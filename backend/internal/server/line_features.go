@@ -614,9 +614,10 @@ func (a *App) listEvents(w http.ResponseWriter, r *http.Request) {
 			for rRows.Next() {
 				var rUID, rSt string
 				if rRows.Scan(&rUID, &rSt) == nil {
-					if rSt == "going" {
+					switch rSt {
+					case "going":
 						going = append(going, rUID)
-					} else if rSt == "declined" {
+					case "declined":
 						declined = append(declined, rUID)
 					}
 				}
@@ -714,9 +715,10 @@ func (a *App) rsvpEvent(w http.ResponseWriter, r *http.Request) {
 		for rRows.Next() {
 			var rUID, rSt string
 			if rRows.Scan(&rUID, &rSt) == nil {
-				if rSt == "going" {
+				switch rSt {
+				case "going":
 					going = append(going, rUID)
-				} else if rSt == "declined" {
+				case "declined":
 					declined = append(declined, rUID)
 				}
 			}
