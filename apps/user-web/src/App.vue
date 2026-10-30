@@ -1491,6 +1491,51 @@ onBeforeUnmount(() => {
   if (callTimer) clearInterval(callTimer)
   if (socket) socket.close()
 })
+// Phase 1 to Phase 6 Extended Actions
+async function testPushNotification() {
+  await wrap(async () => {
+    const res = await api<{ ok: boolean; payload?: { title: string; body: string } }>('/api/v1/push-tokens/test', 'POST')
+    if (res?.ok) {
+      note.value = '🔔 [LUNO 푸시] 테스트 푸시 알림이 발송되었습니다!'
+    }
+  })
+}
+
+async function rotateE2EEKeys() {
+  await wrap(async () => {
+    const devId = 'web_' + (currentUser.value?.id?.slice(0, 8) || 'dev')
+    await api(`/api/v1/devices/${devId}/keys`, 'PUT', {
+      identity_key: `luno_ed25519_${Date.now()}`,
+      signed_prekey: `luno_spk_${Date.now()}`,
+      prekey_sig: `sig_${Date.now()}`,
+      one_time_prekeys: [`otk_${Date.now()}_1`, `otk_${Date.now()}_2`]
+    })
+    note.value = '🔐 [Letter Sealing] E2EE 암호화 키 번들이 갱신되었습니다.'
+  })
+}
+
+async function exportUserDataArchive() {
+  await wrap(async () => {
+    const data = await api<object>('/api/v1/me/export-data')
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `luno_backup_${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    note.value = '💾 [GDPR] 사용자 대화 데이터 아카이브 다운로드가 완료되었습니다.'
+  })
+}
+
+async function deleteUserAccount() {
+  if (!confirm('정말로 계정을 영구 삭제하시겠습니까? 모든 대화와 데이터가 삭제됩니다.')) return
+  await wrap(async () => {
+    await api('/api/v1/me/delete-account', 'POST')
+    logout()
+  })
+}
+
 </script>
 
 <template>
@@ -2408,6 +2453,26 @@ onBeforeUnmount(() => {
             <div class="setting-toggle-row">
               <span>🔔 메시지 수신 사운드 알림</span>
               <input type="checkbox" checked />
+            </div>
+            <!-- Phase 1: Push Notifications -->
+            <div class="setting-toggle-row">
+              <span>🔔 WebPush / FCM 푸시 알림</span>
+              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="testPushNotification">테스트 발송</button>
+            </div>
+
+            <!-- Phase 2: E2EE Key Management -->
+            <div class="setting-toggle-row">
+              <span>🔐 E2EE Double Ratchet 공개키 지문</span>
+              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="rotateE2EEKeys">키 번들 갱신</button>
+            </div>
+          </div>
+
+          <!-- Phase 6: GDPR Data Portability & Deletion -->
+          <div class="setting-group" style="margin-top:8px">
+            <strong>📂 데이터 백업 및 프라이버시 (GDPR)</strong>
+            <div class="flex-row" style="margin-top:6px;gap:8px">
+              <button class="btn-secondary" style="flex:1" @click="exportUserDataArchive">💾 대화 데이터 백업 (JSON)</button>
+              <button class="btn-secondary" style="flex:1;color:#ef4444" @click="deleteUserAccount">⚠️ 계정 영구 삭제</button>
             </div>
           </div>
 

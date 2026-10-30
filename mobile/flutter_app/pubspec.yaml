@@ -1,7 +1,7 @@
-name: global_messenger
+name: luno_messenger
 publish_to: none
-description: Independent messenger mobile client — functional authentication and text chat MVP
-version: 0.1.0+1
+description: LUNO Global Messenger Mobile Client — Connect Beyond Borders
+version: 2.0.0+1
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:

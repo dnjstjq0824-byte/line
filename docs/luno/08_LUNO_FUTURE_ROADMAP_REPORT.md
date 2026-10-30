@@ -244,3 +244,4 @@ gantt
 
 ---
 *LUNO Global Messenger Engineering Roadmap v2.0 © 2026 LUNO Global Platform Inc. All rights reserved.*
+
