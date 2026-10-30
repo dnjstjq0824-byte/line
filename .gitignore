@@ -27,3 +27,6 @@ dist_cf/
 **/.gradle/
 **/.kotlin/
 **/local.properties
+
+*.apk
+

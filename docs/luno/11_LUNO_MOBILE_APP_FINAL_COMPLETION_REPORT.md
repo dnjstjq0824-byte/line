@@ -60,3 +60,4 @@
 - **용량**: 150.8 MB (158,121,120 bytes)
 - **패키지 식별자**: `luno_messenger (v2.0.0+1)`
 - **기본 접속 엔드포인트**: `https://line-messenger.dnjstjqppk.workers.dev`
+

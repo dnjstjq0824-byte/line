@@ -2546,6 +2546,11 @@ export default {
       return json({ status: 'ok', endpoint: p });
     }
 
+    // Mobile APK Download Landing Page
+    if (['/download', '/download/', '/app', '/mobile', '/apk'].includes(url.pathname)) {
+      return Response.redirect(url.origin + "/download.html", 302);
+    }
+
     // Sub-console route redirects
     for (const sub of ['admin', 'partner', 'developer', 'creator', 'ads']) {
       if (url.pathname === `/${sub}`) {

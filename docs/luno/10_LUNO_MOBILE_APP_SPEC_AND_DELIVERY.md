@@ -99,3 +99,4 @@
   - Android APK: `mobile/flutter_app/build/app/outputs/flutter-apk/app-debug.apk`
   - 패키지명: `luno_messenger (v2.0.0+1)`
   - 최소 지원 SDK: Android API 21 (Lollipop) 이상, iOS 12.0 이상 지원
+

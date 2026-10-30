@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LUNO 모바일 앱 다운로드 — Connect Beyond Borders</title>
+  <link rel="icon" type="image/svg+xml" href="./brand/luno-favicon.svg">
+  <meta name="description" content="LUNO Global Messenger 공식 안드로이드 APK 다운로드. 실시간 AI 번역과 보안 메신저를 모바일에서 경험하세요.">
+  <style>
+    :root {
+      --luno-primary: #4F7CFF;
+      --luno-deep-blue: #315BCD;
+      --luno-sky: #8EC5FF;
+      --luno-mint: #5EE6C2;
+      --luno-navy: #14213D;
+      --luno-bg: #F7FAFF;
+      --luno-surface: #FFFFFF;
+      --luno-light-blue: #EAF1FF;
+      --luno-mist: #D9E1EC;
+      --luno-slate: #5B6475;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Inter", Roboto, "Segoe UI", sans-serif;
+    }
+    body {
+      background: var(--luno-bg);
+      color: var(--luno-navy);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px 64px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--luno-light-blue);
+      color: var(--luno-deep-blue);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--luno-navy);
+      letter-spacing: -0.5px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: var(--luno-slate);
+      margin-top: 6px;
+    }
+    .download-card {
+      background: var(--luno-surface);
+      border: 1px solid var(--luno-mist);
+      border-radius: 24px;
+      max-width: 520px;
+      width: 100%;
+      padding: 32px 24px;
+      box-shadow: 0 12px 32px rgba(49, 91, 205, 0.08);
+      text-align: center;
+    }
+    .app-icon-wrap {
+      width: 88px;
+      height: 88px;
+      background: linear-gradient(135deg, var(--luno-deep-blue), var(--luno-primary));
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      box-shadow: 0 8px 20px rgba(49, 91, 205, 0.25);
+    }
+    .app-icon-wrap svg {
+      width: 52px;
+      height: 52px;
+      fill: #ffffff;
+    }
+    .app-name {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--luno-navy);
+    }
+    .app-version {
+      font-size: 13px;
+      color: var(--luno-deep-blue);
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .meta-pills {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 16px 0 24px;
+      flex-wrap: wrap;
+    }
+    .meta-pill {
+      background: #f1f5f9;
+      color: #334155;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .btn-download {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: var(--luno-deep-blue);
+      color: #ffffff;
+      text-decoration: none;
+      padding: 16px 24px;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: 800;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 16px rgba(49, 91, 205, 0.3);
+    }
+    .btn-download:hover {
+      background: #2446a8;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(49, 91, 205, 0.4);
+    }
+    .qr-container {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px dashed var(--luno-mist);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .qr-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--luno-slate);
+      margin-bottom: 12px;
+    }
+    .qr-img {
+      width: 140px;
+      height: 140px;
+      background: #ffffff;
+      border: 1px solid var(--luno-mist);
+      border-radius: 12px;
+      padding: 8px;
+    }
+    .features-list {
+      margin-top: 28px;
+      text-align: left;
+      display: grid;
+      gap: 12px;
+    }
+    .feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: var(--luno-light-blue);
+      padding: 12px 14px;
+      border-radius: 12px;
+    }
+    .feature-icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+    .feature-text h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--luno-navy);
+    }
+    .feature-text p {
+      font-size: 12px;
+      color: var(--luno-slate);
+      margin-top: 2px;
+    }
+    .install-guide {
+      max-width: 520px;
+      width: 100%;
+      margin-top: 28px;
+      background: var(--luno-surface);
+      border: 1px solid var(--luno-mist);
+      border-radius: 20px;
+      padding: 22px 20px;
+    }
+    .install-guide h3 {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--luno-navy);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .guide-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: var(--luno-slate);
+      line-height: 1.4;
+    }
+    .guide-num {
+      background: var(--luno-deep-blue);
+      color: #ffffff;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .footer {
+      margin-top: 36px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--luno-slate);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="brand-badge">🚀 LUNO Official Release</div>
+    <h1 class="title">LUNO 모바일 앱 다운로드</h1>
+    <p class="subtitle">Connect Beyond Borders — 전 세계를 잇는 글로벌 메신저</p>
+  </div>
+
+  <div class="download-card">
+    <div class="app-icon-wrap">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.38 5.08L2.1 21.2a1 1 0 001.2 1.2l4.12-1.28A9.95 9.95 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18a7.95 7.95 0 01-4.07-1.12l-.29-.17-2.61.81.81-2.61-.17-.29A7.95 7.95 0 014 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/>
+      </svg>
+    </div>
+    <div class="app-name">LUNO Global Messenger</div>
+    <div class="app-version">버전 2.0.0 (공식 Android 패키지)</div>
+
+    <div class="meta-pills">
+      <span class="meta-pill">📱 Android 5.0+</span>
+      <span class="meta-pill">📦 APK 패키지</span>
+      <span class="meta-pill">🛡️ 공식 무결성 검증</span>
+      <span class="meta-pill">⚡ 실시간 AI 통역</span>
+    </div>
+
+    <!-- Direct download link -->
+    <a id="btn-apk-download" class="btn-download" href="./luno-messenger.apk" download="luno-messenger.apk">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+      </svg>
+      LUNO APK 다운로드 (.apk)
+    </a>
+
+    <!-- QR Code Section -->
+    <div class="qr-container">
+      <div class="qr-title">스마트폰 카메라로 스캔하여 직접 다운로드</div>
+      <img id="qr-image" class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fline-messenger.dnjstjqppk.workers.dev%2Fluno-messenger.apk" alt="LUNO APK 다운로드 QR 코드">
+    </div>
+
+    <!-- Key Features -->
+    <div class="features-list">
+      <div class="feature-item">
+        <div class="feature-icon">🌐</div>
+        <div class="feature-text">
+          <h4>실시간 AI 다국어 통번역</h4>
+          <p>한국어, 영어, 태국어, 일본어 등 대화 중 말풍선 원클릭 실시간 통역</p>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🔒</div>
+        <div class="feature-text">
+          <h4>Letter Sealing 종단간 암호화 (E2EE)</h4>
+          <p>Signal X3DH + Double Ratchet 프로토콜로 모든 대화 강력 보호</p>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🛸</div>
+        <div class="feature-text">
+          <h4>LUNO Orbit Crew 공식 마스코트</h4>
+          <p>Lumi, Nori, Poko 등 6종의 독창적인 우주 탐험대 스티커</p>
+        </div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">💳</div>
+        <div class="feature-text">
+          <h4>LUNO Pay 간편 지갑</h4>
+          <p>머니 충전, 포인트 적립 및 대화방 내 1초 간편 송금</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Android Installation Guide -->
+  <div class="install-guide">
+    <h3>💡 안드로이드 APK 간편 설치 안내</h3>
+    <div class="guide-step">
+      <div class="guide-num">1</div>
+      <div>상단의 <b>[LUNO APK 다운로드]</b> 버튼을 탭하여 파일을 다운로드합니다.</div>
+    </div>
+    <div class="guide-step">
+      <div class="guide-num">2</div>
+      <div>다운로드 완료 알림을 누르고 <b>[설치]</b>를 진행합니다. (보안 경고 발생 시 <b>'무시하고 설치'</b> 또는 <b>'이 출처의 앱 허용'</b>을 선택하세요.)</div>
+    </div>
+    <div class="guide-step">
+      <div class="guide-num">3</div>
+      <div>설치 완료 후 <b>LUNO</b> 앱을 열고 데모 계정(<code>user@line.local</code>) 또는 새 계정으로 가입하여 시작하세요!</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>&copy; 2026 LUNO Global Messenger. All rights reserved.</p>
+    <p style="margin-top: 4px; color: #94a3b8;">Connect Beyond Borders</p>
+  </div>
+
+</body>
+</html>

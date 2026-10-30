@@ -1734,6 +1734,11 @@ async function deleteUserAccount() {
         </div>
 
         <div class="pc-rail-bottom">
+          <!-- Mobile APK Download Button -->
+          <a href="./download.html" target="_blank" class="pc-rail-btn small" title="📱 LUNO 모바일 앱 다운로드 (Android APK)" style="text-decoration: none;">
+            <span style="font-size: 16px;">📱</span>
+          </a>
+
           <!-- Keep Button -->
           <button class="pc-rail-btn small" :title="t('navKeep')" @click="showKeepModal = true">
             <LineIcon name="keep" :size="20" />
@@ -1754,6 +1759,7 @@ async function deleteUserAccount() {
               <a href="./creator/" target="_blank" class="dropdown-item">🎨 크리에이터 마켓</a>
               <a href="./ads/" target="_blank" class="dropdown-item">📢 광고주 센터</a>
               <div class="dropdown-sep"></div>
+              <a href="./download.html" target="_blank" class="dropdown-item" style="color: #315BCD; font-weight: 700;">📱 모바일 앱 다운로드 (APK)</a>
               <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
               <button class="dropdown-item logout" @click="logout">로그아웃</button>
             </div>
@@ -2502,6 +2508,16 @@ async function deleteUserAccount() {
             <div v-for="dv in devicesList" :key="dv.id" class="setting-toggle-row">
               <span>{{ dv.name }} ({{ dv.platform }})</span>
               <button class="btn-delete-keep" @click="revokeDevice(dv.id)">해제</button>
+            </div>
+          </div>
+
+          <div class="setting-group" style="margin-top:12px; background: #eaf1ff; padding: 12px; border-radius: 12px; border: 1px solid #d9e1ec;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <strong style="color:#315BCD; font-size:13px;">📱 LUNO 모바일 네이티브 앱 (Android)</strong>
+                <p style="font-size:11px; color:#5b6475; margin-top:2px;">실시간 AI 통역 및 E2EE 보안 메신저 APK</p>
+              </div>
+              <a href="./download.html" target="_blank" class="btn-primary" style="text-decoration:none; font-size:12px; padding:6px 12px; display:inline-block;">APK 다운로드</a>
             </div>
           </div>
 
