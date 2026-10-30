@@ -5,6 +5,14 @@ import { LINE_STICKERS, type LineSticker } from './line-stickers'
 import { playSendSound, playReceiveSound } from './sound-effects'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
+  SUPPORTED_LOCALES,
+  UI_DICTIONARY,
+  detectInitialLocale,
+  formatLocalizedTime,
+  translateMessageText,
+  type LunoLocale
+} from './luno-i18n'
+import {
   API_URL,
   request,
   newClientID,
@@ -25,7 +33,87 @@ import {
   flushOfflineQueue
 } from './messenger-utils'
 
+// --- LUNO Multilingual & Accessibility & Theme State ---
+const currentLocale = ref<LunoLocale>(detectInitialLocale())
+const t = (key: string): string => UI_DICTIONARY[currentLocale.value]?.[key] || UI_DICTIONARY.ko[key] || key
+function setLocale(loc: LunoLocale) {
+  currentLocale.value = loc
+  localStorage.setItem('luno.locale', loc)
+}
+
+const isDarkMode = ref(false)
+function toggleDarkMode() {
+  isDarkMode.value = !isDarkMode.value
+  if (isDarkMode.value) {
+    document.documentElement.setAttribute('data-theme', 'dark')
+  } else {
+    document.documentElement.removeAttribute('data-theme')
+  }
+}
+function enableLightMode() {
+  if (isDarkMode.value) toggleDarkMode()
+}
+function enableDarkMode() {
+  if (!isDarkMode.value) toggleDarkMode()
+}
+
+const fontScale = ref<'normal' | 'large' | 'xlarge'>('normal')
+function setFontScale(scale: 'normal' | 'large' | 'xlarge') {
+  fontScale.value = scale
+  if (scale === 'normal') {
+    document.documentElement.removeAttribute('data-font-scale')
+  } else {
+    document.documentElement.setAttribute('data-font-scale', scale)
+  }
+}
+
+// --- AI Translation State ---
+const autoTranslateEnabled = ref(false)
+const targetTranslateLang = ref<LunoLocale>('en')
+const messageTranslations = ref<Record<string, {
+  translated: string;
+  sourceLang: string;
+  engine: string;
+  loading?: boolean;
+  error?: string;
+}>>({})
+
+async function handleTranslateMessage(msg: Message) {
+  if (messageTranslations.value[msg.id]?.translated && !messageTranslations.value[msg.id]?.error) {
+    delete messageTranslations.value[msg.id]
+    return
+  }
+  messageTranslations.value[msg.id] = {
+    translated: '',
+    sourceLang: 'auto',
+    engine: 'luno-ai',
+    loading: true
+  }
+  try {
+    const res = await translateMessageText(msg.body, targetTranslateLang.value)
+    messageTranslations.value[msg.id] = {
+      translated: res.translated,
+      sourceLang: res.sourceLang,
+      engine: res.engine,
+      loading: false
+    }
+  } catch {
+    messageTranslations.value[msg.id] = {
+      translated: '',
+      sourceLang: 'auto',
+      engine: 'luno-ai',
+      loading: false,
+      error: '번역에 실패했습니다.'
+    }
+  }
+}
+
+// --- AI Voice/Video Call Live Captions UX ---
+const liveCaptionsEnabled = ref(false)
+const callSubtitles = ref('실시간 AI 통역 자막이 연결되었습니다.')
+
 // --- Auth & Session State ---
+const basePath = import.meta.env.BASE_URL
 const email = ref('')
 const password = ref('')
 const displayName = ref('')
@@ -133,7 +221,7 @@ const contextMenu = ref<{
   items: []
 })
 
-const activeStickerCategory = ref<'All' | 'Brown' | 'Cony' | 'Sally'>('All')
+const activeStickerCategory = ref<'All' | LineSticker['character']>('All')
 
 const filteredStickers = computed(() => {
   if (activeStickerCategory.value === 'All') return LINE_STICKERS
@@ -291,11 +379,10 @@ function formatDuration(sec: number) {
   return `${m}:${s}`
 }
 
-// Format time
+// Format time with localized format
 function formatTime(iso: string) {
   if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return formatLocalizedTime(iso, currentLocale.value)
 }
 
 // Compute total unread count
@@ -475,6 +562,9 @@ async function connectRealtime() {
             messages.value.push(msg)
             if (currentUser.value && msg.sender_id !== currentUser.value.id) {
               playReceiveSound()
+              if (autoTranslateEnabled.value && msg.kind === 'text') {
+                void handleTranslateMessage(msg)
+              }
             }
           }
           void loadChats()
@@ -618,6 +708,13 @@ async function selectChat(convId: string) {
     if (messages.value.length > 0) {
       const last = messages.value[messages.value.length - 1]
       await api(`/api/v1/conversations/${convId}/read`, 'POST', { sequence: last.sequence })
+    }
+    if (autoTranslateEnabled.value && messages.value.length > 0) {
+      for (const m of messages.value.slice(-6)) {
+        if (m.kind === 'text' && !messageTranslations.value[m.id]) {
+          void handleTranslateMessage(m)
+        }
+      }
     }
     await Promise.all([loadChats(), loadPolls(convId)])
   })
@@ -1408,66 +1505,84 @@ onBeforeUnmount(() => {
       <button class="btn-dismiss" @click="note = ''">✕</button>
     </div>
 
-    <!-- 1. AUTH SCREEN: LINE PC Desktop Login Window -->
+    <!-- 1. AUTH SCREEN: LUNO Desktop Login Window -->
     <main v-if="!currentUser" class="pc-auth-viewport">
       <div class="pc-login-card">
-        <!-- Title bar with window controls -->
+        <!-- Title bar with window controls & language selector -->
         <div class="pc-window-bar">
           <div class="pc-win-dots">
             <span class="dot close"></span>
             <span class="dot min"></span>
             <span class="dot max"></span>
           </div>
-          <span class="pc-win-title">LINE</span>
+          <span class="pc-win-title">LUNO</span>
+          <div class="pc-win-tools">
+            <div class="pc-locale-pills">
+              <button
+                v-for="loc in SUPPORTED_LOCALES"
+                :key="'auth-' + loc.code"
+                class="btn-auth-locale"
+                :class="{ active: currentLocale === loc.code }"
+                @click="setLocale(loc.code)"
+                :title="loc.nativeName"
+              >
+                {{ loc.code.toUpperCase() }}
+              </button>
+            </div>
+            <button class="btn-win-dark" @click="toggleDarkMode" :title="isDarkMode ? '라이트 모드' : '다크 모드'">
+              <LineIcon :name="isDarkMode ? 'sun' : 'moon'" :size="13" />
+            </button>
+          </div>
         </div>
 
         <div class="pc-login-body">
           <!-- Logo Header -->
           <div class="pc-brand-header">
-            <div class="pc-line-badge">LINE</div>
+            <img class="pc-luno-logo" :src="`${basePath}brand/luno-web-logo.svg`" alt="LUNO — Connect Beyond Borders" width="200" height="60" />
+            <p class="pc-brand-slogan">{{ t('brandSlogan') }}</p>
           </div>
 
           <!-- Login Method Tabs -->
           <div class="pc-auth-nav-tabs">
-            <button :class="{ active: authTab === 'email' }" @click="authTab = 'email'">이메일 로그인</button>
-            <button :class="{ active: authTab === 'qr' }" @click="authTab = 'qr'; startQrLoginChallenge()">QR코드 로그인</button>
+            <button :class="{ active: authTab === 'email' }" @click="authTab = 'email'">{{ t('loginEmailTab') }}</button>
+            <button :class="{ active: authTab === 'qr' }" @click="authTab = 'qr'; startQrLoginChallenge()">{{ t('loginQrTab') }}</button>
           </div>
 
           <!-- Email Login & Sign-up -->
           <div v-if="authTab === 'email'" class="pc-tab-content">
             <form class="pc-login-form" @submit.prevent="authAction">
               <div class="pc-input-wrap">
-                <input v-model="email" type="email" placeholder="이메일 주소" required autocomplete="username" />
+                <input v-model="email" type="email" :placeholder="t('emailPlaceholder')" required autocomplete="username" />
               </div>
               <div v-if="registerMode" class="pc-input-wrap">
-                <input v-model="displayName" type="text" placeholder="이름 (닉네임)" required />
+                <input v-model="displayName" type="text" :placeholder="t('namePlaceholder')" required />
               </div>
               <div class="pc-input-wrap">
-                <input v-model="password" type="password" placeholder="비밀번호" required autocomplete="current-password" />
+                <input v-model="password" type="password" :placeholder="t('passwordPlaceholder')" required autocomplete="current-password" />
               </div>
 
               <div class="pc-form-helpers">
                 <label class="pc-remember-check">
                   <input type="checkbox" checked />
-                  <span>자동 로그인</span>
+                  <span>{{ t('rememberMe') }}</span>
                 </label>
                 <button type="button" class="btn-register-toggle" @click="registerMode = !registerMode">
-                  {{ registerMode ? '로그인으로 돌아가기' : '새 계정 만들기' }}
+                  {{ registerMode ? t('backToLogin') : t('createAccount') }}
                 </button>
               </div>
 
               <button class="btn-pc-submit" type="submit">
-                {{ registerMode ? '회원가입' : '로그인' }}
+                {{ registerMode ? t('signUpBtn') : t('signInBtn') }}
               </button>
             </form>
 
             <!-- Quick Demo Accounts -->
             <div class="pc-demo-section">
-              <div class="demo-label">원클릭 테스트 계정:</div>
+              <div class="demo-label">{{ t('quickDemoLabel') }}</div>
               <div class="demo-buttons-group">
-                <button class="btn-demo-chip" @click="quickDemoLogin('user@line.local', 'LineUser#2026!')">일반 유저</button>
-                <button class="btn-demo-chip" @click="quickDemoLogin('alice@line-test.local', 'AliceStrongPass#2026')">앨리스</button>
-                <button class="btn-demo-chip" @click="quickDemoLogin('admin@line.local', 'LineAdmin#2026!')">관리자</button>
+                <button class="btn-demo-chip" @click="quickDemoLogin('user@line.local', 'LineUser#2026!')">{{ t('demoUser') }}</button>
+                <button class="btn-demo-chip" @click="quickDemoLogin('alice@line-test.local', 'AliceStrongPass#2026')">{{ t('demoAlice') }}</button>
+                <button class="btn-demo-chip" @click="quickDemoLogin('admin@line.local', 'LineAdmin#2026!')">{{ t('demoAdmin') }}</button>
               </div>
             </div>
           </div>
@@ -1475,11 +1590,11 @@ onBeforeUnmount(() => {
           <!-- QR Code Login -->
           <div v-else class="pc-tab-content qr-mode">
             <div class="pc-qr-box">
-              <svg viewBox="0 0 100 100" width="130" height="130" fill="#111827">
+              <svg viewBox="0 0 100 100" width="130" height="130" fill="#14213D">
                 <path d="M10 10h30v30h-30z M16 16v18h18v-18z M22 22h6v6h-6z M60 10h30v30h-30z M66 16v18h18v-18z M72 22h6v6h-6z M10 60h30v30h-30z M16 66v18h18v-18z M22 72h6v6h-6z M50 15h6v12h-6z M70 50h10v10h-10z M50 50h10v10h-10z M60 65h10v15h-10z M80 65h10v25h-10z M50 80h10v10h-10z" />
               </svg>
             </div>
-            <p class="qr-guide">스마트폰의 LINE 앱에서<br><strong>설정 &gt; QR코드</strong>로 스캔하여 로그인하세요.</p>
+            <p class="qr-guide">스마트폰의 LUNO 앱에서<br><strong>설정 &gt; QR코드</strong>로 스캔하여 로그인하세요.</p>
             <div v-if="qrChallengeID" class="qr-details">
               <small>Challenge: {{ qrChallengeID.slice(0, 8) }}... | Token: {{ qrToken.slice(0, 8) }}...</small>
             </div>
@@ -1510,8 +1625,8 @@ onBeforeUnmount(() => {
             </div>
             <div class="dropdown-sep"></div>
             <button class="dropdown-item" @click="activeProfileUser = currentUser">👤 프로필 설정</button>
-            <button class="dropdown-item" @click="showSettingsModal = true">⚙️ 환경설정</button>
-            <button class="dropdown-item" @click="showKeepModal = true">💾 Keep 보관함</button>
+            <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
+            <button class="dropdown-item" @click="showKeepModal = true">💾 {{ t('navKeep') }}</button>
             <div class="dropdown-sep"></div>
             <button class="dropdown-item logout" @click="logout">로그아웃</button>
           </div>
@@ -1520,7 +1635,7 @@ onBeforeUnmount(() => {
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'home' }"
-            title="친구"
+            :title="t('navFriends')"
             @click="activeNav = 'home'"
           >
             <span class="pc-rail-indicator"></span>
@@ -1531,7 +1646,7 @@ onBeforeUnmount(() => {
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'chats' }"
-            title="대화"
+            :title="t('navChats')"
             @click="activeNav = 'chats'"
           >
             <span class="pc-rail-indicator"></span>
@@ -1539,33 +1654,33 @@ onBeforeUnmount(() => {
             <span v-if="totalUnreadCount > 0" class="pc-unread-pill">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
           </button>
 
-          <!-- Nav 3: VOOM -->
+          <!-- Nav 3: Channels / Feed -->
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'voom' }"
-            title="LINE VOOM"
+            :title="t('navChannels')"
             @click="activeNav = 'voom'"
           >
             <span class="pc-rail-indicator"></span>
             <LineIcon name="voom" :size="22" />
           </button>
 
-          <!-- Nav 4: OpenChat (오픈채팅) -->
+          <!-- Nav 4: Spaces / OpenSpace -->
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'openchat' }"
-            title="오픈채팅"
+            :title="t('navOpenChat')"
             @click="activeNav = 'openchat'"
           >
             <span class="pc-rail-indicator"></span>
             <LineIcon name="openchat" :size="22" />
           </button>
 
-          <!-- Nav 5: Wallet & Services (더보기 / Pay) -->
+          <!-- Nav 5: Wallet / LUNO Pay -->
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'wallet' }"
-            title="LINE Pay / 서비스"
+            :title="t('navWallet')"
             @click="activeNav = 'wallet'"
           >
             <span class="pc-rail-indicator"></span>
@@ -1574,40 +1689,33 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="pc-rail-bottom">
-          <!-- Keep Vault Button -->
-          <button class="pc-rail-btn small" title="Keep 메모 보관함" @click="showKeepModal = true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-            </svg>
-          </button>
-
           <!-- Keep Button -->
-          <button class="pc-rail-btn small" title="Keep 보관함" @click="showKeepModal = true">
+          <button class="pc-rail-btn small" :title="t('navKeep')" @click="showKeepModal = true">
             <LineIcon name="keep" :size="20" />
           </button>
 
           <!-- Consoles Menu Button (...) -->
           <div class="rail-more-wrapper">
-            <button class="pc-rail-btn small" title="Enterprise 콘솔 및 바로가기" @click="showConsolesMenu = !showConsolesMenu">
+            <button class="pc-rail-btn small" :title="t('navConsoles')" @click="showConsolesMenu = !showConsolesMenu">
               <LineIcon name="more" :size="20" />
             </button>
 
             <!-- Consoles Dropdown Popover -->
             <div v-if="showConsolesMenu" class="pc-dropdown-menu consoles-menu" @click="showConsolesMenu = false">
-              <div class="dropdown-heading">🏢 Enterprise 관리 콘솔</div>
+              <div class="dropdown-heading">🏢 LUNO 플랫폼 관리 콘솔</div>
               <a href="./admin/" target="_blank" class="dropdown-item">👑 관리자 콘솔 (Admin)</a>
               <a href="./partner/" target="_blank" class="dropdown-item">🏢 파트너 콘솔 (Official)</a>
               <a href="./developer/" target="_blank" class="dropdown-item">💻 개발자 콘솔 (Developers)</a>
               <a href="./creator/" target="_blank" class="dropdown-item">🎨 크리에이터 마켓</a>
               <a href="./ads/" target="_blank" class="dropdown-item">📢 광고주 센터</a>
               <div class="dropdown-sep"></div>
-              <button class="dropdown-item" @click="showSettingsModal = true">⚙️ 설정</button>
+              <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
               <button class="dropdown-item logout" @click="logout">로그아웃</button>
             </div>
           </div>
 
           <!-- Settings Button -->
-          <button class="pc-rail-btn small" title="환경설정" @click="showSettingsModal = true">
+          <button class="pc-rail-btn small" :title="t('navSettings')" @click="showSettingsModal = true">
             <LineIcon name="settings" :size="20" />
           </button>
         </div>
@@ -1618,7 +1726,7 @@ onBeforeUnmount(() => {
         <!-- VIEW 1: FRIENDS (친구) -->
         <div v-if="activeNav === 'home'" class="pc-pane-body">
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">친구</h2>
+            <h2 class="pc-pane-title">{{ t('navFriends') }}</h2>
             <div class="pc-pane-tools">
               <button class="btn-pc-header-tool" title="친구 추가" @click="showAddFriendModal = true">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
@@ -1630,7 +1738,7 @@ onBeforeUnmount(() => {
           <div class="pc-search-box">
             <div class="pc-search-inner">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input v-model="searchKeyword" placeholder="이름, 공식 계정 검색" />
+              <input v-model="searchKeyword" :placeholder="t('searchPlaceholder')" />
               <button v-if="searchKeyword" class="btn-search-clear" @click="searchKeyword = ''">✕</button>
             </div>
           </div>
@@ -1639,18 +1747,18 @@ onBeforeUnmount(() => {
           <div class="pc-pane-scroll">
             <!-- My Profile Card -->
             <div class="pc-my-card" @click="activeProfileUser = currentUser">
-              <div class="pc-avatar circle-46" :style="{ background: currentUser.avatar_color || '#06C755' }">
+              <div class="pc-avatar circle-46" :style="{ background: currentUser.avatar_color || '#315BCD' }">
                 {{ currentUser.display_name.slice(0, 1) }}
               </div>
               <div class="pc-card-meta">
                 <div class="name-line">{{ currentUser.display_name }}</div>
-                <div class="status-line">{{ currentUser.status_message || '상태메시지를 설정해보세요' }}</div>
+                <div class="status-line">{{ currentUser.status_message || t('myProfileStatus') }}</div>
               </div>
             </div>
 
             <!-- Birthday Category -->
             <div class="pc-category">
-              <div class="category-title">생일인 친구</div>
+              <div class="category-title">{{ t('birthdayFriends') }}</div>
               <div class="pc-row-item" @click="startDirectChat({ id: '00000000-0000-0000-0000-000000000003', display_name: 'Alice Kim' })">
                 <div class="pc-avatar circle-38" style="background:#f97316">A</div>
                 <div class="pc-row-meta">
@@ -1662,14 +1770,14 @@ onBeforeUnmount(() => {
 
             <!-- Official Accounts Category -->
             <div class="pc-category">
-              <div class="category-title">공식 계정 {{ officialAccounts.length }}</div>
+              <div class="category-title">{{ t('officialChannels') }} {{ officialAccounts.length }}</div>
               <div
                 v-for="oa in officialAccounts"
                 :key="oa.id"
                 class="pc-row-item"
                 @click="startDirectChat({ id: oa.id, display_name: oa.name, official: true })"
               >
-                <div class="pc-avatar circle-38" :style="{ background: oa.color || '#06C755' }">
+                <div class="pc-avatar circle-38" :style="{ background: oa.color || '#315BCD' }">
                   {{ oa.name.slice(0, 1) }}
                 </div>
                 <div class="pc-row-meta">
@@ -1681,7 +1789,7 @@ onBeforeUnmount(() => {
 
             <!-- Friends Category -->
             <div class="pc-category">
-              <div class="category-title">친구 {{ friends.length }}</div>
+              <div class="category-title">{{ t('friendsList') }} {{ friends.length }}</div>
               <div
                 v-for="f in friends"
                 :key="f.id"
@@ -1689,12 +1797,12 @@ onBeforeUnmount(() => {
                 @click="startDirectChat(f)"
                 @contextmenu.prevent="openFriendContextMenu($event, f)"
               >
-                <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || '#0ea5e9' }">
+                <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || '#315BCD' }">
                   {{ f.display_name.slice(0, 1) }}
                 </div>
                 <div class="pc-row-meta">
                   <div class="row-name">{{ f.display_name }}</div>
-                  <div class="row-desc">{{ f.status_message || f.bio || 'LINE 친구' }}</div>
+                  <div class="row-desc">{{ f.status_message || f.bio || 'LUNO 친구' }}</div>
                 </div>
               </div>
             </div>
@@ -1704,7 +1812,7 @@ onBeforeUnmount(() => {
         <!-- VIEW 2: CHATS (대화) -->
         <div v-else-if="activeNav === 'chats'" class="pc-pane-body">
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">대화</h2>
+            <h2 class="pc-pane-title">{{ t('navChats') }}</h2>
             <div class="pc-pane-tools">
               <button class="btn-pc-header-tool" title="그룹 대화방 만들기" @click="showCreateGroupModal = true">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -1714,10 +1822,10 @@ onBeforeUnmount(() => {
 
           <!-- Chat Filter Tabs -->
           <div class="pc-filter-tabs">
-            <button :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">전체</button>
-            <button :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">1:1</button>
-            <button :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">그룹</button>
-            <button :class="{ active: chatFilter === 'unread' }" @click="chatFilter = 'unread'">안읽음</button>
+            <button :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">{{ t('filterAll') }}</button>
+            <button :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">{{ t('filterDirect') }}</button>
+            <button :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">{{ t('filterGroup') }}</button>
+            <button :class="{ active: chatFilter === 'unread' }" @click="chatFilter = 'unread'">{{ t('filterUnread') }}</button>
           </div>
 
           <!-- Search Box -->
@@ -1832,30 +1940,52 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <!-- (Column 3) Right Main Chat View OR Authentic Neutral Empty State -->
+      <!-- (Column 3) Right Main Chat View OR LUNO Empty Canvas -->
       <section v-if="selectedChat" class="pc-chat-viewport">
         <!-- Chat Header -->
         <header class="pc-chat-topbar">
           <div class="chat-topbar-left">
-            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : '#06C755' }">
+            <button class="btn-mobile-back" @click="selectedChatId = ''" title="뒤로가기">
+              <LineIcon name="back" :size="18" />
+            </button>
+            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : '#315BCD' }">
               {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'L' }}
             </div>
             <div class="chat-topbar-info">
               <div class="title-row">
                 <span class="chat-header-title">{{ selectedChat.title }}</span>
                 <span v-if="selectedChat.kind === 'group'" class="member-tag">👥 {{ selectedChat.member_count || 2 }}</span>
-                <span v-if="selectedChat.official" class="badge-verified">✓ 공식계정</span>
+                <span v-if="selectedChat.official" class="badge-verified">✓ 공식채널</span>
               </div>
               <small class="e2ee-tag">
-                {{ letterSealingEnabled ? '🔒 Letter Sealing (종단간 암호화 적용됨)' : '암호화 미지원' }}
+                {{ letterSealingEnabled ? '🔒 LUNO Sealing (종단간 암호화 적용됨)' : '암호화 미지원' }}
               </small>
             </div>
           </div>
 
           <div class="chat-topbar-actions">
-            <button class="btn-chat-action" title="음성통화" @click="startCall('voice')"><LineIcon name="call-voice" :size="18" /></button>
-            <button class="btn-chat-action" title="영상통화" @click="startCall('video')"><LineIcon name="call-video" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화방 서랍" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
+            <!-- AI Translation Bar Controls (Article 10) -->
+            <div class="ai-translate-tool-pill">
+              <button
+                class="btn-translate-switch"
+                :class="{ active: autoTranslateEnabled }"
+                :title="t('translateToggle')"
+                @click="autoTranslateEnabled = !autoTranslateEnabled"
+              >
+                <LineIcon name="translate" :size="16" />
+                <span>{{ autoTranslateEnabled ? 'AI 자동번역 ON' : 'AI 번역' }}</span>
+              </button>
+              <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language">
+                <option value="ko">KR</option>
+                <option value="en">EN</option>
+                <option value="th">TH</option>
+                <option value="ja">JA</option>
+              </select>
+            </div>
+
+            <button class="btn-chat-action" :title="t('callVoice')" @click="startCall('voice')"><LineIcon name="call-voice" :size="18" /></button>
+            <button class="btn-chat-action" :title="t('callVideo')" @click="startCall('video')"><LineIcon name="call-video" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화 서랍" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
           </div>
         </header>
 
@@ -1868,7 +1998,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Message History Canvas (Authentic LINE Slate Blue Wallpaper) -->
+        <!-- Message History Canvas -->
         <div class="pc-chat-messages-canvas">
           <div class="date-capsule">오늘</div>
 
@@ -1876,15 +2006,15 @@ onBeforeUnmount(() => {
             v-for="msg in messages"
             :key="msg.id"
             class="pc-msg-row"
-            :class="{ mine: msg.sender_id === currentUser.id, other: msg.sender_id !== currentUser.id }"
+            :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id }"
           >
             <!-- Other User Avatar -->
-            <div v-if="msg.sender_id !== currentUser.id" class="pc-avatar circle-34 other-avatar">
+            <div v-if="msg.sender_id !== currentUser?.id" class="pc-avatar circle-34 other-avatar" style="background:#315BCD">
               {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
             </div>
 
             <div class="pc-msg-bubble-group">
-              <div v-if="msg.sender_id !== currentUser.id" class="pc-sender-header">
+              <div v-if="msg.sender_id !== currentUser?.id" class="pc-sender-header">
                 {{ selectedChat.title }}
               </div>
 
@@ -1899,23 +2029,41 @@ onBeforeUnmount(() => {
                 </div>
                 <div v-if="msg.kind === 'sticker' && getStickerSvg(msg.body)" class="bubble-sticker-svg" v-html="getStickerSvg(msg.body)"></div>
                 <div v-else class="bubble-text-content">{{ msg.body }}</div>
+
+                <!-- AI Translation Display Box (Article 10) -->
+                <div v-if="messageTranslations[msg.id]" class="luno-ai-translation-box">
+                  <div class="translation-meta">
+                    <span class="badge-engine">🌐 {{ messageTranslations[msg.id].engine }} ({{ messageTranslations[msg.id].sourceLang }} → {{ targetTranslateLang.toUpperCase() }})</span>
+                    <button class="btn-retry-translate" :title="t('retranslateBtn')" @click="handleTranslateMessage(msg)">↻</button>
+                  </div>
+                  <div v-if="messageTranslations[msg.id].loading" class="translation-loading">
+                    <span>✨ {{ t('translating') }}</span>
+                  </div>
+                  <div v-else-if="messageTranslations[msg.id].error" class="translation-error">
+                    <span>⚠️ {{ messageTranslations[msg.id].error }}</span>
+                  </div>
+                  <div v-else class="translation-result">
+                    {{ messageTranslations[msg.id].translated }}
+                  </div>
+                </div>
               </div>
 
               <!-- Status Info: Read receipt & Time -->
               <div class="pc-msg-meta">
-                <span v-if="msg.sender_id === currentUser.id && (msg.read_count || 0) > 0" class="pc-read-receipt">읽음</span>
+                <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
                 <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
               </div>
             </div>
 
             <!-- Bubble Hover Floating Action Bar -->
             <div class="pc-bubble-toolbar">
+              <button :title="t('translateBtn')" @click="handleTranslateMessage(msg)"><LineIcon name="translate" :size="14" /></button>
               <button title="하트" @click="reactToMessage(msg.id, '❤️')"><LineIcon name="heart" :size="14" /></button>
               <button title="좋아요" @click="reactToMessage(msg.id, '👍')"><LineIcon name="thumbsup" :size="14" /></button>
               <button title="답장" @click="startReply(msg)"><LineIcon name="reply" :size="14" /></button>
               <button title="Keep에 저장" @click="saveToKeep(msg)"><LineIcon name="keep" :size="14" /></button>
               <button title="공지 등록" @click="pinMessage(msg.id)"><LineIcon name="pin" :size="14" /></button>
-              <button v-if="msg.sender_id === currentUser.id" title="보내기 취소" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
+              <button v-if="msg.sender_id === currentUser?.id" title="보내기 취소" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
             </div>
           </div>
         </div>
@@ -1938,34 +2086,31 @@ onBeforeUnmount(() => {
           <form class="pc-textarea-form" @submit.prevent="sendMessage">
             <textarea
               v-model="draftMessage"
-              placeholder="메시지를 입력하세요 (Enter: 전송, Shift+Enter: 줄바꿈)"
+              :placeholder="t('inputPlaceholder')"
               rows="3"
               @keydown.enter.exact.prevent="sendMessage"
             ></textarea>
             <div class="pc-textarea-bottom">
               <span class="char-count">{{ draftMessage.length }}/1000</span>
-              <button class="btn-green-send" :disabled="!draftMessage.trim()">전송</button>
+              <button class="btn-green-send" :disabled="!draftMessage.trim()">{{ t('sendBtn') }}</button>
             </div>
           </form>
         </footer>
       </section>
 
-      <!-- Clean Neutral Desktop Empty State (Authentic LINE PC) -->
+      <!-- Clean Neutral Desktop Empty State (LUNO Brand) -->
       <section v-else class="pc-empty-canvas">
         <div class="pc-empty-dialog">
           <div class="pc-watermark-wrap">
-            <svg viewBox="0 0 64 64" width="80" height="80" fill="none">
-              <rect width="64" height="64" rx="20" fill="#e8edf2" />
-              <path d="M32 15c-10.5 0-19 6.8-19 15.2 0 4.8 2.8 9.1 7.2 11.8-.3 1.5-1.4 5.2-1.6 5.9-.2.8.4.9 1 .5 1-.4 5.9-3.6 8.3-5.1 1.3.3 2.7.4 4.1.4 10.5 0 19-6.8 19-15.2S42.5 15 32 15z" fill="#b4c2ce" />
-            </svg>
+            <LineIcon name="luno-logo" :size="80" />
           </div>
-          <h3 class="pc-empty-title">대화를 시작하세요</h3>
-          <p class="pc-empty-desc">친구 목록에서 대화할 상대를 클릭하거나<br>새로운 그룹 대화를 시작하세요.</p>
+          <h3 class="pc-empty-title">{{ t('emptyChatTitle') }}</h3>
+          <p class="pc-empty-desc">{{ t('emptyChatDesc') }}</p>
         </div>
       </section>
     </main>
 
-<!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call) -->
+<!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call with AI Live Captions) -->
     <div v-if="activeCall" class="call-overlay-modal">
       <div class="call-dialog-box">
         <div v-if="activeCall.kind === 'video'" style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
@@ -1973,14 +2118,39 @@ onBeforeUnmount(() => {
           <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover"></video>
         </div>
         <div v-else class="call-avatar-pulse">
-          <div class="avatar-circle lg">{{ activeCall.title.slice(0, 1) }}</div>
+          <div class="avatar-circle lg" style="background:#315BCD">{{ activeCall.title.slice(0, 1) }}</div>
         </div>
         <h3>{{ activeCall.title }}</h3>
         <p class="call-type-status">
-          {{ activeCall.kind === 'video' ? '📹 영상통화' : '📞 음성통화' }} ·
+          {{ activeCall.kind === 'video' ? '📹 ' + t('callVideo') : '📞 ' + t('callVoice') }} ·
           <span v-if="activeCall.state === 'ringing'">연결 중...</span>
           <span v-else-if="activeCall.state === 'connected'" class="timer-active">{{ formatDuration(callDuration) }}</span>
         </p>
+
+        <!-- AI Live Translation Captions UX (Article 10.2) -->
+        <div class="live-captions-control">
+          <button
+            class="btn-caption-toggle"
+            :class="{ active: liveCaptionsEnabled }"
+            @click="liveCaptionsEnabled = !liveCaptionsEnabled"
+          >
+            <LineIcon name="translate" :size="15" />
+            <span>{{ liveCaptionsEnabled ? t('callLiveTranslate') + ' (ON)' : t('callLiveTranslate') + ' (OFF)' }}</span>
+          </button>
+        </div>
+
+        <div v-if="liveCaptionsEnabled" class="live-captions-box">
+          <div class="caption-notice">ℹ️ {{ t('callConsentNotice') }}</div>
+          <div class="caption-lang-badge">
+            <span class="lang-tag">{{ currentLocale.toUpperCase() }}</span>
+            <span class="lang-arrow">⇄</span>
+            <span class="lang-tag">{{ targetTranslateLang.toUpperCase() }}</span>
+            <span class="badge-engine-mini">AI Live</span>
+          </div>
+          <div class="caption-stream">
+            <p class="caption-live-text">"{{ callSubtitles }}"</p>
+          </div>
+        </div>
 
         <!-- Call Action Buttons -->
         <div class="call-controls-row">
@@ -2163,51 +2333,89 @@ onBeforeUnmount(() => {
 
     <!-- SETTINGS & THEMES MODAL -->
     <div v-if="showSettingsModal" class="modal-backdrop" @click.self="showSettingsModal = false">
-      <div class="standard-modal-box">
+      <div class="standard-modal-box settings-modal">
         <div class="modal-header">
-          <h3>⚙️ 라인 환경설정 & 테마</h3>
+          <h3>⚙️ {{ t('settingsTitle') }}</h3>
           <button class="btn-modal-close" @click="showSettingsModal = false">✕</button>
         </div>
         <div class="modal-body-form">
+          <!-- 1. Language Selector (Article 11) -->
           <div class="setting-group">
-            <strong>🎨 디자인 테마 선택</strong>
-            <div class="theme-choice-buttons">
-              <button class="btn-theme-swatch mint" :class="{ active: activeTheme === 'mint' }" @click="switchTheme('mint')">
-                🌱 민트 (LINE 기본)
-              </button>
-              <button class="btn-theme-swatch ocean" :class="{ active: activeTheme === 'ocean' }" @click="switchTheme('ocean')">
-                🌊 오션 블루
-              </button>
-              <button class="btn-theme-swatch sunset" :class="{ active: activeTheme === 'sunset' }" @click="switchTheme('sunset')">
-                🌅 선셋 글로우
-              </button>
-              <button class="btn-theme-swatch sakura" :class="{ active: activeTheme === 'sakura' }" @click="switchTheme('sakura')">
-                🌸 사쿠라 핑크
-              </button>
-              <button class="btn-theme-swatch midnight" :class="{ active: activeTheme === 'midnight' }" @click="switchTheme('midnight')">
-                🌙 미드나잇 다크
+            <strong>🌐 {{ t('languageLabel') }}</strong>
+            <div class="locale-choice-grid">
+              <button
+                v-for="loc in SUPPORTED_LOCALES"
+                :key="loc.code"
+                class="btn-locale-pill"
+                :class="{ active: currentLocale === loc.code }"
+                @click="setLocale(loc.code)"
+              >
+                <span>{{ loc.flag }}</span> {{ loc.nativeName }} ({{ loc.code.toUpperCase() }})
               </button>
             </div>
           </div>
 
-          <div class="setting-toggle-row">
-            <span>🔒 Letter Sealing (Signal ECDH 종단간 암호화)</span>
-            <input v-model="letterSealingEnabled" type="checkbox" aria-label="종단간 암호화 설정" />
+          <!-- 2. AI Translation Target Language (Article 10) -->
+          <div class="setting-group">
+            <strong>✨ {{ t('targetLangLabel') }}</strong>
+            <div class="locale-choice-grid">
+              <button
+                v-for="loc in SUPPORTED_LOCALES"
+                :key="'pref-target-' + loc.code"
+                class="btn-locale-pill"
+                :class="{ active: targetTranslateLang === loc.code }"
+                @click="targetTranslateLang = loc.code"
+              >
+                <span>{{ loc.flag }}</span> {{ loc.nativeName }}
+              </button>
+            </div>
           </div>
-          <div class="setting-toggle-row">
-            <span>👀 읽음 확인 표시 (Read Receipts)</span>
-            <input type="checkbox" checked />
+
+          <!-- 3. Accessible Font Scale (Article 6.2 & 17.3) -->
+          <div class="setting-group">
+            <strong>🔤 {{ t('fontScaleLabel') }}</strong>
+            <div class="font-scale-buttons">
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'normal' }" @click="setFontScale('normal')">보통 (100%)</button>
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'large' }" @click="setFontScale('large')">크게 (112%)</button>
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'xlarge' }" @click="setFontScale('xlarge')">아주 크게 (125%)</button>
+            </div>
           </div>
-          <div class="setting-toggle-row">
-            <span>🔔 메시지 수신 사운드 알림</span>
-            <input type="checkbox" checked />
+
+          <!-- 4. Design Theme & Dark Mode (Article 4 & 4.5) -->
+          <div class="setting-group">
+            <strong>🎨 디자인 모드</strong>
+            <div class="theme-choice-buttons">
+              <button class="btn-theme-swatch default" :class="{ active: !isDarkMode }" @click="enableLightMode">
+                🔵 LUNO Blue (라이트)
+              </button>
+              <button class="btn-theme-swatch dark" :class="{ active: isDarkMode }" @click="enableDarkMode">
+                🌙 LUNO Deep (다크)
+              </button>
+            </div>
+          </div>
+
+          <!-- 5. Honest Security (Article 14 & 17.4) -->
+          <div class="setting-group">
+            <strong>🛡️ {{ t('securitySection') }}</strong>
+            <div class="setting-toggle-row">
+              <span>🔒 LUNO Sealing (기기 로컬 키 Sealing 암호화)</span>
+              <span class="badge-status-on">활성됨</span>
+            </div>
+            <div class="setting-toggle-row">
+              <span>👀 읽음 확인 표시 (Read Receipts)</span>
+              <input type="checkbox" checked />
+            </div>
+            <div class="setting-toggle-row">
+              <span>🔔 메시지 수신 사운드 알림</span>
+              <input type="checkbox" checked />
+            </div>
           </div>
 
           <div class="setting-group" style="margin-top:8px">
             <strong>👤 내 프로필 수정</strong>
             <div class="flex-row" style="margin-top:6px">
               <input v-model="editProfileName" placeholder="이름" style="flex:1" />
-              <input v-model="editProfileHandle" placeholder="LINE ID (@handle)" style="flex:1" />
+              <input v-model="editProfileHandle" placeholder="LUNO ID (@handle)" style="flex:1" />
             </div>
             <div class="flex-row" style="margin-top:6px">
               <input v-model="editProfileBio" placeholder="상태메시지" style="flex:1" />
@@ -2354,16 +2562,18 @@ onBeforeUnmount(() => {
 /* ==========================================================================
    AUTHENTIC LINE PC DESKTOP DESIGN SYSTEM
    ========================================================================== */
-:root {
-  --line-green: #06C755;
-  --line-green-hover: #05b34c;
-  --line-slate-bg: #849ebf;
-  --line-rail-bg: #20252b;
-  --line-side-bg: #ffffff;
-  --line-border: #e9edf1;
-  --line-text-dark: #191919;
-  --line-text-sub: #788290;
+.line-desktop-app {
+  --line-green: var(--luno-deep-blue);
+  --line-green-hover: var(--luno-deep-blue-hover);
+  --line-slate-bg: var(--luno-bg-chat-canvas);
+  --line-rail-bg: var(--luno-bg-rail);
+  --line-side-bg: var(--luno-bg-surface);
+  --line-border: var(--luno-border-color);
+  --line-text-dark: var(--luno-text-primary);
+  --line-text-sub: var(--luno-text-secondary);
 }
+
+.pc-luno-logo { display: block; margin: 0 auto; max-width: 100%; object-fit: contain; }
 
 .line-desktop-app {
   display: flex;
@@ -3534,4 +3744,324 @@ onBeforeUnmount(() => {
   to { opacity: 1; }
 }
 
+/* ==========================================================================
+   LUNO UI/UX ENHANCEMENTS — I18N, TRANSLATION, LIVE CAPTIONS & RESPONSIVENESS
+   ========================================================================== */
+.pc-win-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  z-index: 2;
+}
+.pc-locale-pills {
+  display: flex;
+  gap: 4px;
+}
+.btn-auth-locale {
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-auth-locale.active {
+  background: #315BCD;
+  color: #ffffff;
+  border-color: #315BCD;
+}
+.btn-win-dark {
+  padding: 4px 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  display: grid;
+  place-items: center;
+}
+.btn-win-dark:hover {
+  color: #1e293b;
+}
+.pc-brand-slogan {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5B6475;
+  text-align: center;
+  margin: 6px 0 16px;
+  letter-spacing: 0.3px;
+}
+
+/* Mobile Back Button */
+.btn-mobile-back {
+  display: none;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: inherit;
+  border-radius: 4px;
+}
+.btn-mobile-back:hover {
+  background: #e2e8f0;
+}
+
+/* AI Translation Controls in Chat Header */
+.ai-translate-tool-pill {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 20px;
+  padding: 2px 4px 2px 8px;
+  gap: 6px;
+  border: 1px solid #e2e8f0;
+}
+.btn-translate-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 12px;
+}
+.btn-translate-switch.active {
+  background: #315BCD;
+  color: #ffffff;
+}
+.translate-lang-select {
+  font-size: 11px;
+  font-weight: 700;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 2px 6px;
+  color: #1e293b;
+  outline: none;
+  cursor: pointer;
+}
+
+/* LUNO AI Message Translation Box */
+.luno-ai-translation-box {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(79, 124, 255, 0.08);
+  border-radius: 8px;
+  border-left: 3px solid #315BCD;
+  font-size: 12px;
+}
+.pc-msg-row.mine .luno-ai-translation-box {
+  background: rgba(255, 255, 255, 0.18);
+  border-left-color: #ffffff;
+  color: #ffffff;
+}
+.translation-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+.badge-engine {
+  font-size: 9px;
+  font-weight: 700;
+  color: #315BCD;
+}
+.pc-msg-row.mine .badge-engine {
+  color: #ffffff;
+  opacity: 0.9;
+}
+.btn-retry-translate {
+  background: none;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 4px;
+}
+.translation-result {
+  line-height: 1.4;
+  font-weight: 500;
+}
+.translation-loading {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.translation-error {
+  font-size: 11px;
+  color: #ef4444;
+}
+
+/* Call Live Translation Captions UX (Article 10.2) */
+.live-captions-control {
+  margin: 10px 0;
+}
+.btn-caption-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #475569;
+  background: #334155;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-caption-toggle.active {
+  background: #315BCD;
+  border-color: #4F7CFF;
+}
+.live-captions-box {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  text-align: left;
+}
+.caption-notice {
+  font-size: 10px;
+  color: #fbbf24;
+  margin-bottom: 6px;
+}
+.caption-lang-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.lang-tag {
+  background: #1e293b;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.lang-arrow {
+  color: #5EE6C2;
+}
+.badge-engine-mini {
+  margin-left: auto;
+  background: #315BCD;
+  color: #ffffff;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 9px;
+}
+.caption-live-text {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #F7FAFF;
+  line-height: 1.4;
+}
+
+/* Settings Modal Elements */
+.locale-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+.btn-locale-pill {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+.btn-locale-pill.active {
+  background: #315BCD;
+  color: #ffffff;
+  border-color: #315BCD;
+}
+.font-scale-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.btn-scale-chip {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn-scale-chip.active {
+  background: #315BCD;
+  color: #ffffff;
+  border-color: #315BCD;
+}
+.badge-status-on {
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN BREAKPOINTS (Article 12)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .pc-workspace {
+    flex-direction: column-reverse;
+  }
+  .pc-rail {
+    width: 100vw;
+    height: 56px;
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 0 4px;
+  }
+  .pc-rail-top {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+    gap: 0;
+  }
+  .pc-rail-bottom {
+    display: none;
+  }
+  .pc-side-pane {
+    width: 100vw;
+    height: calc(100vh - 56px);
+  }
+  .btn-mobile-back {
+    display: grid;
+    place-items: center;
+  }
+  .pc-chat-viewport {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    width: 100vw;
+    height: 100vh;
+  }
+  .pc-login-card {
+    width: calc(100vw - 32px);
+    max-width: 360px;
+  }
+}
 </style>

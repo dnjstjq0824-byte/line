@@ -73,9 +73,9 @@ async function saveFeatureFlag() {
 <template>
   <div class="page">
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding:10px 14px;background:#fff;border-radius:10px;font-size:13px;align-items:center;border:1px solid #e0e8ee">
-      <a href="../" style="text-decoration:none;color:#06C755;font-weight:700">💬 LINE 메신저 홈</a>
+      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
       <span style="color:#ccc">|</span>
-      <a href="../admin/" style="text-decoration:none;color:#a83232;font-weight:700">👑 관리자</a>
+      <a href="../admin/" style="text-decoration:none;color:#315BCD;font-weight:700">👑 관리자</a>
       <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">🏢 파트너</a>
       <a href="../developer/" style="text-decoration:none;color:#334155;font-weight:600">💻 개발자</a>
       <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">🎨 크리에이터</a>
@@ -84,7 +84,7 @@ async function saveFeatureFlag() {
     </nav>
 
     <header>
-      <h1>Messenger 슈퍼 관리자 센터</h1>
+      <h1>LUNO 통합 관리자 센터 (Admin)</h1>
       <span>역할: platform_admin · support · moderator</span>
     </header>
 

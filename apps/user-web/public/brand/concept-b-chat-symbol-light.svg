@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" fill="none">
+  <rect width="320" height="96" rx="24" fill="#F7FAFF"/>
+  <!-- Symbol -->
+  <g transform="translate(24, 16)">
+    <rect width="64" height="64" rx="20" fill="#315BCD"/>
+    <!-- Speech Bubble Body -->
+    <path d="M16 30C16 20.6112 23.6112 13 33 13H35C44.3888 13 52 20.6112 52 30C52 39.3888 44.3888 47 35 47H26L17.5 52.5C16.5 53.1 15.3 52.2 15.6 51L17.2 43.5C16.4 41.2 16 38.7 16 36V30Z" fill="#FFFFFF"/>
+    <!-- LUNO Crescent & Connection Nodes -->
+    <path d="M26 27C26 32.5228 30.4772 37 36 37C39.2 37 42 35.5 43.8 33.2" stroke="#315BCD" stroke-width="4.5" stroke-linecap="round"/>
+    <circle cx="27" cy="24" r="3" fill="#4F7CFF"/>
+    <circle cx="42" cy="24" r="3.5" fill="#5EE6C2"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="106" y="54" font-family="Inter, Pretendard, sans-serif" font-size="34" font-weight="800" letter-spacing="-0.5" fill="#14213D">LUNO</text>
+  <text x="108" y="74" font-family="Inter, Pretendard, sans-serif" font-size="12" font-weight="600" letter-spacing="0.4" fill="#5B6475">CONNECT BEYOND BORDERS</text>
+</svg>

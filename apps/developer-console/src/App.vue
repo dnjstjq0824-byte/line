@@ -80,17 +80,17 @@ async function registerMiniApp() {
 <template>
   <main>
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;font-size:13px;align-items:center">
-      <a href="../" style="text-decoration:none;color:#06C755;font-weight:700">💬 LINE 메신저 홈</a>
+      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
       <span style="color:#ccc">|</span>
       <a href="../admin/" style="text-decoration:none;color:#334155;font-weight:600">👑 관리자</a>
       <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">🏢 파트너</a>
-      <a href="../developer/" style="text-decoration:none;color:#165dd8;font-weight:700">💻 개발자</a>
+      <a href="../developer/" style="text-decoration:none;color:#315BCD;font-weight:700">💻 개발자</a>
       <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">🎨 크리에이터</a>
       <a href="../ads/" style="text-decoration:none;color:#334155;font-weight:600">📢 광고주</a>
       <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
     </nav>
 
-    <h1>Developer Center</h1>
+    <h1>LUNO Developer Center (Developers)</h1>
     <p>개발자 조직 · Messaging API 앱 · Webhook 발송 엔진 · Mini App 플랫폼</p>
     <p class="error" role="alert" v-if="error">{{ error }}</p>
     <p class="note" v-if="note">{{ note }}</p>

@@ -1,5 +1,20 @@
 # Continuation status — 2026-10-26
 
+## Continuation: 2026-10-31 — local LUNO migration repair
+
+- Preserved the existing LUNO assets, dictionary, icons and design-token edits.
+- Fixed the sticker collection initialization order; retained the existing export
+  as a compatibility alias and derived the category type from the sticker model.
+- Restored common stylesheet imports needed by existing messenger components.
+- Connected the login title/logo to LUNO, using Vite's base URL for asset paths.
+- Scoped desktop color aliases to the app container and mapped them to LUNO tokens.
+- Validation: all six apps passed the web build task (vue-tsc and Vite);
+  edited TypeScript/Vue entry files have no editor diagnostics.
+- Browser interactions and backend integration were not verified. No deployment.
+- Remaining migration work includes wiring locale selection to the UI, reviewing
+  the dictionary's simulated translation behavior, and replacing remaining old
+  brand labels and hard-coded colors throughout the application.
+
 The working tree already contained changes to six Vue apps, the Flutter app,
 Go saved-message deletion, and the Cloudflare Worker. Those changes were preserved.
 

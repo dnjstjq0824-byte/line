@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" fill="none">
+  <rect width="320" height="96" rx="24" fill="#F7FAFF"/>
+  <g transform="translate(28, 22)">
+    <!-- L -->
+    <path d="M12 8V40C12 43.3137 14.6863 46 18 46H38" stroke="#315BCD" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- U -->
+    <path d="M58 8V30C58 39.3888 65.6112 47 75 47C84.3888 47 92 39.3888 92 30V8" stroke="#4F7CFF" stroke-width="10" stroke-linecap="round"/>
+    <!-- N -->
+    <path d="M116 46V10C116 8.5 118 8 119 9.2L147 44.8C148 46 150 45.5 150 44V8" stroke="#315BCD" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- O with Mint Connection Node -->
+    <circle cx="194" cy="27" r="19" stroke="#4F7CFF" stroke-width="10"/>
+    <circle cx="209" cy="12" r="6" fill="#5EE6C2"/>
+  </g>
+  <text x="256" y="55" font-family="Inter, Pretendard, sans-serif" font-size="13" font-weight="600" fill="#5B6475">GLOBAL</text>
+</svg>

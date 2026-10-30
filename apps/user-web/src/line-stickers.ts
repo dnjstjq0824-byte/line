@@ -1,250 +1,169 @@
-// Official LINE Friends High-Fidelity Vector Sticker Collection
-// Characters: Brown (곰 브라운), Cony (토끼 코니), Sally (오리 샐리)
+// ============================================================================
+// LUNO ORIGINAL BRAND STICKER COLLECTION — "LUNO ORBIT CREW"
+// 100% Original LUNO Brand Characters: Lumi (루미), Nori (노리), Poko (포코)
+// Zero third-party copyrighted assets (Article 2 Compliance)
+// ============================================================================
 
-export interface LineSticker {
+export interface LunoSticker {
   id: string;
   name: string;
-  character: 'Brown' | 'Cony' | 'Sally';
+  character: 'Lumi' | 'Nori' | 'Poko';
   svg: string;
 }
 
-export const LINE_STICKERS: LineSticker[] = [
-  // --- BROWN STICKERS ---
+export type LineSticker = LunoSticker;
+// Compatibility name for existing message rendering and imports.
+export { LUNO_STICKERS as LINE_STICKERS };
+
+export const LUNO_STICKERS: LunoSticker[] = [
+  // --- LUMI (루미 — LUNO Blue Celestial Mascot) ---
   {
-    id: 'brown_hello',
-    name: '브라운 안녕',
-    character: 'Brown',
+    id: 'lumi_hello',
+    name: 'Lumi Hello',
+    character: 'Lumi',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="28" cy="28" r="16" fill="#784421"/>
-      <circle cx="28" cy="28" r="9" fill="#5c3418"/>
-      <circle cx="72" cy="28" r="16" fill="#784421"/>
-      <circle cx="72" cy="28" r="9" fill="#5c3418"/>
-      <circle cx="50" cy="54" r="38" fill="#8c5028"/>
-      <ellipse cx="50" cy="62" rx="15" ry="11" fill="#fff" opacity="0.9"/>
-      <circle cx="50" cy="58" r="3.5" fill="#222"/>
-      <path d="M50 61.5v6M46 70c2-1.5 6-1.5 8 0" stroke="#222" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-      <circle cx="37" cy="50" r="3" fill="#111"/>
-      <circle cx="63" cy="50" r="3" fill="#111"/>
-      <!-- Waving Hand -->
-      <g transform="translate(76, 45) rotate(-20)">
-        <ellipse cx="8" cy="12" rx="7" ry="11" fill="#8c5028"/>
-        <path d="M3 2c3-4 8-3 10 1" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
-      </g>
+      <circle cx="50" cy="52" r="36" fill="#4F7CFF"/>
+      <circle cx="32" cy="24" r="10" fill="#315BCD"/>
+      <circle cx="68" cy="24" r="10" fill="#315BCD"/>
+      <ellipse cx="50" cy="58" rx="16" ry="12" fill="#F7FAFF"/>
+      <circle cx="38" cy="46" r="3.5" fill="#14213D"/>
+      <circle cx="62" cy="46" r="3.5" fill="#14213D"/>
+      <path d="M44 58c3 4 9 4 12 0" stroke="#14213D" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <circle cx="74" cy="34" r="6" fill="#5EE6C2"/>
+      <text x="50" y="95" font-size="11" font-weight="800" fill="#315BCD" text-anchor="middle">HELLO!</text>
     </svg>`
   },
   {
-    id: 'brown_heart',
-    name: '브라운 하트',
-    character: 'Brown',
+    id: 'lumi_heart',
+    name: 'Lumi Love',
+    character: 'Lumi',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="28" cy="26" r="15" fill="#784421"/>
-      <circle cx="72" cy="26" r="15" fill="#784421"/>
-      <circle cx="50" cy="52" r="36" fill="#8c5028"/>
-      <ellipse cx="50" cy="59" rx="14" ry="10" fill="#fff" opacity="0.9"/>
-      <circle cx="50" cy="56" r="3" fill="#222"/>
-      <path d="M50 59v5M47 66c2-1 4-1 6 0" stroke="#222" stroke-width="2" stroke-linecap="round" fill="none"/>
-      <circle cx="38" cy="48" r="3" fill="#111"/>
-      <circle cx="62" cy="48" r="3" fill="#111"/>
-      <!-- Big Red Heart -->
-      <path d="M72 58 C72 48, 88 48, 88 60 C88 74, 72 84, 72 84 C72 84, 56 74, 56 60 C56 48, 72 48, 72 58 Z" fill="#ff334b"/>
-      <circle cx="65" cy="56" r="2" fill="#fff" opacity="0.6"/>
+      <circle cx="50" cy="54" r="35" fill="#4F7CFF"/>
+      <circle cx="32" cy="26" r="9" fill="#315BCD"/>
+      <circle cx="68" cy="26" r="9" fill="#315BCD"/>
+      <path d="M34 46c3-3 6-3 9 0M57 46c3-3 6-3 9 0" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M70 52 C70 43, 84 43, 84 54 C84 66, 70 75, 70 75 C70 75, 56 66, 56 54 C56 43, 70 43, 70 52 Z" fill="#EF4444"/>
     </svg>`
   },
   {
-    id: 'brown_thumbsup',
-    name: '브라운 따봉',
-    character: 'Brown',
+    id: 'lumi_thumbsup',
+    name: 'Lumi Great',
+    character: 'Lumi',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="28" cy="28" r="16" fill="#784421"/>
-      <circle cx="72" cy="28" r="16" fill="#784421"/>
-      <circle cx="50" cy="52" r="36" fill="#8c5028"/>
-      <ellipse cx="50" cy="59" rx="14" ry="10" fill="#fff" opacity="0.9"/>
-      <circle cx="50" cy="56" r="3.2" fill="#222"/>
-      <path d="M50 59v5M47 66c2-1 4-1 6 0" stroke="#222" stroke-width="2" stroke-linecap="round" fill="none"/>
-      <circle cx="38" cy="48" r="3" fill="#111"/>
-      <circle cx="62" cy="48" r="3" fill="#111"/>
-      <!-- Thumbs Up Glove -->
-      <g transform="translate(14, 56)">
-        <ellipse cx="12" cy="14" rx="10" ry="12" fill="#ffcc00"/>
-        <rect x="7" y="2" width="7" height="12" rx="3.5" fill="#ffcc00"/>
-        <path d="M10 6v5" stroke="#cc9900" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="12" y="32" font-size="10" font-weight="bold" fill="#06C755" text-anchor="middle">GOOD!</text>
-      </g>
+      <circle cx="50" cy="52" r="35" fill="#315BCD"/>
+      <circle cx="38" cy="46" r="3.5" fill="#FFFFFF"/>
+      <circle cx="62" cy="46" r="3.5" fill="#FFFFFF"/>
+      <path d="M43 56c4 5 10 5 14 0" stroke="#5EE6C2" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <rect x="14" y="52" width="22" height="22" rx="8" fill="#5EE6C2"/>
+      <text x="50" y="95" font-size="11" font-weight="800" fill="#315BCD" text-anchor="middle">GREAT!</text>
     </svg>`
   },
   {
-    id: 'brown_cry',
-    name: '브라운 눈물',
-    character: 'Brown',
+    id: 'lumi_cry',
+    name: 'Lumi Sad',
+    character: 'Lumi',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="28" cy="28" r="16" fill="#784421"/>
-      <circle cx="72" cy="28" r="16" fill="#784421"/>
-      <circle cx="50" cy="52" r="36" fill="#8c5028"/>
-      <ellipse cx="50" cy="62" rx="14" ry="10" fill="#fff" opacity="0.9"/>
-      <circle cx="50" cy="59" r="3" fill="#222"/>
-      <path d="M47 68c2-2 4-2 6 0" stroke="#222" stroke-width="2" stroke-linecap="round" fill="none"/>
-      <!-- Sad eyes -->
-      <path d="M34 50c3-2 6-1 8 0M58 50c2-1 5-2 8 0" stroke="#111" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-      <!-- Tears stream -->
-      <path d="M37 54 C35 66, 32 78, 30 86" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" fill="none"/>
-      <path d="M63 54 C65 66, 68 78, 70 86" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" fill="none"/>
+      <circle cx="50" cy="54" r="35" fill="#4F7CFF"/>
+      <path d="M34 48c3-2 6-1 8 0M58 48c2-1 5-2 8 0" stroke="#14213D" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <path d="M38 53v22M62 53v22" stroke="#8EC5FF" stroke-width="4.5" stroke-linecap="round"/>
+      <path d="M45 64c3-3 7-3 10 0" stroke="#14213D" stroke-width="2.5" stroke-linecap="round" fill="none"/>
     </svg>`
   },
 
-  // --- CONY STICKERS ---
+  // --- NORI (노리 — LUNO Mint Star Companion) ---
   {
-    id: 'cony_happy',
-    name: '코니 신남',
-    character: 'Cony',
+    id: 'nori_happy',
+    name: 'Nori Joy',
+    character: 'Nori',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <!-- Ears -->
-      <ellipse cx="36" cy="24" rx="9" ry="24" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <ellipse cx="36" cy="25" rx="5" ry="17" fill="#fca5a5"/>
-      <ellipse cx="64" cy="24" rx="9" ry="24" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <ellipse cx="64" cy="25" rx="5" ry="17" fill="#fca5a5"/>
-      <!-- Head -->
-      <circle cx="50" cy="58" r="34" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <!-- Blushing Cheeks -->
-      <circle cx="30" cy="64" r="6" fill="#f43f5e" opacity="0.4"/>
-      <circle cx="70" cy="64" r="6" fill="#f43f5e" opacity="0.4"/>
-      <!-- Happy Arch Eyes -->
-      <path d="M33 54c4-4 8-4 12 0M55 54c4-4 8-4 12 0" stroke="#1e293b" stroke-width="3" stroke-linecap="round" fill="none"/>
-      <!-- Nose & Mouth -->
-      <circle cx="50" cy="60" r="2.5" fill="#f43f5e"/>
-      <path d="M46 66c2 4 6 4 8 0" stroke="#1e293b" stroke-width="2" stroke-linecap="round" fill="#f43f5e"/>
-      <!-- Sparkles -->
-      <path d="M18 42l2 4 4 2-4 2-2 4-2-4-4-2 4-2zM82 42l1.5 3 3 1.5-3 1.5-1.5 3-1.5-3-3-1.5 3-1.5z" fill="#facc15"/>
+      <circle cx="50" cy="54" r="34" fill="#5EE6C2" stroke="#315BCD" stroke-width="3"/>
+      <path d="M34 50c3-4 7-4 10 0M56 50c3-4 7-4 10 0" stroke="#14213D" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M44 62c3 5 9 5 12 0" stroke="#14213D" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <circle cx="28" cy="58" r="5" fill="#4F7CFF" opacity="0.35"/>
+      <circle cx="72" cy="58" r="5" fill="#4F7CFF" opacity="0.35"/>
     </svg>`
   },
   {
-    id: 'cony_love',
-    name: '코니 하트뿅',
-    character: 'Cony',
+    id: 'nori_cheer',
+    name: 'Nori Cheer',
+    character: 'Nori',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="36" cy="24" rx="9" ry="24" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <ellipse cx="36" cy="25" rx="5" ry="17" fill="#fca5a5"/>
-      <ellipse cx="64" cy="24" rx="9" ry="24" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <ellipse cx="64" cy="25" rx="5" ry="17" fill="#fca5a5"/>
-      <circle cx="50" cy="58" r="34" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <circle cx="28" cy="64" r="7" fill="#f43f5e" opacity="0.5"/>
-      <circle cx="72" cy="64" r="7" fill="#f43f5e" opacity="0.5"/>
-      <!-- Heart Eyes -->
-      <path d="M39 52 C39 46, 46 46, 46 52 C46 58, 39 63, 39 63 C39 63, 32 58, 32 52 C32 46, 39 46, 39 52 Z" fill="#e11d48"/>
-      <path d="M61 52 C61 46, 68 46, 68 52 C68 58, 61 63, 61 63 C61 63, 54 58, 54 52 C54 46, 61 46, 61 52 Z" fill="#e11d48"/>
-      <!-- Kiss Mouth -->
-      <path d="M47 67c3 2 5 2 6 0" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <circle cx="50" cy="52" r="34" fill="#5EE6C2" stroke="#14213D" stroke-width="3"/>
+      <circle cx="38" cy="48" r="3.5" fill="#14213D"/>
+      <circle cx="62" cy="48" r="3.5" fill="#14213D"/>
+      <path d="M44 60h12" stroke="#14213D" stroke-width="3" stroke-linecap="round"/>
+      <text x="50" y="95" font-size="11" font-weight="800" fill="#14213D" text-anchor="middle">LET'S GO!</text>
     </svg>`
   },
   {
-    id: 'cony_cheer',
-    name: '코니 파이팅',
-    character: 'Cony',
+    id: 'nori_thanks',
+    name: 'Nori Thanks',
+    character: 'Nori',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="36" cy="24" rx="9" ry="24" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <ellipse cx="36" cy="25" rx="5" ry="17" fill="#fca5a5"/>
-      <ellipse cx="64" cy="24" rx="9" ry="24" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <ellipse cx="64" cy="25" rx="5" ry="17" fill="#fca5a5"/>
-      <circle cx="50" cy="58" r="34" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
-      <!-- Red Headband -->
-      <path d="M18 52 C35 44, 65 44, 82 52" stroke="#dc2626" stroke-width="5" stroke-linecap="round" fill="none"/>
-      <!-- Determined Eyes -->
-      <circle cx="38" cy="58" r="3" fill="#111"/>
-      <circle cx="62" cy="58" r="3" fill="#111"/>
-      <path d="M34 52l7 3M66 52l-7 3" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
-      <path d="M46 68h8" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
-      <text x="50" y="94" font-size="12" font-weight="900" fill="#dc2626" text-anchor="middle">FIGHTING!</text>
+      <circle cx="50" cy="52" r="34" fill="#EAF1FF" stroke="#4F7CFF" stroke-width="3"/>
+      <circle cx="38" cy="48" r="3.5" fill="#315BCD"/>
+      <circle cx="62" cy="48" r="3.5" fill="#315BCD"/>
+      <path d="M44 58c3 4 9 4 12 0" stroke="#315BCD" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <text x="50" y="95" font-size="11" font-weight="800" fill="#315BCD" text-anchor="middle">THANK YOU</text>
     </svg>`
   },
   {
-    id: 'cony_angry',
-    name: '코니 분노',
-    character: 'Cony',
+    id: 'nori_translate',
+    name: 'Nori Global',
+    character: 'Nori',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="32" cy="24" rx="9" ry="24" fill="#fee2e2" stroke="#f87171" stroke-width="1.5"/>
-      <ellipse cx="68" cy="24" rx="9" ry="24" fill="#fee2e2" stroke="#f87171" stroke-width="1.5"/>
-      <circle cx="50" cy="58" r="34" fill="#fee2e2" stroke="#f87171" stroke-width="1.5"/>
-      <!-- Anger mark -->
-      <path d="M68 38l6 6M74 38l-6 6M65 41h12M71 35v12" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round"/>
-      <!-- Angry Eyes -->
-      <path d="M32 54l10 5M68 54l-10 5" stroke="#991b1b" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="39" cy="62" r="3" fill="#991b1b"/>
-      <circle cx="61" cy="62" r="3" fill="#991b1b"/>
-      <!-- Open Grr Mouth -->
-      <path d="M44 71c3-4 9-4 12 0z" fill="#991b1b"/>
+      <circle cx="50" cy="50" r="35" fill="#315BCD"/>
+      <ellipse cx="50" cy="50" rx="18" ry="35" stroke="#8EC5FF" stroke-width="2.5" fill="none"/>
+      <line x1="15" y1="50" x2="85" y2="50" stroke="#5EE6C2" stroke-width="2.5"/>
+      <text x="50" y="55" font-size="14" font-weight="800" fill="#FFFFFF" text-anchor="middle">A↔가</text>
     </svg>`
   },
 
-  // --- SALLY STICKERS ---
+  // --- POKO (포코 — Warm Cloud Companion) ---
   {
-    id: 'sally_wink',
-    name: '샐리 윙크',
-    character: 'Sally',
+    id: 'poko_wink',
+    name: 'Poko Wink',
+    character: 'Poko',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <!-- Body -->
-      <circle cx="50" cy="54" r="36" fill="#facc15"/>
-      <!-- Left Eye Open -->
-      <circle cx="37" cy="48" r="3.5" fill="#1e293b"/>
-      <!-- Right Eye Wink -->
-      <path d="M58 48c4-3 8-3 12 0" stroke="#1e293b" stroke-width="3" stroke-linecap="round" fill="none"/>
-      <!-- Orange Beak -->
-      <ellipse cx="50" cy="58" rx="14" ry="8" fill="#ea580c"/>
-      <line x1="40" y1="58" x2="60" y2="58" stroke="#9a3412" stroke-width="1.5"/>
-      <!-- Feet -->
-      <ellipse cx="38" cy="88" rx="7" ry="3" fill="#ea580c"/>
-      <ellipse cx="62" cy="88" rx="7" ry="3" fill="#ea580c"/>
+      <circle cx="50" cy="54" r="34" fill="#8EC5FF"/>
+      <circle cx="37" cy="48" r="3.5" fill="#14213D"/>
+      <path d="M57 48c4-3 8-3 12 0" stroke="#14213D" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M44 60c3 4 9 4 12 0" stroke="#14213D" stroke-width="2.5" stroke-linecap="round" fill="none"/>
     </svg>`
   },
   {
-    id: 'sally_yay',
-    name: '샐리 만세',
-    character: 'Sally',
+    id: 'poko_yay',
+    name: 'Poko Celebrate',
+    character: 'Poko',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="54" r="36" fill="#facc15"/>
-      <circle cx="36" cy="46" r="3.5" fill="#1e293b"/>
-      <circle cx="64" cy="46" r="3.5" fill="#1e293b"/>
-      <!-- Open Beak -->
-      <ellipse cx="50" cy="57" rx="14" ry="10" fill="#ea580c"/>
-      <ellipse cx="50" cy="59" rx="8" ry="5" fill="#7c2d12"/>
-      <!-- Wings Raised -->
-      <ellipse cx="14" cy="44" rx="7" ry="12" fill="#eab308" transform="rotate(-30 14 44)"/>
-      <ellipse cx="86" cy="44" rx="7" ry="12" fill="#eab308" transform="rotate(30 86 44)"/>
-      <!-- Cheeks -->
-      <circle cx="28" cy="56" r="5" fill="#f97316" opacity="0.5"/>
-      <circle cx="72" cy="56" r="5" fill="#f97316" opacity="0.5"/>
+      <circle cx="50" cy="54" r="34" fill="#8EC5FF"/>
+      <circle cx="37" cy="47" r="3.5" fill="#14213D"/>
+      <circle cx="63" cy="47" r="3.5" fill="#14213D"/>
+      <circle cx="50" cy="60" r="6" fill="#315BCD"/>
+      <circle cx="22" cy="26" r="4" fill="#5EE6C2"/>
+      <circle cx="78" cy="26" r="4" fill="#4F7CFF"/>
     </svg>`
   },
   {
-    id: 'sally_question',
-    name: '샐리 갸우뚱',
-    character: 'Sally',
+    id: 'poko_question',
+    name: 'Poko Curious',
+    character: 'Poko',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <g transform="rotate(12 50 54)">
-        <circle cx="50" cy="54" r="36" fill="#facc15"/>
-        <circle cx="37" cy="47" r="3.5" fill="#1e293b"/>
-        <circle cx="63" cy="47" r="3.5" fill="#1e293b"/>
-        <ellipse cx="50" cy="57" rx="13" ry="8" fill="#ea580c"/>
-        <line x1="41" y1="57" x2="59" y2="57" stroke="#9a3412" stroke-width="1.5"/>
-      </g>
-      <!-- Question Mark -->
-      <text x="80" y="36" font-size="28" font-weight="bold" fill="#0284c7">?</text>
+      <circle cx="50" cy="56" r="33" fill="#8EC5FF"/>
+      <circle cx="38" cy="50" r="3.5" fill="#14213D"/>
+      <circle cx="62" cy="50" r="3.5" fill="#14213D"/>
+      <circle cx="50" cy="62" r="3.5" fill="#14213D"/>
+      <text x="78" y="34" font-size="26" font-weight="800" fill="#315BCD">?</text>
     </svg>`
   },
   {
-    id: 'sally_love',
-    name: '샐리 사랑',
-    character: 'Sally',
+    id: 'poko_ok',
+    name: 'Poko OK',
+    character: 'Poko',
     svg: `<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="54" r="36" fill="#facc15"/>
-      <circle cx="36" cy="48" r="3" fill="#1e293b"/>
-      <circle cx="64" cy="48" r="3" fill="#1e293b"/>
-      <ellipse cx="50" cy="58" rx="14" ry="8" fill="#ea580c"/>
-      <!-- Cheeks -->
-      <circle cx="27" cy="56" r="5" fill="#f43f5e" opacity="0.6"/>
-      <circle cx="73" cy="56" r="5" fill="#f43f5e" opacity="0.6"/>
-      <!-- Hearts around -->
-      <path d="M22 28 C22 23, 27 23, 27 28 C27 34, 22 38, 22 38 C22 38, 17 34, 17 28 C17 23, 22 23, 22 28 Z" fill="#ef4444"/>
-      <path d="M78 26 C78 21, 83 21, 83 26 C83 32, 78 36, 78 36 C78 36, 73 32, 73 26 C73 21, 78 21, 78 26 Z" fill="#ef4444"/>
+      <circle cx="50" cy="52" r="34" fill="#315BCD"/>
+      <circle cx="50" cy="52" r="26" stroke="#5EE6C2" stroke-width="3" fill="none"/>
+      <text x="50" y="59" font-size="22" font-weight="800" fill="#FFFFFF" text-anchor="middle">OK</text>
     </svg>`
   }
 ];
-

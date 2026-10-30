@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#F7FAFF"/>
+  <circle cx="1050" cy="120" r="260" fill="#EAF1FF"/>
+  <circle cx="140" cy="540" r="200" fill="#EAF1FF"/>
+  <g transform="translate(120, 200) scale(2.2)">
+    <rect width="64" height="64" rx="20" fill="#315BCD"/>
+    <path d="M15 29C15 19.6112 22.6112 12 32 12H34C43.3888 12 51 19.6112 51 29C51 38.3888 43.3888 46 34 46H25L16.5 51.5C15.5 52.1 14.3 51.2 14.6 50L16.2 42.5C15.4 40.2 15 37.7 15 35V29Z" fill="#FFFFFF"/>
+    <path d="M25 26C25 31.5228 29.4772 36 35 36C38.2 36 41 34.5 42.8 32.2" stroke="#315BCD" stroke-width="4.5" stroke-linecap="round"/>
+    <circle cx="26" cy="23" r="3" fill="#4F7CFF"/>
+    <circle cx="41" cy="23" r="3.5" fill="#5EE6C2"/>
+  </g>
+  <text x="300" y="290" font-family="Inter, Pretendard, sans-serif" font-size="84" font-weight="800" fill="#14213D">LUNO</text>
+  <text x="304" y="350" font-family="Inter, Pretendard, sans-serif" font-size="32" font-weight="600" fill="#315BCD">Connect Beyond Borders</text>
+  <text x="304" y="405" font-family="Inter, Pretendard, sans-serif" font-size="24" font-weight="500" fill="#5B6475">Global Messenger &amp; Real-Time AI Translation Platform</text>
+</svg>

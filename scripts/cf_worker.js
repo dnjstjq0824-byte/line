@@ -271,8 +271,8 @@ function seedExtras() {
   alice.birthday = new Date().toISOString().slice(5, 10);
 
   for (const [id, name, handle, description, color] of [
-    ['oa-notice', 'LINE 공식 공지', '@line_notice', '서비스 소식과 업데이트를 전해드립니다.', '#06c755'],
-    ['oa_notice', 'LINE 공식 공지', '@line_notice', '서비스 소식과 업데이트를 전해드립니다.', '#06c755'],
+    ['oa-notice', 'LUNO 공식 안내', '@luno_notice', 'LUNO 서비스 소식과 업데이트를 전해드립니다.', '#315BCD'],
+    ['oa_notice', 'LUNO 공식 안내', '@luno_notice', 'LUNO 서비스 소식과 업데이트를 전해드립니다.', '#315BCD'],
     ['oa-weather', '날씨 알리미', '@weather', '매일 아침 날씨를 알려드립니다.', '#0ea5e9'],
     ['oa_weather', '날씨 알리미', '@weather', '매일 아침 날씨를 알려드립니다.', '#0ea5e9'],
     ['oa-deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e'],
@@ -354,10 +354,10 @@ function ensureSeed() {
       id: '00000000-0000-0000-0000-000000000002',
       email: 'user@line.local',
       password: 'LineUser#2026!',
-      display_name: 'LINE Demo User',
+      display_name: 'LUNO Demo User',
       role: 'user',
-      handle: 'line_user',
-      bio: 'Cloudflare Demo Messenger User'
+      handle: 'luno_user',
+      bio: 'LUNO Global Messenger User'
     },
     {
       id: '00000000-0000-0000-0000-000000000003',
@@ -1476,6 +1476,7 @@ async function syncFromD1(db) {
           }
         }
         const existing = users.get(row.email.toLowerCase());
+        const dName = (row.display_name === 'LINE Demo User' || !row.display_name) ? 'LUNO Demo User' : row.display_name;
         const u = {
           id: row.id,
           email: row.email,
@@ -1483,9 +1484,9 @@ async function syncFromD1(db) {
           raw_password: plain || existing?.raw_password,
           pw_hash: row.password_hash,
           pw_salt: existing?.pw_salt,
-          display_name: row.display_name,
+          display_name: dName,
           role: row.email.includes('admin') ? 'admin' : 'user',
-          bio: row.bio || '',
+          bio: (row.bio && !row.bio.includes('LINE')) ? row.bio : 'LUNO Global Messenger User',
           status_message: row.status_message || '',
           created_at: row.created_at
         };
@@ -1574,7 +1575,20 @@ export default {
 
     // Health / Readyz / Metrics
     if (url.pathname === '/healthz' || url.pathname === '/readyz' || url.pathname === '/api/v1/health') {
-      return json({ status: 'ok', runtime: 'cloudflare-worker' });
+      return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
+    }
+    if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
+      const auth = getAuthUser(request);
+      if (!auth) return json({ error: 'unauthorized' }, 401);
+      const b = await request.json().catch(() => ({}));
+      const text = String(b.text || '').trim();
+      const targetLang = String(b.target_lang || 'en');
+      return json({
+        original: text,
+        target_lang: targetLang,
+        translated: `[LUNO AI] ${text}`,
+        engine: 'luno-edge-ai-v1'
+      });
     }
     if (url.pathname === '/metrics') {
       return new Response('# HELP cf_edge_requests_total\ncf_edge_requests_total 1\n', {
