@@ -159,6 +159,22 @@ CREATE TABLE chat.saved_messages (
  user_id UUID NOT NULL REFERENCES identity.users(id), message_id UUID NOT NULL REFERENCES chat.messages(id),
  saved_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY(user_id,message_id)
 );
+CREATE TABLE chat.notes (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), conversation_id UUID NOT NULL REFERENCES chat.conversations(id),
+ author_id UUID NOT NULL REFERENCES identity.users(id), body TEXT NOT NULL,
+ likes INT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE chat.events (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), conversation_id UUID NOT NULL REFERENCES chat.conversations(id),
+ title TEXT NOT NULL, starts_at TEXT NOT NULL, location TEXT NOT NULL DEFAULT '',
+ created_by UUID NOT NULL REFERENCES identity.users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE chat.event_rsvps (
+ event_id UUID NOT NULL REFERENCES chat.events(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES identity.users(id),
+ status TEXT NOT NULL CHECK(status IN ('going','maybe','declined')),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY(event_id,user_id)
+);
 
 CREATE TABLE realtime.presence (
  user_id UUID NOT NULL REFERENCES identity.users(id), device_id UUID NOT NULL REFERENCES identity.devices(id),
@@ -245,6 +261,27 @@ CREATE TABLE community.members (
 CREATE TABLE community.posts (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), room_id UUID NOT NULL REFERENCES community.rooms(id),
  author_id UUID NOT NULL REFERENCES identity.users(id), body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), deleted_at TIMESTAMPTZ
+);
+CREATE TABLE community.stories (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), author_id UUID NOT NULL REFERENCES identity.users(id),
+ text TEXT NOT NULL, bg TEXT NOT NULL DEFAULT 'linear-gradient(135deg,#06C755,#00B900)',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE community.voom_posts (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), author_id UUID NOT NULL REFERENCES identity.users(id),
+ body TEXT NOT NULL, media_emoji TEXT NOT NULL DEFAULT '🎬', media_bg TEXT NOT NULL DEFAULT 'linear-gradient(135deg,#0f172a,#1e293b)',
+ tags JSONB NOT NULL DEFAULT '[]'::jsonb, likes INT NOT NULL DEFAULT 0, shares INT NOT NULL DEFAULT 0,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE community.voom_likes (
+ post_id UUID NOT NULL REFERENCES community.voom_posts(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES identity.users(id),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY(post_id,user_id)
+);
+CREATE TABLE community.voom_comments (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), post_id UUID NOT NULL REFERENCES community.voom_posts(id) ON DELETE CASCADE,
+ author_id UUID NOT NULL REFERENCES identity.users(id), text TEXT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE business.organizations (
@@ -389,6 +426,16 @@ CREATE TABLE commerce.subscriptions (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES identity.users(id),
  product_id UUID NOT NULL REFERENCES commerce.products(id), provider TEXT NOT NULL,
  provider_subscription_id TEXT, state TEXT NOT NULL DEFAULT 'pending', current_period_end TIMESTAMPTZ
+);
+CREATE TABLE commerce.wallets (
+ user_id UUID PRIMARY KEY REFERENCES identity.users(id),
+ balance BIGINT NOT NULL DEFAULT 125000, points BIGINT NOT NULL DEFAULT 3450,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE commerce.wallet_transactions (
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES identity.users(id),
+ kind TEXT NOT NULL CHECK(kind IN ('in','out')), title TEXT NOT NULL, amount BIGINT NOT NULL,
+ Counterpart_id UUID REFERENCES identity.users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE creator.settlements (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), creator_id UUID NOT NULL REFERENCES creator.creators(id),

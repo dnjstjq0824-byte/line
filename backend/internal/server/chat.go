@@ -23,11 +23,14 @@ type Message struct {
 	Kind           string         `json:"kind"`
 	Body           string         `json:"body"`
 	ReplyTo        string         `json:"reply_to,omitempty"`
+	ReplyPreview   map[string]any `json:"reply_preview,omitempty"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	EditedAt       *time.Time     `json:"edited_at,omitempty"`
 	Reactions      map[string]int `json:"reactions,omitempty"`
 	MyReactions    []string       `json:"my_reactions,omitempty"`
+	ReadCount      int            `json:"read_count"`
+	Unsent         bool           `json:"unsent,omitempty"`
 }
 
 func (a *App) isMember(r *http.Request, id string) bool {
@@ -60,30 +63,70 @@ func (a *App) conversationMemberIDs(r *http.Request, conversationID string) []st
 }
 
 func (a *App) conversations(w http.ResponseWriter, r *http.Request) {
+	uid := claims(r).Subject
 	rows, e := a.db.QueryContext(r.Context(), `SELECT c.id,c.kind,COALESCE(c.title,''),c.last_sequence,m.last_read_sequence,c.updated_at
  FROM chat.conversation_members m JOIN chat.conversations c ON c.id=m.conversation_id
- WHERE m.user_id=$1 AND m.left_at IS NULL AND c.deleted_at IS NULL ORDER BY c.updated_at DESC LIMIT 200`, claims(r).Subject)
+ WHERE m.user_id=$1 AND m.left_at IS NULL AND c.deleted_at IS NULL ORDER BY c.updated_at DESC LIMIT 200`, uid)
 	if e != nil {
 		fail(w, 500, "conversation list failed")
 		return
 	}
 	defer rows.Close()
-	out := make([]any, 0)
+	type convRow struct {
+		id, kind, title string
+		seq, read       int64
+		updated         time.Time
+	}
+	var rawRows []convRow
 	for rows.Next() {
-		var id, kind, title string
-		var seq, read int64
-		var updated time.Time
-		if rows.Scan(&id, &kind, &title, &seq, &read, &updated) == nil {
-			out = append(out, map[string]any{
-				"id":                 id,
-				"kind":               kind,
-				"title":              title,
-				"last_sequence":      seq,
-				"last_read_sequence": read,
-				"unread_count":       max(int64(0), seq-read),
-				"updated_at":         updated,
-			})
+		var cr convRow
+		if rows.Scan(&cr.id, &cr.kind, &cr.title, &cr.seq, &cr.read, &cr.updated) == nil {
+			rawRows = append(rawRows, cr)
 		}
+	}
+	rows.Close()
+	out := make([]any, 0, len(rawRows))
+	for _, cr := range rawRows {
+		title := cr.title
+		if title == "" && cr.kind == "direct" {
+			_ = a.db.QueryRowContext(r.Context(),
+				`SELECT u.display_name FROM chat.conversation_members cm JOIN identity.users u ON u.id=cm.user_id
+				 WHERE cm.conversation_id=$1 AND cm.user_id<>$2 AND cm.left_at IS NULL LIMIT 1`,
+				cr.id, uid).Scan(&title)
+		}
+		var memberCount int
+		_ = a.db.QueryRowContext(r.Context(),
+			`SELECT count(*) FROM chat.conversation_members WHERE conversation_id=$1 AND left_at IS NULL`,
+			cr.id).Scan(&memberCount)
+
+		var lastMsg any
+		var lmID, lmSender, lmKind, lmBody string
+		var lmAt time.Time
+		if err := a.db.QueryRowContext(r.Context(),
+			`SELECT id, sender_id, kind, body, created_at FROM chat.messages
+			 WHERE conversation_id=$1 AND deleted_at IS NULL ORDER BY sequence DESC LIMIT 1`,
+			cr.id).Scan(&lmID, &lmSender, &lmKind, &lmBody, &lmAt); err == nil {
+			lastMsg = map[string]any{
+				"id":         lmID,
+				"sender_id":  lmSender,
+				"kind":       lmKind,
+				"body":       a.msgCipher.decrypt(lmBody),
+				"created_at": lmAt,
+				"unsent":     false,
+			}
+		}
+
+		out = append(out, map[string]any{
+			"id":                 cr.id,
+			"kind":               cr.kind,
+			"title":              title,
+			"last_sequence":      cr.seq,
+			"last_read_sequence": cr.read,
+			"unread_count":       max(int64(0), cr.seq-cr.read),
+			"member_count":       memberCount,
+			"last_message":       lastMsg,
+			"updated_at":         cr.updated,
+		})
 	}
 	send(w, 200, map[string]any{"conversations": out})
 }
@@ -185,7 +228,7 @@ func (a *App) messages(w http.ResponseWriter, r *http.Request) {
 		}
 		before = n
 	}
-	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(reply_to,''),COALESCE(metadata,'{}'),created_at
+	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(reply_to,''),COALESCE(metadata,'{}'),created_at,edited_at
  FROM chat.messages WHERE conversation_id=$1 AND sequence<$2 AND deleted_at IS NULL ORDER BY sequence DESC LIMIT $3`, id, before, limit)
 	if e != nil {
 		fail(w, 500, "message fetch failed")
@@ -196,7 +239,7 @@ func (a *App) messages(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var m Message
 		var metaStr string
-		if rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.ClientID, &m.Sequence, &m.Kind, &m.Body, &m.ReplyTo, &metaStr, &m.CreatedAt) == nil {
+		if rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.ClientID, &m.Sequence, &m.Kind, &m.Body, &m.ReplyTo, &metaStr, &m.CreatedAt, &m.EditedAt) == nil {
 			m.Body = a.msgCipher.decrypt(m.Body)
 
 			if metaStr != "" && metaStr != "{}" {
@@ -205,10 +248,12 @@ func (a *App) messages(w http.ResponseWriter, r *http.Request) {
 			msgs = append(msgs, m)
 		}
 	}
+	rows.Close()
 	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
 	a.populateReactions(r.Context(), msgs, claims(r).Subject)
+	a.enrichMessages(r.Context(), id, msgs)
 	send(w, 200, map[string]any{"messages": msgs})
 }
 
@@ -229,7 +274,7 @@ func (a *App) syncMessages(w http.ResponseWriter, r *http.Request) {
 		after = n
 	}
 	limit := auth.ParsePositiveInt(r.URL.Query().Get("limit"), 100, 500)
-	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(reply_to,''),COALESCE(metadata,'{}'),created_at
+	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(reply_to,''),COALESCE(metadata,'{}'),created_at,edited_at
  FROM chat.messages WHERE conversation_id=$1 AND sequence>$2 AND deleted_at IS NULL ORDER BY sequence ASC LIMIT $3`, id, after, limit)
 	if e != nil {
 		fail(w, 500, "message sync failed")
@@ -240,24 +285,67 @@ func (a *App) syncMessages(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var m Message
 		var metaStr string
+		if rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.ClientID, &m.Sequence, &m.Kind, &m.Body, &m.ReplyTo, &metaStr, &m.CreatedAt, &m.EditedAt) == nil {
 			m.Body = a.msgCipher.decrypt(m.Body)
-
-		if rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.ClientID, &m.Sequence, &m.Kind, &m.Body, &m.ReplyTo, &metaStr, &m.CreatedAt) == nil {
 			if metaStr != "" && metaStr != "{}" {
 				_ = json.Unmarshal([]byte(metaStr), &m.Metadata)
 			}
 			msgs = append(msgs, m)
 		}
 	}
+	rows.Close()
 	a.populateReactions(r.Context(), msgs, claims(r).Subject)
+	a.enrichMessages(r.Context(), id, msgs)
 	var lastSeq int64
 	_ = a.db.QueryRowContext(r.Context(), "SELECT last_sequence FROM chat.conversations WHERE id=$1", id).Scan(&lastSeq)
 	send(w, 200, map[string]any{"messages": msgs, "last_sequence": lastSeq})
 }
 
+func (a *App) enrichMessages(ctx context.Context, convID string, msgs []Message) {
+	if len(msgs) == 0 {
+		return
+	}
+	type memberRead struct {
+		uid string
+		seq int64
+	}
+	var reads []memberRead
+	rRows, rErr := a.db.QueryContext(ctx, "SELECT user_id, last_read_sequence FROM chat.conversation_members WHERE conversation_id=$1 AND left_at IS NULL", convID)
+	if rErr == nil {
+		for rRows.Next() {
+			var mr memberRead
+			if rRows.Scan(&mr.uid, &mr.seq) == nil {
+				reads = append(reads, mr)
+			}
+		}
+		rRows.Close()
+	}
+	for i := range msgs {
+		rc := 0
+		for _, mr := range reads {
+			if mr.uid != msgs[i].SenderID && mr.seq >= msgs[i].Sequence {
+				rc++
+			}
+		}
+		msgs[i].ReadCount = rc
+		if msgs[i].ReplyTo != "" {
+			var rSender, rKind, rBody string
+			var rDel any
+			if err := a.db.QueryRowContext(ctx, "SELECT sender_id, kind, body, deleted_at FROM chat.messages WHERE id=$1", msgs[i].ReplyTo).Scan(&rSender, &rKind, &rBody, &rDel); err == nil {
+				msgs[i].ReplyPreview = map[string]any{
+					"sender_id": rSender,
+					"kind":      rKind,
+					"body":      a.msgCipher.decrypt(rBody),
+					"unsent":    rDel != nil,
+				}
+			}
+		}
+	}
+}
+
 var allowedMessageKinds = map[string]bool{
-	"text": true, "image": true, "video": true, "audio": true, "file": true,
-	"sticker": true, "location": true, "contact": true, "system": true, "poll": true,
+	"text": true, "image": true, "video": true, "audio": true, "voice": true, "file": true,
+	"sticker": true, "location": true, "contact": true, "system": true, "poll": true, "pay": true, "call": true,
 }
 
 func (a *App) sendMessage(w http.ResponseWriter, r *http.Request) {
@@ -422,9 +510,10 @@ func (a *App) editMessage(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid body")
 		return
 	}
+	encrypted := a.msgCipher.encrypt(in.Body)
 	res, e := a.db.ExecContext(r.Context(),
 		"UPDATE chat.messages SET body=$3,edited_at=now() WHERE id=$1 AND conversation_id=$2 AND sender_id=$4 AND deleted_at IS NULL",
-		msgID, convID, in.Body, claims(r).Subject)
+		msgID, convID, encrypted, claims(r).Subject)
 	if e != nil {
 		fail(w, 500, "edit failed")
 		return
@@ -433,9 +522,11 @@ func (a *App) editMessage(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "message not found or not editable")
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{"type": "message.updated", "conversation_id": convID, "message_id": msgID, "body": in.Body})
+	now := time.Now().UTC()
+	msgPayload := map[string]any{"id": msgID, "conversation_id": convID, "body": in.Body, "edited_at": now}
+	payload, _ := json.Marshal(map[string]any{"type": "message.updated", "conversation_id": convID, "message_id": msgID, "body": in.Body, "message": msgPayload})
 	a.hub.Notify(a.conversationMemberIDs(r, convID), payload)
-	send(w, 200, map[string]string{"status": "edited", "id": msgID})
+	send(w, 200, map[string]any{"status": "edited", "id": msgID, "message": msgPayload})
 }
 
 func (a *App) deleteMessage(w http.ResponseWriter, r *http.Request) {
@@ -456,8 +547,11 @@ func (a *App) deleteMessage(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "message not found")
 		return
 	}
+	members := a.conversationMemberIDs(r, convID)
 	payload, _ := json.Marshal(map[string]any{"type": "message.deleted", "conversation_id": convID, "message_id": msgID})
-	a.hub.Notify(a.conversationMemberIDs(r, convID), payload)
+	a.hub.Notify(members, payload)
+	unsentPayload, _ := json.Marshal(map[string]any{"type": "message.unsent", "conversation_id": convID, "message_id": msgID})
+	a.hub.Notify(members, unsentPayload)
 	send(w, 200, map[string]string{"status": "recalled", "id": msgID})
 }
 
@@ -615,7 +709,7 @@ func (a *App) listPins(w http.ResponseWriter, r *http.Request) {
 		var mid, by, body string
 		var at any
 		if rows.Scan(&mid, &by, &at, &body) == nil {
-			out = append(out, map[string]any{"message_id": mid, "pinned_by": by, "pinned_at": at, "body": body})
+			out = append(out, map[string]any{"message_id": mid, "pinned_by": by, "pinned_at": at, "body": a.msgCipher.decrypt(body)})
 		}
 	}
 	send(w, 200, map[string]any{"pins": out})

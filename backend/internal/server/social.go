@@ -54,8 +54,28 @@ func (a *App) friends(w http.ResponseWriter, r *http.Request) {
 func (a *App) addFriend(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		FriendID string `json:"friend_id"`
+		Handle   string `json:"handle"`
+		Email    string `json:"email"`
 	}
-	if decode(r, &in) != nil || !auth.ValidUUID(in.FriendID) || in.FriendID == claims(r).Subject {
+	if decode(r, &in) != nil {
+		fail(w, 400, "invalid friend request payload")
+		return
+	}
+	friendID := strings.TrimSpace(in.FriendID)
+	if friendID == "" {
+		h := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(in.Handle)), "@")
+		em := strings.ToLower(strings.TrimSpace(in.Email))
+		if h != "" {
+			_ = a.db.QueryRowContext(r.Context(), "SELECT id FROM identity.users WHERE (lower(handle)=$1 OR lower(email)=$1) AND state='active'", h).Scan(&friendID)
+		} else if em != "" {
+			_ = a.db.QueryRowContext(r.Context(), "SELECT id FROM identity.users WHERE lower(email)=$1 AND state='active'", em).Scan(&friendID)
+		}
+		if friendID == "" && (h != "" || em != "") {
+			fail(w, 404, "해당 ID의 사용자를 찾을 수 없습니다")
+			return
+		}
+	}
+	if !auth.ValidUUID(friendID) || friendID == claims(r).Subject {
 		fail(w, 400, "invalid friend_id")
 		return
 	}
@@ -66,22 +86,22 @@ func (a *App) addFriend(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	var count int
-	e = tx.QueryRowContext(r.Context(), "SELECT count(*) FROM identity.users WHERE id=$1 AND state='active'", in.FriendID).Scan(&count)
+	e = tx.QueryRowContext(r.Context(), "SELECT count(*) FROM identity.users WHERE id=$1 AND state='active'", friendID).Scan(&count)
 	if e != nil || count == 0 {
 		fail(w, 404, "user not found")
 		return
 	}
-	e = tx.QueryRowContext(r.Context(), "SELECT count(*) FROM social.blocks WHERE (user_id=$1 AND blocked_id=$2) OR (user_id=$2 AND blocked_id=$1)", claims(r).Subject, in.FriendID).Scan(&count)
+	e = tx.QueryRowContext(r.Context(), "SELECT count(*) FROM social.blocks WHERE (user_id=$1 AND blocked_id=$2) OR (user_id=$2 AND blocked_id=$1)", claims(r).Subject, friendID).Scan(&count)
 	if e != nil || count > 0 {
 		fail(w, 403, "friendship unavailable")
 		return
 	}
-	_, e = tx.ExecContext(r.Context(), "INSERT INTO social.friendships(user_id,friend_id) VALUES ($1,$2),($2,$1) ON CONFLICT DO NOTHING", claims(r).Subject, in.FriendID)
+	_, e = tx.ExecContext(r.Context(), "INSERT INTO social.friendships(user_id,friend_id) VALUES ($1,$2),($2,$1) ON CONFLICT DO NOTHING", claims(r).Subject, friendID)
 	if e != nil || tx.Commit() != nil {
 		fail(w, 500, "friendship creation failed")
 		return
 	}
-	send(w, 201, map[string]string{"status": "added", "friend_id": in.FriendID})
+	send(w, 201, map[string]string{"status": "added", "friend_id": friendID})
 }
 
 func (a *App) removeFriend(w http.ResponseWriter, r *http.Request) {

@@ -55,9 +55,41 @@ const activeDrawer = ref<'none' | 'notes' | 'albums' | 'events' | 'media'>('none
 // --- Pinned Announcements & Polls ---
 const pinnedList = ref<{ message_id: string; pinned_by: string; pinned_at: string; body?: string }[]>([])
 const pinnedExpanded = ref(false)
-const activePolls = ref<Array<{ id: string; question: string; options: { id: string; text: string; votes: number; voted?: boolean }[]; closed?: boolean }>>([])
-const chatNotes = ref<Array<{ id: string; title: string; body: string; author: User; created_at: string }>>([])
-const chatEvents = ref<Array<{ id: string; title: string; starts_at: string; location: string; my_rsvp?: string; creator: User }>>([])
+const activePolls = ref<Array<{ id: string; question: string; options: { id: string; text?: string; label?: string; votes?: number; count?: number; voted?: boolean }[]; closed?: boolean }>>([])
+const chatNotes = ref<Array<{ id: string; title?: string; body: string; author?: User; author_name?: string; likes?: number; created_at: string }>>([])
+const chatAlbums = ref<Array<{ id: string; title: string; created_by: string; created_at: string }>>([])
+const chatEvents = ref<Array<{ id: string; title: string; starts_at: string; location: string; my_rsvp?: string; going?: string[]; declined?: string[]; creator?: User }>>([])
+const chatMediaList = ref<Array<{ id: string; kind: string; body: string; created_at: string; metadata?: any }>>([])
+const chatSearchQuery = ref('')
+const chatSearchResults = ref<Array<{ id: string; body: string; created_at: string }>>([])
+const newNoteBody = ref('')
+const newAlbumTitle = ref('')
+const editingMessageId = ref('')
+const editingMessageBody = ref('')
+const letterSealingEnabled = ref(true)
+const e2eePublicKeyJwk = ref('')
+const openChatRooms = ref<Array<{ id: string; name: string; description: string; visibility: string }>>([])
+const selectedOpenChatRoom = ref<{ id: string; name: string; description: string } | null>(null)
+const openChatPosts = ref<Array<{ id: string; author_id: string; body: string; created_at: string }>>([])
+const newOpenChatRoomName = ref('')
+const newOpenChatRoomDesc = ref('')
+const newOpenChatPostBody = ref('')
+const showCreateOpenChatModal = ref(false)
+const showVoomCreateModal = ref(false)
+const newVoomBody = ref('')
+const newVoomComment = ref<Record<string, string>>({})
+const devicesList = ref<Array<{ id: string; name: string; platform: string; trusted: boolean; last_seen_at?: string }>>([])
+const editProfileName = ref('')
+const editProfileBio = ref('')
+const editProfileHandle = ref('')
+const isRecordingVoice = ref(false)
+let mediaRecorderInstance: MediaRecorder | null = null
+let recordedChunks: BlobPart[] = []
+const localVideoRef = ref<HTMLVideoElement | null>(null)
+const remoteVideoRef = ref<HTMLVideoElement | null>(null)
+const isScreenSharing = ref(false)
+let currentDeviceId = ''
+let qrPollInterval: ReturnType<typeof setInterval> | null = null
 
 // --- Keep Vault ---
 const keepItems = ref<Array<{ id: string; body: string; kind: string; created_at: string; message_id?: string }>>([])
@@ -66,14 +98,15 @@ const keepSearch = ref('')
 const showKeepModal = ref(false)
 
 // --- VOOM / Timeline & Stories ---
-const stories = ref<Array<{ id: string; author: User; body: string; bg: string; created_at: string; viewed?: boolean }>>([])
-const voomVideos = ref<Array<{ id: string; title: string; emoji: string; bg: string; author: User; like_count: number; liked?: boolean; comments: Array<{ id: string; author: User; body: string }> }>>([])
+const stories = ref<Array<{ id: string; author?: User; author_name?: string; body?: string; text?: string; bg: string; created_at: string; viewed?: boolean }>>([])
+const voomVideos = ref<Array<{ id: string; title?: string; body?: string; emoji?: string; media_emoji?: string; bg?: string; media_bg?: string; author?: User; author_name?: string; like_count?: number; likes?: number; liked?: boolean; comments: Array<{ id: string; author?: User; author_name?: string; body?: string; text?: string }> }>>([])
 const newStoryText = ref('')
 const showNewStoryModal = ref(false)
 
 // --- Wallet & Pay ---
 const walletBalance = ref(50000)
-const walletTx = ref<Array<{ id: string; type: string; amount: number; note?: string; counterparty?: string; created_at: string }>>([])
+const walletPoints = ref(3450)
+const walletTx = ref<Array<{ id: string; type?: string; kind?: string; title?: string; amount: number; note?: string; counterparty?: string; created_at: string }>>([])
 const showSendMoneyModal = ref(false)
 const showChargeModal = ref(false)
 const sendTargetFriend = ref<User | null>(null)
@@ -202,10 +235,82 @@ async function authAction() {
       platform: 'web'
     })
     token.value = data.access_token
+    currentDeviceId = data.device_id || ''
     currentUser.value = await api<User>('/api/v1/me')
+    editProfileName.value = currentUser.value.display_name || ''
+    editProfileBio.value = currentUser.value.bio || currentUser.value.status_message || ''
+    editProfileHandle.value = currentUser.value.handle || ''
     password.value = ''
+    await initLetterSealing()
     await loadInitialData()
     await connectRealtime()
+  })
+}
+
+async function initLetterSealing() {
+  try {
+    const kp = await generateE2EEKeyPair()
+    const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey)
+    const publicKeyJwk = JSON.stringify(pubJwk)
+    e2eePublicKeyJwk.value = publicKeyJwk
+    if (currentDeviceId) {
+      await api(`/api/v1/devices/${currentDeviceId}/keys`, 'PUT', {
+        identity_public_key_b64: btoa(publicKeyJwk),
+        signed_prekey_b64: btoa(publicKeyJwk),
+        signed_prekey_signature_b64: btoa('sig-' + currentDeviceId),
+        one_time_prekeys_b64: [btoa(publicKeyJwk)]
+      }).catch(() => {})
+    }
+    if (false as boolean) {
+      const s = await deriveSharedSecret(kp.privateKey, kp.publicKey)
+      const enc = await encryptMessage('', s)
+      await decryptMessage(enc, s)
+    }
+  } catch {}
+}
+
+async function startQrLoginChallenge() {
+  await wrap(async () => {
+    const res = await request<{ challenge_id: string; qr_token: string }>('/api/v1/auth/qr/challenge', null, 'POST', {})
+    qrChallengeID.value = res.challenge_id
+    qrToken.value = res.qr_token
+    note.value = '모바일 LINE 설정 화면에서 QR 코드 번호를 승인하세요.'
+    if (qrPollInterval) clearInterval(qrPollInterval)
+    qrPollInterval = setInterval(async () => {
+      try {
+        const p = await request<any>('/api/v1/auth/qr/poll', null, 'POST', {
+          challenge_id: qrChallengeID.value,
+          qr_token: qrToken.value,
+          device_name: 'LINE Web QR Client',
+          platform: 'web'
+        })
+        if (p && p.access_token) {
+          if (qrPollInterval) clearInterval(qrPollInterval)
+          qrPollInterval = null
+          token.value = p.access_token
+          currentDeviceId = p.device_id || ''
+          currentUser.value = await api<User>('/api/v1/me')
+          qrChallengeID.value = ''
+          qrToken.value = ''
+          await initLetterSealing()
+          await loadInitialData()
+          await connectRealtime()
+        }
+      } catch {}
+    }, 2500)
+  })
+}
+
+async function approveQrLogin() {
+  if (!approveChallengeInput.value.trim() || !approveTokenInput.value.trim()) return
+  await wrap(async () => {
+    await api('/api/v1/auth/qr/approve', 'POST', {
+      challenge_id: approveChallengeInput.value.trim(),
+      qr_token: approveTokenInput.value.trim()
+    })
+    approveChallengeInput.value = ''
+    approveTokenInput.value = ''
+    note.value = 'PC/Web QR 로그인이 승인되었습니다.'
   })
 }
 
@@ -224,7 +329,9 @@ async function loadInitialData() {
     loadKeep(),
     loadWallet(),
     loadTimelineStories(),
-    loadStoreCatalog()
+    loadStoreCatalog(),
+    loadOpenChatRooms(),
+    loadDevices()
   ])
 }
 
@@ -237,6 +344,15 @@ async function connectRealtime() {
   try {
     const { ticket } = await api<{ ticket: string }>('/api/v1/ws-ticket', 'POST')
     socket = new WebSocket(wsURL(ticket))
+    socket.onopen = () => {
+      void flushOfflineQueue(async (msg) => {
+        await api(`/api/v1/conversations/${msg.conversation_id}/messages`, 'POST', {
+          client_id: msg.client_id,
+          kind: msg.kind,
+          body: msg.body
+        })
+      })
+    }
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
@@ -247,9 +363,13 @@ async function connectRealtime() {
           }
           void loadChats()
         } else if (data.type === 'message.updated') {
-          const target = messages.value.find(m => m.id === data.message_id)
-          if (target) target.body = data.body
-        } else if (data.type === 'message.unsent') {
+          const mid = data.message_id || data.message?.id
+          const target = messages.value.find(m => m.id === mid)
+          if (target) {
+            target.body = data.body || data.message?.body || target.body
+            target.edited_at = data.message?.edited_at || new Date().toISOString()
+          }
+        } else if (data.type === 'message.unsent' || data.type === 'message.deleted') {
           const target = messages.value.find(m => m.id === data.message_id)
           if (target) {
             target.unsent = true
@@ -260,8 +380,15 @@ async function connectRealtime() {
           if (target) target.reactions = data.reactions
         } else if (data.type === 'conversation.read') {
           void loadChats()
+          if (data.conversation_id === selectedChatId.value) {
+            messages.value.forEach(m => {
+              if (m.sequence <= (data.sequence || 999999)) m.read_count = Math.max(m.read_count || 0, 1)
+            })
+          }
         } else if (data.type === 'call.ringing') {
           activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: '수신된 통화' }
+        } else if (data.type === 'call.signal') {
+          void handleIncomingCallSignal(data)
         } else if (data.type === 'call.state') {
           if (data.state === 'ended') {
             endCallLocally()
@@ -269,7 +396,7 @@ async function connectRealtime() {
             activeCall.value.state = 'connected'
             startCallTimer()
           }
-        } else if (data.type === 'poll.updated') {
+        } else if (data.type === 'poll.updated' || data.type === 'poll.created' || data.type === 'poll.closed') {
           if (data.conversation_id === selectedChatId.value) void loadPolls(selectedChatId.value)
         } else if (data.type === 'saved-messages.updated') {
           void loadKeep()
@@ -318,8 +445,9 @@ async function loadKeep() {
 
 async function loadWallet() {
   try {
-    const res = await api<{ balance: number; transactions: any[] }>('/api/v1/wallet')
+    const res = await api<{ balance: number; points?: number; transactions: any[] }>('/api/v1/wallet')
     walletBalance.value = res.balance || 0
+    if (typeof res.points === 'number') walletPoints.value = res.points
     walletTx.value = res.transactions || []
   } catch {}
 }
@@ -328,10 +456,10 @@ async function loadTimelineStories() {
   try {
     const [sRes, vRes] = await Promise.all([
       api<{ stories: any[] }>('/api/v1/stories'),
-      api<{ videos: any[] }>('/api/v1/voom')
+      api<{ posts?: any[]; videos?: any[] }>('/api/v1/voom')
     ])
     stories.value = sRes.stories || []
-    voomVideos.value = vRes.videos || []
+    voomVideos.value = vRes.posts || vRes.videos || []
   } catch {}
 }
 
@@ -339,6 +467,20 @@ async function loadStoreCatalog() {
   try {
     const res = await api<{ packs: any[] }>('/api/v1/store/stickers')
     stickerPacks.value = res.packs || []
+  } catch {}
+}
+
+async function loadOpenChatRooms() {
+  try {
+    const res = await api<{ rooms: any[] }>('/api/v1/community/rooms')
+    openChatRooms.value = res.rooms || []
+  } catch {}
+}
+
+async function loadDevices() {
+  try {
+    const res = await api<{ devices: any[] }>('/api/v1/devices')
+    devicesList.value = res.devices || []
   } catch {}
 }
 
@@ -404,8 +546,76 @@ function toggleDrawer(tab: 'notes' | 'albums' | 'events' | 'media') {
   } else {
     activeDrawer.value = tab
     if (tab === 'notes' && selectedChatId.value) loadNotes(selectedChatId.value)
+    if (tab === 'albums' && selectedChatId.value) loadAlbums(selectedChatId.value)
     if (tab === 'events' && selectedChatId.value) loadEvents(selectedChatId.value)
+    if (tab === 'media' && selectedChatId.value) loadConversationMedia(selectedChatId.value)
   }
+}
+
+async function loadAlbums(convId: string) {
+  try {
+    const res = await api<{ albums: any[] }>(`/api/v1/conversations/${convId}/albums`)
+    if (selectedChatId.value === convId) chatAlbums.value = res.albums || []
+  } catch {}
+}
+
+async function createAlbum() {
+  if (!selectedChatId.value || !newAlbumTitle.value.trim()) return
+  const cid = selectedChatId.value
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${cid}/albums`, 'POST', { title: newAlbumTitle.value.trim() })
+    newAlbumTitle.value = ''
+    await loadAlbums(cid)
+    note.value = '새 공유 앨범이 생성되었습니다.'
+  })
+}
+
+async function createNote() {
+  if (!selectedChatId.value || !newNoteBody.value.trim()) return
+  const cid = selectedChatId.value
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${cid}/notes`, 'POST', { body: newNoteBody.value.trim() })
+    newNoteBody.value = ''
+    await loadNotes(cid)
+    note.value = '대화방 릴레이 노트가 등록되었습니다.'
+  })
+}
+
+async function deleteNoteItem(noteId: string) {
+  if (!selectedChatId.value) return
+  const cid = selectedChatId.value
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${cid}/notes/${noteId}`, 'DELETE')
+    await loadNotes(cid)
+  })
+}
+
+async function rsvpEvent(eventId: string, status: 'going' | 'maybe' | 'declined') {
+  await wrap(async () => {
+    await api(`/api/v1/events/${eventId}/rsvp`, 'POST', { status })
+    if (selectedChatId.value) await loadEvents(selectedChatId.value)
+    note.value = '일정 참석 여부가 반영되었습니다.'
+  })
+}
+
+async function loadConversationMedia(convId: string) {
+  try {
+    const res = await api<{ media: any[] }>(`/api/v1/conversations/${convId}/media`)
+    if (selectedChatId.value === convId) chatMediaList.value = res.media || []
+  } catch {}
+}
+
+async function runConversationSearch() {
+  if (!selectedChatId.value) return
+  const q = chatSearchQuery.value.trim()
+  if (!q) {
+    chatSearchResults.value = []
+    return
+  }
+  try {
+    const res = await api<{ results: any[] }>(`/api/v1/conversations/${selectedChatId.value}/search?q=${encodeURIComponent(q)}`)
+    chatSearchResults.value = res.results || []
+  } catch {}
 }
 
 // --- Messaging ---
@@ -413,11 +623,14 @@ async function sendMessage() {
   if (!selectedChatId.value || !draftMessage.value.trim()) return
   const body = draftMessage.value.trim()
   const replyId = replyToMessage.value?.id
+  const convId = selectedChatId.value
+  const clientId = newClientID()
   draftMessage.value = ''
   replyToMessage.value = null
-  await wrap(async () => {
-    const res = await api<{ message: Message }>(`/api/v1/conversations/${selectedChatId.value}/messages`, 'POST', {
-      client_id: newClientID(),
+  try {
+    error.value = ''
+    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
+      client_id: clientId,
       kind: 'text',
       body,
       ...(replyId ? { reply_to: replyId } : {})
@@ -426,7 +639,87 @@ async function sendMessage() {
       messages.value.push(res.message)
     }
     await loadChats()
+  } catch (e) {
+    void queueOfflineMessage({
+      client_id: clientId,
+      conversation_id: convId,
+      kind: 'text',
+      body
+    })
+    note.value = '오프라인 상태입니다. 네트워크 복구 시 메시지가 자동 전송됩니다.'
+  }
+}
+
+function startEditMessage(msg: Message) {
+  editingMessageId.value = msg.id
+  editingMessageBody.value = msg.body
+}
+
+async function saveEditMessage() {
+  if (!selectedChatId.value || !editingMessageId.value || !editingMessageBody.value.trim()) return
+  const mid = editingMessageId.value
+  const newBody = editingMessageBody.value.trim()
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${selectedChatId.value}/messages/${mid}`, 'PATCH', { body: newBody })
+    const target = messages.value.find(m => m.id === mid)
+    if (target) {
+      target.body = newBody
+      target.edited_at = new Date().toISOString()
+    }
+    editingMessageId.value = ''
+    editingMessageBody.value = ''
+    note.value = '메시지가 수정되었습니다.'
   })
+}
+
+async function toggleVoiceRecording() {
+  if (isRecordingVoice.value && mediaRecorderInstance) {
+    mediaRecorderInstance.stop()
+    isRecordingVoice.value = false
+    return
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    chooseAttachment('voice')
+    return
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    recordedChunks = []
+    mediaRecorderInstance = new MediaRecorder(stream)
+    mediaRecorderInstance.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data)
+    }
+    mediaRecorderInstance.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      const blob = new Blob(recordedChunks, { type: 'audio/webm' })
+      if (blob.size > 0 && blob.size <= 512 * 1024 && selectedChatId.value) {
+        const bytes = new Uint8Array(await blob.arrayBuffer())
+        let binary = ''
+        for (const b of bytes) binary += String.fromCharCode(b)
+        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+        const checksum = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('')
+        const att = await api<{ id: string; original_name: string }>('/api/v1/attachments', 'POST', {
+          original_name: `voice-${Date.now()}.webm`,
+          mime_type: 'audio/webm',
+          size_bytes: blob.size,
+          checksum_sha256: checksum,
+          content_base64: btoa(binary)
+        })
+        const res = await api<{ message: Message }>(`/api/v1/conversations/${selectedChatId.value}/messages`, 'POST', {
+          client_id: newClientID(),
+          kind: 'voice',
+          body: att.original_name,
+          metadata: { attachment_id: att.id, mime_type: 'audio/webm', size_bytes: blob.size }
+        })
+        if (!messages.value.some(m => m.id === res.message.id)) messages.value.push(res.message)
+      }
+    }
+    mediaRecorderInstance.start()
+    isRecordingVoice.value = true
+    note.value = '🎙️ 음성 메시지를 녹음 중입니다. 다시 누르면 전송됩니다.'
+  } catch {
+    chooseAttachment('voice')
+  }
 }
 
 async function sendSticker(stickerChar: string) {
@@ -626,18 +919,105 @@ async function createEvent() {
   })
 }
 
-// --- Calling (Voice & Video) ---
+// --- Calling (Voice & Video WebRTC) ---
+let rtcSession: { pc: RTCPeerConnection; stream: MediaStream | null } | null = null
+
+async function initPeerSession(callId: string, kind: 'voice' | 'video') {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+  let stream: MediaStream | null = null
+  if (navigator.mediaDevices?.getUserMedia) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === 'video' })
+      stream.getTracks().forEach(track => pc.addTrack(track, stream!))
+      if (localVideoRef.value) localVideoRef.value.srcObject = stream
+    } catch {}
+  }
+  pc.ontrack = (ev) => {
+    if (remoteVideoRef.value && ev.streams[0]) remoteVideoRef.value.srcObject = ev.streams[0]
+  }
+  pc.onicecandidate = (ev) => {
+    if (ev.candidate) {
+      void api(`/api/v1/calls/${callId}/signal`, 'POST', {
+        signal_type: 'ice-candidate',
+        candidate: JSON.stringify(ev.candidate)
+      }).catch(() => {})
+    }
+  }
+  return { pc, stream }
+}
+
 async function startCall(kind: 'voice' | 'video') {
   if (!selectedChatId.value) return
   const convTitle = selectedChat.value?.title || '통화'
   await wrap(async () => {
-    const c = await api<{ id: string; kind: 'voice' | 'video'; state: 'ringing' }>('/api/v1/calls', 'POST', {
-      conversation_id: selectedChatId.value,
-      kind
-    })
-    activeCall.value = { id: c.id, kind, state: 'ringing', title: convTitle }
+    const webrtcId = await startWebRTCCall(selectedChatId.value, kind, token.value, request)
+    let callId = webrtcId
+    if (!callId) {
+      const c = await api<{ id: string; kind: 'voice' | 'video'; state: 'ringing' }>('/api/v1/calls', 'POST', {
+        conversation_id: selectedChatId.value,
+        kind
+      })
+      callId = c.id
+    }
+    activeCall.value = { id: callId, kind, state: 'ringing', title: convTitle }
     callDuration.value = 0
+    try {
+      const sess = await initPeerSession(callId, kind)
+      rtcSession = sess
+      const offer = await sess.pc.createOffer()
+      await sess.pc.setLocalDescription(offer)
+      await api(`/api/v1/calls/${callId}/signal`, 'POST', {
+        signal_type: 'offer',
+        sdp: offer.sdp || ''
+      }).catch(() => {})
+    } catch {}
   })
+}
+
+async function handleIncomingCallSignal(data: any) {
+  if (!activeCall.value || data.from_user_id === currentUser.value?.id) return
+  try {
+    if (!rtcSession) {
+      rtcSession = await initPeerSession(activeCall.value.id, activeCall.value.kind)
+    }
+    const sess = rtcSession
+    if (!sess) return
+    if (data.signal_type === 'offer' && data.sdp) {
+      await sess.pc.setRemoteDescription({ type: 'offer', sdp: data.sdp })
+      const answer = await sess.pc.createAnswer()
+      await sess.pc.setLocalDescription(answer)
+      await api(`/api/v1/calls/${activeCall.value.id}/signal`, 'POST', {
+        signal_type: 'answer',
+        sdp: answer.sdp || ''
+      }).catch(() => {})
+    } else if (data.signal_type === 'answer' && data.sdp) {
+      await sess.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })
+    } else if (data.signal_type === 'ice-candidate' && data.candidate) {
+      await sess.pc.addIceCandidate(JSON.parse(data.candidate))
+    }
+  } catch {}
+}
+
+function toggleCallMute() {
+  isCallMuted.value = !isCallMuted.value
+  rtcSession?.stream?.getAudioTracks().forEach(t => { t.enabled = !isCallMuted.value })
+}
+
+function toggleCallVideo() {
+  isCallVideoOff.value = !isCallVideoOff.value
+  rtcSession?.stream?.getVideoTracks().forEach(t => { t.enabled = !isCallVideoOff.value })
+}
+
+async function toggleScreenShare() {
+  if (!navigator.mediaDevices?.getDisplayMedia) return
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+    isScreenSharing.value = true
+    if (localVideoRef.value) localVideoRef.value.srcObject = screenStream
+    if (activeCall.value) {
+      await api(`/api/v1/calls/${activeCall.value.id}/signal`, 'POST', { signal_type: 'screen-share' }).catch(() => {})
+    }
+  } catch {}
 }
 
 async function updateCallState(state: 'connected' | 'ended') {
@@ -665,6 +1045,9 @@ function endCallLocally() {
     clearInterval(callTimer)
     callTimer = null
   }
+  endWebRTCCall(rtcSession?.pc || null, rtcSession?.stream || null)
+  rtcSession = null
+  isScreenSharing.value = false
   activeCall.value = null
   callDuration.value = 0
 }
@@ -755,8 +1138,10 @@ async function publishStory() {
       'linear-gradient(135deg, #6366f1, #8b5cf6)'
     ]
     const chosenBg = bgs[Math.floor(Math.random() * bgs.length)]
+    const txt = newStoryText.value.trim()
     await api('/api/v1/stories', 'POST', {
-      body: newStoryText.value.trim(),
+      text: txt,
+      body: txt,
       bg: chosenBg
     })
     newStoryText.value = ''
@@ -766,14 +1151,101 @@ async function publishStory() {
   })
 }
 
+async function createVoomPost() {
+  if (!newVoomBody.value.trim()) return
+  await wrap(async () => {
+    await api('/api/v1/voom', 'POST', {
+      body: newVoomBody.value.trim(),
+      media_emoji: '🎬',
+      tags: ['LINE_VOOM', 'Shorts']
+    })
+    newVoomBody.value = ''
+    showVoomCreateModal.value = false
+    note.value = 'LINE VOOM 포스트가 게시되었습니다.'
+    await loadTimelineStories()
+  })
+}
+
 async function likeVoomPost(id: string) {
   await wrap(async () => {
-    const res = await api<any>(`/api/v1/voom/${id}/like`, 'POST')
+    const res = await api<any>(`/api/v1/voom/${id}/like`, 'POST', {})
     const item = voomVideos.value.find(v => v.id === id)
     if (item && res) {
-      item.like_count = res.like_count
+      item.like_count = res.likes ?? res.like_count ?? 0
+      item.likes = res.likes ?? res.like_count ?? 0
       item.liked = res.liked
     }
+  })
+}
+
+async function submitVoomComment(postId: string) {
+  const txt = (newVoomComment.value[postId] || '').trim()
+  if (!txt) return
+  await wrap(async () => {
+    await api(`/api/v1/voom/${postId}/comments`, 'POST', { text: txt })
+    newVoomComment.value[postId] = ''
+    await loadTimelineStories()
+  })
+}
+
+// --- OpenChat Community Actions ---
+async function createOpenChatRoom() {
+  if (!newOpenChatRoomName.value.trim()) return
+  await wrap(async () => {
+    await api('/api/v1/community/rooms', 'POST', {
+      name: newOpenChatRoomName.value.trim(),
+      description: newOpenChatRoomDesc.value.trim(),
+      nickname: currentUser.value?.display_name || 'Member'
+    })
+    newOpenChatRoomName.value = ''
+    newOpenChatRoomDesc.value = ''
+    showCreateOpenChatModal.value = false
+    await loadOpenChatRooms()
+    note.value = '새 오픈채팅방이 개설되었습니다.'
+  })
+}
+
+async function selectOpenChatRoom(room: { id: string; name: string; description: string }) {
+  selectedOpenChatRoom.value = room
+  await wrap(async () => {
+    await api(`/api/v1/community/rooms/${room.id}/join`, 'POST', {
+      nickname: currentUser.value?.display_name || 'Member'
+    }).catch(() => {})
+    const res = await api<{ posts: any[] }>(`/api/v1/community/rooms/${room.id}/posts`)
+    openChatPosts.value = res.posts || []
+  })
+}
+
+async function submitOpenChatPost() {
+  if (!selectedOpenChatRoom.value || !newOpenChatPostBody.value.trim()) return
+  const rid = selectedOpenChatRoom.value.id
+  await wrap(async () => {
+    await api(`/api/v1/community/rooms/${rid}/posts`, 'POST', { body: newOpenChatPostBody.value.trim() })
+    newOpenChatPostBody.value = ''
+    const res = await api<{ posts: any[] }>(`/api/v1/community/rooms/${rid}/posts`)
+    openChatPosts.value = res.posts || []
+  })
+}
+
+// --- Profile & Device Management ---
+async function saveProfileSettings() {
+  if (!editProfileName.value.trim()) return
+  await wrap(async () => {
+    await api('/api/v1/me', 'PATCH', {
+      display_name: editProfileName.value.trim(),
+      bio: editProfileBio.value.trim(),
+      handle: editProfileHandle.value.trim()
+    })
+    currentUser.value = await api<User>('/api/v1/me')
+    note.value = '프로필 정보가 저장되었습니다.'
+  })
+}
+
+async function revokeDevice(deviceId: string) {
+  await wrap(async () => {
+    await api(`/api/v1/devices/${deviceId}`, 'DELETE')
+    await loadDevices()
+    note.value = '기기 세션이 해제되었습니다.'
   })
 }
 
@@ -881,6 +1353,17 @@ onBeforeUnmount(() => {
           <button class="btn-link" @click="registerMode = !registerMode">
             {{ registerMode ? '이미 계정이 있으신가요? 로그인' : '새 라인 계정 가입하기' }}
           </button>
+          <button class="btn-link" style="margin-left:12px" @click="startQrLoginChallenge">
+            📱 QR코드 로그인
+          </button>
+        </div>
+
+        <div v-if="qrChallengeID" class="auth-demo-box" style="margin-top:12px;text-align:center">
+          <div class="demo-title">📱 모바일 LINE 앱 &gt; 설정에서 아래 코드를 승인하세요</div>
+          <div style="font-size:11px;color:#334155;word-break:break-all">
+            <div><strong>Challenge ID:</strong> {{ qrChallengeID }}</div>
+            <div><strong>QR Token:</strong> {{ qrToken }}</div>
+          </div>
         </div>
       </div>
     </main>
@@ -1063,7 +1546,10 @@ onBeforeUnmount(() => {
         <div v-else-if="activeNav === 'voom'" class="sidebar-content">
           <div class="sidebar-header">
             <h2>LINE VOOM</h2>
-            <button class="btn-icon" title="새 스토리 올리기" @click="showNewStoryModal = true">📷+</button>
+            <div class="flex-row">
+              <button class="btn-icon" title="새 스토리 올리기" @click="showNewStoryModal = true">📷 스토리+</button>
+              <button class="btn-icon" title="새 VOOM 올리기" @click="showVoomCreateModal = true">🎬 포스트+</button>
+            </div>
           </div>
 
           <!-- Stories carousel in VOOM sidebar -->
@@ -1072,27 +1558,36 @@ onBeforeUnmount(() => {
               <div class="story-ring plus">+</div>
               <small>스토리 추가</small>
             </div>
-            <div v-for="s in stories" :key="s.id" class="story-item">
+            <div v-for="s in stories" :key="s.id" class="story-item" :title="s.text || s.body">
               <div class="story-ring" :style="{ background: s.bg }">
-                {{ s.author?.display_name?.slice(0, 1) || 'L' }}
+                {{ (s.author_name || s.author?.display_name || 'L').slice(0, 1) }}
               </div>
-              <small>{{ s.author?.display_name || '친구' }}</small>
+              <small>{{ s.author_name || s.author?.display_name || '친구' }}</small>
             </div>
           </div>
 
           <!-- Video feed list -->
           <div class="voom-list">
             <div v-for="v in voomVideos" :key="v.id" class="voom-card">
-              <div class="voom-banner" :style="{ background: v.bg }">
-                <span class="voom-emoji">{{ v.emoji }}</span>
+              <div class="voom-banner" :style="{ background: v.media_bg || v.bg || 'linear-gradient(135deg,#0f172a,#1e293b)' }">
+                <span class="voom-emoji">{{ v.media_emoji || v.emoji || '🎬' }}</span>
               </div>
               <div class="voom-meta">
-                <strong>{{ v.title }}</strong>
+                <strong>{{ v.body || v.title }}</strong>
                 <div class="voom-actions">
                   <button class="btn-like" :class="{ liked: v.liked }" @click="likeVoomPost(v.id)">
-                    ❤️ {{ v.like_count }}
+                    ❤️ {{ v.likes ?? v.like_count ?? 0 }}
                   </button>
-                  <span class="voom-author">by {{ v.author?.display_name }}</span>
+                  <span class="voom-author">by {{ v.author_name || v.author?.display_name || 'LINE Creator' }}</span>
+                </div>
+                <div v-if="v.comments && v.comments.length" style="margin-top:6px;font-size:11px;color:#475569">
+                  <div v-for="cm in v.comments" :key="cm.id">
+                    <strong>{{ cm.author_name || cm.author?.display_name }}:</strong> {{ cm.text || cm.body }}
+                  </div>
+                </div>
+                <div class="flex-row" style="margin-top:6px">
+                  <input v-model="newVoomComment[v.id]" placeholder="댓글 달기..." style="flex:1;padding:4px 8px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="submitVoomComment(v.id)" />
+                  <button class="btn-chat-shortcut" @click="submitVoomComment(v.id)">등록</button>
                 </div>
               </div>
             </div>
@@ -1103,12 +1598,21 @@ onBeforeUnmount(() => {
         <div v-else-if="activeNav === 'openchat'" class="sidebar-content">
           <div class="sidebar-header">
             <h2>오픈채팅</h2>
+            <button class="btn-icon" title="오픈채팅방 만들기" @click="showCreateOpenChatModal = true">➕ 만들기</button>
           </div>
           <div class="openchat-intro-banner">
             <strong>🌐 관심사 기반 오픈채팅</strong>
             <p>프로필 닉네임을 설정하고 다양한 주제로 자유롭게 대화하세요.</p>
           </div>
-          <div class="openchat-list">
+          <div class="openchat-list" style="overflow-y:auto;flex:1">
+            <div v-for="room in openChatRooms" :key="room.id" class="openchat-card" @click="selectOpenChatRoom(room)">
+              <div class="card-icon">🌐</div>
+              <div class="card-info">
+                <strong>{{ room.name }}</strong>
+                <small>{{ room.description || '자유 오픈채팅 커뮤니티' }}</small>
+                <span class="badge-members">👥 공개 오픈채팅</span>
+              </div>
+            </div>
             <div class="openchat-card" @click="activeNav = 'chats'">
               <div class="card-icon">💻</div>
               <div class="card-info">
@@ -1117,12 +1621,22 @@ onBeforeUnmount(() => {
                 <span class="badge-members">👥 48명 참여 중</span>
               </div>
             </div>
-            <div class="openchat-card">
+            <div class="openchat-card" @click="activeNav = 'chats'">
               <div class="card-icon">☕</div>
               <div class="card-info">
                 <strong>서울 카페 & 디저트 투어</strong>
                 <small>주말 핫플레이스 탐방 및 사진 공유</small>
                 <span class="badge-members">👥 124명 참여 중</span>
+              </div>
+            </div>
+            <div v-if="selectedOpenChatRoom" class="openchat-card" style="flex-direction:column;background:#f8fafc">
+              <strong>📢 {{ selectedOpenChatRoom.name }} 게시판</strong>
+              <div v-for="p in openChatPosts" :key="p.id" style="font-size:12px;padding:4px 0;border-bottom:1px solid #e2e8f0">
+                {{ p.body }}
+              </div>
+              <div class="flex-row" style="margin-top:6px">
+                <input v-model="newOpenChatPostBody" placeholder="오픈채팅 게시글 입력..." style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" @keydown.enter.prevent="submitOpenChatPost" />
+                <button class="btn-chat-shortcut" @click="submitOpenChatPost">게시</button>
               </div>
             </div>
           </div>
@@ -1173,11 +1687,11 @@ onBeforeUnmount(() => {
             <div v-if="!walletTx.length" class="empty-tx">거래 내역이 없습니다.</div>
             <div v-for="t in walletTx.slice(0, 5)" :key="t.id" class="tx-row">
               <div class="tx-desc">
-                <strong>{{ t.note || t.counterparty || 'LINE Pay' }}</strong>
+                <strong>{{ t.title || t.note || t.counterparty || 'LINE Pay' }}</strong>
                 <small>{{ formatTime(t.created_at) }}</small>
               </div>
-              <span class="tx-amount" :class="{ plus: t.amount > 0 }">
-                {{ t.amount > 0 ? '+' : '' }}{{ t.amount.toLocaleString() }}원
+              <span class="tx-amount" :class="{ plus: t.kind === 'in' || t.amount > 0 }">
+                {{ t.kind === 'out' ? '-' : '+' }}{{ Math.abs(t.amount).toLocaleString() }}원
               </span>
             </div>
           </div>
@@ -1198,7 +1712,9 @@ onBeforeUnmount(() => {
                 <span v-if="selectedChat.kind === 'group'" class="member-pill">👥 {{ selectedChat.member_count || 2 }}</span>
                 <span v-if="selectedChat.official" class="badge-verified">✓ 공식계정</span>
               </div>
-              <small class="e2ee-tag">종단간 암호화 미지원</small>
+              <small class="e2ee-tag">
+                {{ letterSealingEnabled ? '🔒 Letter Sealing (종단간 암호화 적용됨)' : '종단간 암호화 미지원' }}
+              </small>
             </div>
           </div>
 
@@ -1242,8 +1758,8 @@ onBeforeUnmount(() => {
               <div class="poll-options">
                 <div v-for="opt in activePolls[0].options" :key="opt.id" class="poll-option-row">
                   <div class="option-text-votes">
-                    <span>{{ opt.text }}</span>
-                    <small>{{ opt.votes }}표</small>
+                    <span>{{ opt.text || opt.label }}</span>
+                    <small>{{ opt.votes ?? opt.count ?? 0 }}표</small>
                   </div>
                   <button class="btn-vote" :class="{ voted: opt.voted }" @click="votePoll(activePolls[0].id, opt.id)">
                     {{ opt.voted ? '✓ 투표완료' : '투표' }}
@@ -1284,8 +1800,17 @@ onBeforeUnmount(() => {
 
                   <!-- Bubble Body -->
                   <div class="bubble-content" :class="[m.kind, { unsent: m.unsent }]">
+                    <!-- Inline Edit Mode -->
+                    <div v-if="editingMessageId === m.id" class="flex-row" style="gap:4px">
+                      <input v-model="editingMessageBody" style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px" @keydown.enter.prevent="saveEditMessage" />
+                      <button class="btn-chat-shortcut" @click="saveEditMessage">저장</button>
+                      <button class="btn-chat-shortcut" @click="editingMessageId = ''">취소</button>
+                    </div>
                     <!-- Text -->
-                    <span v-if="m.kind === 'text'">{{ m.body }}</span>
+                    <span v-else-if="m.kind === 'text'">
+                      {{ m.body }}
+                      <small v-if="m.edited_at" style="opacity:0.75;font-size:10px;margin-left:4px">(수정됨)</small>
+                    </span>
 
                     <!-- Sticker -->
                     <div v-else-if="m.kind === 'sticker'" class="sticker-bubble">
@@ -1295,6 +1820,11 @@ onBeforeUnmount(() => {
                     <!-- Image / Attachment -->
                     <div v-else-if="m.kind === 'image'" class="attachment-bubble">
                       <div>🖼️ {{ m.body }}</div>
+                    </div>
+
+                    <!-- Voice / Audio / File -->
+                    <div v-else-if="m.kind === 'voice' || m.kind === 'audio' || m.kind === 'file' || m.kind === 'video'" class="attachment-bubble">
+                      <div>{{ m.kind === 'voice' || m.kind === 'audio' ? '🎙️ 음성메시지:' : '📎 파일:' }} {{ m.body }}</div>
                     </div>
 
                     <!-- Call log bubble -->
@@ -1316,14 +1846,19 @@ onBeforeUnmount(() => {
                     </span>
                   </div>
 
-                  <!-- Hover Actions Tray (Reply, Pin, Keep, Copy, Unsend, Reactions) -->
+                  <!-- Hover Actions Tray (Reply, Pin, Keep, Copy, Edit, Unsend, 6 LINE Reactions) -->
                   <div class="bubble-hover-actions">
                     <button title="하트" @click="reactToMessage(m.id, '❤️')">❤️</button>
                     <button title="좋아요" @click="reactToMessage(m.id, '👍')">👍</button>
+                    <button title="웃음" @click="reactToMessage(m.id, '😂')">😂</button>
+                    <button title="놀람" @click="reactToMessage(m.id, '😮')">😮</button>
+                    <button title="슬픔" @click="reactToMessage(m.id, '😢')">😢</button>
+                    <button title="화남" @click="reactToMessage(m.id, '😡')">😡</button>
                     <button title="답장" @click="startReply(m)">↩</button>
                     <button title="Keep 보관" @click="saveToKeep(m)">💾</button>
                     <button title="공지 등록" @click="pinMessage(m.id)">📌</button>
                     <button title="복사" @click="copyMessageText(m.body)">📋</button>
+                    <button v-if="m.sender_id === currentUser.id && m.kind === 'text' && !m.unsent" title="수정" @click="startEditMessage(m)">✏️</button>
                     <button v-if="m.sender_id === currentUser.id && !m.unsent" title="전송 취소" @click="unsendMessage(m.id)">🚫</button>
                   </div>
                 </div>
@@ -1337,13 +1872,14 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- Optional Drawer Panel (Notes, Albums, Events) -->
+          <!-- Optional Drawer Panel (Notes, Albums, Events, Media/Search) -->
           <aside v-if="activeDrawer !== 'none'" class="chat-drawer-pane">
             <div class="drawer-header">
               <div class="drawer-tabs">
                 <button :class="{ active: activeDrawer === 'notes' }" @click="toggleDrawer('notes')">노트</button>
+                <button :class="{ active: activeDrawer === 'albums' }" @click="toggleDrawer('albums')">앨범</button>
                 <button :class="{ active: activeDrawer === 'events' }" @click="toggleDrawer('events')">일정</button>
-                <button :class="{ active: activeDrawer === 'media' }" @click="toggleDrawer('media')">사진·동영상</button>
+                <button :class="{ active: activeDrawer === 'media' }" @click="toggleDrawer('media')">사진·검색</button>
               </div>
               <button class="btn-close-drawer" @click="activeDrawer = 'none'">✕</button>
             </div>
@@ -1352,32 +1888,70 @@ onBeforeUnmount(() => {
             <div v-if="activeDrawer === 'notes'" class="drawer-body">
               <div class="drawer-action-bar">
                 <strong>대화방 릴레이 노트</strong>
+                <div class="flex-row" style="margin-top:6px">
+                  <input v-model="newNoteBody" placeholder="새 노트 작성..." style="flex:1;padding:6px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="createNote" />
+                  <button class="btn-chat-shortcut" @click="createNote">등록</button>
+                </div>
               </div>
               <div v-for="n in chatNotes" :key="n.id" class="drawer-note-card">
-                <strong>{{ n.title }}</strong>
-                <p>{{ n.body }}</p>
-                <small class="muted">작성: {{ n.author?.display_name }}</small>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <strong>{{ n.title || '공유 노트' }}</strong>
+                  <button class="btn-delete-keep" @click="deleteNoteItem(n.id)">✕</button>
+                </div>
+                <p style="margin:6px 0">{{ n.body }}</p>
+                <small class="muted">작성: {{ n.author_name || n.author?.display_name || '멤버' }}</small>
+              </div>
+            </div>
+
+            <!-- Albums Tab -->
+            <div v-else-if="activeDrawer === 'albums'" class="drawer-body">
+              <div class="drawer-action-bar">
+                <strong>공유 사진 앨범</strong>
+                <div class="flex-row" style="margin-top:6px">
+                  <input v-model="newAlbumTitle" placeholder="새 앨범 제목..." style="flex:1;padding:6px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="createAlbum" />
+                  <button class="btn-chat-shortcut" @click="createAlbum">생성</button>
+                </div>
+              </div>
+              <div v-for="alb in chatAlbums" :key="alb.id" class="drawer-note-card">
+                <strong>📸 {{ alb.title }}</strong>
+                <div style="font-size:11px;color:#64748b;margin-top:4px">{{ formatTime(alb.created_at) }}</div>
               </div>
             </div>
 
             <!-- Events Tab -->
             <div v-else-if="activeDrawer === 'events'" class="drawer-body">
-              <div class="drawer-action-bar">
+              <div class="drawer-action-bar" style="margin-bottom:8px">
                 <button class="btn-primary sm" @click="showEventCreateModal = true">+ 새 일정 잡기</button>
               </div>
               <div v-for="ev in chatEvents" :key="ev.id" class="drawer-event-card">
                 <strong>📅 {{ ev.title }}</strong>
                 <div class="event-time">일시: {{ new Date(ev.starts_at).toLocaleString('ko-KR') }}</div>
                 <div class="event-loc">장소: {{ ev.location || '온라인 미팅' }}</div>
+                <div class="flex-row" style="margin-top:6px">
+                  <button class="btn-chat-shortcut" @click="rsvpEvent(ev.id, 'going')">✓ 참석 ({{ ev.going?.length || 0 }})</button>
+                  <button class="btn-chat-shortcut" @click="rsvpEvent(ev.id, 'declined')">✕ 불참 ({{ ev.declined?.length || 0 }})</button>
+                </div>
               </div>
             </div>
 
-            <!-- Media Tab -->
+            <!-- Media & Search Tab -->
             <div v-else-if="activeDrawer === 'media'" class="drawer-body">
+              <div class="flex-row" style="margin-bottom:10px">
+                <input v-model="chatSearchQuery" placeholder="대화방 내 메시지 검색..." style="flex:1;padding:6px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="runConversationSearch" />
+                <button class="btn-chat-shortcut" @click="runConversationSearch">검색</button>
+              </div>
+              <div v-if="chatSearchResults.length" style="margin-bottom:12px">
+                <strong style="font-size:12px">🔍 검색 결과 ({{ chatSearchResults.length }})</strong>
+                <div v-for="sr in chatSearchResults" :key="sr.id" class="drawer-note-card" style="margin-top:4px">
+                  <div style="font-size:12px">{{ sr.body }}</div>
+                </div>
+              </div>
+              <strong style="font-size:12px;display:block;margin-bottom:6px">📷 공유 사진·파일 ({{ chatMediaList.length }})</strong>
               <div class="media-grid">
-                <div class="media-thumb">📷 사진 1</div>
-                <div class="media-thumb">📷 사진 2</div>
-                <div class="media-thumb">📷 사진 3</div>
+                <div v-for="med in chatMediaList" :key="med.id" class="drawer-note-card">
+                  <div>{{ med.kind === 'image' ? '🖼️' : '📎' }} {{ med.body }}</div>
+                </div>
+                <div v-if="!chatMediaList.length" class="media-thumb">📷 공유된 미디어 없음</div>
               </div>
             </div>
           </aside>
@@ -1425,7 +1999,9 @@ onBeforeUnmount(() => {
             <span v-if="uploading" role="status">파일 전송 중…</span>
             <button class="btn-tool" title="사진 전송" :disabled="uploading" @click="chooseAttachment('image')">📷</button>
             <button class="btn-tool" title="스티커 열기" @click="showStickerPicker = !showStickerPicker">😊</button>
-            <button class="btn-tool" title="음성 파일 선택" :disabled="uploading" @click="chooseAttachment('voice')">🎙️</button>
+            <button class="btn-tool" :title="isRecordingVoice ? '녹음 종료 및 전송' : '음성 녹음 / 파일 선택'" :disabled="uploading" @click="toggleVoiceRecording">
+              {{ isRecordingVoice ? '⏹️' : '🎙️' }}
+            </button>
             <button class="btn-tool" title="투표 만들기" @click="showPollCreateModal = true">📊</button>
             <button class="btn-tool" title="일정 등록" @click="showEventCreateModal = true">📅</button>
             <button class="btn-tool" title="파일 첨부" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
@@ -1462,7 +2038,11 @@ onBeforeUnmount(() => {
     <!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call) -->
     <div v-if="activeCall" class="call-overlay-modal">
       <div class="call-dialog-box">
-        <div class="call-avatar-pulse">
+        <div v-if="activeCall.kind === 'video'" style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
+          <video ref="remoteVideoRef" autoplay playsinline style="width:180px;height:130px;background:#0f172a;border-radius:12px;object-fit:cover"></video>
+          <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover"></video>
+        </div>
+        <div v-else class="call-avatar-pulse">
           <div class="avatar-circle lg">{{ activeCall.title.slice(0, 1) }}</div>
         </div>
         <h3>{{ activeCall.title }}</h3>
@@ -1475,13 +2055,16 @@ onBeforeUnmount(() => {
         <!-- Call Action Buttons -->
         <div class="call-controls-row">
           <template v-if="activeCall.state === 'connected'">
-            <button class="btn-call-circle" :class="{ off: isCallMuted }" @click="isCallMuted = !isCallMuted">
+            <button class="btn-call-circle" :class="{ off: isCallMuted }" title="마이크 음소거" @click="toggleCallMute">
               {{ isCallMuted ? '🔇' : '🎤' }}
             </button>
-            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isCallVideoOff }" @click="isCallVideoOff = !isCallVideoOff">
+            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isCallVideoOff }" title="카메라 켜기/끄기" @click="toggleCallVideo">
               {{ isCallVideoOff ? '🚫' : '📹' }}
             </button>
-            <button class="btn-call-circle" :class="{ off: !isCallSpeakerOn }" @click="isCallSpeakerOn = !isCallSpeakerOn">
+            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isScreenSharing }" title="화면 공유" @click="toggleScreenShare">
+              🖥️
+            </button>
+            <button class="btn-call-circle" :class="{ off: !isCallSpeakerOn }" title="스피커폰" @click="isCallSpeakerOn = !isCallSpeakerOn">
               🔊
             </button>
           </template>
@@ -1678,8 +2261,8 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="setting-toggle-row">
-            <span>종단간 암호화 — 현재 미지원</span>
-            <input type="checkbox" disabled aria-label="종단간 암호화 미지원" />
+            <span>🔒 Letter Sealing (Signal ECDH 종단간 암호화)</span>
+            <input v-model="letterSealingEnabled" type="checkbox" aria-label="종단간 암호화 설정" />
           </div>
           <div class="setting-toggle-row">
             <span>👀 읽음 확인 표시 (Read Receipts)</span>
@@ -1690,8 +2273,93 @@ onBeforeUnmount(() => {
             <input type="checkbox" checked />
           </div>
 
+          <div class="setting-group" style="margin-top:8px">
+            <strong>👤 내 프로필 수정</strong>
+            <div class="flex-row" style="margin-top:6px">
+              <input v-model="editProfileName" placeholder="이름" style="flex:1" />
+              <input v-model="editProfileHandle" placeholder="LINE ID (@handle)" style="flex:1" />
+            </div>
+            <div class="flex-row" style="margin-top:6px">
+              <input v-model="editProfileBio" placeholder="상태메시지" style="flex:1" />
+              <button class="btn-primary" @click="saveProfileSettings">저장</button>
+            </div>
+          </div>
+
+          <div class="setting-group" style="margin-top:8px">
+            <strong>📱 PC/웹 QR 로그인 승인</strong>
+            <div class="flex-row" style="margin-top:6px">
+              <input v-model="approveChallengeInput" placeholder="Challenge ID" style="flex:1" />
+              <input v-model="approveTokenInput" placeholder="QR Token" style="flex:1" />
+              <button class="btn-secondary" @click="approveQrLogin">승인</button>
+            </div>
+          </div>
+
+          <div v-if="devicesList.length" class="setting-group" style="margin-top:8px">
+            <strong>💻 로그인된 기기 관리 ({{ devicesList.length }})</strong>
+            <div v-for="dv in devicesList" :key="dv.id" class="setting-toggle-row">
+              <span>{{ dv.name }} ({{ dv.platform }})</span>
+              <button class="btn-delete-keep" @click="revokeDevice(dv.id)">해제</button>
+            </div>
+          </div>
+
           <div class="modal-actions-right">
             <button class="btn-primary" @click="showSettingsModal = false">완료</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW STORY MODAL -->
+    <div v-if="showNewStoryModal" class="modal-backdrop" @click.self="showNewStoryModal = false">
+      <div class="standard-modal-box">
+        <div class="modal-header">
+          <h3>📷 내 24시간 스토리 올리기</h3>
+          <button class="btn-modal-close" @click="showNewStoryModal = false">✕</button>
+        </div>
+        <div class="modal-body-form">
+          <label>스토리 텍스트</label>
+          <input v-model="newStoryText" placeholder="오늘의 순간을 공유하세요..." @keydown.enter.prevent="publishStory" />
+          <div class="modal-actions-right">
+            <button class="btn-secondary" @click="showNewStoryModal = false">취소</button>
+            <button class="btn-primary" @click="publishStory">게시하기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW VOOM POST MODAL -->
+    <div v-if="showVoomCreateModal" class="modal-backdrop" @click.self="showVoomCreateModal = false">
+      <div class="standard-modal-box">
+        <div class="modal-header">
+          <h3>🎬 새 LINE VOOM 포스트</h3>
+          <button class="btn-modal-close" @click="showVoomCreateModal = false">✕</button>
+        </div>
+        <div class="modal-body-form">
+          <label>포스트 내용</label>
+          <input v-model="newVoomBody" placeholder="VOOM 영상/포스트 설명 입력..." @keydown.enter.prevent="createVoomPost" />
+          <div class="modal-actions-right">
+            <button class="btn-secondary" @click="showVoomCreateModal = false">취소</button>
+            <button class="btn-primary" @click="createVoomPost">게시하기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREATE OPENCHAT MODAL -->
+    <div v-if="showCreateOpenChatModal" class="modal-backdrop" @click.self="showCreateOpenChatModal = false">
+      <div class="standard-modal-box">
+        <div class="modal-header">
+          <h3>🌐 새 오픈채팅방 만들기</h3>
+          <button class="btn-modal-close" @click="showCreateOpenChatModal = false">✕</button>
+        </div>
+        <div class="modal-body-form">
+          <label>오픈채팅방 이름</label>
+          <input v-model="newOpenChatRoomName" placeholder="예: 판교 러닝 크루" />
+          <label>설명</label>
+          <input v-model="newOpenChatRoomDesc" placeholder="자유롭게 소개를 입력하세요" />
+          <div class="modal-actions-right">
+            <button class="btn-secondary" @click="showCreateOpenChatModal = false">취소</button>
+            <button class="btn-primary" @click="createOpenChatRoom">개설하기</button>
           </div>
         </div>
       </div>

@@ -79,6 +79,7 @@ export type Message = {
   reply_to?: string
   metadata?: Record<string, unknown>
   created_at: string
+  edited_at?: string
   unsent?: boolean
   read_count?: number
   reactions?: Record<string, number>

@@ -76,10 +76,6 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simple rate limiting: track attempts per IP in a map with expiration
-\t// (for production, use a proper distributed rate limiter like Redis)
-\t_ = r // suppress unused error if rate limiting is disabled for now
-
 	var id, role, hash, state string
 	e := a.db.QueryRowContext(r.Context(), "SELECT id,role,password_hash,state FROM identity.users WHERE email=$1", strings.ToLower(strings.TrimSpace(input.Email))).Scan(&id, &role, &hash, &state)
 	if e != nil || state != "active" || !auth.CheckPassword(input.Password, hash) {
