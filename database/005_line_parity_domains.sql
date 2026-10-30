@@ -77,3 +77,4 @@ CREATE TABLE IF NOT EXISTS commerce.wallet_transactions (
  counterpart_id UUID REFERENCES identity.users(id),
  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+

@@ -128,7 +128,8 @@ func (a *App) drainPushQueue(ctx context.Context) {
 				delivered = true
 			}
 			for _, pt := range tokens {
-				if pt.provider == "fcm" {
+				switch pt.provider {
+				case "fcm":
 					if fcm.Enabled {
 						token := fcm.AccessToken
 						if token == "" {
@@ -141,7 +142,7 @@ func (a *App) drainPushQueue(ctx context.Context) {
 					} else {
 						delivered = true
 					}
-				} else if pt.provider == "apns" {
+				case "apns":
 					if a.cfg.APNsKeyID != "" && a.cfg.APNsPrivateKey != "" {
 						ok := a.sendAPNs(ctx, a.cfg, pt.token, it.title.String, it.body.String, it.payload)
 						if ok {
@@ -150,7 +151,7 @@ func (a *App) drainPushQueue(ctx context.Context) {
 					} else {
 						delivered = true
 					}
-				} else {
+				default:
 					delivered = true
 				}
 			}

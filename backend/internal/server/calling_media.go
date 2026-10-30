@@ -412,7 +412,8 @@ func (a *App) listStoreStickers(w http.ResponseWriter, r *http.Request) {
 	send(w, 200, map[string]any{"packs": out})
 }
 
-func (a *App) createOrder(w http.ResponseWriter, r *http.Request) {
+// CreateOrder handles internal order creation for digital items and stickers.
+func (a *App) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		ProductType    string `json:"product_type"`
 		ResourceID     string `json:"resource_id"`

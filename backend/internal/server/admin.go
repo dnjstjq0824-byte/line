@@ -126,9 +126,10 @@ func (a *App) moderationAction(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "moderation action failed")
 		return
 	}
-	if in.Action == "suspend" {
+	switch in.Action {
+	case "suspend":
 		_, _ = a.db.ExecContext(r.Context(), "UPDATE identity.users SET state='suspended',updated_at=now() WHERE id=$1", in.SubjectUserID)
-	} else if in.Action == "activate" {
+	case "activate":
 		_, _ = a.db.ExecContext(r.Context(), "UPDATE identity.users SET state='active',updated_at=now() WHERE id=$1", in.SubjectUserID)
 	}
 	if repArg != nil {
