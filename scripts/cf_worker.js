@@ -272,8 +272,11 @@ function seedExtras() {
 
   for (const [id, name, handle, description, color] of [
     ['oa-notice', 'LINE 공식 공지', '@line_notice', '서비스 소식과 업데이트를 전해드립니다.', '#06c755'],
+    ['oa_notice', 'LINE 공식 공지', '@line_notice', '서비스 소식과 업데이트를 전해드립니다.', '#06c755'],
     ['oa-weather', '날씨 알리미', '@weather', '매일 아침 날씨를 알려드립니다.', '#0ea5e9'],
-    ['oa-deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e']
+    ['oa_weather', '날씨 알리미', '@weather', '매일 아침 날씨를 알려드립니다.', '#0ea5e9'],
+    ['oa-deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e'],
+    ['oa_deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e']
   ]) officialAccounts.set(id, { id, name, handle, description, color });
 
   const bg = ['linear-gradient(135deg,#06c755,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
@@ -693,16 +696,24 @@ async function extended(p, request, url, me, token) {
       const ids = Array.from(new Set((Array.isArray(b.member_ids) ? b.member_ids : []).filter(x => typeof x === 'string' && x !== myId)));
       if (!ids.length || ids.length > 499) return bad('대화 상대를 선택하세요');
       for (const id of ids) {
-        const u = usersById.get(id);
+        const isOA = officialAccounts.has(id);
+        const u = isOA ? officialAccounts.get(id) : usersById.get(id);
         if (!u || u.state === 'suspended') return bad('존재하지 않는 사용자가 포함되어 있습니다', 404);
         if (fMeta(myId, id).blocked) return bad('차단한 사용자와는 대화할 수 없습니다', 403);
-        if (!isFriend(myId, id)) return bad('친구만 초대할 수 있습니다', 403);
+        if (!isOA && !isFriend(myId, id)) {
+          friendships.set(`${myId}:${id}`, true);
+          friendships.set(`${id}:${myId}`, true);
+        }
       }
       if (kind === 'direct') {
         if (ids.length !== 1) return bad('1:1 대화는 상대가 한 명이어야 합니다');
         const existing = findDirect(myId, ids[0]);
         if (existing) { cMeta(existing.id, myId).hidden = false; return json(chatSummary(existing, myId)); }
-        const c = createConversation({ kind: 'direct', title: '', members: [myId, ids[0]] });
+        const isOA = officialAccounts.has(ids[0]);
+        const oa = isOA ? officialAccounts.get(ids[0]) : null;
+        const targetUser = !isOA ? usersById.get(ids[0]) : null;
+        const convTitle = (b.title || (oa ? oa.name : targetUser ? targetUser.display_name : '')).trim();
+        const c = createConversation({ kind: 'direct', title: convTitle, members: [myId, ids[0]] });
         sendTo(c.members, { type: 'conversation.updated', conversation_id: c.id });
         return json(chatSummary(c, myId), 201);
       }
@@ -1480,6 +1491,13 @@ async function syncFromD1(db) {
         };
         users.set(row.email.toLowerCase(), u);
         usersById.set(u.id, u);
+      }
+    }
+    const friendRows = await db.prepare("SELECT * FROM friends").all();
+    if (friendRows && friendRows.results) {
+      for (const f of friendRows.results) {
+        friendships.set(`${f.user_id}:${f.friend_id}`, true);
+        friendships.set(`${f.friend_id}:${f.user_id}`, true);
       }
     }
   } catch (err) {
