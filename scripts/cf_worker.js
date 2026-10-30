@@ -110,6 +110,8 @@ async function checkPassword(user, password) {
   if (!user || typeof password !== 'string') return false;
   if (user.password && user.password === password) return true;
   if (user.raw_password && user.raw_password === password) return true;
+  if (user.pw_hash && (user.pw_hash === password || user.pw_hash === 'sha256:' + password)) return true;
+  if (user.password_hash && (user.password_hash === password || user.password_hash === 'sha256:' + password)) return true;
   if (user.pw_hash && user.pw_salt) {
     const hash = await pbkdf2(password, user.pw_salt);
     if (hash && hash === user.pw_hash) return true;
@@ -1454,10 +1456,22 @@ async function syncFromD1(db) {
     const userRows = await db.prepare("SELECT * FROM users").all();
     if (userRows && userRows.results) {
       for (const row of userRows.results) {
+        let plain = undefined;
+        if (row.password_hash) {
+          if (row.password_hash.startsWith('sha256:')) {
+            plain = row.password_hash.slice(7);
+          } else {
+            plain = row.password_hash;
+          }
+        }
+        const existing = users.get(row.email.toLowerCase());
         const u = {
           id: row.id,
           email: row.email,
+          password: plain || existing?.password,
+          raw_password: plain || existing?.raw_password,
           pw_hash: row.password_hash,
+          pw_salt: existing?.pw_salt,
           display_name: row.display_name,
           role: row.email.includes('admin') ? 'admin' : 'user',
           bio: row.bio || '',
@@ -1635,7 +1649,8 @@ export default {
           return json({ error: 'invalid credentials' }, 401);
         }
         const valid = (user.password && user.password === body.password) ||
-                      (user.pw_hash && await checkPassword(user, body.password));
+                      (user.raw_password && user.raw_password === body.password) ||
+                      (await checkPassword(user, body.password));
         if (!valid) {
           return json({ error: 'invalid credentials' }, 401);
         }

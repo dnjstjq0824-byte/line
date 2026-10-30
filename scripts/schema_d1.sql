@@ -156,3 +156,4 @@ VALUES
   ('oc_tech_01', '💻 개발자들의 대화방 (Tech & Code)', '프론트엔드/백엔드/인프라 기술 잡담 및 질의응답', 'it', 1284, datetime('now')),
   ('oc_crypto_02', '📈 글로벌 경제 & 재테크 토론', '국내외 주식, 암호화폐, 환율 실시간 정보 공유', 'finance', 3420, datetime('now')),
   ('oc_cafe_03', '☕ 전국 감성 카페 & 디저트 탐방', '주말 데이트 및 핫플레이스 카페 공유방', 'lifestyle', 890, datetime('now'));
+

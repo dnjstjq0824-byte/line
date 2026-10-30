@@ -247,3 +247,4 @@ export const LINE_STICKERS: LineSticker[] = [
     </svg>`
   }
 ];
+
