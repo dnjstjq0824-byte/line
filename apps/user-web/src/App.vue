@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import LineIcon from './components/LineIcon.vue'
+import LineContextMenu, { type ContextMenuItem } from './components/LineContextMenu.vue'
+import { LINE_STICKERS, type LineSticker } from './line-stickers'
+import { playSendSound, playReceiveSound } from './sound-effects'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   API_URL,
@@ -115,6 +119,112 @@ const showChargeModal = ref(false)
 const sendTargetFriend = ref<User | null>(null)
 const sendAmountInput = ref(10000)
 const sendMemoInput = ref('')
+
+// --- Context Menu & Stickers State ---
+const contextMenu = ref<{
+  visible: boolean;
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+}>({
+  visible: false,
+  x: 0,
+  y: 0,
+  items: []
+})
+
+const activeStickerCategory = ref<'All' | 'Brown' | 'Cony' | 'Sally'>('All')
+
+const filteredStickers = computed(() => {
+  if (activeStickerCategory.value === 'All') return LINE_STICKERS
+  return LINE_STICKERS.filter(s => s.character === activeStickerCategory.value)
+})
+
+function getStickerSvg(id: string): string {
+  const found = LINE_STICKERS.find(s => s.id === id)
+  return found ? found.svg : ''
+}
+
+function openMessageContextMenu(e: MouseEvent, msg: Message) {
+  e.preventDefault()
+  const items: ContextMenuItem[] = [
+    {
+      label: '텍스트 복사',
+      shortcut: 'Ctrl+C',
+      action: () => {
+        navigator.clipboard?.writeText(msg.body).catch(() => {})
+        note.value = '메시지가 클립보드에 복사되었습니다.'
+      }
+    },
+    {
+      label: '답장',
+      action: () => startReply(msg)
+    },
+    {
+      label: 'Keep에 저장',
+      action: () => saveToKeep(msg)
+    },
+    {
+      label: '공지로 등록',
+      action: () => pinMessage(msg.id)
+    }
+  ]
+
+  if (currentUser.value && msg.sender_id === currentUser.value.id) {
+    items.push({
+      label: '보내기 취소',
+      danger: true,
+      separator: true,
+      action: () => unsendMessage(msg.id)
+    })
+  }
+
+  contextMenu.value = {
+    visible: true,
+    x: Math.min(e.clientX, window.innerWidth - 180),
+    y: Math.min(e.clientY, window.innerHeight - 200),
+    items
+  }
+}
+
+async function startCallWithUser(friend: User, kind: 'voice' | 'video') {
+  await startDirectChat(friend)
+  await startCall(kind)
+}
+
+function openFriendContextMenu(e: MouseEvent, friend: User) {
+  e.preventDefault()
+  const items: ContextMenuItem[] = [
+    {
+      label: '1:1 대화',
+      action: () => startDirectChat(friend)
+    },
+    {
+      label: '음성 통화',
+      action: () => startCallWithUser(friend, 'voice')
+    },
+    {
+      label: '영상 통화',
+      action: () => startCallWithUser(friend, 'video')
+    },
+    {
+      label: '프로필 보기',
+      action: () => { activeProfileUser.value = friend }
+    },
+    {
+      label: '송금하기',
+      separator: true,
+      action: () => openSendMoneyModal(friend)
+    }
+  ]
+
+  contextMenu.value = {
+    visible: true,
+    x: Math.min(e.clientX, window.innerWidth - 180),
+    y: Math.min(e.clientY, window.innerHeight - 220),
+    items
+  }
+}
 
 // --- Store / Stickers & Themes ---
 const stickerPacks = ref<Array<{ id: string; title: string; price_minor: number; stickers: string[]; owned?: boolean }>>([])
@@ -363,6 +473,9 @@ async function connectRealtime() {
           const msg = data.message as Message
           if (msg.conversation_id === selectedChatId.value && !messages.value.some(m => m.id === msg.id)) {
             messages.value.push(msg)
+            if (currentUser.value && msg.sender_id !== currentUser.value.id) {
+              playReceiveSound()
+            }
           }
           void loadChats()
         } else if (data.type === 'message.updated') {
@@ -1411,10 +1524,7 @@ onBeforeUnmount(() => {
             @click="activeNav = 'home'"
           >
             <span class="pc-rail-indicator"></span>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
+            <LineIcon name="friends" :size="22" />
           </button>
 
           <!-- Nav 2: Chats (대화) -->
@@ -1425,9 +1535,7 @@ onBeforeUnmount(() => {
             @click="activeNav = 'chats'"
           >
             <span class="pc-rail-indicator"></span>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
+            <LineIcon name="chats" :size="22" />
             <span v-if="totalUnreadCount > 0" class="pc-unread-pill">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
           </button>
 
@@ -1439,10 +1547,7 @@ onBeforeUnmount(() => {
             @click="activeNav = 'voom'"
           >
             <span class="pc-rail-indicator"></span>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" />
-            </svg>
+            <LineIcon name="voom" :size="22" />
           </button>
 
           <!-- Nav 4: OpenChat (오픈채팅) -->
@@ -1453,10 +1558,7 @@ onBeforeUnmount(() => {
             @click="activeNav = 'openchat'"
           >
             <span class="pc-rail-indicator"></span>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 8h2a2 2 0 0 1 2 2v10l-4-4H9a2 2 0 0 1-2-2" />
-              <path d="M15 14v-4a2 2 0 0 0-2-2H5l-4 4V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-            </svg>
+            <LineIcon name="openchat" :size="22" />
           </button>
 
           <!-- Nav 5: Wallet & Services (더보기 / Pay) -->
@@ -1467,10 +1569,7 @@ onBeforeUnmount(() => {
             @click="activeNav = 'wallet'"
           >
             <span class="pc-rail-indicator"></span>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-              <line x1="2" y1="10" x2="22" y2="10" />
-            </svg>
+            <LineIcon name="wallet" :size="22" />
           </button>
         </div>
 
@@ -1482,14 +1581,15 @@ onBeforeUnmount(() => {
             </svg>
           </button>
 
+          <!-- Keep Button -->
+          <button class="pc-rail-btn small" title="Keep 보관함" @click="showKeepModal = true">
+            <LineIcon name="keep" :size="20" />
+          </button>
+
           <!-- Consoles Menu Button (...) -->
           <div class="rail-more-wrapper">
             <button class="pc-rail-btn small" title="Enterprise 콘솔 및 바로가기" @click="showConsolesMenu = !showConsolesMenu">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <circle cx="12" cy="12" r="2" />
-                <circle cx="19" cy="12" r="2" />
-                <circle cx="5" cy="12" r="2" />
-              </svg>
+              <LineIcon name="more" :size="20" />
             </button>
 
             <!-- Consoles Dropdown Popover -->
@@ -1508,10 +1608,7 @@ onBeforeUnmount(() => {
 
           <!-- Settings Button -->
           <button class="pc-rail-btn small" title="환경설정" @click="showSettingsModal = true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
+            <LineIcon name="settings" :size="20" />
           </button>
         </div>
       </nav>
@@ -1590,6 +1687,7 @@ onBeforeUnmount(() => {
                 :key="f.id"
                 class="pc-row-item"
                 @click="startDirectChat(f)"
+                @contextmenu.prevent="openFriendContextMenu($event, f)"
               >
                 <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || '#0ea5e9' }">
                   {{ f.display_name.slice(0, 1) }}
@@ -1755,9 +1853,9 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="chat-topbar-actions">
-            <button class="btn-chat-action" title="음성통화" @click="startCall('voice')">📞</button>
-            <button class="btn-chat-action" title="영상통화" @click="startCall('video')">📹</button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화방 서랍" @click="toggleDrawer('notes')">☰</button>
+            <button class="btn-chat-action" title="음성통화" @click="startCall('voice')"><LineIcon name="call-voice" :size="18" /></button>
+            <button class="btn-chat-action" title="영상통화" @click="startCall('video')"><LineIcon name="call-video" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화방 서랍" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
           </div>
         </header>
 
@@ -1791,11 +1889,16 @@ onBeforeUnmount(() => {
               </div>
 
               <!-- Speech Bubble -->
-              <div class="pc-speech-bubble" :class="{ sticker: msg.kind === 'sticker' }">
+              <div
+                class="pc-speech-bubble"
+                :class="{ 'is-sticker': msg.kind === 'sticker' }"
+                @contextmenu.prevent="openMessageContextMenu($event, msg)"
+              >
                 <div v-if="msg.reply_to" class="bubble-reply-preview">
-                  ↩ {{ msg.reply_preview || '답장한 메시지' }}
+                  <LineIcon name="reply" :size="12" /> {{ msg.reply_preview || '답장한 메시지' }}
                 </div>
-                <div class="bubble-text-content">{{ msg.body }}</div>
+                <div v-if="msg.kind === 'sticker' && getStickerSvg(msg.body)" class="bubble-sticker-svg" v-html="getStickerSvg(msg.body)"></div>
+                <div v-else class="bubble-text-content">{{ msg.body }}</div>
               </div>
 
               <!-- Status Info: Read receipt & Time -->
@@ -1807,12 +1910,12 @@ onBeforeUnmount(() => {
 
             <!-- Bubble Hover Floating Action Bar -->
             <div class="pc-bubble-toolbar">
-              <button title="하트" @click="reactToMessage(msg.id, '❤️')">❤️</button>
-              <button title="좋아요" @click="reactToMessage(msg.id, '👍')">👍</button>
-              <button title="답장" @click="startReply(msg)">↩</button>
-              <button title="Keep에 저장" @click="saveToKeep(msg)">💾</button>
-              <button title="공지 등록" @click="pinMessage(msg.id)">📌</button>
-              <button v-if="msg.sender_id === currentUser.id" title="보내기 취소" @click="unsendMessage(msg.id)">✕</button>
+              <button title="하트" @click="reactToMessage(msg.id, '❤️')"><LineIcon name="heart" :size="14" /></button>
+              <button title="좋아요" @click="reactToMessage(msg.id, '👍')"><LineIcon name="thumbsup" :size="14" /></button>
+              <button title="답장" @click="startReply(msg)"><LineIcon name="reply" :size="14" /></button>
+              <button title="Keep에 저장" @click="saveToKeep(msg)"><LineIcon name="keep" :size="14" /></button>
+              <button title="공지 등록" @click="pinMessage(msg.id)"><LineIcon name="pin" :size="14" /></button>
+              <button v-if="msg.sender_id === currentUser.id" title="보내기 취소" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
             </div>
           </div>
         </div>
@@ -2235,6 +2338,14 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+    <!-- Global LINE PC Context Menu -->
+    <LineContextMenu
+      :visible="contextMenu.visible"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :items="contextMenu.items"
+      @close="contextMenu.visible = false"
+    />
   </div>
 </template>
 
@@ -3267,4 +3378,160 @@ onBeforeUnmount(() => {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Sticker Tray Popover */
+.pc-sticker-tray-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  width: 380px;
+  height: 310px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  overflow: hidden;
+  animation: traySlideUp 0.15s ease-out;
+}
+
+@keyframes traySlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sticker-tray-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sticker-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.sticker-tabs button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sticker-tabs button.active {
+  background-color: #06C755;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.btn-tray-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.btn-tray-close:hover {
+  background-color: #e2e8f0;
+  color: #1e293b;
+}
+
+.sticker-grid-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.sticker-item-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s, transform 0.1s;
+}
+
+.sticker-item-cell:hover {
+  background-color: #f1f5f9;
+  transform: scale(1.05);
+}
+
+.sticker-thumbnail {
+  width: 60px;
+  height: 60px;
+}
+
+.sticker-label {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70px;
+}
+
+/* Sticker Display in Chat Bubbles */
+.pc-speech-bubble.is-sticker {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 4px !important;
+}
+
+.pc-speech-bubble.is-sticker::after {
+  display: none !important;
+}
+
+.bubble-sticker-svg {
+  width: 120px;
+  height: 120px;
+  display: block;
+  animation: stickerPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes stickerPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.btn-tool-icon.active {
+  background-color: #e8f8ee;
+  color: #06C755;
+}
+
+.btn-tool-icon.recording {
+  background-color: #fee2e2;
+  color: #ef4444;
+  animation: pulseRecording 1s infinite alternate;
+}
+
+@keyframes pulseRecording {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
+}
+
 </style>

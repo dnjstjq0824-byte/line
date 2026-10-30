@@ -1437,13 +1437,52 @@ async function leaveConversation(conv, myId, me) {
   return json({ status: 'left' });
 }
 
+
+async function d1Run(db, query, ...params) {
+  if (!db) return null;
+  try {
+    return await db.prepare(query).bind(...params).run();
+  } catch (e) {
+    console.error('[D1 Error]', e);
+    return null;
+  }
+}
+
+async function syncFromD1(db) {
+  if (!db) return;
+  try {
+    const userRows = await db.prepare("SELECT * FROM users").all();
+    if (userRows && userRows.results) {
+      for (const row of userRows.results) {
+        const u = {
+          id: row.id,
+          email: row.email,
+          pw_hash: row.password_hash,
+          display_name: row.display_name,
+          role: row.email.includes('admin') ? 'admin' : 'user',
+          bio: row.bio || '',
+          status_message: row.status_message || '',
+          created_at: row.created_at
+        };
+        users.set(row.email.toLowerCase(), u);
+        usersById.set(u.id, u);
+      }
+    }
+  } catch (err) {
+    console.error('[D1 Sync Error]', err);
+  }
+}
+
 let booted = null;
-function boot() {
+function boot(env) {
   if (!booted) {
     booted = (async () => {
       ensureSeed();
       seedExtras();
       await hashPendingPasswords();
+      if (env && env.DB) {
+        await syncFromD1(env.DB);
+      }
     })();
   }
   return booted;
@@ -1487,7 +1526,7 @@ export default {
       if (backendRoute) return json({ error: 'persistent backend must be configured' }, 503);
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Assets unavailable', { status: 503 });
     }
-    await boot();
+    await boot(env);
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
@@ -1564,6 +1603,22 @@ export default {
         };
         users.set(email, newUser);
         usersById.set(newUser.id, newUser);
+        if (env.DB) {
+          ctx.waitUntil(d1Run(
+            env.DB,
+            "INSERT OR REPLACE INTO users (id, email, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            newUser.id,
+            newUser.email,
+            newUser.password,
+            newUser.display_name,
+            newUser.bio
+          ));
+          ctx.waitUntil(d1Run(
+            env.DB,
+            "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 100000, datetime('now'))",
+            newUser.id
+          ));
+        }
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);
       }
 

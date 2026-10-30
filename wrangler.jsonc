@@ -9,6 +9,13 @@
     "directory": "./dist_cf",
     "binding": "ASSETS"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "line-messenger-db",
+      "database_id": "ed6615d0-cc8c-40fa-96b5-82e9382d90f6"
+    }
+  ],
   "vars": {
     "ALLOW_LOCAL_DEMO": "true",
     "ALLOW_EDGE_STANDALONE": "true"
