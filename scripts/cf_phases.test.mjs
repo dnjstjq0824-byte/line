@@ -146,3 +146,4 @@ test('LUNO Phase 6: Compliance & GDPR Data Portability', async () => {
   assert.ok(exportData.user?.id);
   assert.ok(Array.isArray(exportData.friends));
 });
+
