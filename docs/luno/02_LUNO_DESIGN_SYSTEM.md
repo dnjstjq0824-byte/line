@@ -183,3 +183,4 @@ LUNO Design System(LDS)은 일관성, 접근성, 확장성을 보장하기 위�
 
 ---
 *LUNO Design System Specification v1.0 © 2026 LUNO Global Platform Inc.*
+
