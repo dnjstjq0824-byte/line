@@ -10,6 +10,7 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "ALLOW_LOCAL_DEMO": "true"
+    "ALLOW_LOCAL_DEMO": "true",
+    "ALLOW_EDGE_STANDALONE": "true"
   }
 }

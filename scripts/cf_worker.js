@@ -1480,7 +1480,9 @@ export default {
         return json({ error: 'backend unavailable' }, 502);
       }
     }
-    const localDemo = env.ALLOW_LOCAL_DEMO === 'true' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    const isEdgeHost = url.hostname.endsWith('.workers.dev') || url.hostname.endsWith('.pages.dev') || env.ALLOW_EDGE_STANDALONE === 'true';
+    const localDemo = (env.ALLOW_LOCAL_DEMO === 'true' && (isLocal || isEdgeHost)) || env.ALLOW_EDGE_STANDALONE === 'true';
     if (!localDemo) {
       if (backendRoute) return json({ error: 'persistent backend must be configured' }, 503);
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Assets unavailable', { status: 503 });
