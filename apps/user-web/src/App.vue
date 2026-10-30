@@ -26,6 +26,9 @@ const email = ref('')
 const password = ref('')
 const displayName = ref('')
 const registerMode = ref(false)
+const showUserMenu = ref(false)
+const showConsolesMenu = ref(false)
+const authTab = ref<'email' | 'qr'>('email')
 const token = ref('')
 const currentUser = ref<User | null>(null)
 const error = ref('')
@@ -1060,6 +1063,11 @@ function openSendMoneyModal(friend: User) {
   showSendMoneyModal.value = true
 }
 
+function openSendMoneyFromChat() {
+  const f = friends.value.find(fr => fr.display_name === selectedChat.value?.title) || friends.value[0];
+  if (f) openSendMoneyModal(f);
+}
+
 async function executeSendMoney() {
   if (!sendTargetFriend.value || sendAmountInput.value <= 0) return
   await wrap(async () => {
@@ -1276,766 +1284,585 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="line-app" :class="[`theme-${activeTheme}`, { 'dark-mode': darkMode }]">
-    <!-- Top Global Service Navigation Bar -->
-    <header class="line-header">
-      <div class="brand">
-        <span class="line-badge-icon">LINE</span>
-        <span class="brand-title">LINE Global Messenger</span>
-        <span class="version-badge">v2026.1 Enterprise</span>
-      </div>
-      <div class="header-consoles">
-        <a href="./admin/" target="_blank" class="console-link">👑 관리자</a>
-        <a href="./partner/" target="_blank" class="console-link">🏢 파트너</a>
-        <a href="./developer/" target="_blank" class="console-link">💻 개발자</a>
-        <a href="./creator/" target="_blank" class="console-link">🎨 크리에이터</a>
-        <a href="./ads/" target="_blank" class="console-link">📢 광고주</a>
-        <button v-if="token" class="btn-logout" @click="logout">로그아웃</button>
-      </div>
-    </header>
-
-    <!-- Global Notice / Alert Banner -->
-    <div v-if="error" class="alert-banner error" role="alert">
+  <div class="line-desktop-app" :class="[`theme-${activeTheme}`, { 'dark-mode': darkMode }]">
+    <!-- Global Floating Alerts (Toast style) -->
+    <div v-if="error" class="floating-alert error" role="alert">
       <span>⚠️ {{ error }}</span>
       <button class="btn-dismiss" @click="error = ''">✕</button>
     </div>
-    <div v-if="note" class="alert-banner note" role="status">
+    <div v-if="note" class="floating-alert note" role="status">
       <span>💡 {{ note }}</span>
       <button class="btn-dismiss" @click="note = ''">✕</button>
     </div>
 
-    <!-- 1. LOGIN / REGISTER VIEW (LINE Authenticator UI) -->
-    <main v-if="!currentUser" class="auth-container">
-      <div class="auth-card">
-        <div class="auth-logo-area">
-          <div class="line-big-logo">LINE</div>
-          <h1>라인 메신저</h1>
-          <p class="auth-subtitle">친구, 가족, 세상과 연결되는 자유로운 글로벌 메신저</p>
+    <!-- 1. AUTH SCREEN: LINE PC Desktop Login Window -->
+    <main v-if="!currentUser" class="pc-auth-viewport">
+      <div class="pc-login-card">
+        <!-- Title bar with window controls -->
+        <div class="pc-window-bar">
+          <div class="pc-win-dots">
+            <span class="dot close"></span>
+            <span class="dot min"></span>
+            <span class="dot max"></span>
+          </div>
+          <span class="pc-win-title">LINE</span>
         </div>
 
-        <div class="auth-demo-box">
-          <div class="demo-title">💡 클릭하여 원클릭 데모 로그인</div>
-          <div class="demo-buttons">
-            <button class="btn-demo" @click="quickDemoLogin('user@line.local', 'LineUser#2026!')">
-              👤 일반 사용자 (Demo User)
-            </button>
-            <button class="btn-demo" @click="quickDemoLogin('alice@line-test.local', 'AliceStrongPass#2026')">
-              👩 앨리스 (Alice Kim)
-            </button>
-            <button class="btn-demo" @click="quickDemoLogin('admin@line.local', 'LineAdmin#2026!')">
-              👑 시스템 관리자 (Admin)
-            </button>
-          </div>
-        </div>
-
-        <form class="auth-form" @submit.prevent="authAction">
-          <div class="form-group">
-            <label>이메일 계정</label>
-            <input v-model="email" type="email" placeholder="example@line.local" required autocomplete="username" />
+        <div class="pc-login-body">
+          <!-- Logo Header -->
+          <div class="pc-brand-header">
+            <div class="pc-line-badge">LINE</div>
           </div>
 
-          <div v-if="registerMode" class="form-group">
-            <label>이름 (프로필 닉네임)</label>
-            <input v-model="displayName" type="text" placeholder="홍길동" required />
+          <!-- Login Method Tabs -->
+          <div class="pc-auth-nav-tabs">
+            <button :class="{ active: authTab === 'email' }" @click="authTab = 'email'">이메일 로그인</button>
+            <button :class="{ active: authTab === 'qr' }" @click="authTab = 'qr'; startQrLoginChallenge()">QR코드 로그인</button>
           </div>
 
-          <div class="form-group">
-            <label>비밀번호</label>
-            <input v-model="password" type="password" placeholder="••••••••••••" required autocomplete="current-password" />
+          <!-- Email Login & Sign-up -->
+          <div v-if="authTab === 'email'" class="pc-tab-content">
+            <form class="pc-login-form" @submit.prevent="authAction">
+              <div class="pc-input-wrap">
+                <input v-model="email" type="email" placeholder="이메일 주소" required autocomplete="username" />
+              </div>
+              <div v-if="registerMode" class="pc-input-wrap">
+                <input v-model="displayName" type="text" placeholder="이름 (닉네임)" required />
+              </div>
+              <div class="pc-input-wrap">
+                <input v-model="password" type="password" placeholder="비밀번호" required autocomplete="current-password" />
+              </div>
+
+              <div class="pc-form-helpers">
+                <label class="pc-remember-check">
+                  <input type="checkbox" checked />
+                  <span>자동 로그인</span>
+                </label>
+                <button type="button" class="btn-register-toggle" @click="registerMode = !registerMode">
+                  {{ registerMode ? '로그인으로 돌아가기' : '새 계정 만들기' }}
+                </button>
+              </div>
+
+              <button class="btn-pc-submit" type="submit">
+                {{ registerMode ? '회원가입' : '로그인' }}
+              </button>
+            </form>
+
+            <!-- Quick Demo Accounts -->
+            <div class="pc-demo-section">
+              <div class="demo-label">원클릭 테스트 계정:</div>
+              <div class="demo-buttons-group">
+                <button class="btn-demo-chip" @click="quickDemoLogin('user@line.local', 'LineUser#2026!')">일반 유저</button>
+                <button class="btn-demo-chip" @click="quickDemoLogin('alice@line-test.local', 'AliceStrongPass#2026')">앨리스</button>
+                <button class="btn-demo-chip" @click="quickDemoLogin('admin@line.local', 'LineAdmin#2026!')">관리자</button>
+              </div>
+            </div>
           </div>
 
-          <button class="btn-primary line-btn-submit" type="submit">
-            {{ registerMode ? '라인 계정 만들기' : '로그인' }}
-          </button>
-        </form>
-
-        <div class="auth-footer-actions">
-          <button class="btn-link" @click="registerMode = !registerMode">
-            {{ registerMode ? '이미 계정이 있으신가요? 로그인' : '새 라인 계정 가입하기' }}
-          </button>
-          <button class="btn-link" style="margin-left:12px" @click="startQrLoginChallenge">
-            📱 QR코드 로그인
-          </button>
-        </div>
-
-        <div v-if="qrChallengeID" class="auth-demo-box" style="margin-top:12px;text-align:center">
-          <div class="demo-title">📱 모바일 LINE 앱 &gt; 설정에서 아래 코드를 승인하세요</div>
-          <div style="font-size:11px;color:#334155;word-break:break-all">
-            <div><strong>Challenge ID:</strong> {{ qrChallengeID }}</div>
-            <div><strong>QR Token:</strong> {{ qrToken }}</div>
+          <!-- QR Code Login -->
+          <div v-else class="pc-tab-content qr-mode">
+            <div class="pc-qr-box">
+              <svg viewBox="0 0 100 100" width="130" height="130" fill="#111827">
+                <path d="M10 10h30v30h-30z M16 16v18h18v-18z M22 22h6v6h-6z M60 10h30v30h-30z M66 16v18h18v-18z M72 22h6v6h-6z M10 60h30v30h-30z M16 66v18h18v-18z M22 72h6v6h-6z M50 15h6v12h-6z M70 50h10v10h-10z M50 50h10v10h-10z M60 65h10v15h-10z M80 65h10v25h-10z M50 80h10v10h-10z" />
+              </svg>
+            </div>
+            <p class="qr-guide">스마트폰의 LINE 앱에서<br><strong>설정 &gt; QR코드</strong>로 스캔하여 로그인하세요.</p>
+            <div v-if="qrChallengeID" class="qr-details">
+              <small>Challenge: {{ qrChallengeID.slice(0, 8) }}... | Token: {{ qrToken.slice(0, 8) }}...</small>
+            </div>
+            <button class="btn-qr-reload" @click="startQrLoginChallenge">새로고침</button>
           </div>
         </div>
       </div>
     </main>
 
-    <!-- 2. MAIN LOGGED-IN MESSENGER UI (LINE 3-PANE LAYOUT) -->
-    <main v-else class="messenger-shell">
-      <!-- (Column 1) Leftmost LINE Icon Dock -->
-      <nav class="line-dock">
-        <div class="dock-top">
-          <div class="dock-app-icon" title="LINE Global">L</div>
+    <!-- 2. AUTHENTIC LINE PC DESKTOP MESSENGER (3-Pane Workspace) -->
+    <main v-else class="pc-workspace">
+      <!-- (Column 1) Sleek Dark Charcoal Dock (60px) -->
+      <nav class="pc-rail">
+        <div class="pc-rail-top">
+          <!-- Current User Profile Avatar with Online Dot -->
+          <div class="pc-user-avatar-trigger" title="내 프로필" @click="showUserMenu = !showUserMenu">
+            <div class="pc-avatar circle-36" :style="{ background: currentUser.avatar_color || '#06C755' }">
+              {{ currentUser.display_name.slice(0, 1) }}
+            </div>
+            <span class="pc-dot-online"></span>
+          </div>
 
-          <button class="dock-btn" :class="{ active: activeNav === 'home' }" title="홈 / 친구" @click="activeNav = 'home'">
-            <span class="icon">👤</span>
-            <span class="label">홈</span>
+          <!-- User Menu Dropdown -->
+          <div v-if="showUserMenu" class="pc-dropdown-menu user-menu" @click="showUserMenu = false">
+            <div class="dropdown-header">
+              <strong>{{ currentUser.display_name }}</strong>
+              <small>{{ currentUser.email }}</small>
+            </div>
+            <div class="dropdown-sep"></div>
+            <button class="dropdown-item" @click="activeProfileUser = currentUser">👤 프로필 설정</button>
+            <button class="dropdown-item" @click="showSettingsModal = true">⚙️ 환경설정</button>
+            <button class="dropdown-item" @click="showKeepModal = true">💾 Keep 보관함</button>
+            <div class="dropdown-sep"></div>
+            <button class="dropdown-item logout" @click="logout">로그아웃</button>
+          </div>
+
+          <!-- Nav 1: Friends (친구) -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'home' }"
+            title="친구"
+            @click="activeNav = 'home'"
+          >
+            <span class="pc-rail-indicator"></span>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
           </button>
 
-          <button class="dock-btn" :class="{ active: activeNav === 'chats' }" title="대화" @click="activeNav = 'chats'">
-            <span class="icon">💬</span>
-            <span class="label">대화</span>
-            <span v-if="totalUnreadCount > 0" class="dock-badge">{{ totalUnreadCount }}</span>
+          <!-- Nav 2: Chats (대화) -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'chats' }"
+            title="대화"
+            @click="activeNav = 'chats'"
+          >
+            <span class="pc-rail-indicator"></span>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span v-if="totalUnreadCount > 0" class="pc-unread-pill">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
           </button>
 
-          <button class="dock-btn" :class="{ active: activeNav === 'voom' }" title="VOOM (타임라인/스토리)" @click="activeNav = 'voom'">
-            <span class="icon">🎬</span>
-            <span class="label">VOOM</span>
+          <!-- Nav 3: VOOM -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'voom' }"
+            title="LINE VOOM"
+            @click="activeNav = 'voom'"
+          >
+            <span class="pc-rail-indicator"></span>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" />
+            </svg>
           </button>
 
-          <button class="dock-btn" :class="{ active: activeNav === 'openchat' }" title="오픈채팅" @click="activeNav = 'openchat'">
-            <span class="icon">🌐</span>
-            <span class="label">오픈채팅</span>
+          <!-- Nav 4: OpenChat (오픈채팅) -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'openchat' }"
+            title="오픈채팅"
+            @click="activeNav = 'openchat'"
+          >
+            <span class="pc-rail-indicator"></span>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 8h2a2 2 0 0 1 2 2v10l-4-4H9a2 2 0 0 1-2-2" />
+              <path d="M15 14v-4a2 2 0 0 0-2-2H5l-4 4V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
           </button>
 
-          <button class="dock-btn" :class="{ active: activeNav === 'wallet' }" title="더보기 & Pay" @click="activeNav = 'wallet'">
-            <span class="icon">👛</span>
-            <span class="label">Pay/더보기</span>
+          <!-- Nav 5: Wallet & Services (더보기 / Pay) -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'wallet' }"
+            title="LINE Pay / 서비스"
+            @click="activeNav = 'wallet'"
+          >
+            <span class="pc-rail-indicator"></span>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <line x1="2" y1="10" x2="22" y2="10" />
+            </svg>
           </button>
         </div>
 
-        <div class="dock-bottom">
-          <button class="dock-btn" title="Keep 보관함" @click="showKeepModal = true">
-            <span class="icon">💾</span>
-            <span class="label">Keep</span>
+        <div class="pc-rail-bottom">
+          <!-- Keep Vault Button -->
+          <button class="pc-rail-btn small" title="Keep 메모 보관함" @click="showKeepModal = true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
           </button>
-          <button class="dock-btn" title="설정" @click="showSettingsModal = true">
-            <span class="icon">⚙️</span>
-            <span class="label">설정</span>
+
+          <!-- Consoles Menu Button (...) -->
+          <div class="rail-more-wrapper">
+            <button class="pc-rail-btn small" title="Enterprise 콘솔 및 바로가기" @click="showConsolesMenu = !showConsolesMenu">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="19" cy="12" r="2" />
+                <circle cx="5" cy="12" r="2" />
+              </svg>
+            </button>
+
+            <!-- Consoles Dropdown Popover -->
+            <div v-if="showConsolesMenu" class="pc-dropdown-menu consoles-menu" @click="showConsolesMenu = false">
+              <div class="dropdown-heading">🏢 Enterprise 관리 콘솔</div>
+              <a href="./admin/" target="_blank" class="dropdown-item">👑 관리자 콘솔 (Admin)</a>
+              <a href="./partner/" target="_blank" class="dropdown-item">🏢 파트너 콘솔 (Official)</a>
+              <a href="./developer/" target="_blank" class="dropdown-item">💻 개발자 콘솔 (Developers)</a>
+              <a href="./creator/" target="_blank" class="dropdown-item">🎨 크리에이터 마켓</a>
+              <a href="./ads/" target="_blank" class="dropdown-item">📢 광고주 센터</a>
+              <div class="dropdown-sep"></div>
+              <button class="dropdown-item" @click="showSettingsModal = true">⚙️ 설정</button>
+              <button class="dropdown-item logout" @click="logout">로그아웃</button>
+            </div>
+          </div>
+
+          <!-- Settings Button -->
+          <button class="pc-rail-btn small" title="환경설정" @click="showSettingsModal = true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
           </button>
         </div>
       </nav>
 
-      <!-- (Column 2) Second Sidebar List Pane -->
-      <aside class="line-sidebar">
-        <!-- TAB 1: HOME (Profile, Favorites, Birthday, Friends, OA) -->
-        <div v-if="activeNav === 'home'" class="sidebar-content">
-          <div class="sidebar-header">
-            <h2>친구</h2>
-            <button class="btn-icon" title="친구 추가" @click="showAddFriendModal = true">➕</button>
-          </div>
-
-          <!-- My Profile Box -->
-          <div class="my-profile-card" @click="activeProfileUser = currentUser">
-            <div class="avatar-circle" :style="{ background: currentUser.avatar_color || '#06C755' }">
-              {{ currentUser.display_name.slice(0, 1) }}
-            </div>
-            <div class="profile-info">
-              <strong class="name">{{ currentUser.display_name }}</strong>
-              <small class="status-msg">{{ currentUser.status_message || '상태메시지를 입력하세요' }}</small>
-              <div class="bgm-tag">🎵 Official Hige Dandism - Subtitle</div>
+      <!-- (Column 2) Second Sidebar List Pane (310px) -->
+      <aside class="pc-side-pane">
+        <!-- VIEW 1: FRIENDS (친구) -->
+        <div v-if="activeNav === 'home'" class="pc-pane-body">
+          <div class="pc-pane-header">
+            <h2 class="pc-pane-title">친구</h2>
+            <div class="pc-pane-tools">
+              <button class="btn-pc-header-tool" title="친구 추가" @click="showAddFriendModal = true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              </button>
             </div>
           </div>
 
-          <!-- Search input -->
-          <div class="search-box">
-            <input v-model="searchKeyword" placeholder="친구, 공식 계정 검색" />
+          <!-- Clean Search Input -->
+          <div class="pc-search-box">
+            <div class="pc-search-inner">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input v-model="searchKeyword" placeholder="이름, 공식 계정 검색" />
+              <button v-if="searchKeyword" class="btn-search-clear" @click="searchKeyword = ''">✕</button>
+            </div>
           </div>
 
-          <div class="friends-scroll-area">
-            <!-- Birthday Friends Section -->
-            <div class="friends-category">
-              <div class="category-header">🎂 오늘 생일인 친구</div>
-              <div class="friend-row">
-                <div class="avatar-circle sm" style="background:#f97316">A</div>
-                <div class="info">
-                  <strong>Alice Kim</strong>
-                  <small class="muted">오늘 생일입니다 🎉</small>
-                </div>
-                <button class="btn-gift" @click="openSendMoneyModal({ id: '00000000-0000-0000-0000-000000000003', display_name: 'Alice Kim' })">
-                  선물하기
-                </button>
+          <!-- Friends List Scroll Area -->
+          <div class="pc-pane-scroll">
+            <!-- My Profile Card -->
+            <div class="pc-my-card" @click="activeProfileUser = currentUser">
+              <div class="pc-avatar circle-46" :style="{ background: currentUser.avatar_color || '#06C755' }">
+                {{ currentUser.display_name.slice(0, 1) }}
+              </div>
+              <div class="pc-card-meta">
+                <div class="name-line">{{ currentUser.display_name }}</div>
+                <div class="status-line">{{ currentUser.status_message || '상태메시지를 설정해보세요' }}</div>
               </div>
             </div>
 
-            <!-- Official Accounts Section -->
-            <div class="friends-category">
-              <div class="category-header">🟢 공식 계정 ({{ officialAccounts.length }})</div>
-              <div v-for="oa in officialAccounts" :key="oa.id" class="friend-row" @click="startDirectChat({ id: oa.id, display_name: oa.name, official: true })">
-                <div class="avatar-circle sm" :style="{ background: oa.color || '#06C755' }">
+            <!-- Birthday Category -->
+            <div class="pc-category">
+              <div class="category-title">생일인 친구</div>
+              <div class="pc-row-item" @click="startDirectChat({ id: '00000000-0000-0000-0000-000000000003', display_name: 'Alice Kim' })">
+                <div class="pc-avatar circle-38" style="background:#f97316">A</div>
+                <div class="pc-row-meta">
+                  <div class="row-name">Alice Kim 🎂</div>
+                  <div class="row-desc">오늘 생일입니다 🎉</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Official Accounts Category -->
+            <div class="pc-category">
+              <div class="category-title">공식 계정 {{ officialAccounts.length }}</div>
+              <div
+                v-for="oa in officialAccounts"
+                :key="oa.id"
+                class="pc-row-item"
+                @click="startDirectChat({ id: oa.id, display_name: oa.name, official: true })"
+              >
+                <div class="pc-avatar circle-38" :style="{ background: oa.color || '#06C755' }">
                   {{ oa.name.slice(0, 1) }}
                 </div>
-                <div class="info">
-                  <strong>{{ oa.name }} <span class="badge-verified">✓</span></strong>
-                  <small class="muted">{{ oa.description }}</small>
+                <div class="pc-row-meta">
+                  <div class="row-name">{{ oa.name }} <span class="badge-verified">✓</span></div>
+                  <div class="row-desc">{{ oa.description }}</div>
                 </div>
-                <button class="btn-chat-shortcut">대화</button>
               </div>
             </div>
 
-            <!-- Friends List Section -->
-            <div class="friends-category">
-              <div class="category-header">👥 친구 ({{ friends.length }})</div>
-              <div v-for="f in friends" :key="f.id" class="friend-row">
-                <div class="avatar-circle sm" :style="{ background: f.avatar_color || '#0ea5e9' }" @click="activeProfileUser = f">
+            <!-- Friends Category -->
+            <div class="pc-category">
+              <div class="category-title">친구 {{ friends.length }}</div>
+              <div
+                v-for="f in friends"
+                :key="f.id"
+                class="pc-row-item"
+                @click="startDirectChat(f)"
+              >
+                <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || '#0ea5e9' }">
                   {{ f.display_name.slice(0, 1) }}
                 </div>
-                <div class="info" @click="activeProfileUser = f">
-                  <strong>{{ f.display_name }}</strong>
-                  <small class="muted">{{ f.status_message || f.bio || 'LINE 친구' }}</small>
-                </div>
-                <div class="row-actions">
-                  <button class="btn-chat-shortcut" @click="startDirectChat(f)">1:1 대화</button>
+                <div class="pc-row-meta">
+                  <div class="row-name">{{ f.display_name }}</div>
+                  <div class="row-desc">{{ f.status_message || f.bio || 'LINE 친구' }}</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- TAB 2: CHATS (Conversation List) -->
-        <div v-else-if="activeNav === 'chats'" class="sidebar-content">
-          <div class="sidebar-header">
-            <h2>대화</h2>
-            <div class="header-btns">
-              <button class="btn-icon" title="그룹 대화방 만들기" @click="showCreateGroupModal = true">👥+</button>
+        <!-- VIEW 2: CHATS (대화) -->
+        <div v-else-if="activeNav === 'chats'" class="pc-pane-body">
+          <div class="pc-pane-header">
+            <h2 class="pc-pane-title">대화</h2>
+            <div class="pc-pane-tools">
+              <button class="btn-pc-header-tool" title="그룹 대화방 만들기" @click="showCreateGroupModal = true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </button>
             </div>
           </div>
 
-          <!-- Chat Filter Pills -->
-          <div class="chat-filters">
+          <!-- Chat Filter Tabs -->
+          <div class="pc-filter-tabs">
             <button :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">전체</button>
             <button :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">1:1</button>
             <button :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">그룹</button>
             <button :class="{ active: chatFilter === 'unread' }" @click="chatFilter = 'unread'">안읽음</button>
           </div>
 
-          <div class="search-box">
-            <input v-model="searchKeyword" placeholder="대화방 또는 메시지 검색" />
+          <!-- Search Box -->
+          <div class="pc-search-box">
+            <div class="pc-search-inner">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input v-model="searchKeyword" placeholder="대화방 또는 메시지 검색" />
+            </div>
           </div>
 
-          <div class="chats-scroll-area">
+          <!-- Chats Scroll List -->
+          <div class="pc-pane-scroll">
             <div
               v-for="c in filteredChats"
               :key="c.id"
-              class="chat-row"
+              class="pc-chat-row"
               :class="{ selected: selectedChatId === c.id }"
               @click="selectChat(c.id)"
             >
-              <div class="avatar-circle chat-avatar" :class="{ 'group-avatar': c.kind === 'group' }">
+              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }">
                 {{ c.title ? c.title.slice(0, 1) : 'L' }}
               </div>
-              <div class="chat-row-info">
-                <div class="chat-title-line">
-                  <strong class="chat-title">{{ c.title || '대화방' }}</strong>
-                  <span v-if="c.kind === 'group'" class="member-count">{{ c.member_count || 2 }}</span>
-                  <span v-if="c.pinned" class="badge-pin">📌</span>
-                  <small class="chat-time">{{ formatTime(c.updated_at || '') }}</small>
+              <div class="pc-chat-meta">
+                <div class="chat-top-line">
+                  <div class="chat-title-text">
+                    {{ c.title || '대화방' }}
+                    <span v-if="c.kind === 'group'" class="member-count">{{ c.member_count || 2 }}</span>
+                  </div>
+                  <span class="chat-timestamp">{{ formatTime(c.updated_at || '') }}</span>
                 </div>
-                <div class="chat-preview-line">
-                  <span class="preview-text">
-                    {{ c.last_message?.unsent ? '메시지를 취소했습니다' : (c.last_message?.body || '새로운 대화가 시작되었습니다.') }}
-                  </span>
-                  <span v-if="c.unread_count && c.unread_count > 0" class="unread-badge">
-                    {{ c.unread_count }}
-                  </span>
+                <div class="chat-bottom-line">
+                  <span class="chat-last-message">{{ c.last_message?.body || '메시지가 없습니다' }}</span>
+                  <span v-if="c.unread_count > 0" class="chat-unread-badge">{{ c.unread_count }}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- TAB 3: VOOM (Shorts & Story) -->
-        <div v-else-if="activeNav === 'voom'" class="sidebar-content">
-          <div class="sidebar-header">
-            <h2>LINE VOOM</h2>
-            <div class="flex-row">
-              <button class="btn-icon" title="새 스토리 올리기" @click="showNewStoryModal = true">📷 스토리+</button>
-              <button class="btn-icon" title="새 VOOM 올리기" @click="showVoomCreateModal = true">🎬 포스트+</button>
-            </div>
+        <!-- VIEW 3: VOOM -->
+        <div v-else-if="activeNav === 'voom'" class="pc-pane-body">
+          <div class="pc-pane-header">
+            <h2 class="pc-pane-title">LINE VOOM</h2>
+            <button class="btn-pc-header-tool" title="새 스토리" @click="showNewStoryModal = true">➕</button>
           </div>
-
-          <!-- Stories carousel in VOOM sidebar -->
           <div class="stories-row">
-            <div class="story-item my-story" @click="showNewStoryModal = true">
-              <div class="story-ring plus">+</div>
+            <div class="story-item" @click="showNewStoryModal = true">
+              <div class="story-ring plus">＋</div>
               <small>스토리 추가</small>
             </div>
-            <div v-for="s in stories" :key="s.id" class="story-item" :title="s.text || s.body">
-              <div class="story-ring" :style="{ background: s.bg }">
-                {{ (s.author_name || s.author?.display_name || 'L').slice(0, 1) }}
-              </div>
-              <small>{{ s.author_name || s.author?.display_name || '친구' }}</small>
+            <div v-for="s in stories" :key="s.id" class="story-item">
+              <div class="story-ring" :style="{ background: s.bg || '#06C755' }">{{ (s.author_name || 'L').slice(0, 1) }}</div>
+              <small>{{ s.author_name || '친구' }}</small>
             </div>
           </div>
-
-          <!-- Video feed list -->
           <div class="voom-list">
             <div v-for="v in voomVideos" :key="v.id" class="voom-card">
-              <div class="voom-banner" :style="{ background: v.media_bg || v.bg || 'linear-gradient(135deg,#0f172a,#1e293b)' }">
-                <span class="voom-emoji">{{ v.media_emoji || v.emoji || '🎬' }}</span>
+              <div class="voom-banner" :style="{ background: v.media_bg || v.bg || '#e2e8f0' }">
+                <span>{{ v.media_emoji || v.emoji || '🎬' }}</span>
               </div>
               <div class="voom-meta">
-                <strong>{{ v.body || v.title }}</strong>
+                <strong>{{ v.title || v.body }}</strong>
                 <div class="voom-actions">
                   <button class="btn-like" :class="{ liked: v.liked }" @click="likeVoomPost(v.id)">
-                    ❤️ {{ v.likes ?? v.like_count ?? 0 }}
+                    {{ v.liked ? '❤️' : '🤍' }} {{ v.likes || v.like_count || 0 }}
                   </button>
-                  <span class="voom-author">by {{ v.author_name || v.author?.display_name || 'LINE Creator' }}</span>
-                </div>
-                <div v-if="v.comments && v.comments.length" style="margin-top:6px;font-size:11px;color:#475569">
-                  <div v-for="cm in v.comments" :key="cm.id">
-                    <strong>{{ cm.author_name || cm.author?.display_name }}:</strong> {{ cm.text || cm.body }}
-                  </div>
-                </div>
-                <div class="flex-row" style="margin-top:6px">
-                  <input v-model="newVoomComment[v.id]" placeholder="댓글 달기..." style="flex:1;padding:4px 8px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="submitVoomComment(v.id)" />
-                  <button class="btn-chat-shortcut" @click="submitVoomComment(v.id)">등록</button>
+                  <small>{{ v.comments?.length || 0 }}개의 댓글</small>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- TAB 4: OPENCHAT (Communities) -->
-        <div v-else-if="activeNav === 'openchat'" class="sidebar-content">
-          <div class="sidebar-header">
-            <h2>오픈채팅</h2>
-            <button class="btn-icon" title="오픈채팅방 만들기" @click="showCreateOpenChatModal = true">➕ 만들기</button>
+        <!-- VIEW 4: OPENCHAT -->
+        <div v-else-if="activeNav === 'openchat'" class="pc-pane-body">
+          <div class="pc-pane-header">
+            <h2 class="pc-pane-title">오픈채팅</h2>
+            <button class="btn-pc-header-tool" title="오픈채팅 만들기" @click="showCreateOpenChatModal = true">➕</button>
           </div>
-          <div class="openchat-intro-banner">
-            <strong>🌐 관심사 기반 오픈채팅</strong>
-            <p>프로필 닉네임을 설정하고 다양한 주제로 자유롭게 대화하세요.</p>
-          </div>
-          <div class="openchat-list" style="overflow-y:auto;flex:1">
+          <div class="openchat-list">
             <div v-for="room in openChatRooms" :key="room.id" class="openchat-card" @click="selectOpenChatRoom(room)">
-              <div class="card-icon">🌐</div>
+              <div class="card-icon">💬</div>
               <div class="card-info">
                 <strong>{{ room.name }}</strong>
-                <small>{{ room.description || '자유 오픈채팅 커뮤니티' }}</small>
-                <span class="badge-members">👥 공개 오픈채팅</span>
-              </div>
-            </div>
-            <div class="openchat-card" @click="activeNav = 'chats'">
-              <div class="card-icon">💻</div>
-              <div class="card-info">
-                <strong>LINE Global Developer Lounge</strong>
-                <small>클라우드플레어 엣지 및 프론트엔드 엔지니어 오픈채팅</small>
-                <span class="badge-members">👥 48명 참여 중</span>
-              </div>
-            </div>
-            <div class="openchat-card" @click="activeNav = 'chats'">
-              <div class="card-icon">☕</div>
-              <div class="card-info">
-                <strong>서울 카페 & 디저트 투어</strong>
-                <small>주말 핫플레이스 탐방 및 사진 공유</small>
-                <span class="badge-members">👥 124명 참여 중</span>
-              </div>
-            </div>
-            <div v-if="selectedOpenChatRoom" class="openchat-card" style="flex-direction:column;background:#f8fafc">
-              <strong>📢 {{ selectedOpenChatRoom.name }} 게시판</strong>
-              <div v-for="p in openChatPosts" :key="p.id" style="font-size:12px;padding:4px 0;border-bottom:1px solid #e2e8f0">
-                {{ p.body }}
-              </div>
-              <div class="flex-row" style="margin-top:6px">
-                <input v-model="newOpenChatPostBody" placeholder="오픈채팅 게시글 입력..." style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" @keydown.enter.prevent="submitOpenChatPost" />
-                <button class="btn-chat-shortcut" @click="submitOpenChatPost">게시</button>
+                <p>{{ room.description }}</p>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- TAB 5: WALLET / PAY & SERVICES -->
-        <div v-else-if="activeNav === 'wallet'" class="sidebar-content">
-          <div class="sidebar-header">
-            <h2>LINE Pay & 더보기</h2>
+        <!-- VIEW 5: WALLET / SERVICES -->
+        <div v-else-if="activeNav === 'wallet'" class="pc-pane-body">
+          <div class="pc-pane-header">
+            <h2 class="pc-pane-title">LINE Pay / 서비스</h2>
           </div>
-
-          <!-- LINE Pay Card -->
           <div class="line-pay-card">
             <div class="pay-top">
-              <span class="pay-logo">LINE Pay</span>
-              <span class="pay-currency">KRW</span>
+              <span>LINE Pay</span>
+              <span>POINT {{ walletPoints.toLocaleString() }} P</span>
             </div>
             <div class="pay-balance">₩ {{ walletBalance.toLocaleString() }}</div>
             <div class="pay-actions">
-              <button class="btn-pay-action" @click="showChargeModal = true">➕ 충전하기</button>
-              <button class="btn-pay-action secondary" @click="showSendMoneyModal = true">💸 송금하기</button>
+              <button class="btn-pay-action" @click="showChargeModal = true">충전</button>
+              <button class="btn-pay-action secondary" @click="showSendMoneyModal = true">송금</button>
             </div>
           </div>
-
-          <!-- Services Grid -->
           <div class="services-grid">
-            <div class="service-box" @click="showKeepModal = true">
-              <span class="icon">💾</span>
-              <span class="title">Keep 보관함</span>
-            </div>
-            <div class="service-box" @click="activeNav = 'voom'">
-              <span class="icon">🎬</span>
-              <span class="title">LINE VOOM</span>
-            </div>
-            <div class="service-box" @click="showSettingsModal = true">
-              <span class="icon">🎨</span>
-              <span class="title">테마 / 설정</span>
-            </div>
-            <div class="service-box" @click="showStickerPicker = true">
-              <span class="icon">🐻</span>
-              <span class="title">스티커 샵</span>
-            </div>
-          </div>
-
-          <!-- Recent Transactions -->
-          <div class="tx-history">
-            <h3>최근 이용 내역</h3>
-            <div v-if="!walletTx.length" class="empty-tx">거래 내역이 없습니다.</div>
-            <div v-for="t in walletTx.slice(0, 5)" :key="t.id" class="tx-row">
-              <div class="tx-desc">
-                <strong>{{ t.title || t.note || t.counterparty || 'LINE Pay' }}</strong>
-                <small>{{ formatTime(t.created_at) }}</small>
-              </div>
-              <span class="tx-amount" :class="{ plus: t.kind === 'in' || t.amount > 0 }">
-                {{ t.kind === 'out' ? '-' : '+' }}{{ Math.abs(t.amount).toLocaleString() }}원
-              </span>
-            </div>
+            <div class="service-box" @click="activeNav = 'voom'"><span class="icon">🎬</span><span class="title">LINE VOOM</span></div>
+            <div class="service-box" @click="showSettingsModal = true"><span class="icon">🎨</span><span class="title">테마 / 설정</span></div>
+            <div class="service-box" @click="showStickerPicker = true"><span class="icon">🐻</span><span class="title">스티커 샵</span></div>
           </div>
         </div>
       </aside>
 
-      <!-- (Column 3) Right Main Chat / Conversation Window -->
-      <section v-if="selectedChat" class="line-chat-pane">
+      <!-- (Column 3) Right Main Chat View OR Authentic Neutral Empty State -->
+      <section v-if="selectedChat" class="pc-chat-viewport">
         <!-- Chat Header -->
-        <header class="chat-header">
-          <div class="header-left">
-            <div class="avatar-circle sm" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : '#06C755' }">
+        <header class="pc-chat-topbar">
+          <div class="chat-topbar-left">
+            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : '#06C755' }">
               {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'L' }}
             </div>
-            <div class="chat-info-block">
+            <div class="chat-topbar-info">
               <div class="title-row">
-                <h3>{{ selectedChat.title }}</h3>
-                <span v-if="selectedChat.kind === 'group'" class="member-pill">👥 {{ selectedChat.member_count || 2 }}</span>
+                <span class="chat-header-title">{{ selectedChat.title }}</span>
+                <span v-if="selectedChat.kind === 'group'" class="member-tag">👥 {{ selectedChat.member_count || 2 }}</span>
                 <span v-if="selectedChat.official" class="badge-verified">✓ 공식계정</span>
               </div>
               <small class="e2ee-tag">
-                {{ letterSealingEnabled ? '🔒 Letter Sealing (종단간 암호화 적용됨)' : '종단간 암호화 미지원' }}
+                {{ letterSealingEnabled ? '🔒 Letter Sealing (종단간 암호화 적용됨)' : '암호화 미지원' }}
               </small>
             </div>
           </div>
 
-          <div class="header-right-actions">
-            <button class="btn-call" title="무료 음성통화" @click="startCall('voice')">📞 음성통화</button>
-            <button class="btn-call video" title="영상통화" @click="startCall('video')">📹 영상통화</button>
-            <button class="btn-drawer-toggle" :class="{ active: activeDrawer !== 'none' }" @click="toggleDrawer('notes')">
-              ☰ 메뉴
-            </button>
+          <div class="chat-topbar-actions">
+            <button class="btn-chat-action" title="음성통화" @click="startCall('voice')">📞</button>
+            <button class="btn-chat-action" title="영상통화" @click="startCall('video')">📹</button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화방 서랍" @click="toggleDrawer('notes')">☰</button>
           </div>
         </header>
 
         <!-- Pinned Announcement (공지사항) -->
-        <div v-if="pinnedList.length" class="pinned-notice-bar" :class="{ expanded: pinnedExpanded }">
-          <div class="pin-icon">📌</div>
-          <div class="pin-body" @click="pinnedExpanded = !pinnedExpanded">
-            <strong>공지: </strong>{{ pinnedList[0].body || '상단 고정된 대화 공지사항입니다.' }}
-          </div>
-          <div class="pin-controls">
-            <button class="btn-pin-toggle" @click="pinnedExpanded = !pinnedExpanded">
-              {{ pinnedExpanded ? '▲ 접기' : '▼ 펼치기' }}
-            </button>
-            <button class="btn-pin-unpin" title="공지 해제" @click="unpinMessage(pinnedList[0].message_id)">✕</button>
+        <div v-if="pinnedList.length" class="pinned-banner" :class="{ expanded: pinnedExpanded }">
+          <div class="pinned-summary" @click="pinnedExpanded = !pinnedExpanded">
+            <span class="pin-icon">📢</span>
+            <span class="pin-text">{{ pinnedList[0].body || '상단 고정 공지사항' }}</span>
+            <span class="pin-toggle">{{ pinnedExpanded ? '▲' : '▼' }}</span>
           </div>
         </div>
 
-        <!-- Chat Workspace Body: Messages + Drawer -->
-        <div class="chat-body-workspace">
-          <!-- Messages Scroll Stream -->
-          <div class="messages-stream">
-            <div class="date-divider">
-              <span>2026년 10월 26일 월요일</span>
+        <!-- Message History Canvas (Authentic LINE Slate Blue Wallpaper) -->
+        <div class="pc-chat-messages-canvas">
+          <div class="date-capsule">오늘</div>
+
+          <div
+            v-for="msg in messages"
+            :key="msg.id"
+            class="pc-msg-row"
+            :class="{ mine: msg.sender_id === currentUser.id, other: msg.sender_id !== currentUser.id }"
+          >
+            <!-- Other User Avatar -->
+            <div v-if="msg.sender_id !== currentUser.id" class="pc-avatar circle-34 other-avatar">
+              {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
             </div>
 
-            <!-- Active Poll Card in Stream -->
-            <div v-if="activePolls.length" class="inline-poll-card">
-              <div class="poll-header">
-                <strong>📊 {{ activePolls[0].question }}</strong>
-                <span class="poll-status">진행 중</span>
-              </div>
-              <div class="poll-options">
-                <div v-for="opt in activePolls[0].options" :key="opt.id" class="poll-option-row">
-                  <div class="option-text-votes">
-                    <span>{{ opt.text || opt.label }}</span>
-                    <small>{{ opt.votes ?? opt.count ?? 0 }}표</small>
-                  </div>
-                  <button class="btn-vote" :class="{ voted: opt.voted }" @click="votePoll(activePolls[0].id, opt.id)">
-                    {{ opt.voted ? '✓ 투표완료' : '투표' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Individual Message Bubbles -->
-            <div
-              v-for="m in messages"
-              :key="m.id"
-              class="message-row"
-              :class="{ mine: m.sender_id === currentUser.id, system: m.kind === 'system' }"
-            >
-              <!-- System Message -->
-              <div v-if="m.kind === 'system'" class="system-bubble">
-                {{ m.body }}
+            <div class="pc-msg-bubble-group">
+              <div v-if="msg.sender_id !== currentUser.id" class="pc-sender-header">
+                {{ selectedChat.title }}
               </div>
 
-              <!-- Chat Bubble (Partner or Mine) -->
-              <div v-else class="bubble-container">
-                <!-- Partner Avatar -->
-                <div v-if="m.sender_id !== currentUser.id" class="bubble-avatar">
-                  {{ (selectedChat.title || 'U').slice(0, 1) }}
+              <!-- Speech Bubble -->
+              <div class="pc-speech-bubble" :class="{ sticker: msg.kind === 'sticker' }">
+                <div v-if="msg.reply_to" class="bubble-reply-preview">
+                  ↩ {{ msg.reply_preview || '답장한 메시지' }}
                 </div>
-
-                <div class="bubble-wrapper">
-                  <!-- Sender Name if partner -->
-                  <div v-if="m.sender_id !== currentUser.id" class="bubble-sender-name">
-                    {{ selectedChat.kind === 'group' ? '그룹 멤버' : selectedChat.title }}
-                  </div>
-
-                  <!-- Reply Preview Quotation -->
-                  <div v-if="m.reply_preview" class="reply-quoted-box">
-                    <small>↩ 답장: {{ m.reply_preview.body }}</small>
-                  </div>
-
-                  <!-- Bubble Body -->
-                  <div class="bubble-content" :class="[m.kind, { unsent: m.unsent }]">
-                    <!-- Inline Edit Mode -->
-                    <div v-if="editingMessageId === m.id" class="flex-row" style="gap:4px">
-                      <input v-model="editingMessageBody" style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px" @keydown.enter.prevent="saveEditMessage" />
-                      <button class="btn-chat-shortcut" @click="saveEditMessage">저장</button>
-                      <button class="btn-chat-shortcut" @click="editingMessageId = ''">취소</button>
-                    </div>
-                    <!-- Text -->
-                    <span v-else-if="m.kind === 'text'">
-                      {{ m.body }}
-                      <small v-if="m.edited_at" style="opacity:0.75;font-size:10px;margin-left:4px">(수정됨)</small>
-                    </span>
-
-                    <!-- Sticker -->
-                    <div v-else-if="m.kind === 'sticker'" class="sticker-bubble">
-                      <span class="big-sticker">{{ m.body }}</span>
-                    </div>
-
-                    <!-- Image / Attachment -->
-                    <div v-else-if="m.kind === 'image'" class="attachment-bubble">
-                      <div>🖼️ {{ m.body }}</div>
-                    </div>
-
-                    <!-- Voice / Audio / File -->
-                    <div v-else-if="m.kind === 'voice' || m.kind === 'audio' || m.kind === 'file' || m.kind === 'video'" class="attachment-bubble">
-                      <div>{{ m.kind === 'voice' || m.kind === 'audio' ? '🎙️ 음성메시지:' : '📎 파일:' }} {{ m.body }}</div>
-                    </div>
-
-                    <!-- Call log bubble -->
-                    <div v-else-if="m.kind === 'call'" class="call-log-bubble">
-                      📞 통화가 종료되었습니다 ({{ m.metadata?.duration || 0 }}초)
-                    </div>
-
-                    <!-- Pay bubble -->
-                    <div v-else-if="m.kind === 'pay'" class="pay-transfer-bubble">
-                      💸 {{ (m.metadata?.amount || 0).toLocaleString() }}원이 송금되었습니다.
-                    </div>
-                  </div>
-
-                  <button v-if="m.metadata?.attachment_id && !m.unsent" class="btn-tool" @click="downloadAttachment(m)">파일 다운로드</button>
-                  <!-- Reactions Badges on Bubble -->
-                  <div v-if="m.reactions && Object.keys(m.reactions).length" class="reaction-badge-group">
-                    <span v-for="(count, emoji) in m.reactions" :key="emoji" class="reaction-pill">
-                      {{ emoji }} {{ count }}
-                    </span>
-                  </div>
-
-                  <!-- Hover Actions Tray (Reply, Pin, Keep, Copy, Edit, Unsend, 6 LINE Reactions) -->
-                  <div class="bubble-hover-actions">
-                    <button title="하트" @click="reactToMessage(m.id, '❤️')">❤️</button>
-                    <button title="좋아요" @click="reactToMessage(m.id, '👍')">👍</button>
-                    <button title="웃음" @click="reactToMessage(m.id, '😂')">😂</button>
-                    <button title="놀람" @click="reactToMessage(m.id, '😮')">😮</button>
-                    <button title="슬픔" @click="reactToMessage(m.id, '😢')">😢</button>
-                    <button title="화남" @click="reactToMessage(m.id, '😡')">😡</button>
-                    <button title="답장" @click="startReply(m)">↩</button>
-                    <button title="Keep 보관" @click="saveToKeep(m)">💾</button>
-                    <button title="공지 등록" @click="pinMessage(m.id)">📌</button>
-                    <button title="복사" @click="copyMessageText(m.body)">📋</button>
-                    <button v-if="m.sender_id === currentUser.id && m.kind === 'text' && !m.unsent" title="수정" @click="startEditMessage(m)">✏️</button>
-                    <button v-if="m.sender_id === currentUser.id && !m.unsent" title="전송 취소" @click="unsendMessage(m.id)">🚫</button>
-                  </div>
-                </div>
-
-                <!-- Timestamp and Read Receipt -->
-                <div class="bubble-meta">
-                  <span v-if="m.sender_id === currentUser.id" class="read-receipt">읽음</span>
-                  <span class="bubble-time">{{ formatTime(m.created_at) }}</span>
-                </div>
+                <div class="bubble-text-content">{{ msg.body }}</div>
               </div>
-            </div>
-          </div>
 
-          <!-- Optional Drawer Panel (Notes, Albums, Events, Media/Search) -->
-          <aside v-if="activeDrawer !== 'none'" class="chat-drawer-pane">
-            <div class="drawer-header">
-              <div class="drawer-tabs">
-                <button :class="{ active: activeDrawer === 'notes' }" @click="toggleDrawer('notes')">노트</button>
-                <button :class="{ active: activeDrawer === 'albums' }" @click="toggleDrawer('albums')">앨범</button>
-                <button :class="{ active: activeDrawer === 'events' }" @click="toggleDrawer('events')">일정</button>
-                <button :class="{ active: activeDrawer === 'media' }" @click="toggleDrawer('media')">사진·검색</button>
-              </div>
-              <button class="btn-close-drawer" @click="activeDrawer = 'none'">✕</button>
-            </div>
-
-            <!-- Notes Tab -->
-            <div v-if="activeDrawer === 'notes'" class="drawer-body">
-              <div class="drawer-action-bar">
-                <strong>대화방 릴레이 노트</strong>
-                <div class="flex-row" style="margin-top:6px">
-                  <input v-model="newNoteBody" placeholder="새 노트 작성..." style="flex:1;padding:6px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="createNote" />
-                  <button class="btn-chat-shortcut" @click="createNote">등록</button>
-                </div>
-              </div>
-              <div v-for="n in chatNotes" :key="n.id" class="drawer-note-card">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                  <strong>{{ n.title || '공유 노트' }}</strong>
-                  <button class="btn-delete-keep" @click="deleteNoteItem(n.id)">✕</button>
-                </div>
-                <p style="margin:6px 0">{{ n.body }}</p>
-                <small class="muted">작성: {{ n.author_name || n.author?.display_name || '멤버' }}</small>
+              <!-- Status Info: Read receipt & Time -->
+              <div class="pc-msg-meta">
+                <span v-if="msg.sender_id === currentUser.id && (msg.read_count || 0) > 0" class="pc-read-receipt">읽음</span>
+                <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
               </div>
             </div>
 
-            <!-- Albums Tab -->
-            <div v-else-if="activeDrawer === 'albums'" class="drawer-body">
-              <div class="drawer-action-bar">
-                <strong>공유 사진 앨범</strong>
-                <div class="flex-row" style="margin-top:6px">
-                  <input v-model="newAlbumTitle" placeholder="새 앨범 제목..." style="flex:1;padding:6px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="createAlbum" />
-                  <button class="btn-chat-shortcut" @click="createAlbum">생성</button>
-                </div>
-              </div>
-              <div v-for="alb in chatAlbums" :key="alb.id" class="drawer-note-card">
-                <strong>📸 {{ alb.title }}</strong>
-                <div style="font-size:11px;color:#64748b;margin-top:4px">{{ formatTime(alb.created_at) }}</div>
-              </div>
+            <!-- Bubble Hover Floating Action Bar -->
+            <div class="pc-bubble-toolbar">
+              <button title="하트" @click="reactToMessage(msg.id, '❤️')">❤️</button>
+              <button title="좋아요" @click="reactToMessage(msg.id, '👍')">👍</button>
+              <button title="답장" @click="startReply(msg)">↩</button>
+              <button title="Keep에 저장" @click="saveToKeep(msg)">💾</button>
+              <button title="공지 등록" @click="pinMessage(msg.id)">📌</button>
+              <button v-if="msg.sender_id === currentUser.id" title="보내기 취소" @click="unsendMessage(msg.id)">✕</button>
             </div>
-
-            <!-- Events Tab -->
-            <div v-else-if="activeDrawer === 'events'" class="drawer-body">
-              <div class="drawer-action-bar" style="margin-bottom:8px">
-                <button class="btn-primary sm" @click="showEventCreateModal = true">+ 새 일정 잡기</button>
-              </div>
-              <div v-for="ev in chatEvents" :key="ev.id" class="drawer-event-card">
-                <strong>📅 {{ ev.title }}</strong>
-                <div class="event-time">일시: {{ new Date(ev.starts_at).toLocaleString('ko-KR') }}</div>
-                <div class="event-loc">장소: {{ ev.location || '온라인 미팅' }}</div>
-                <div class="flex-row" style="margin-top:6px">
-                  <button class="btn-chat-shortcut" @click="rsvpEvent(ev.id, 'going')">✓ 참석 ({{ ev.going?.length || 0 }})</button>
-                  <button class="btn-chat-shortcut" @click="rsvpEvent(ev.id, 'declined')">✕ 불참 ({{ ev.declined?.length || 0 }})</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Media & Search Tab -->
-            <div v-else-if="activeDrawer === 'media'" class="drawer-body">
-              <div class="flex-row" style="margin-bottom:10px">
-                <input v-model="chatSearchQuery" placeholder="대화방 내 메시지 검색..." style="flex:1;padding:6px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px" @keydown.enter.prevent="runConversationSearch" />
-                <button class="btn-chat-shortcut" @click="runConversationSearch">검색</button>
-              </div>
-              <div v-if="chatSearchResults.length" style="margin-bottom:12px">
-                <strong style="font-size:12px">🔍 검색 결과 ({{ chatSearchResults.length }})</strong>
-                <div v-for="sr in chatSearchResults" :key="sr.id" class="drawer-note-card" style="margin-top:4px">
-                  <div style="font-size:12px">{{ sr.body }}</div>
-                </div>
-              </div>
-              <strong style="font-size:12px;display:block;margin-bottom:6px">📷 공유 사진·파일 ({{ chatMediaList.length }})</strong>
-              <div class="media-grid">
-                <div v-for="med in chatMediaList" :key="med.id" class="drawer-note-card">
-                  <div>{{ med.kind === 'image' ? '🖼️' : '📎' }} {{ med.body }}</div>
-                </div>
-                <div v-if="!chatMediaList.length" class="media-thumb">📷 공유된 미디어 없음</div>
-              </div>
-            </div>
-          </aside>
-        </div>
-
-        <!-- Reply Bar preview -->
-        <div v-if="replyToMessage" class="reply-active-bar">
-          <div class="reply-info">
-            <strong>↩ {{ replyToMessage.sender_id === currentUser.id ? '나' : '상대방' }}에게 답장:</strong>
-            <span class="preview">{{ replyToMessage.body }}</span>
-          </div>
-          <button class="btn-cancel-reply" @click="replyToMessage = null">✕</button>
-        </div>
-
-        <!-- Sticker Picker Drawer Popover -->
-        <div v-if="showStickerPicker" class="sticker-popover">
-          <div class="sticker-tabs">
-            <button
-              v-for="(pack, idx) in stickersList"
-              :key="pack.id"
-              :class="{ active: activeStickerTab === idx }"
-              @click="activeStickerTab = idx"
-            >
-              {{ pack.name }}
-            </button>
-            <button class="btn-close-sticker" @click="showStickerPicker = false">✕</button>
-          </div>
-          <div class="sticker-palette-grid">
-            <button
-              v-for="stk in stickersList[activeStickerTab].items"
-              :key="stk"
-              class="sticker-choice-btn"
-              @click="sendSticker(stk)"
-            >
-              {{ stk }}
-            </button>
           </div>
         </div>
 
         <!-- Chat Input Composer -->
-        <footer class="chat-composer">
-          <!-- Attachment bar icons -->
-          <div class="composer-toolbar">
+        <footer class="pc-chat-input-dock">
+          <!-- Attachment Bar Icons -->
+          <div class="pc-input-toolbar">
             <input ref="attachmentInput" type="file" hidden @change="uploadSelectedFile" />
-            <span v-if="uploading" role="status">파일 전송 중…</span>
-            <button class="btn-tool" title="사진 전송" :disabled="uploading" @click="chooseAttachment('image')">📷</button>
-            <button class="btn-tool" title="스티커 열기" @click="showStickerPicker = !showStickerPicker">😊</button>
-            <button class="btn-tool" :title="isRecordingVoice ? '녹음 종료 및 전송' : '음성 녹음 / 파일 선택'" :disabled="uploading" @click="toggleVoiceRecording">
+            <button class="btn-tool-icon" title="스티커" @click="showStickerPicker = !showStickerPicker">😊</button>
+            <button class="btn-tool-icon" title="사진 전송" :disabled="uploading" @click="chooseAttachment('image')">📷</button>
+            <button class="btn-tool-icon" title="파일 첨부" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
+            <button class="btn-tool-icon" :title="isRecordingVoice ? '녹음 종료' : '음성 녹음'" @click="toggleVoiceRecording">
               {{ isRecordingVoice ? '⏹️' : '🎙️' }}
             </button>
-            <button class="btn-tool" title="투표 만들기" @click="showPollCreateModal = true">📊</button>
-            <button class="btn-tool" title="일정 등록" @click="showEventCreateModal = true">📅</button>
-            <button class="btn-tool" title="파일 첨부" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
+            <button class="btn-tool-icon" title="송금" @click="openSendMoneyFromChat">₩</button>
           </div>
 
-          <form class="composer-input-area" @submit.prevent="sendMessage">
+          <!-- Textarea Form Area -->
+          <form class="pc-textarea-form" @submit.prevent="sendMessage">
             <textarea
               v-model="draftMessage"
-              placeholder="메시지를 입력하세요 (Enter 전송, Shift+Enter 줄바꿈)"
-              rows="2"
+              placeholder="메시지를 입력하세요 (Enter: 전송, Shift+Enter: 줄바꿈)"
+              rows="3"
               @keydown.enter.exact.prevent="sendMessage"
             ></textarea>
-            <button class="btn-send-line" :disabled="!draftMessage.trim()">
-              전송
-            </button>
+            <div class="pc-textarea-bottom">
+              <span class="char-count">{{ draftMessage.length }}/1000</span>
+              <button class="btn-green-send" :disabled="!draftMessage.trim()">전송</button>
+            </div>
           </form>
         </footer>
       </section>
 
-      <!-- Empty State View when no chat is selected -->
-      <section v-else class="empty-welcome-pane">
-        <div class="welcome-box">
-          <div class="welcome-logo">LINE</div>
-          <h2>LINE 메신저에 오신 것을 환영합니다</h2>
-          <p>왼쪽 목록에서 대화방을 선택하거나 친구와 1:1 대화를 시작하세요.</p>
-          <div class="quick-welcome-actions">
-            <button class="btn-primary" @click="activeNav = 'home'">👥 친구 목록 보기</button>
-            <button class="btn-secondary" @click="showCreateGroupModal = true">💬 그룹 대화 만들기</button>
+      <!-- Clean Neutral Desktop Empty State (Authentic LINE PC) -->
+      <section v-else class="pc-empty-canvas">
+        <div class="pc-empty-dialog">
+          <div class="pc-watermark-wrap">
+            <svg viewBox="0 0 64 64" width="80" height="80" fill="none">
+              <rect width="64" height="64" rx="20" fill="#e8edf2" />
+              <path d="M32 15c-10.5 0-19 6.8-19 15.2 0 4.8 2.8 9.1 7.2 11.8-.3 1.5-1.4 5.2-1.6 5.9-.2.8.4.9 1 .5 1-.4 5.9-3.6 8.3-5.1 1.3.3 2.7.4 4.1.4 10.5 0 19-6.8 19-15.2S42.5 15 32 15z" fill="#b4c2ce" />
+            </svg>
           </div>
+          <h3 class="pc-empty-title">대화를 시작하세요</h3>
+          <p class="pc-empty-desc">친구 목록에서 대화할 상대를 클릭하거나<br>새로운 그룹 대화를 시작하세요.</p>
         </div>
       </section>
     </main>
 
-    <!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call) -->
+<!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call) -->
     <div v-if="activeCall" class="call-overlay-modal">
       <div class="call-dialog-box">
         <div v-if="activeCall.kind === 'video'" style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
@@ -2411,779 +2238,1033 @@ onBeforeUnmount(() => {
   </div>
 </template>
 
+
 <style scoped>
 /* ==========================================================================
-   LINE OFFICIAL SIGNATURE DESIGN SYSTEM & MODERN UI/UX
+   AUTHENTIC LINE PC DESKTOP DESIGN SYSTEM
    ========================================================================== */
 :root {
   --line-green: #06C755;
   --line-green-hover: #05b34c;
-  --line-green-light: #e8f8ee;
-  --line-bubble-mine: #06C755;
-  --line-bubble-mine-text: #ffffff;
-  --line-bubble-other: #ffffff;
-  --line-bubble-other-text: #191919;
-  --line-bg: #849ebf;
-  --line-panel-bg: #ffffff;
-  --line-text-primary: #191919;
-  --line-text-muted: #64748b;
-  --line-border: #e2e8f0;
+  --line-slate-bg: #849ebf;
+  --line-rail-bg: #20252b;
+  --line-side-bg: #ffffff;
+  --line-border: #e9edf1;
+  --line-text-dark: #191919;
+  --line-text-sub: #788290;
 }
 
-.theme-mint {
-  --line-green: #06C755;
-  --line-bg: #9bbad8;
-}
-.theme-ocean {
-  --line-green: #0ea5e9;
-  --line-bg: #8faec9;
-}
-.theme-sunset {
-  --line-green: #f97316;
-  --line-bg: #c99f8f;
-}
-.theme-sakura {
-  --line-green: #ec4899;
-  --line-bg: #d4a5b8;
-}
-.theme-midnight {
-  --line-green: #10b981;
-  --line-bg: #111827;
-  --line-panel-bg: #1f2937;
-  --line-text-primary: #f3f4f6;
-  --line-text-muted: #9ca3af;
-  --line-border: #374151;
-  --line-bubble-other: #374151;
-  --line-bubble-other-text: #f3f4f6;
-}
-
-.line-app {
+.line-desktop-app {
   display: flex;
-  flex-direction: column;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
-  color: var(--line-text-primary);
-  background: var(--line-bg);
+  background: var(--line-rail-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", "Noto Sans KR", sans-serif;
+  color: var(--line-text-dark);
+  user-select: none;
 }
 
-/* --- Global Header --- */
-.line-header {
-  height: 48px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  z-index: 10;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.line-badge-icon {
-  background: #06C755;
-  color: white;
-  font-weight: 900;
-  font-size: 11px;
-  padding: 3px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-}
-.brand-title {
-  font-weight: 700;
-  font-size: 14px;
-  color: #111827;
-}
-.version-badge {
-  font-size: 11px;
-  background: #f1f5f9;
-  color: #64748b;
-  padding: 2px 6px;
-  border-radius: 10px;
-}
-.header-consoles {
+/* Floating Alerts (Toast) */
+.floating-alert {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  z-index: 9999;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
 }
-.console-link {
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
-  text-decoration: none;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-.console-link:hover {
-  background: #f1f5f9;
-  color: #06C755;
-}
-.btn-logout {
-  font-size: 11px;
-  padding: 4px 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-}
+.floating-alert.error { background: #fee2e2; color: #b91c1c; border: 1px solid #f87171; }
+.floating-alert.note { background: #dcfce7; color: #15803d; border: 1px solid #4ade80; }
+.btn-dismiss { background: none; border: none; cursor: pointer; font-size: 12px; color: inherit; }
 
-/* --- Alerts --- */
-.alert-banner {
-  padding: 8px 16px;
-  font-size: 13px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.alert-banner.error { background: #fef2f2; color: #dc2626; border-bottom: 1px solid #fecaca; }
-.alert-banner.note { background: #f0fdf4; color: #16a34a; border-bottom: 1px solid #bbf7d0; }
-.btn-dismiss { background: none; border: none; cursor: pointer; font-size: 12px; }
-
-/* --- Auth Screen --- */
-.auth-container {
+/* ==========================================================================
+   AUTH SCREEN: AUTHENTIC LINE PC LOGIN WINDOW
+   ========================================================================== */
+.pc-auth-viewport {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eef2f6;
-  padding: 20px;
+  background: #20252b;
+  height: 100vh;
+  width: 100vw;
 }
-.auth-card {
-  width: 100%;
-  max-width: 420px;
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
-}
-.auth-logo-area {
-  text-align: center;
-  margin-bottom: 24px;
-}
-.line-big-logo {
-  display: inline-block;
-  background: #06C755;
-  color: white;
-  font-weight: 900;
-  font-size: 24px;
-  padding: 8px 18px;
-  border-radius: 12px;
-  margin-bottom: 12px;
-}
-.auth-card h1 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 800;
-  color: #111827;
-}
-.auth-subtitle {
-  font-size: 13px;
-  color: #64748b;
-  margin: 6px 0 0;
-}
-.auth-demo-box {
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 20px;
-}
-.demo-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: #475569;
-  margin-bottom: 8px;
-}
-.demo-buttons {
+.pc-login-card {
+  width: 360px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.pc-window-bar {
+  height: 32px;
+  background: #f8fafc;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  position: relative;
+}
+.pc-win-dots {
+  display: flex;
   gap: 6px;
 }
-.btn-demo {
-  text-align: left;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid #e2e8f0;
-  background: white;
-  border-radius: 8px;
-  cursor: pointer;
+.pc-win-dots .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
 }
-.btn-demo:hover {
-  background: #e8f8ee;
-  border-color: #06C755;
-}
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.form-group label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 4px;
-}
-.form-group input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 14px;
-  box-sizing: border-box;
-}
-.line-btn-submit {
-  background: #06C755;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 15px;
+.pc-win-dots .dot.close { background: #ff5f56; }
+.pc-win-dots .dot.min { background: #ffbd2e; }
+.pc-win-dots .dot.max { background: #27c93f; }
+.pc-win-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
   font-weight: 700;
-  cursor: pointer;
-  margin-top: 6px;
+  color: #64748b;
+  letter-spacing: 0.5px;
 }
-.line-btn-submit:hover {
-  background: #05b34c;
+.pc-login-body {
+  padding: 28px 24px 24px;
 }
-.auth-footer-actions {
+.pc-brand-header {
   text-align: center;
-  margin-top: 16px;
+  margin-bottom: 20px;
 }
-.btn-link {
+.pc-line-badge {
+  display: inline-block;
+  background: #06C755;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 26px;
+  letter-spacing: 0.5px;
+  padding: 8px 22px;
+  border-radius: 12px;
+}
+.pc-auth-nav-tabs {
+  display: flex;
+  border-bottom: 2px solid #f1f5f9;
+  margin-bottom: 20px;
+}
+.pc-auth-nav-tabs button {
+  flex: 1;
+  padding: 10px 0;
   background: none;
   border: none;
   font-size: 13px;
-  color: #06C755;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-/* --- Messenger Shell 3-Pane Layout --- */
-.messenger-shell {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  height: calc(100vh - 48px);
-}
-
-/* (Col 1) Left Dock */
-.line-dock {
-  width: 68px;
-  background: #1e293b;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  flex-shrink: 0;
-  z-index: 5;
-}
-.dock-top, .dock-bottom {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-.dock-app-icon {
-  background: #06C755;
-  color: white;
-  font-weight: 900;
-  font-size: 16px;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 8px;
-}
-.dock-btn {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  font-weight: 600;
+  color: #8892a0;
   cursor: pointer;
   position: relative;
   transition: all 0.15s;
 }
-.dock-btn .icon { font-size: 20px; }
-.dock-btn .label { font-size: 10px; font-weight: 600; margin-top: 2px; }
-.dock-btn:hover { background: rgba(255,255,255,0.08); color: #f1f5f9; }
-.dock-btn.active { background: #06C755; color: white; }
-.dock-badge {
+.pc-auth-nav-tabs button.active {
+  color: #111827;
+  font-weight: 700;
+}
+.pc-auth-nav-tabs button.active::after {
+  content: '';
   position: absolute;
-  top: 4px;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #06C755;
+}
+.pc-input-wrap {
+  margin-bottom: 12px;
+}
+.pc-input-wrap input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.pc-input-wrap input:focus {
+  border-color: #06C755;
+}
+.pc-form-helpers {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #4b5563;
+  margin: 10px 0 16px;
+}
+.pc-remember-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.btn-register-toggle {
+  background: none;
+  border: none;
+  color: #06C755;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-pc-submit {
+  width: 100%;
+  height: 44px;
+  background: #06C755;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-pc-submit:hover { background: #05b34c; }
+
+.pc-demo-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed #e2e8f0;
+}
+.demo-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.demo-buttons-group {
+  display: flex;
+  gap: 6px;
+}
+.btn-demo-chip {
+  flex: 1;
+  padding: 6px 0;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+.btn-demo-chip:hover {
+  background: #e8f8ee;
+  border-color: #06C755;
+  color: #06C755;
+}
+
+/* QR Tab */
+.pc-tab-content.qr-mode {
+  text-align: center;
+  padding: 10px 0;
+}
+.pc-qr-box {
+  display: inline-block;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.qr-guide {
+  font-size: 12px;
+  color: #4b5563;
+  margin: 12px 0 6px;
+  line-height: 1.4;
+}
+.qr-details {
+  font-size: 10px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+.btn-qr-reload {
+  padding: 6px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   AUTHENTIC LINE PC DESKTOP WORKSPACE (3 PANES)
+   ========================================================================== */
+.pc-workspace {
+  display: flex;
+  flex: 1;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* (Column 1) Leftmost Rail Dock (60px) */
+.pc-rail {
+  width: 60px;
+  background: #20252b;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  flex-shrink: 0;
+  z-index: 100;
+}
+.pc-rail-top, .pc-rail-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.pc-user-avatar-trigger {
+  position: relative;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+.pc-avatar {
+  border-radius: 50%;
+  color: #ffffff;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.circle-34 { width: 34px; height: 34px; font-size: 13px; }
+.circle-36 { width: 36px; height: 36px; font-size: 14px; }
+.circle-38 { width: 38px; height: 38px; font-size: 14px; }
+.circle-44 { width: 44px; height: 44px; font-size: 16px; }
+.circle-46 { width: 46px; height: 46px; font-size: 17px; }
+
+.pc-dot-online {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: #06C755;
+  border: 2px solid #20252b;
+  border-radius: 50%;
+}
+
+.pc-rail-btn {
+  width: 52px;
+  height: 48px;
+  background: none;
+  border: none;
+  color: #7b8794;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-radius: 8px;
+}
+.pc-rail-btn.small {
+  width: 40px;
+  height: 40px;
+}
+.pc-rail-btn:hover {
+  color: #ffffff;
+  background: rgba(255,255,255,0.06);
+}
+.pc-rail-btn.active {
+  color: #ffffff;
+  background: rgba(255,255,255,0.1);
+}
+.pc-rail-indicator {
+  display: none;
+}
+.pc-rail-btn.active .pc-rail-indicator {
+  display: block;
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 24px;
+  background: #06C755;
+  border-radius: 0 2px 2px 0;
+}
+.pc-unread-pill {
+  position: absolute;
+  top: 6px;
   right: 6px;
-  background: #ef4444;
-  color: white;
+  background: #06C755;
+  color: #ffffff;
   font-size: 10px;
   font-weight: 800;
-  padding: 2px 5px;
+  padding: 1px 5px;
   border-radius: 10px;
 }
 
-/* (Col 2) Second Sidebar List */
-.line-sidebar {
-  width: 320px;
-  background: var(--line-panel-bg);
-  border-right: 1px solid var(--line-border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-.sidebar-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-.sidebar-header {
-  padding: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.sidebar-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 800;
-}
-.btn-icon {
-  background: none;
-  border: 1px solid #cbd5e1;
+/* Dropdown menus from rail */
+.pc-dropdown-menu {
+  position: absolute;
+  left: 64px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 6px 0;
+  min-width: 190px;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease-out;
 }
-.my-profile-card {
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #f8fafc;
-  border-bottom: 1px solid #f1f5f9;
-  cursor: pointer;
+.user-menu { top: 16px; }
+.consoles-menu { bottom: 48px; }
+.dropdown-header {
+  padding: 8px 14px;
 }
-.avatar-circle {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  color: white;
-  font-weight: 800;
-  font-size: 16px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-.avatar-circle.sm { width: 36px; height: 36px; font-size: 14px; }
-.avatar-circle.lg { width: 72px; height: 72px; font-size: 28px; }
-.avatar-circle.xl { width: 88px; height: 88px; font-size: 34px; border: 4px solid white; }
-.profile-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.profile-info .name { font-size: 14px; font-weight: 700; }
-.profile-info .status-msg { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bgm-tag { font-size: 10px; color: #06C755; margin-top: 2px; }
-.search-box {
-  padding: 8px 16px;
-}
-.search-box input {
-  width: 100%;
-  padding: 8px 12px;
-  background: #f1f5f9;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  box-sizing: border-box;
-}
-.friends-scroll-area, .chats-scroll-area {
-  flex: 1;
-  overflow-y: auto;
-}
-.friends-category {
-  padding: 8px 0;
-}
-.category-header {
+.dropdown-header strong { display: block; font-size: 13px; color: #111827; }
+.dropdown-header small { color: #64748b; font-size: 11px; }
+.dropdown-heading {
+  padding: 6px 14px;
   font-size: 11px;
   font-weight: 700;
   color: #94a3b8;
-  padding: 4px 16px;
 }
-.friend-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.friend-row:hover { background: #f8fafc; }
-.friend-row .info { flex: 1; min-width: 0; }
-.friend-row .info strong { display: block; font-size: 13px; }
-.badge-verified { color: #06C755; font-size: 11px; }
-.btn-gift, .btn-chat-shortcut {
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid #cbd5e1;
-  background: white;
-  cursor: pointer;
-}
-.btn-gift { color: #ea580c; border-color: #fdba74; }
-
-/* Chats List */
-.chat-filters {
-  display: flex;
-  gap: 6px;
-  padding: 0 16px 8px;
-}
-.chat-filters button {
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 12px;
-  border: none;
+.dropdown-sep {
+  height: 1px;
   background: #f1f5f9;
-  color: #64748b;
-  cursor: pointer;
+  margin: 4px 0;
 }
-.chat-filters button.active { background: #06C755; color: white; }
-.chat-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+.dropdown-item {
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
   cursor: pointer;
-  border-bottom: 1px solid rgba(0,0,0,0.03);
+  display: block;
+  text-decoration: none;
 }
-.chat-row:hover { background: #f8fafc; }
-.chat-row.selected { background: #e8f8ee; border-left: 4px solid #06C755; }
-.chat-row-info { flex: 1; min-width: 0; }
-.chat-title-line { display: flex; align-items: center; justify-content: space-between; }
-.chat-title { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.member-count { font-size: 11px; color: #94a3b8; margin-left: 4px; }
-.chat-time { font-size: 11px; color: #94a3b8; }
-.chat-preview-line { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
-.preview-text { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-.unread-badge { background: #06C755; color: white; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 10px; }
+.dropdown-item:hover {
+  background: #f1f5f9;
+  color: #06C755;
+}
+.dropdown-item.logout {
+  color: #ef4444;
+}
 
-/* VOOM tab */
-.stories-row { display: flex; gap: 10px; padding: 12px 16px; overflow-x: auto; border-bottom: 1px solid #f1f5f9; }
-.story-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
-.story-ring { width: 48px; height: 48px; border-radius: 50%; border: 2px solid #06C755; display: grid; place-items: center; color: white; font-weight: 800; }
-.story-ring.plus { border-color: #cbd5e1; color: #06C755; font-size: 20px; }
-.voom-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-.voom-card { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: white; }
-.voom-banner { height: 100px; display: grid; place-items: center; font-size: 36px; }
-.voom-meta { padding: 10px; }
-.voom-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
-.btn-like { background: none; border: 1px solid #e2e8f0; border-radius: 12px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
-.btn-like.liked { background: #fee2e2; border-color: #fca5a5; }
-
-/* OpenChat tab */
-.openchat-intro-banner { padding: 12px 16px; background: #f0fdf4; margin: 0 16px 12px; border-radius: 10px; }
-.openchat-list { padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
-.openchat-card { display: flex; gap: 12px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; cursor: pointer; }
-.openchat-card:hover { background: #f8fafc; border-color: #06C755; }
-.card-icon { font-size: 24px; }
-.badge-members { display: block; font-size: 11px; color: #06C755; font-weight: 700; margin-top: 4px; }
-
-/* Wallet tab */
-.line-pay-card { margin: 16px; background: linear-gradient(135deg, #06C755, #0ea5e9); color: white; padding: 18px; border-radius: 16px; }
-.pay-top { display: flex; justify-content: space-between; font-weight: 800; }
-.pay-balance { font-size: 24px; font-weight: 900; margin: 12px 0; }
-.pay-actions { display: flex; gap: 8px; }
-.btn-pay-action { flex: 1; padding: 8px; background: white; color: #06C755; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; }
-.btn-pay-action.secondary { background: rgba(255,255,255,0.2); color: white; }
-.services-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px 16px; }
-.service-box { background: #f8fafc; padding: 14px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
-.service-box:hover { background: #e8f8ee; }
-.service-box .icon { font-size: 22px; }
-.service-box .title { font-size: 12px; font-weight: 700; }
-.tx-history { padding: 0 16px; }
-.tx-history h3 { font-size: 14px; margin-bottom: 8px; }
-.tx-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
-.tx-amount { font-weight: 700; font-size: 13px; }
-.tx-amount.plus { color: #06C755; }
-
-/* (Col 3) Right Main Chat Window */
-.line-chat-pane {
-  flex: 1;
+/* (Column 2) Second Sidebar List Pane (310px) */
+.pc-side-pane {
+  width: 310px;
+  background: #ffffff;
+  border-right: 1px solid #e9edf1;
   display: flex;
   flex-direction: column;
-  background: var(--line-bg);
-  height: 100%;
-  position: relative;
+  flex-shrink: 0;
+  height: 100vh;
 }
-.chat-header {
-  height: 60px;
-  background: rgba(255,255,255,0.95);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0,0,0,0.08);
+.pc-pane-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.pc-pane-header {
+  height: 52px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  flex-shrink: 0;
 }
-.header-left { display: flex; align-items: center; gap: 12px; }
-.chat-info-block .title-row { display: flex; align-items: center; gap: 8px; }
-.chat-info-block h3 { margin: 0; font-size: 16px; font-weight: 800; }
-.member-pill { font-size: 11px; background: #f1f5f9; padding: 2px 6px; border-radius: 8px; color: #64748b; }
-.e2ee-tag { font-size: 11px; color: #16a34a; font-weight: 600; }
-.header-right-actions { display: flex; gap: 8px; align-items: center; }
-.btn-call { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.btn-call.video { background: #e8f8ee; color: #06C755; border-color: #06C755; }
-.btn-drawer-toggle { background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.btn-drawer-toggle.active { background: #1e293b; color: white; }
+.pc-pane-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+}
+.btn-pc-header-tool {
+  background: none;
+  border: none;
+  color: #475569;
+  cursor: pointer;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+}
+.btn-pc-header-tool:hover { background: #f1f5f9; }
 
-/* Pinned Announcement */
-.pinned-notice-bar {
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
+.pc-search-box {
+  padding: 0 12px 8px;
+}
+.pc-search-inner {
+  height: 32px;
+  background: #f2f4f6;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+}
+.pc-search-inner input {
+  flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 12px;
+}
+.btn-search-clear {
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.pc-filter-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px 8px;
+}
+.pc-filter-tabs button {
+  flex: 1;
+  padding: 5px 0;
+  border: none;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.pc-filter-tabs button.active {
+  background: #06C755;
+  color: #ffffff;
+}
+
+.pc-pane-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+.pc-my-card {
   padding: 10px 16px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+  gap: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
 }
-.pin-icon { font-size: 16px; }
-.pin-body { flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pinned-notice-bar.expanded .pin-body { white-space: normal; }
-.btn-pin-toggle, .btn-pin-unpin { background: none; border: none; font-size: 11px; color: #64748b; cursor: pointer; }
-
-/* Chat Workspace Body (Stream + Drawer) */
-.chat-body-workspace { flex: 1; display: flex; overflow: hidden; position: relative; }
-.messages-stream { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-.date-divider { text-align: center; margin: 10px 0; }
-.date-divider span { background: rgba(0,0,0,0.15); color: white; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 12px; }
-
-/* Inline Poll Card */
-.inline-poll-card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
-.poll-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.poll-status { font-size: 11px; background: #e8f8ee; color: #06C755; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
-.poll-option-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f8fafc; border-radius: 8px; margin-bottom: 6px; }
-.btn-vote { padding: 4px 10px; font-size: 11px; background: #06C755; color: white; border: none; border-radius: 6px; cursor: pointer; }
-.btn-vote.voted { background: #94a3b8; }
-
-/* Messages and Bubbles */
-.message-row { display: flex; flex-direction: column; }
-.system-bubble { align-self: center; background: rgba(0,0,0,0.2); color: white; font-size: 11px; padding: 4px 12px; border-radius: 12px; }
-.bubble-container { display: flex; align-items: flex-end; gap: 8px; max-width: 75%; position: relative; }
-.message-row.mine .bubble-container { align-self: flex-end; flex-direction: row-reverse; }
-.bubble-avatar { width: 34px; height: 34px; border-radius: 50%; background: #0ea5e9; color: white; font-weight: 700; font-size: 12px; display: grid; place-items: center; align-self: flex-start; }
-.bubble-wrapper { position: relative; display: flex; flex-direction: column; }
-.bubble-sender-name { font-size: 11px; color: rgba(255,255,255,0.9); margin-bottom: 4px; font-weight: 600; }
-.reply-quoted-box { background: rgba(0,0,0,0.05); padding: 4px 8px; border-radius: 6px; font-size: 11px; margin-bottom: 4px; }
-.bubble-content {
-  background: var(--line-bubble-other);
-  color: var(--line-bubble-other-text);
-  padding: 10px 14px;
-  border-radius: 16px;
+.pc-my-card:hover { background: #f8fafc; }
+.pc-card-meta {
+  flex: 1;
+  min-width: 0;
+}
+.name-line {
   font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+.status-line {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.pc-category {
+  padding-bottom: 4px;
+}
+.category-title {
+  padding: 10px 16px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+.pc-row-item {
+  height: 52px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.pc-row-item:hover { background: #f4f6f8; }
+.pc-row-meta {
+  flex: 1;
+  min-width: 0;
+}
+.row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.row-desc {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.badge-verified { color: #06C755; font-size: 11px; font-weight: 700; }
+
+/* Chats List Rows */
+.pc-chat-row {
+  height: 64px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0,0,0,0.02);
+  transition: background 0.1s;
+}
+.pc-chat-row:hover { background: #f4f6f8; }
+.pc-chat-row.selected {
+  background: #e8f8ee;
+}
+.pc-chat-meta {
+  flex: 1;
+  min-width: 0;
+}
+.chat-top-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.chat-title-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.member-count {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 400;
+  margin-left: 4px;
+}
+.chat-timestamp {
+  font-size: 10px;
+  color: #94a3b8;
+}
+.chat-bottom-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 3px;
+}
+.chat-last-message {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+.chat-unread-badge {
+  background: #06C755;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+/* (Column 3) Right Main Chat View */
+.pc-chat-viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--line-slate-bg);
+  height: 100vh;
+  position: relative;
+}
+.pc-chat-topbar {
+  height: 52px;
+  background: #ffffff;
+  border-bottom: 1px solid #e9edf1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+.chat-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.chat-header-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+.member-tag { font-size: 11px; color: #64748b; margin-left: 6px; }
+.e2ee-tag { font-size: 10px; color: #16a34a; font-weight: 600; display: block; }
+.chat-topbar-actions {
+  display: flex;
+  gap: 6px;
+}
+.btn-chat-action {
+  width: 34px;
+  height: 34px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 15px;
+  display: grid;
+  place-items: center;
+  color: #475569;
+}
+.btn-chat-action:hover { background: #f1f5f9; }
+
+/* Canvas for Chat Messages */
+.pc-chat-messages-canvas {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.date-capsule {
+  align-self: center;
+  background: rgba(0,0,0,0.22);
+  color: #ffffff;
+  font-size: 11px;
+  padding: 3px 12px;
+  border-radius: 12px;
+  margin: 6px 0 10px;
+}
+.pc-msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  position: relative;
+  max-width: 75%;
+}
+.pc-msg-row.mine {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.pc-msg-row.other {
+  align-self: flex-start;
+}
+.pc-msg-bubble-group {
+  display: flex;
+  flex-direction: column;
+}
+.pc-msg-row.mine .pc-msg-bubble-group {
+  align-items: flex-end;
+}
+.pc-sender-header {
+  font-size: 11px;
+  color: #334155;
+  margin-bottom: 2px;
+  margin-left: 2px;
+}
+.pc-speech-bubble {
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
   line-height: 1.45;
   word-break: break-word;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
 }
-.message-row.mine .bubble-content {
-  background: var(--line-bubble-mine);
-  color: var(--line-bubble-mine-text);
-  border-bottom-right-radius: 4px;
+.pc-msg-row.other .pc-speech-bubble {
+  background: #ffffff;
+  color: #191919;
+  border-top-left-radius: 2px;
 }
-.message-row:not(.mine) .bubble-content {
-  border-bottom-left-radius: 4px;
+.pc-msg-row.mine .pc-speech-bubble {
+  background: #06C755;
+  color: #ffffff;
+  border-top-right-radius: 2px;
 }
-.bubble-content.sticker { background: transparent; box-shadow: none; padding: 0; }
-.big-sticker { font-size: 48px; }
-.bubble-content.unsent { font-style: italic; opacity: 0.8; }
-.reaction-badge-group { display: flex; gap: 4px; margin-top: 4px; }
-.reaction-pill { background: white; border: 1px solid #e2e8f0; font-size: 11px; padding: 2px 6px; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.pc-speech-bubble.sticker {
+  background: none !important;
+  box-shadow: none !important;
+  font-size: 28px;
+  padding: 4px;
+}
+.bubble-reply-preview {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-bottom: 4px;
+  border-left: 2px solid currentColor;
+  padding-left: 4px;
+}
+.pc-msg-meta {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  font-size: 10px;
+  color: rgba(255,255,255,0.75);
+  margin-top: 2px;
+}
+.pc-read-receipt {
+  font-weight: 700;
+  color: #ffffff;
+}
 
-/* Hover Actions */
-.bubble-hover-actions {
+.pc-bubble-toolbar {
   display: none;
   position: absolute;
   top: -24px;
-  background: white;
-  border-radius: 14px;
+  background: #ffffff;
+  border-radius: 16px;
   padding: 2px 6px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  gap: 2px;
-  z-index: 5;
+  gap: 4px;
+  z-index: 10;
 }
-.bubble-wrapper:hover .bubble-hover-actions { display: flex; }
-.message-row.mine .bubble-hover-actions { right: 0; }
-.message-row:not(.mine) .bubble-hover-actions { left: 0; }
-.bubble-hover-actions button { background: none; border: none; font-size: 12px; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
-.bubble-hover-actions button:hover { background: #f1f5f9; }
-
-.bubble-meta { display: flex; flex-direction: column; align-items: flex-end; font-size: 10px; color: rgba(255,255,255,0.85); flex-shrink: 0; }
-.message-row.mine .bubble-meta { align-items: flex-end; }
-.read-receipt { color: #06C755; font-weight: 700; background: white; padding: 1px 4px; border-radius: 4px; margin-bottom: 2px; font-size: 9px; }
-
-/* Drawer Pane */
-.chat-drawer-pane { width: 280px; background: white; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; }
-.drawer-header { padding: 12px; display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; }
-.drawer-tabs { display: flex; gap: 6px; }
-.drawer-tabs button { padding: 4px 8px; font-size: 12px; border: none; background: #f1f5f9; border-radius: 6px; cursor: pointer; }
-.drawer-tabs button.active { background: #06C755; color: white; }
-.btn-close-drawer { background: none; border: none; font-size: 13px; cursor: pointer; }
-.drawer-body { padding: 14px; overflow-y: auto; flex: 1; }
-.drawer-note-card, .drawer-event-card { background: #f8fafc; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
-
-/* Composer */
-.reply-active-bar { background: #f1f5f9; padding: 6px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-.btn-cancel-reply { background: none; border: none; cursor: pointer; }
-.sticker-popover { background: white; border-top: 1px solid #e2e8f0; padding: 10px 16px; height: 160px; overflow-y: auto; }
-.sticker-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
-.sticker-tabs button { font-size: 12px; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 6px; background: white; cursor: pointer; }
-.sticker-tabs button.active { background: #06C755; color: white; border-color: #06C755; }
-.sticker-palette-grid { display: flex; gap: 12px; flex-wrap: wrap; }
-.sticker-choice-btn { font-size: 30px; background: none; border: none; cursor: pointer; }
-.chat-composer { background: white; border-top: 1px solid #e2e8f0; padding: 10px 16px; }
-.composer-toolbar { display: flex; gap: 12px; margin-bottom: 6px; }
-.btn-tool { background: none; border: none; font-size: 18px; cursor: pointer; }
-.composer-input-area { display: flex; gap: 10px; align-items: flex-end; }
-.composer-input-area textarea {
-  flex: 1;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-family: inherit;
-  font-size: 14px;
-  resize: none;
-  box-sizing: border-box;
+.pc-msg-row:hover .pc-bubble-toolbar {
+  display: flex;
 }
-.btn-send-line {
-  background: #06C755;
-  color: white;
+.pc-msg-row.mine .pc-bubble-toolbar { right: 0; }
+.pc-msg-row.other .pc-bubble-toolbar { left: 40px; }
+.pc-bubble-toolbar button {
+  background: none;
   border: none;
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-size: 14px;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.pc-bubble-toolbar button:hover { background: #f1f5f9; }
+
+/* Chat Input Dock */
+.pc-chat-input-dock {
+  height: 135px;
+  background: #ffffff;
+  border-top: 1px solid #e9edf1;
+  display: flex;
+  flex-direction: column;
+}
+.pc-input-toolbar {
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #f8fafc;
+}
+.btn-tool-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #64748b;
+  padding: 4px;
+  border-radius: 4px;
+}
+.btn-tool-icon:hover { background: #f1f5f9; color: #111827; }
+
+.pc-textarea-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px 10px;
+}
+.pc-textarea-form textarea {
+  flex: 1;
+  border: none;
+  resize: none;
+  outline: none;
+  font-size: 13px;
+  line-height: 1.4;
+  font-family: inherit;
+}
+.pc-textarea-bottom {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+.char-count { font-size: 11px; color: #94a3b8; }
+.btn-green-send {
+  height: 28px;
+  padding: 0 14px;
+  background: #06C755;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
-.btn-send-line:disabled { background: #cbd5e1; cursor: not-allowed; }
-
-/* Empty Welcome Pane */
-.empty-welcome-pane { flex: 1; display: grid; place-items: center; background: #f8fafc; }
-.welcome-box { text-align: center; max-width: 420px; padding: 30px; }
-.welcome-logo { display: inline-block; background: #06C755; color: white; font-weight: 900; font-size: 28px; padding: 10px 22px; border-radius: 14px; margin-bottom: 14px; }
-.quick-welcome-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
-.btn-primary { background: #06C755; color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
-.btn-secondary { background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
-
-/* Calling Overlay Modal */
-.call-overlay-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  display: grid;
-  place-items: center;
-  z-index: 100;
+.btn-green-send:disabled {
+  background: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
-.call-dialog-box {
-  background: #1e293b;
-  color: white;
-  width: 340px;
-  padding: 36px 24px;
-  border-radius: 24px;
+
+/* Empty Canvas (Authentic LINE PC Watermark) */
+.pc-empty-canvas {
+  flex: 1;
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+.pc-empty-dialog {
   text-align: center;
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
 }
-.call-avatar-pulse { margin-bottom: 16px; display: inline-block; position: relative; }
-.call-type-status { font-size: 14px; color: #94a3b8; margin: 8px 0 24px; }
-.timer-active { color: #06C755; font-weight: 700; }
-.call-controls-row { display: flex; gap: 12px; justify-content: center; align-items: center; }
-.btn-call-circle { width: 44px; height: 44px; border-radius: 50%; background: #334155; border: none; font-size: 18px; color: white; cursor: pointer; }
-.btn-call-circle.off { background: #ef4444; }
-.btn-call-answer { background: #06C755; color: white; border: none; border-radius: 24px; padding: 12px 24px; font-weight: 800; cursor: pointer; }
-.btn-call-hangup { background: #ef4444; color: white; border: none; border-radius: 24px; padding: 12px 24px; font-weight: 800; cursor: pointer; }
+.pc-watermark-wrap {
+  margin-bottom: 14px;
+  opacity: 0.85;
+}
+.pc-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  margin: 0 0 6px;
+}
+.pc-empty-desc {
+  font-size: 13px;
+  color: #828fa0;
+  line-height: 1.5;
+  margin: 0;
+}
 
-/* Modals */
+/* Modal styles preserved */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.5);
-  display: grid;
-  place-items: center;
-  z-index: 50;
-  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
 }
 .standard-modal-box {
-  background: white;
-  border-radius: 16px;
-  width: 100%;
-  max-width: 440px;
+  width: 380px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.25);
   overflow: hidden;
-  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
 }
 .modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 14px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-bottom: 1px solid #f1f5f9;
 }
-.modal-header h3 { margin: 0; font-size: 16px; font-weight: 800; }
-.btn-modal-close { background: none; border: none; font-size: 14px; cursor: pointer; }
-.modal-body-form { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-.modal-body-form label { font-size: 12px; font-weight: 700; color: #475569; }
-.modal-body-form input { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
-.modal-actions-right { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.modal-header h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.btn-modal-close { background: none; border: none; font-size: 16px; cursor: pointer; color: #94a3b8; }
+.modal-body-form { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.modal-body-form label { font-size: 12px; font-weight: 600; color: #475569; }
+.modal-body-form input {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.modal-actions-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.btn-primary { background: #06C755; color: white; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-secondary { background: #f1f5f9; color: #475569; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
 
-/* Profile Card Modal */
-.profile-modal-card { width: 340px; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); text-align: center; }
-.profile-cover-header { height: 120px; position: relative; }
-.profile-avatar-center { margin-top: -44px; display: flex; justify-content: center; }
-.profile-body-center { padding: 16px 20px; }
-.profile-body-center h2 { margin: 0; font-size: 20px; font-weight: 800; }
-.user-handle { font-size: 13px; color: #64748b; margin-top: 2px; }
-.user-status-text { font-size: 13px; color: #334155; margin: 12px 0 0; font-style: italic; }
-.profile-actions-footer { display: flex; border-top: 1px solid #f1f5f9; padding: 12px; justify-content: space-around; }
-.btn-profile-action { background: none; border: none; font-size: 12px; font-weight: 700; color: #06C755; cursor: pointer; }
-
-/* Keep Modal */
-.keep-modal { max-width: 520px; }
-.keep-filter-bar { display: flex; gap: 8px; padding: 12px 20px 0; }
-.keep-filter-bar button { padding: 4px 10px; border-radius: 12px; border: none; background: #f1f5f9; font-size: 12px; cursor: pointer; }
+/* Keep modal, Call modal, etc */
+.keep-modal { width: 440px; }
+.keep-filter-bar { display: flex; gap: 6px; padding: 10px 18px; border-bottom: 1px solid #f1f5f9; }
+.keep-filter-bar button { padding: 4px 10px; font-size: 11px; border: none; border-radius: 12px; background: #f1f5f9; cursor: pointer; }
 .keep-filter-bar button.active { background: #06C755; color: white; }
-.keep-search-input { margin: 10px 20px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; }
-.keep-scroll-content { padding: 0 20px 20px; max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.keep-item-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
-.keep-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.badge-keep-type { font-size: 10px; background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
-.btn-delete-keep { background: none; border: none; font-size: 11px; color: #ef4444; cursor: pointer; }
+.keep-search-input { width: calc(100% - 36px); margin: 8px 18px; padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; }
+.keep-scroll-content { max-height: 280px; overflow-y: auto; padding: 0 18px 18px; }
+.keep-card { padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.btn-delete-keep { background: none; border: none; color: #ef4444; font-size: 12px; cursor: pointer; }
 
-/* Themes & Settings */
-.theme-choice-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-.btn-theme-swatch { padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 700; cursor: pointer; text-align: left; background: white; }
-.btn-theme-swatch.active { border-color: #06C755; background: #e8f8ee; }
-.setting-toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
-.quick-amounts { display: flex; gap: 6px; }
-.quick-amounts button { flex: 1; padding: 6px; font-size: 11px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer; }
-.charge-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.btn-charge-option { padding: 16px; font-size: 14px; font-weight: 700; border: 1px solid #06C755; color: #06C755; background: white; border-radius: 10px; cursor: pointer; }
-.btn-charge-option:hover { background: #e8f8ee; }
-.select-friends-scroll { max-height: 180px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
-.friend-check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
-.flex-row { display: flex; gap: 8px; }
+/* Call overlay */
+.call-overlay-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; }
+.call-dialog-box { width: 340px; background: #1e293b; color: white; border-radius: 16px; padding: 24px; text-align: center; }
+.call-avatar-pulse { margin-bottom: 12px; }
+.call-controls-row { display: flex; justify-content: center; gap: 12px; margin-top: 18px; }
+.btn-call-circle { width: 44px; height: 44px; border-radius: 50%; background: #334155; border: none; color: white; cursor: pointer; font-size: 18px; display: grid; place-items: center; }
+.btn-call-circle.off { background: #ef4444; }
+.btn-call-answer { background: #06C755; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
+.btn-call-hangup { background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
+
+/* Profile modal */
+.profile-modal-box { width: 340px; background: white; border-radius: 16px; overflow: hidden; text-align: center; padding-bottom: 18px; }
+.profile-cover-header { height: 110px; position: relative; display: flex; justify-content: flex-end; padding: 10px; }
+.profile-main-meta { margin-top: -40px; display: flex; flex-direction: column; align-items: center; }
+.profile-actions-footer { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+.btn-profile-action { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* Pinned Banner */
+.pinned-banner { background: #fffbeb; border-bottom: 1px solid #fef3c7; padding: 6px 16px; cursor: pointer; }
+.pinned-summary { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #92400e; font-weight: 600; }
+.pin-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* VOOM & Stories */
+.stories-row { display: flex; gap: 10px; padding: 12px 16px; overflow-x: auto; border-bottom: 1px solid #f1f5f9; }
+.story-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font-size: 11px; }
+.story-ring { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #06C755; display: grid; place-items: center; color: white; font-weight: 800; font-size: 14px; }
+.story-ring.plus { border-color: #cbd5e1; color: #06C755; font-size: 18px; }
+.voom-list { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.voom-card { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: white; }
+.voom-banner { height: 90px; display: grid; place-items: center; font-size: 32px; }
+.voom-meta { padding: 10px; }
+.voom-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.btn-like { background: none; border: 1px solid #e2e8f0; border-radius: 12px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
+.btn-like.liked { background: #fee2e2; border-color: #fca5a5; }
+
+/* OpenChat */
+.openchat-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.openchat-card { display: flex; gap: 10px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; }
+.openchat-card:hover { background: #f8fafc; border-color: #06C755; }
+.card-icon { font-size: 20px; }
+.card-info strong { font-size: 13px; }
+.card-info p { font-size: 11px; color: #64748b; margin: 2px 0 0; }
+
+/* Wallet Card */
+.line-pay-card { margin: 12px; background: linear-gradient(135deg, #06C755, #0ea5e9); color: white; padding: 16px; border-radius: 12px; }
+.pay-top { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
+.pay-balance { font-size: 22px; font-weight: 900; margin: 10px 0; }
+.pay-actions { display: flex; gap: 8px; }
+.btn-pay-action { flex: 1; padding: 6px; background: white; color: #06C755; font-weight: 700; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.btn-pay-action.secondary { background: rgba(255,255,255,0.2); color: white; }
+.services-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 12px 12px; }
+.service-box { background: #f8fafc; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font-size: 11px; font-weight: 700; }
+.service-box:hover { background: #e8f8ee; }
+.service-box .icon { font-size: 20px; }
+
+/* Sticker Popover */
+.sticker-popover { position: absolute; bottom: 140px; left: 16px; width: 280px; height: 180px; background: white; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow: hidden; z-index: 100; }
+.sticker-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #f1f5f9; padding: 4px; }
+.sticker-tabs button { flex: 1; padding: 4px; font-size: 11px; border: none; background: none; cursor: pointer; }
+.sticker-tabs button.active { font-weight: 700; color: #06C755; border-bottom: 2px solid #06C755; }
+.btn-close-sticker { background: none; border: none; cursor: pointer; font-size: 12px; color: #94a3b8; }
+.sticker-palette-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px; overflow-y: auto; }
+.sticker-choice-btn { font-size: 22px; background: none; border: none; cursor: pointer; border-radius: 6px; }
+.sticker-choice-btn:hover { background: #f1f5f9; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
