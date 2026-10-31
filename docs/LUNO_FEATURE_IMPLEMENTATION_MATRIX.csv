@@ -1,0 +1,19 @@
+feature_id,domain,feature_name,frontend_component,backend_endpoint,db_table,status,verification
+F001,Auth,Email & Password Login,App.vue (authAction),POST /api/v1/auth/login,identity.users / identity.sessions,COMPLETED,cf_worker.test.mjs & e2e_test.go
+F002,Auth,Phone SMS OTP Login,App.vue (sendPhoneCode/verifyPhoneLogin),POST /api/v1/auth/phone/send-code & verify,identity.verification_challenges,COMPLETED,cf_worker.test.mjs
+F003,Auth,Dynamic QR Code Login,App.vue (startQrLoginChallenge),POST /api/v1/auth/qr/challenge & poll & approve,identity.sessions,COMPLETED,cf_worker.test.mjs
+F004,Home,Profile & Status Management,App.vue (saveProfileSettings),PATCH /api/v1/me,identity.users,COMPLETED,identity_account_test.go
+F005,Home,Friends & Groups Accordion,App.vue (loadFriends / groupChats),GET /api/v1/friends & POST /api/v1/friends,social.friendships,COMPLETED,e2e_test.go
+F006,Chats,Direct & Group Conversations,App.vue (loadChats / selectChat),GET & POST /api/v1/conversations,chat.conversations,COMPLETED,cf_conversations_bugfix.test.mjs
+F007,Chats,Official Security Channel (LUNO 보안 알림),App.vue (security_notice card),GET /api/v1/conversations/oa-notice/messages,chat.messages,COMPLETED,cf_conversations_bugfix.test.mjs
+F008,Chats,Realtime Messaging & Read Receipts,App.vue (sendMessage / connectRealtime),POST /api/v1/conversations/:id/messages & /read,chat.messages / chat.message_receipts,COMPLETED,cf_conversations_bugfix.test.mjs
+F009,Chats,Call Status Bubbles (음성통화/부재중/취소),App.vue (call_status bubble),POST /api/v1/conversations/:id/messages,chat.messages,COMPLETED,cf_conversations_bugfix.test.mjs
+F010,Chats,Reactions / Reply / Unsend / Edit,App.vue (reactToMessage / unsendMessage / saveEditMessage),POST reactions / DELETE / PATCH messages,chat.messages / chat.message_reactions,COMPLETED,polls_reactions_test.go
+F011,Chats,Conversation Drawer (Notes/Albums/Events/Media),App.vue (pc-drawer-panel),GET & POST /notes /albums /events /media,chat.albums / chat.polls,COMPLETED,line_features_test.go
+F012,Calls,Calls History & WebRTC Signaling,App.vue (pc-calls-pane / pc-calls-viewport),POST /api/v1/calls & /signal & /state,calling.calls,COMPLETED,cf_phases.test.mjs
+F013,News,News Feed & Category Filter & Reader,App.vue (pc-news-pane / news-reader-modal),GET /api/v1/news (curated + share to chat),content feed,COMPLETED,Build & UI Audit
+F014,AI,Multilingual AI Translation & Live Captions,App.vue (handleTranslateMessage),POST /api/v1/ai/translate & stt,ai translation service,COMPLETED,cf_phases.test.mjs
+F015,E2EE,LUNO Letter Sealing & Key Rotation,App.vue (initLetterSealing / rotateE2EEKeys),PUT /api/v1/devices/:id/keys,crypto.device_keys,COMPLETED,cf_phases.test.mjs
+F016,Keep,Keep Cloud Vault,App.vue (showKeepModal),GET & POST & DELETE /api/v1/saved-messages,chat.saved_messages,COMPLETED,line_features_test.go
+F017,Wallet,LUNO Pay Balance / Send / Charge,App.vue (executeSendMoney / executeChargeMoney),GET /api/v1/wallet & POST /send /charge,commerce.wallets,COMPLETED,cf_phases.test.mjs
+F018,Consoles,Admin / Partner / Developer / Creator / Ads,apps/*-console/src/App.vue,/api/v1/admin/* /partner/* /developer/* /creator/* /ads/*,business / developer / creator / ads / safety,COMPLETED,e2e_test.go

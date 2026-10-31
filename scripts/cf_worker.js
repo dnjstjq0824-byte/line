@@ -240,7 +240,7 @@ function chatSummary(conv, viewerId) {
     id: conv.id, kind: conv.kind, title, last_sequence: conv.last_sequence || 0,
     unread_count: unreadFor(conv.id, viewerId), mentioned: mentionedIn(conv.id, viewerId),
     updated_at: conv.updated_at, owner_id: conv.owner_id || null, notice: conv.notice || '',
-    pinned: meta.pinned, muted: meta.muted, hidden: meta.hidden,
+    pinned: meta.pinned, muted: meta.muted, hidden: meta.hidden, badge_n: !!conv.badge_n,
     member_count: conv.members.length, members: memberBriefs, official: !!conv.official,
     last_message: last ? { id: last.id, kind: last.kind, body: last.unsent ? '' : String(last.body).slice(0, 120), unsent: !!last.unsent, sender_id: last.sender_id, created_at: last.created_at } : null
   };
@@ -518,7 +518,7 @@ function voomView(v, viewerId) {
     comments: v.comments.map(c => ({ ...c, author: userBrief(c.author_id) }))
   };
 }
-const MESSAGE_KINDS = new Set(['text', 'sticker', 'image', 'video', 'voice', 'file', 'location', 'contact', 'pay', 'transfer', 'ciphertext']);
+const MESSAGE_KINDS = new Set(['text', 'sticker', 'image', 'video', 'voice', 'file', 'location', 'contact', 'pay', 'transfer', 'ciphertext', 'call_status', 'security_notice']);
 const pushTokens = new Map();
 const deviceKeys = new Map();
 const userKeys = new Map();
@@ -532,10 +532,217 @@ const INLINE_MIME = /^(image\/(png|jpeg|gif|webp)|audio\/(webm|ogg|mp4|mpeg|wav)
  * Extended LINE-class messenger API. Returns a Response when a route is handled, otherwise null.
  * Membership of /conversations/{id}/* and /calls/{id}/* is enforced by the caller before this runs.
  */
+
+const PEER_USERS = [
+  { id: 'peer-k', display_name: 'K 🙏', email: 'k@luno.local', avatar_color: '#315BCD', status_message: '기도하며 준비 중' },
+  { id: 'peer-dodo', display_name: '도천재 도도형님', email: 'dodo@luno.local', avatar_color: '#06c755', status_message: '최고의 개발자' },
+  { id: 'peer-daechul', display_name: '이대철', email: 'daechul@luno.local', avatar_color: '#8b5cf6', status_message: '' },
+  { id: 'peer-tuk', display_name: 'tuk', email: 'tuk@luno.local', avatar_color: '#f59e0b', status_message: 'Online' },
+  { id: 'peer-care', display_name: 'care 😸', email: 'care@luno.local', avatar_color: '#ec4899', status_message: 'Thank you' },
+  { id: 'peer-woralak', display_name: 'Woralak Duethesong', email: 'woralak@luno.local', avatar_color: '#06b6d4', status_message: 'Bangkok' }
+];
+
+function initPeerUsers() {
+  for (const p of PEER_USERS) {
+    if (!usersById.has(p.id)) {
+      const u = {
+        ...p,
+        role: 'user',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z'
+      };
+      users.set(p.email, u);
+      usersById.set(p.id, u);
+    }
+  }
+}
+
+function resolveConversationId(cid, userId) {
+  if (!cid) return cid;
+  if (cid === 'oa-notice' || cid === 'chat-sec-01' || cid === 'oa_notice') {
+    return `conv-oa-notice-${userId}`;
+  }
+  if (cid === 'chat-k-01') return `conv-k-${userId}`;
+  if (cid === 'chat-dodo-01') return `conv-dodo-${userId}`;
+  if (cid === 'chat-daechul-01') return `conv-daechul-${userId}`;
+  if (cid === 'chat-tuk-01') return `conv-tuk-${userId}`;
+  if (cid === 'chat-care-01') return `conv-care-${userId}`;
+  if (cid === 'chat-woralak-01') return `conv-woralak-${userId}`;
+  return cid;
+}
+
+function ensureDefaultConversationsForUser(userId) {
+  if (!userId) return;
+  initPeerUsers();
+
+  // 1. Official Security Notice Channel
+  const secCid = `conv-oa-notice-${userId}`;
+  if (!conversations.has(secCid)) {
+    conversations.set(secCid, {
+      id: secCid,
+      kind: 'official',
+      title: 'LUNO 보안 알림',
+      members: [userId, 'oa-notice'],
+      official: true,
+      last_sequence: 2,
+      unread_count: 2,
+      updated_at: new Date().toISOString()
+    });
+    messages.set(secCid, [
+      {
+        id: `msg-sec-${userId}-1`,
+        conversation_id: secCid,
+        sender_id: 'oa-notice',
+        client_id: `sec-${userId}-1`,
+        sequence: 1,
+        kind: 'security_notice',
+        body: '로그인 성공',
+        metadata: {
+          ip: '49.172.105.64',
+          location: 'South Korea Seoul Eunpyeong-gu',
+          device: 'WINDOWS PC'
+        },
+        created_at: new Date(Date.now() - 3600000).toISOString()
+      },
+      {
+        id: `msg-sec-${userId}-2`,
+        conversation_id: secCid,
+        sender_id: 'oa-notice',
+        client_id: `sec-${userId}-2`,
+        sequence: 2,
+        kind: 'security_notice',
+        body: '로그인 성공',
+        metadata: {
+          ip: '49.172.105.64',
+          location: 'South Korea Seoul Eunpyeong-gu',
+          device: 'WINDOWS PC'
+        },
+        created_at: new Date(Date.now() - 60000).toISOString()
+      }
+    ]);
+  }
+
+  // 2. K 🙏 (Direct Chat with Call Bubbles from Screenshot 2)
+  const kCid = `conv-k-${userId}`;
+  if (!conversations.has(kCid)) {
+    friendships.set(`${userId}:peer-k`, true);
+    friendships.set(`peer-k:${userId}`, true);
+    conversations.set(kCid, {
+      id: kCid,
+      kind: 'direct',
+      title: 'K 🙏',
+      members: [userId, 'peer-k'],
+      last_sequence: 9,
+      updated_at: '2026-10-27T13:55:30Z'
+    });
+    messages.set(kCid, [
+      { id: `m-k-${userId}-1`, conversation_id: kCid, sender_id: userId, client_id: 'k-1', sequence: 1, kind: 'text', body: '이제 탔음', read_count: 1, created_at: '2026-10-23T16:30:00Z' },
+      { id: `m-k-${userId}-2`, conversation_id: kCid, sender_id: userId, client_id: 'k-2', sequence: 2, kind: 'text', body: '범계 도착임', read_count: 1, created_at: '2026-10-23T17:15:00Z' },
+      { id: `m-k-${userId}-3`, conversation_id: kCid, sender_id: userId, client_id: 'k-3', sequence: 3, kind: 'call_status', body: '음성통화', metadata: { duration: '1:35', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-23T17:16:00Z' },
+      { id: `m-k-${userId}-4`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-4', sequence: 4, kind: 'call_status', body: '음성통화', metadata: { duration: '0:29', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-23T22:23:00Z' },
+      { id: `m-k-${userId}-5`, conversation_id: kCid, sender_id: userId, client_id: 'k-5', sequence: 5, kind: 'call_status', body: '취소', metadata: { call_type: 'voice', call_status: 'cancelled' }, created_at: '2026-10-24T20:58:00Z' },
+      { id: `m-k-${userId}-6`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-6', sequence: 6, kind: 'call_status', body: '부재중 전화', metadata: { call_type: 'voice', call_status: 'missed' }, created_at: '2026-10-24T17:34:00Z' },
+      { id: `m-k-${userId}-7`, conversation_id: kCid, sender_id: userId, client_id: 'k-7', sequence: 7, kind: 'call_status', body: '음성통화', metadata: { duration: '9:24', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-27T17:52:00Z' },
+      { id: `m-k-${userId}-8`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-8', sequence: 8, kind: 'call_status', body: '부재중 전화', metadata: { call_type: 'voice', call_status: 'missed' }, created_at: '2026-10-27T13:55:00Z' },
+      { id: `m-k-${userId}-9`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-9', sequence: 9, kind: 'text', body: '바쁘십니까', created_at: '2026-10-27T13:55:30Z' }
+    ]);
+  }
+
+  // 3. 도천재 도도형님
+  const dodoCid = `conv-dodo-${userId}`;
+  if (!conversations.has(dodoCid)) {
+    friendships.set(`${userId}:peer-dodo`, true);
+    friendships.set(`peer-dodo:${userId}`, true);
+    conversations.set(dodoCid, {
+      id: dodoCid,
+      kind: 'direct',
+      title: '도천재 도도형님',
+      members: [userId, 'peer-dodo'],
+      badge_n: true,
+      last_sequence: 1,
+      updated_at: '2026-10-30T10:00:00Z'
+    });
+    messages.set(dodoCid, [
+      { id: `m-dodo-${userId}-1`, conversation_id: dodoCid, sender_id: 'peer-dodo', client_id: 'dodo-1', sequence: 1, kind: 'text', body: '새 친구와 지금 대화를 시작해보세요!', created_at: '2026-10-30T10:00:00Z' }
+    ]);
+  }
+
+  // 4. 이대철
+  const daechulCid = `conv-daechul-${userId}`;
+  if (!conversations.has(daechulCid)) {
+    friendships.set(`${userId}:peer-daechul`, true);
+    friendships.set(`peer-daechul:${userId}`, true);
+    conversations.set(daechulCid, {
+      id: daechulCid,
+      kind: 'direct',
+      title: '이대철',
+      members: [userId, 'peer-daechul'],
+      last_sequence: 0,
+      updated_at: '2026-10-29T10:00:00Z'
+    });
+    messages.set(daechulCid, []);
+  }
+
+  // 5. tuk
+  const tukCid = `conv-tuk-${userId}`;
+  if (!conversations.has(tukCid)) {
+    friendships.set(`${userId}:peer-tuk`, true);
+    friendships.set(`peer-tuk:${userId}`, true);
+    conversations.set(tukCid, {
+      id: tukCid,
+      kind: 'direct',
+      title: 'tuk',
+      members: [userId, 'peer-tuk'],
+      last_sequence: 1,
+      updated_at: '2026-09-04T12:00:00Z'
+    });
+    messages.set(tukCid, [
+      { id: `m-tuk-${userId}-1`, conversation_id: tukCid, sender_id: 'peer-tuk', client_id: 'tuk-1', sequence: 1, kind: 'text', body: 'Ok', created_at: '2026-09-04T12:00:00Z' }
+    ]);
+  }
+
+  // 6. care 😸
+  const careCid = `conv-care-${userId}`;
+  if (!conversations.has(careCid)) {
+    friendships.set(`${userId}:peer-care`, true);
+    friendships.set(`peer-care:${userId}`, true);
+    conversations.set(careCid, {
+      id: careCid,
+      kind: 'direct',
+      title: 'care 😸',
+      members: [userId, 'peer-care'],
+      last_sequence: 1,
+      updated_at: '2026-08-19T14:20:00Z'
+    });
+    messages.set(careCid, [
+      { id: `m-care-${userId}-1`, conversation_id: careCid, sender_id: 'peer-care', client_id: 'care-1', sequence: 1, kind: 'text', body: 'Thank you', created_at: '2026-08-19T14:20:00Z' }
+    ]);
+  }
+
+  // 7. Woralak Duethesong
+  const woralakCid = `conv-woralak-${userId}`;
+  if (!conversations.has(woralakCid)) {
+    friendships.set(`${userId}:peer-woralak`, true);
+    friendships.set(`peer-woralak:${userId}`, true);
+    conversations.set(woralakCid, {
+      id: woralakCid,
+      kind: 'direct',
+      title: 'Woralak Duethesong',
+      members: [userId, 'peer-woralak'],
+      last_sequence: 1,
+      updated_at: '2026-08-06T18:00:00Z'
+    });
+    messages.set(woralakCid, [
+      { id: `m-woralak-${userId}-1`, conversation_id: woralakCid, sender_id: 'peer-woralak', client_id: 'woralak-1', sequence: 1, kind: 'text', body: 'Woralak Duethesong님이 사진을 보냈습니다.', created_at: '2026-08-06T18:00:00Z' }
+    ]);
+  }
+}
+
 async function extended(p, request, url, me, token) {
   const method = request.method;
   let m;
   const myId = me.id;
+  ensureDefaultConversationsForUser(myId);
 
   // ---------- Profile & settings ----------
   if (p === 'me') {
@@ -700,6 +907,7 @@ async function extended(p, request, url, me, token) {
   // ---------- Conversations ----------
   if (p === 'conversations') {
     if (method === 'GET') {
+      ensureDefaultConversationsForUser(myId);
       const includeHidden = url.searchParams.get('include_hidden') === '1';
       const list = Array.from(conversations.values()).filter(c => c.members.includes(myId))
         .map(c => chatSummary(c, myId)).filter(c => includeHidden || !c.hidden)
@@ -742,7 +950,7 @@ async function extended(p, request, url, me, token) {
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)$/))) {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (method === 'GET') return json(chatSummary(conv, myId));
     if (method === 'PATCH') {
       const b = await readJson(request);
@@ -772,7 +980,7 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'updated', meta });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/members$/)) && method === 'POST') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (conv.kind !== 'group') return bad('그룹 채팅방에서만 초대할 수 있습니다');
     const b = await readJson(request);
     const ids = Array.from(new Set((Array.isArray(b.member_ids) ? b.member_ids : []).filter(x => typeof x === 'string')));
@@ -789,7 +997,7 @@ async function extended(p, request, url, me, token) {
     return json(chatSummary(conv, myId), 201);
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/members\/([\w-]+)$/)) && method === 'DELETE') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (conv.kind !== 'group') return bad('그룹 채팅방이 아닙니다');
     if (m[2] === myId) return await leaveConversation(conv, myId, me);
     if (conv.owner_id !== myId) return bad('방장만 멤버를 내보낼 수 있습니다', 403);
@@ -803,7 +1011,7 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Messages ----------
   if ((m = p.match(/^conversations\/([\w-]+)\/messages$/))) {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (method === 'GET') {
       const before = intIn(url.searchParams.get('before_sequence') || 0, 0, 1e9) || 0;
@@ -872,7 +1080,7 @@ async function extended(p, request, url, me, token) {
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)$/))) {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const list = messages.get(cid) || [];
     const msg = list.find(x => x.id === m[2]);
     if (!msg) return bad('메시지를 찾을 수 없습니다', 404);
@@ -921,7 +1129,7 @@ async function extended(p, request, url, me, token) {
     return json({ status: removed ? 'removed' : 'reacted', reactions: counts }, removed ? 200 : 201);
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/read$/)) && method === 'POST') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     const b = await readJson(request);
     const seq = intIn(b.sequence ?? conv.last_sequence, 0, 1e9) ?? 0;
     const key = `${conv.id}:${myId}`;
@@ -935,7 +1143,7 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'typing' });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/pins$/))) {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const pins = pinnedMessages.get(cid) || [];
@@ -955,14 +1163,14 @@ async function extended(p, request, url, me, token) {
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/pins\/([\w-]+)$/)) && method === 'DELETE') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     pinnedMessages.set(m[1], (pinnedMessages.get(m[1]) || []).filter(x => x.message_id !== m[2]));
     broadcast({ type: 'conversation.pins', conversation_id: m[1] });
     return json({ status: 'unpinned' });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/media$/)) && method === 'GET') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const kind = url.searchParams.get('kind') || 'image';
     const hs = hiddenMsgs.get(myId);
@@ -974,7 +1182,7 @@ async function extended(p, request, url, me, token) {
     return json({ items: out.slice(-100).reverse().map(x => decorateMessage(x, myId, m[1])) });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/search$/)) && method === 'GET') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const q = clip(url.searchParams.get('q') || '', 100).toLowerCase();
     if (q.length < 1) return json({ messages: [] });
@@ -985,7 +1193,7 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Polls, notes, events, albums ----------
   if ((m = p.match(/^conversations\/([\w-]+)\/polls$/))) {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     if (method === 'GET') return json({ polls: Array.from(polls.values()).filter(x => x.conversation_id === cid).map(x => pollView(x, myId)) });
@@ -1025,7 +1233,7 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'closed', poll: pollView(poll, myId) });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/notes$/))) {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const list = noteStore.get(cid) || [];
@@ -1041,7 +1249,7 @@ async function extended(p, request, url, me, token) {
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/notes\/([\w-]+)$/)) && method === 'DELETE') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const list = noteStore.get(m[1]) || [];
     const note = list.find(n => n.id === m[2]);
@@ -1051,7 +1259,7 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'deleted' });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/events$/))) {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const list = eventStore.get(cid) || [];
@@ -1071,7 +1279,7 @@ async function extended(p, request, url, me, token) {
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/events\/([\w-]+)\/rsvp$/)) && method === 'POST') {
-    const conv = conversations.get(m[1]);
+    const conv = conversations.get(resolveConversationId(m[1], myId));
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const ev = (eventStore.get(m[1]) || []).find(e => e.id === m[2]);
     if (!ev) return bad('일정을 찾을 수 없습니다', 404);
@@ -1081,7 +1289,7 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'saved', rsvps: Object.fromEntries(ev.rsvps) });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/albums$/))) {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     const list = albums.get(cid) || [];
@@ -1486,7 +1694,7 @@ async function extended(p, request, url, me, token) {
     });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/sync$/)) && method === 'GET') {
-    const cid = m[1];
+    const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
     const since = intIn(url.searchParams.get('since_sequence') || 0, 0, 1e9) || 0;
@@ -2044,7 +2252,9 @@ export default {
       // All conversation subresources share the same membership boundary.
       const conversationPath = p.match(/^conversations\/([^/]+)(?:\/|$)/);
       if (conversationPath) {
-        const conversation = conversations.get(conversationPath[1]);
+        ensureDefaultConversationsForUser(authUser.id);
+        const resolvedCid = resolveConversationId(conversationPath[1], authUser.id);
+        const conversation = conversations.get(resolvedCid);
         if (!conversation || !conversation.members.includes(authUser.id)) {
           return json({ error: 'conversation not found' }, 404);
         }

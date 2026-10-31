@@ -239,6 +239,14 @@ const popularNewsList = ref<NewsArticle[]>([
   }
 ])
 
+const filteredPopularNews = computed(() => {
+  if (selectedNewsCategory.value === '전체' || selectedNewsCategory.value === '인기') {
+    return popularNewsList.value
+  }
+  const filtered = popularNewsList.value.filter(a => a.category === selectedNewsCategory.value)
+  return filtered.length > 0 ? filtered : popularNewsList.value
+})
+
 function openNewsArticle(article: NewsArticle) {
   activeNewsArticle.value = article
 }
@@ -352,8 +360,47 @@ const callHistoryList = ref<CallRecord[]>([
   }
 ])
 
-function startCallFromHistory(record: CallRecord, kind: 'voice' | 'video' = 'voice') {
-  startCall(kind)
+const selectedCallRecord = ref<CallRecord | null>(null)
+const conversationError = ref('')
+const isLoadingMessages = ref(false)
+
+function switchNav(nav: NavItem) {
+  activeNav.value = nav
+  error.value = ''
+  note.value = ''
+  conversationError.value = ''
+  selectedFriendProfile.value = null
+  if (nav !== 'chats') {
+    selectedChatId.value = ''
+  }
+  if (nav === 'calls' && !selectedCallRecord.value && callHistoryList.value.length > 0) {
+    selectedCallRecord.value = callHistoryList.value[0]
+  }
+}
+
+async function resolvePeerConversationId(record: CallRecord): Promise<string> {
+  const match = chats.value.find(c =>
+    c.title === record.peer_name ||
+    (record.peer_id === 'peer-k' && (c.id.includes('conv-k') || c.title?.includes('K'))) ||
+    (record.peer_id === 'peer-tuk' && (c.id.includes('conv-tuk') || c.title === 'tuk'))
+  )
+  if (match) return match.id
+  if (record.peer_id === 'peer-k') return 'chat-k-01'
+  if (record.peer_id === 'peer-tuk') return 'chat-tuk-01'
+  return chats.value[0]?.id || 'chat-k-01'
+}
+
+async function openChatFromCallRecord(record: CallRecord) {
+  const cid = await resolvePeerConversationId(record)
+  switchNav('chats')
+  await selectChat(cid)
+}
+
+async function startCallFromHistory(record: CallRecord, kind: 'voice' | 'video' = 'voice') {
+  selectedCallRecord.value = record
+  const cid = await resolvePeerConversationId(record)
+  selectedChatId.value = cid
+  await startCall(kind, record.peer_name)
 }
 
 function removeCallRecord(id: string) {
@@ -1043,72 +1090,7 @@ async function connectRealtime() {
 async function loadChats() {
   try {
     const res = await api<{ conversations: Chat[] }>('/api/v1/conversations')
-    const list = res.conversations || []
-    if (list.length === 0 || !list.some(c => c.title?.includes('K'))) {
-      const defaultChats: any[] = [
-        {
-          id: 'chat-k-01',
-          title: 'K 🙏',
-          kind: 'direct',
-          updated_at: new Date(Date.now() - 3600000).toISOString(),
-          unread_count: 0,
-          last_message: { body: '📞 통화시간: 7:41' }
-        },
-        {
-          id: 'chat-sec-01',
-          title: 'LUNO 보안 알림',
-          kind: 'official',
-          official: true,
-          updated_at: new Date().toISOString(),
-          unread_count: 2,
-          last_message: { body: '로그인 성공' }
-        },
-        {
-          id: 'chat-dodo-01',
-          title: '도천재 도도형님',
-          kind: 'direct',
-          updated_at: new Date(Date.now() - 86400000).toISOString(),
-          unread_count: 0,
-          badge_n: true,
-          last_message: { body: '새 친구와 지금 대화를 시작해보세요!' }
-        },
-        {
-          id: 'chat-daechul-01',
-          title: '이대철',
-          kind: 'direct',
-          updated_at: new Date(Date.now() - 172800000).toISOString(),
-          unread_count: 0,
-          last_message: { body: '' }
-        },
-        {
-          id: 'chat-tuk-01',
-          title: 'tuk',
-          kind: 'direct',
-          updated_at: new Date(Date.now() - 500000000).toISOString(),
-          unread_count: 0,
-          last_message: { body: 'Ok' }
-        },
-        {
-          id: 'chat-care-01',
-          title: 'care 🤠',
-          kind: 'direct',
-          updated_at: new Date(Date.now() - 600000000).toISOString(),
-          unread_count: 0,
-          last_message: { body: 'Ok' }
-        },
-        {
-          id: 'chat-woralak-01',
-          title: 'Woralak Duethesong',
-          kind: 'direct',
-          updated_at: new Date(Date.now() - 700000000).toISOString(),
-          unread_count: 0,
-          last_message: { body: 'Woralak Duethesong님이 사진을 보냈습니다.' }
-        }
-      ]
-      chats.value = [...list, ...defaultChats]
-    } else {
-      chats.value = list
-    }
+    chats.value = res.conversations || []
   } catch {}
 }
 
@@ -1181,50 +1163,28 @@ async function loadDevices() {
 // --- Chat Actions ---
 let chatSelectVersion = 0
 async function selectChat(convId: string) {
+  activeNav.value = 'chats'
   selectedChatId.value = convId
   selectedFriendProfile.value = null
   replyToMessage.value = null
   activeDrawer.value = 'none'
+  error.value = ''
+  conversationError.value = ''
+  isLoadingMessages.value = true
   const version = ++chatSelectVersion
-  await wrap(async () => {
+  try {
     const [msgRes, pinsRes] = await Promise.all([
       api<{ messages: Message[] }>(`/api/v1/conversations/${convId}/messages?limit=50`),
-      api<{ pins: any[] }>(`/api/v1/conversations/${convId}/pins`)
+      api<{ pins: any[] }>(`/api/v1/conversations/${convId}/pins`).catch(() => ({ pins: [] }))
     ])
     if (selectedChatId.value !== convId || version !== chatSelectVersion) return
     messages.value = msgRes.messages || []
-    if (messages.value.length === 0) {
-      if (selectedChat.value?.title?.includes('K') || convId.includes('k')) {
-        messages.value = [
-          { id: 'm-k-01', conversation_id: convId, sender_id: currentUser.value?.id || 'me', body: '이제 탔음', kind: 'text', read_count: 1, created_at: '2026-10-23T16:30:00Z' },
-          { id: 'm-k-02', conversation_id: convId, sender_id: currentUser.value?.id || 'me', body: '범계 도착임', kind: 'text', read_count: 1, created_at: '2026-10-23T17:15:00Z' },
-          { id: 'm-k-03', conversation_id: convId, sender_id: currentUser.value?.id || 'me', body: '음성통화', kind: 'call_status', call_duration: '1:35', created_at: '2026-10-23T17:16:00Z' },
-          { id: 'm-k-04', conversation_id: convId, sender_id: 'peer-k', body: '음성통화', kind: 'call_status', call_duration: '0:29', created_at: '2026-10-23T22:23:00Z' },
-          { id: 'm-k-05', conversation_id: convId, sender_id: currentUser.value?.id || 'me', body: '취소', kind: 'call_status', call_status: 'cancelled', created_at: '2026-10-24T20:58:00Z' },
-          { id: 'm-k-06', conversation_id: convId, sender_id: 'peer-k', body: '부재중 전화', kind: 'call_status', call_status: 'missed', created_at: '2026-10-24T17:34:00Z' },
-          { id: 'm-k-07', conversation_id: convId, sender_id: currentUser.value?.id || 'me', body: '음성통화', kind: 'call_status', call_duration: '9:24', created_at: '2026-10-27T17:52:00Z' },
-          { id: 'm-k-08', conversation_id: convId, sender_id: 'peer-k', body: '부재중 전화', kind: 'call_status', call_status: 'missed', created_at: '2026-10-27T13:55:00Z' },
-          { id: 'm-k-09', conversation_id: convId, sender_id: 'peer-k', body: '바쁘십니까', kind: 'text', created_at: '2026-10-27T13:55:30Z' }
-        ] as any[]
-      } else if (selectedChat.value?.title?.includes('보안') || selectedChat.value?.official) {
-        messages.value = [
-          {
-            id: 'm-sec-01',
-            conversation_id: convId,
-            sender_id: 'official-security',
-            body: '로그인 성공',
-            kind: 'security_notice',
-            client_ip: '49.172.105.64',
-            client_location: 'South Korea Seoul Eunpyeong-gu',
-            created_at: new Date().toISOString()
-          }
-        ] as any[]
-      }
-    }
     pinnedList.value = pinsRes.pins || []
     if (messages.value.length > 0) {
       const last = messages.value[messages.value.length - 1]
-      await api(`/api/v1/conversations/${convId}/read`, 'POST', { sequence: last.sequence })
+      if (last.sequence) {
+        await api(`/api/v1/conversations/${convId}/read`, 'POST', { sequence: last.sequence }).catch(() => {})
+      }
     }
     if (autoTranslateEnabled.value && messages.value.length > 0) {
       for (const m of messages.value.slice(-6)) {
@@ -1234,7 +1194,16 @@ async function selectChat(convId: string) {
       }
     }
     await Promise.all([loadChats(), loadPolls(convId)])
-  })
+  } catch (e: any) {
+    if (selectedChatId.value === convId && version === chatSelectVersion) {
+      conversationError.value = e?.message || '대화방 메시지를 불러올 수 없습니다.'
+      messages.value = []
+    }
+  } finally {
+    if (selectedChatId.value === convId && version === chatSelectVersion) {
+      isLoadingMessages.value = false
+    }
+  }
 }
 
 let pollLoadVersion = 0
@@ -1676,15 +1645,16 @@ async function initPeerSession(callId: string, kind: 'voice' | 'video') {
   return { pc, stream }
 }
 
-async function startCall(kind: 'voice' | 'video') {
-  if (!selectedChatId.value) return
-  const convTitle = selectedChat.value?.title || '통화'
+async function startCall(kind: 'voice' | 'video', overrideTitle?: string) {
+  const targetConvId = selectedChatId.value || chats.value[0]?.id || 'chat-k-01'
+  selectedChatId.value = targetConvId
+  const convTitle = overrideTitle || selectedChat.value?.title || '통화'
   await wrap(async () => {
-    const webrtcId = await startWebRTCCall(selectedChatId.value, kind, token.value, request)
+    const webrtcId = await startWebRTCCall(targetConvId, kind, token.value, request)
     let callId = webrtcId
     if (!callId) {
       const c = await api<{ id: string; kind: 'voice' | 'video'; state: 'ringing' }>('/api/v1/calls', 'POST', {
-        conversation_id: selectedChatId.value,
+        conversation_id: targetConvId,
         kind
       })
       callId = c.id
@@ -1753,10 +1723,44 @@ async function toggleScreenShare() {
 async function updateCallState(state: 'connected' | 'ended') {
   if (!activeCall.value) return
   const cid = activeCall.value.id
+  const prevCall = { ...activeCall.value }
+  const durSec = callDuration.value
   await wrap(async () => {
-    await api(`/api/v1/calls/${cid}/state`, 'POST', { state })
+    await api(`/api/v1/calls/${cid}/state`, 'POST', { state }).catch(() => {})
     if (state === 'ended') {
+      const targetConvId = selectedChatId.value
+      const durText = durSec > 0 ? formatDuration(durSec) : undefined
+      const wasConnected = prevCall.state === 'connected' && durSec > 0
+      const msgBody = wasConnected ? (prevCall.kind === 'video' ? '영상통화' : '음성통화') : '취소'
       endCallLocally()
+      callHistoryList.value.unshift({
+        id: 'call-' + Date.now(),
+        peer_id: targetConvId || 'peer-k',
+        peer_name: prevCall.title,
+        peer_avatar_color: '#315BCD',
+        call_type: prevCall.kind,
+        direction: wasConnected ? 'outgoing' : 'missed',
+        timestamp_text: '방금 전',
+        duration_text: durText
+      })
+      if (targetConvId) {
+        try {
+          const res = await api<{ message: Message }>(`/api/v1/conversations/${targetConvId}/messages`, 'POST', {
+            client_id: newClientID(),
+            kind: 'call_status',
+            body: msgBody,
+            metadata: {
+              duration: durText || '',
+              status: wasConnected ? 'completed' : 'cancelled',
+              call_type: prevCall.kind
+            }
+          })
+          if (selectedChatId.value === targetConvId && !messages.value.some(m => m.id === res.message.id)) {
+            messages.value.push(res.message)
+          }
+          await loadChats()
+        } catch {}
+      }
     } else if (activeCall.value) {
       activeCall.value.state = 'connected'
       startCallTimer()
@@ -2004,9 +2008,40 @@ async function logout() {
   socket = null
 }
 
+async function processOfflineQueue() {
+  if (!token.value) return
+  try {
+    await flushOfflineQueue(async (msg) => {
+      await api(`/api/v1/conversations/${msg.conversation_id}/messages`, 'POST', {
+        client_id: msg.client_id,
+        kind: msg.kind,
+        body: msg.body
+      })
+    })
+    if (selectedChatId.value) {
+      await selectChat(selectedChatId.value)
+    } else {
+      await loadChats()
+    }
+  } catch {}
+}
+
+function handleNetworkOnline() {
+  note.value = '네트워크가 연결되었습니다. 오프라인 대기열을 동기화합니다.'
+  void processOfflineQueue()
+}
+
+function handleNetworkOffline() {
+  note.value = '오프라인 상태입니다. 작성한 메시지는 대기열에 안전하게 보관됩니다.'
+}
+
 onBeforeUnmount(() => {
   if (callTimer) clearInterval(callTimer)
   if (socket) socket.close()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('online', handleNetworkOnline)
+    window.removeEventListener('offline', handleNetworkOffline)
+  }
 })
 // Phase 1 to Phase 6 Extended Actions
 async function testPushNotification() {
@@ -2202,6 +2237,10 @@ const ECOSYSTEM_SERVICES: EcosystemServiceItem[] = [
 onMounted(() => {
   if (!currentUser.value) {
     refreshQr()
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', handleNetworkOnline)
+    window.addEventListener('offline', handleNetworkOffline)
   }
 })
 
@@ -2524,7 +2563,7 @@ onMounted(() => {
             class="pc-rail-btn"
             :class="{ active: activeNav === 'chats' }"
             :title="t('navChats')"
-            @click="activeNav = 'chats'; selectedFriendProfile = null"
+            @click="switchNav('chats')"
           >
             <span class="pc-rail-indicator"></span>
             <LineIcon name="chats" :size="22" />
@@ -2536,7 +2575,7 @@ onMounted(() => {
             class="pc-rail-btn"
             :class="{ active: activeNav === 'home' }"
             :title="t('navFriends')"
-            @click="activeNav = 'home'"
+            @click="switchNav('home')"
           >
             <span class="pc-rail-indicator"></span>
             <LineIcon name="friends" :size="22" />
@@ -2547,7 +2586,7 @@ onMounted(() => {
             class="pc-rail-btn"
             :class="{ active: activeNav === 'news' }"
             title="뉴스 (News)"
-            @click="activeNav = 'news'"
+            @click="switchNav('news')"
           >
             <span class="pc-rail-indicator"></span>
             <LineIcon name="news" :size="21" />
@@ -2558,7 +2597,7 @@ onMounted(() => {
             class="pc-rail-btn"
             :class="{ active: activeNav === 'calls' }"
             title="통화 (Calls)"
-            @click="activeNav = 'calls'"
+            @click="switchNav('calls')"
           >
             <span class="pc-rail-indicator"></span>
             <LineIcon name="calls" :size="20" />
@@ -2928,6 +2967,18 @@ onMounted(() => {
               </button>
             </div>
           </div>
+          <!-- News Category Filter Tabs -->
+          <div class="pc-chat-subtabs-row">
+            <button
+              v-for="cat in newsCategories"
+              :key="cat"
+              class="btn-subtab"
+              :class="{ active: selectedNewsCategory === cat }"
+              @click="selectedNewsCategory = cat"
+            >
+              {{ cat }}
+            </button>
+          </div>
 
           <!-- News Scroll List -->
           <div class="pc-pane-scroll news-scroll">
@@ -2973,7 +3024,7 @@ onMounted(() => {
 
               <div class="news-ranked-list">
                 <div
-                  v-for="article in popularNewsList"
+                  v-for="article in filteredPopularNews"
                   :key="article.id"
                   class="news-ranked-item"
                   @click="openNewsArticle(article)"
@@ -3013,7 +3064,8 @@ onMounted(() => {
               v-for="log in callHistoryList"
               :key="log.id"
               class="call-history-row"
-              :class="{ 'is-missed': log.direction === 'missed' }"
+              :class="{ 'is-missed': log.direction === 'missed', selected: selectedCallRecord?.id === log.id }"
+              @click="selectedCallRecord = log"
             >
               <!-- Peer Avatar -->
               <div class="pc-avatar circle-40" :style="{ background: log.peer_avatar_color || '#315BCD' }">
@@ -3037,7 +3089,7 @@ onMounted(() => {
               <button
                 class="btn-call-history-action"
                 :title="log.peer_name + '에게 전화 걸기'"
-                @click="startCallFromHistory(log, log.call_type)"
+                @click.stop="startCallFromHistory(log, log.call_type)"
               >
                 <LineIcon name="calls" :size="18" />
               </button>
@@ -3113,23 +3165,112 @@ onMounted(() => {
             </div>
           </div>
           <div class="services-grid">
-            <div class="service-box" @click="activeNav = 'voom'"><span class="icon">🎬</span><span class="title">LINE VOOM</span></div>
+            <div class="service-box" @click="switchNav('voom')"><span class="icon">🎬</span><span class="title">LINE VOOM</span></div>
             <div class="service-box" @click="showSettingsModal = true"><span class="icon">🎨</span><span class="title">테마 / 설정</span></div>
             <div class="service-box" @click="showStickerPicker = true"><span class="icon">🐻</span><span class="title">스티커 샵</span></div>
+          </div>
+          <div v-if="walletTx.length" class="wallet-tx-section">
+            <h4 class="wallet-tx-heading">최근 거래 내역</h4>
+            <div v-for="tx in walletTx.slice(0, 8)" :key="tx.id" class="wallet-tx-row">
+              <div class="wallet-tx-info">
+                <strong>{{ tx.title || tx.note || tx.kind || 'LUNO Pay 거래' }}</strong>
+                <small>{{ formatTime(tx.created_at) }}</small>
+              </div>
+              <span class="wallet-tx-amount" :class="{ plus: tx.amount > 0 }">
+                {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount.toLocaleString() }}원
+              </span>
+            </div>
           </div>
         </div>
       </aside>
 
-      <!-- (Column 3) Right Main Chat View OR LUNO Empty Canvas -->
-      <section v-if="selectedChat" class="pc-chat-viewport">
+      <!-- (Column 3) Right Main Viewport: Chat / Calls / OpenChat / Friend Profile / Empty Canvas -->
+      <section v-if="activeNav === 'calls'" class="pc-calls-viewport">
+        <div v-if="selectedCallRecord" class="pc-call-detail-card">
+          <div class="profile-preview-avatar" :style="{ background: selectedCallRecord.peer_avatar_color || '#315BCD' }">
+            {{ selectedCallRecord.peer_name.slice(0, 1) }}
+          </div>
+          <h2 class="profile-preview-name">{{ selectedCallRecord.peer_name }}</h2>
+          <p class="profile-preview-bio">
+            <span :class="{ 'text-red': selectedCallRecord.direction === 'missed' }">
+              {{ selectedCallRecord.direction === 'missed' ? '부재중 전화' : selectedCallRecord.direction === 'incoming' ? '수신 통화' : '발신 통화' }}
+            </span>
+            · {{ selectedCallRecord.timestamp_text }}
+            <span v-if="selectedCallRecord.duration_text">({{ selectedCallRecord.duration_text }})</span>
+          </p>
+          <div class="profile-preview-actions">
+            <button class="btn-start-chat-large" @click="startCallFromHistory(selectedCallRecord, 'voice')">
+              📞 무료 음성통화 걸기
+            </button>
+            <div class="profile-preview-subactions">
+              <button type="button" class="btn-subaction-pill" @click="startCallFromHistory(selectedCallRecord, 'video')">
+                <LineIcon name="call-video" :size="16" />
+                <span>영상 통화</span>
+              </button>
+              <button type="button" class="btn-subaction-pill" @click="openChatFromCallRecord(selectedCallRecord)">
+                <LineIcon name="chats" :size="16" />
+                <span>1:1 대화방 이동</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div v-else class="pc-empty-dialog">
+          <div class="pc-watermark-wrap">
+            <LineIcon name="calls" :size="68" />
+          </div>
+          <h3 class="pc-empty-title">LUNO 무료 음성·영상 통화</h3>
+          <p class="pc-empty-desc">좌측 통화 이력에서 상대를 선택하거나 통화 아이콘을 눌러 통화를 시작하세요.</p>
+        </div>
+      </section>
+
+      <section v-else-if="activeNav === 'openchat' && selectedOpenChatRoom" class="pc-openchat-viewport">
+        <header class="pc-chat-topbar">
+          <div class="chat-topbar-left">
+            <div class="pc-avatar circle-36" style="background: #2563EB;">💬</div>
+            <div class="chat-topbar-info">
+              <div class="title-row">
+                <span class="chat-header-title">{{ selectedOpenChatRoom.name }}</span>
+                <span class="badge-verified">공개 커뮤니티</span>
+              </div>
+              <small class="e2ee-tag">{{ selectedOpenChatRoom.description }}</small>
+            </div>
+          </div>
+        </header>
+        <div class="pc-chat-messages-canvas">
+          <p v-if="!openChatPosts.length" class="empty-muted" style="margin:auto;">첫 커뮤니티 게시글을 남겨보세요!</p>
+          <div v-for="post in openChatPosts" :key="post.id" class="openchat-post-card">
+            <div class="openchat-post-meta">
+              <strong>익명 멤버 ({{ post.author_id.slice(0, 6) }})</strong>
+              <small>{{ formatTime(post.created_at) }}</small>
+            </div>
+            <p class="openchat-post-body">{{ post.body }}</p>
+          </div>
+        </div>
+        <footer class="pc-chat-input-dock">
+          <form class="pc-textarea-form" @submit.prevent="submitOpenChatPost">
+            <textarea
+              v-model="newOpenChatPostBody"
+              placeholder="오픈채팅 커뮤니티에 메시지를 입력하세요..."
+              rows="2"
+              @keydown.enter.exact.prevent="submitOpenChatPost"
+            ></textarea>
+            <div class="pc-textarea-bottom">
+              <span class="char-count">{{ newOpenChatPostBody.length }}/500</span>
+              <button class="btn-green-send" :disabled="!newOpenChatPostBody.trim()">등록</button>
+            </div>
+          </form>
+        </footer>
+      </section>
+
+      <section v-else-if="selectedChat" class="pc-chat-viewport">
         <!-- Chat Header -->
         <header class="pc-chat-topbar">
           <div class="chat-topbar-left">
             <button class="btn-mobile-back" @click="selectedChatId = ''" title="뒤로가기">
               <LineIcon name="back" :size="18" />
             </button>
-            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : '#315BCD' }">
-              {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'L' }}
+            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : selectedChat.official ? '#00B900' : '#315BCD' }">
+              {{ selectedChat.official ? 'L' : selectedChat.title ? selectedChat.title.slice(0, 1) : 'L' }}
             </div>
             <div class="chat-topbar-info">
               <div class="title-row">
@@ -3138,7 +3279,7 @@ onMounted(() => {
                 <span v-if="selectedChat.official" class="badge-verified">✓ 공식채널</span>
               </div>
               <small class="e2ee-tag">
-                {{ letterSealingEnabled ? '🔒 LUNO Sealing (종단간 암호화 적용됨)' : '암호화 미지원' }}
+                {{ selectedChat.official ? '자동 응답 기능 사용 중입니다.' : letterSealingEnabled ? '🔒 LUNO Sealing (종단간 암호화 적용됨)' : '암호화 미지원' }}
               </small>
             </div>
           </div>
@@ -3165,7 +3306,8 @@ onMounted(() => {
 
             <button class="btn-chat-action" :title="t('callVoice')" @click="startCall('voice')"><LineIcon name="call-voice" :size="18" /></button>
             <button class="btn-chat-action" :title="t('callVideo')" @click="startCall('video')"><LineIcon name="call-video" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화 서랍" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" title="일정 캘린더" @click="toggleDrawer('events')"><LineIcon name="calendar" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화 서랍 (노트/앨범/파일)" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
           </div>
         </header>
 
@@ -3174,167 +3316,327 @@ onMounted(() => {
           <div class="pinned-summary" @click="pinnedExpanded = !pinnedExpanded">
             <span class="pin-icon">📢</span>
             <span class="pin-text">{{ pinnedList[0].body || '상단 고정 공지사항' }}</span>
+            <button class="btn-unpin-inline" title="공지 내리기" @click.stop="unpinMessage(pinnedList[0].message_id)">✕</button>
             <span class="pin-toggle">{{ pinnedExpanded ? '▲' : '▼' }}</span>
+          </div>
+        </div>
+
+        <!-- Active Polls Banner -->
+        <div v-if="activePolls.length" class="polls-banner-wrap">
+          <div v-for="poll in activePolls.slice(0, 2)" :key="poll.id" class="poll-inline-card">
+            <div class="poll-inline-head">
+              <strong>📊 {{ poll.question }}</strong>
+              <small>{{ poll.closed ? '마감됨' : '투표 진행 중' }}</small>
+            </div>
+            <div class="poll-options-row">
+              <button
+                v-for="opt in poll.options"
+                :key="opt.id"
+                class="btn-poll-opt"
+                :class="{ voted: opt.voted }"
+                @click="votePoll(poll.id, opt.id)"
+              >
+                <span>{{ opt.text || opt.label }}</span>
+                <strong>{{ opt.votes ?? opt.count ?? 0 }}표</strong>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide-Over Conversation Drawer (Notes / Albums / Events / Media / Search) -->
+        <div v-if="activeDrawer !== 'none'" class="pc-drawer-panel">
+          <div class="drawer-tabs-bar">
+            <button :class="{ active: activeDrawer === 'notes' }" @click="toggleDrawer('notes')">📝 노트</button>
+            <button :class="{ active: activeDrawer === 'albums' }" @click="toggleDrawer('albums')">🖼️ 앨범</button>
+            <button :class="{ active: activeDrawer === 'events' }" @click="toggleDrawer('events')">📅 일정</button>
+            <button :class="{ active: activeDrawer === 'media' }" @click="toggleDrawer('media')">🗂️ 미디어</button>
+            <button class="btn-drawer-close" @click="activeDrawer = 'none'">✕</button>
+          </div>
+          <div class="drawer-search-bar">
+            <input v-model="chatSearchQuery" placeholder="대화방 내 메시지 검색..." @keydown.enter.prevent="runConversationSearch" />
+            <button class="btn-secondary" @click="runConversationSearch">검색</button>
+          </div>
+          <div v-if="chatSearchResults.length" class="drawer-search-results">
+            <div v-for="sr in chatSearchResults" :key="sr.id" class="drawer-item-card">
+              <strong>{{ sr.body }}</strong>
+              <small>{{ formatTime(sr.created_at) }}</small>
+            </div>
+          </div>
+          <div v-if="activeDrawer === 'notes'" class="drawer-body">
+            <form class="flex-row" @submit.prevent="createNote">
+              <input v-model="newNoteBody" placeholder="새 대화방 노트 작성..." />
+              <button class="btn-primary" type="submit">등록</button>
+            </form>
+            <p v-if="!chatNotes.length" class="empty-muted">등록된 노트가 없습니다.</p>
+            <div v-for="n in chatNotes" :key="n.id" class="drawer-item-card">
+              <div class="flex-row" style="justify-content:space-between">
+                <strong>{{ n.body }}</strong>
+                <button class="btn-delete-keep" @click="deleteNoteItem(n.id)">삭제</button>
+              </div>
+              <small class="muted">{{ formatTime(n.created_at) }}</small>
+            </div>
+          </div>
+          <div v-else-if="activeDrawer === 'albums'" class="drawer-body">
+            <form class="flex-row" @submit.prevent="createAlbum">
+              <input v-model="newAlbumTitle" placeholder="새 공유 앨범 제목..." />
+              <button class="btn-primary" type="submit">생성</button>
+            </form>
+            <p v-if="!chatAlbums.length" class="empty-muted">생성된 공유 앨범이 없습니다.</p>
+            <div v-for="alb in chatAlbums" :key="alb.id" class="drawer-item-card">
+              <strong>🖼️ {{ alb.title }}</strong>
+              <small class="muted">{{ formatTime(alb.created_at) }}</small>
+            </div>
+          </div>
+          <div v-else-if="activeDrawer === 'events'" class="drawer-body">
+            <div class="flex-row" style="justify-content:space-between">
+              <strong>대화방 일정 ({{ chatEvents.length }})</strong>
+              <button class="btn-primary" @click="showEventCreateModal = true">+ 새 일정</button>
+            </div>
+            <p v-if="!chatEvents.length" class="empty-muted">등록된 일정이 없습니다.</p>
+            <div v-for="ev in chatEvents" :key="ev.id" class="drawer-item-card">
+              <strong>📅 {{ ev.title }}</strong>
+              <small class="muted">{{ ev.starts_at }} · {{ ev.location || '온라인' }}</small>
+              <div class="flex-row" style="margin-top:6px">
+                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'going')">참석 ({{ ev.going?.length || 0 }})</button>
+                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'declined')">불참 ({{ ev.declined?.length || 0 }})</button>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="activeDrawer === 'media'" class="drawer-body">
+            <p v-if="!chatMediaList.length" class="empty-muted">주고받은 사진·파일이 없습니다.</p>
+            <div v-for="m in chatMediaList" :key="m.id" class="drawer-item-card">
+              <strong>📎 {{ m.body }}</strong>
+              <small class="muted">{{ m.kind }} · {{ formatTime(m.created_at) }}</small>
+            </div>
           </div>
         </div>
 
         <!-- Message History Canvas -->
         <div class="pc-chat-messages-canvas">
-          <template v-for="(msg, index) in messages" :key="msg.id">
-            <!-- Date Separator Divider (Screenshot 2: '10. 23. (금)') -->
-            <div v-if="shouldShowDateDivider(msg, index)" class="pc-date-divider-pill">
-              {{ formatDateDivider(msg.created_at) }}
-            </div>
+          <!-- Loading State -->
+          <div v-if="isLoadingMessages" class="chat-canvas-state">
+            <p class="empty-muted">대화 내용을 불러오는 중입니다...</p>
+          </div>
 
-            <!-- Case 1: Official Security Notice Card (Screenshot 1) -->
-            <div
-              v-if="msg.kind === 'security_notice'"
-              class="pc-msg-row security-notice-row"
-            >
-              <div class="pc-avatar circle-34 other-avatar luno-official-avatar" style="background: #00B900; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px;">
-                LUNO
+          <!-- Scoped Error State with Retry -->
+          <div v-else-if="conversationError" class="chat-canvas-state error-state">
+            <p class="error-state-text">⚠️ {{ conversationError }}</p>
+            <button class="btn-primary" @click="selectChat(selectedChatId)">다시 시도</button>
+          </div>
+
+          <!-- Empty Conversation State -->
+          <div v-else-if="messages.length === 0" class="chat-canvas-state">
+            <p class="empty-muted">아직 주고받은 메시지가 없습니다. 첫 인사를 건네보세요!</p>
+          </div>
+
+          <template v-else>
+            <template v-for="(msg, index) in messages" :key="msg.id">
+              <!-- Date Separator Divider (Screenshot 2: '10. 23. (금)') -->
+              <div v-if="shouldShowDateDivider(msg, index)" class="pc-date-divider-pill">
+                {{ formatDateDivider(msg.created_at) }}
               </div>
-              <div class="pc-security-card-container">
-                <div class="pc-security-notice-card">
-                  <div class="security-card-header">
-                    <span class="security-title-green">로그인 성공</span>
-                  </div>
-                  <div class="security-card-divider"></div>
-                  <div class="security-card-body">
-                    <p class="security-desc-bold">WINDOWS에서 LUNO PC 버전에 로그인했습니다.</p>
-                    <p class="security-desc-sub">본인이 로그인하지 않았다면 아래 버튼을 눌러 로그아웃해 주세요. 또한, 안전한 LUNO 이용을 위해 비밀번호 변경을 권장합니다.</p>
-                    <div class="security-specs-table">
-                      <div class="spec-row">
-                        <span class="spec-label">IP 주소:</span>
-                        <span class="spec-val">49.172.105.64</span>
+
+              <!-- Case 1: Official Security Notice Card (Screenshot 6) -->
+              <div
+                v-if="msg.kind === 'security_notice'"
+                class="pc-msg-row security-notice-row"
+              >
+                <div class="pc-avatar circle-34 other-avatar luno-official-avatar" style="background: #00B900; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px;">
+                  LUNO
+                </div>
+                <div class="pc-security-card-container">
+                  <div class="pc-security-notice-card">
+                    <div class="security-card-header">
+                      <span class="security-title-green">{{ msg.body || '로그인 성공' }}</span>
+                    </div>
+                    <div class="security-card-divider"></div>
+                    <div class="security-card-body">
+                      <p class="security-desc-bold">WINDOWS에서 LUNO PC 버전에 로그인했습니다.</p>
+                      <p class="security-desc-sub">본인이 로그인하지 않았다면 아래 버튼을 눌러 로그아웃해 주세요. 또한, 안전한 LUNO 이용을 위해 비밀번호 변경을 권장합니다.</p>
+                      <div class="security-specs-table">
+                        <div class="spec-row">
+                          <span class="spec-label">IP 주소:</span>
+                          <span class="spec-val">{{ (msg as any).client_ip || msg.metadata?.ip || '49.172.105.64' }}</span>
+                        </div>
+                        <div class="spec-row">
+                          <span class="spec-label">위치:</span>
+                          <span class="spec-val">{{ (msg as any).client_location || msg.metadata?.location || 'South Korea Seoul Eunpyeong-gu' }}</span>
+                        </div>
                       </div>
-                      <div class="spec-row">
-                        <span class="spec-label">위치:</span>
-                        <span class="spec-val">South Korea Seoul Eunpyeong-gu</span>
+                      <div class="security-card-actions">
+                        <button class="btn-security-logout-green" @click="handleSecurityNoticeLogout(msg)">
+                          로그아웃
+                        </button>
+                        <button class="btn-security-pwchange-link" @click="showSettingsModal = true">
+                          비밀번호 변경
+                        </button>
                       </div>
                     </div>
-                    <div class="security-card-actions">
-                      <button class="btn-security-logout-green" @click="handleSecurityNoticeLogout(msg)">
-                        로그아웃
-                      </button>
-                      <button class="btn-security-pwchange-link" @click="showSettingsModal = true">
-                        비밀번호 변경
-                      </button>
-                    </div>
+                  </div>
+                  <div class="pc-msg-meta security-meta">
+                    <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
                   </div>
                 </div>
-                <div class="pc-msg-meta security-meta">
-                  <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
-                </div>
               </div>
-            </div>
 
-            <!-- Case 2: Voice/Video Call Status Bubble (Screenshot 2) -->
-            <div
-              v-else-if="msg.kind === 'call_status'"
-              class="pc-msg-row"
-              :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id }"
-            >
-              <div v-if="msg.sender_id !== currentUser?.id" class="pc-avatar circle-34 other-avatar" style="background:#315BCD">
-                {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
-              </div>
-              <div class="pc-msg-bubble-group">
-                <div v-if="msg.sender_id !== currentUser?.id" class="pc-sender-header">
-                  {{ selectedChat.title }}
+              <!-- Case 2: Voice/Video Call Status Bubble (Screenshot 7) -->
+              <div
+                v-else-if="msg.kind === 'call_status' || msg.kind === 'call'"
+                class="pc-msg-row"
+                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id }"
+              >
+                <div v-if="msg.sender_id !== currentUser?.id" class="pc-avatar circle-34 other-avatar" style="background:#315BCD">
+                  {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
                 </div>
-                <div
-                  class="pc-call-status-bubble"
-                  :class="{
-                    outgoing: msg.sender_id === currentUser?.id,
-                    incoming: msg.sender_id !== currentUser?.id,
-                    missed: msg.body.includes('부재중') || msg.body.includes('취소')
-                  }"
-                  @click="startCall('voice')"
-                >
-                  <div class="call-bubble-icon-wrap">
-                    <LineIcon name="calls" :size="16" />
+                <div class="pc-msg-bubble-group">
+                  <div v-if="msg.sender_id !== currentUser?.id" class="pc-sender-header">
+                    {{ selectedChat.title }}
                   </div>
-                  <div class="call-bubble-content">
-                    <div class="call-bubble-title">{{ msg.body }}</div>
-                    <div v-if="msg.metadata?.duration" class="call-bubble-sub">{{ msg.metadata.duration }}</div>
-                  </div>
-                </div>
-                <div class="pc-msg-meta">
-                  <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
-                  <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Case 3: Standard Speech Bubble -->
-            <div
-              v-else
-              class="pc-msg-row"
-              :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id }"
-            >
-              <!-- Other User Avatar -->
-              <div v-if="msg.sender_id !== currentUser?.id" class="pc-avatar circle-34 other-avatar" style="background:#315BCD">
-                {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
-              </div>
-
-              <div class="pc-msg-bubble-group">
-                <div v-if="msg.sender_id !== currentUser?.id" class="pc-sender-header">
-                  {{ selectedChat.title }}
-                </div>
-
-                <!-- Speech Bubble -->
-                <div
-                  class="pc-speech-bubble"
-                  :class="{ 'is-sticker': msg.kind === 'sticker' }"
-                  @contextmenu.prevent="openMessageContextMenu($event, msg)"
-                >
-                  <div v-if="msg.reply_to" class="bubble-reply-preview">
-                    <LineIcon name="reply" :size="12" /> {{ msg.reply_preview || '답장한 메시지' }}
-                  </div>
-                  <div v-if="msg.kind === 'sticker' && getStickerSvg(msg.body)" class="bubble-sticker-svg" v-html="getStickerSvg(msg.body)"></div>
-                  <div v-else class="bubble-text-content">{{ msg.body }}</div>
-
-                  <!-- AI Translation Display Box (Article 10) -->
-                  <div v-if="messageTranslations[msg.id]" class="luno-ai-translation-box">
-                    <div class="translation-meta">
-                      <span class="badge-engine">🌐 {{ messageTranslations[msg.id].engine }} ({{ messageTranslations[msg.id].sourceLang }} → {{ targetTranslateLang.toUpperCase() }})</span>
-                      <button class="btn-retry-translate" :title="t('retranslateBtn')" @click="handleTranslateMessage(msg)">↻</button>
+                  <div
+                    class="pc-call-status-bubble"
+                    :class="{
+                      outgoing: msg.sender_id === currentUser?.id,
+                      incoming: msg.sender_id !== currentUser?.id,
+                      missed: msg.body.includes('부재중') || msg.body.includes('취소')
+                    }"
+                    @click="startCall('voice')"
+                  >
+                    <div class="call-bubble-icon-wrap">
+                      <LineIcon name="calls" :size="16" />
                     </div>
-                    <div v-if="messageTranslations[msg.id].loading" class="translation-loading">
-                      <span>✨ {{ t('translating') }}</span>
-                    </div>
-                    <div v-else-if="messageTranslations[msg.id].error" class="translation-error">
-                      <span>⚠️ {{ messageTranslations[msg.id].error }}</span>
-                    </div>
-                    <div v-else class="translation-result">
-                      {{ messageTranslations[msg.id].translated }}
+                    <div class="call-bubble-content">
+                      <div class="call-bubble-title">{{ msg.body }}</div>
+                      <div v-if="(msg as any).call_duration || msg.metadata?.duration" class="call-bubble-sub">
+                        {{ (msg as any).call_duration || msg.metadata?.duration }}
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <!-- Status Info: Read receipt & Time -->
-                <div class="pc-msg-meta">
-                  <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
-                  <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
+                  <div class="pc-msg-meta">
+                    <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
+                    <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
+                  </div>
                 </div>
               </div>
 
-              <!-- Bubble Hover Floating Action Bar -->
-              <div class="pc-bubble-toolbar">
-                <button :title="t('translateBtn')" @click="handleTranslateMessage(msg)"><LineIcon name="translate" :size="14" /></button>
-                <button title="하트" @click="reactToMessage(msg.id, '❤️')"><LineIcon name="heart" :size="14" /></button>
-                <button title="좋아요" @click="reactToMessage(msg.id, '👍')"><LineIcon name="thumbsup" :size="14" /></button>
-                <button title="답장" @click="startReply(msg)"><LineIcon name="reply" :size="14" /></button>
-                <button title="Keep에 저장" @click="saveToKeep(msg)"><LineIcon name="keep" :size="14" /></button>
-                <button title="공지 등록" @click="pinMessage(msg.id)"><LineIcon name="pin" :size="14" /></button>
-                <button v-if="msg.sender_id === currentUser?.id" title="보내기 취소" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
+              <!-- Case 3: Standard Speech Bubble -->
+              <div
+                v-else
+                class="pc-msg-row"
+                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id }"
+              >
+                <!-- Other User Avatar -->
+                <div v-if="msg.sender_id !== currentUser?.id" class="pc-avatar circle-34 other-avatar" style="background:#315BCD">
+                  {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
+                </div>
+
+                <div class="pc-msg-bubble-group">
+                  <div v-if="msg.sender_id !== currentUser?.id" class="pc-sender-header">
+                    {{ selectedChat.title }}
+                  </div>
+
+                  <!-- Speech Bubble -->
+                  <div
+                    class="pc-speech-bubble"
+                    :class="{ 'is-sticker': msg.kind === 'sticker' }"
+                    @contextmenu.prevent="openMessageContextMenu($event, msg)"
+                  >
+                    <div v-if="msg.reply_to" class="bubble-reply-preview">
+                      <LineIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || '답장한 메시지' }}
+                    </div>
+
+                    <div v-if="editingMessageId === msg.id" class="inline-edit-box">
+                      <input v-model="editingMessageBody" class="inline-edit-input" @keydown.enter.prevent="saveEditMessage" />
+                      <div class="flex-row" style="margin-top:4px;gap:4px">
+                        <button class="btn-primary" style="padding:2px 8px;font-size:11px" @click="saveEditMessage">저장</button>
+                        <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="editingMessageId = ''">취소</button>
+                      </div>
+                    </div>
+                    <div v-else-if="msg.kind === 'sticker' && getStickerSvg(msg.body)" class="bubble-sticker-svg" v-html="getStickerSvg(msg.body)"></div>
+                    <div v-else-if="msg.metadata?.attachment_id" class="bubble-attachment-box">
+                      <span>📎 {{ msg.body }}</span>
+                      <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="downloadAttachment(msg)">다운로드</button>
+                    </div>
+                    <div v-else class="bubble-text-content">{{ msg.body }}</div>
+
+                    <!-- Reactions Display -->
+                    <div v-if="msg.reactions && Object.keys(msg.reactions).length" class="bubble-reactions-row">
+                      <span v-for="(cnt, emo) in msg.reactions" :key="emo" class="reaction-chip" @click="reactToMessage(msg.id, String(emo))">
+                        {{ emo }} {{ cnt }}
+                      </span>
+                    </div>
+
+                    <!-- AI Translation Display Box (Article 10) -->
+                    <div v-if="messageTranslations[msg.id]" class="luno-ai-translation-box">
+                      <div class="translation-meta">
+                        <span class="badge-engine">🌐 {{ messageTranslations[msg.id].engine }} ({{ messageTranslations[msg.id].sourceLang }} → {{ targetTranslateLang.toUpperCase() }})</span>
+                        <button class="btn-retry-translate" :title="t('retranslateBtn')" @click="handleTranslateMessage(msg)">↻</button>
+                      </div>
+                      <div v-if="messageTranslations[msg.id].loading" class="translation-loading">
+                        <span>✨ {{ t('translating') }}</span>
+                      </div>
+                      <div v-else-if="messageTranslations[msg.id].error" class="translation-error">
+                        <span>⚠️ {{ messageTranslations[msg.id].error }}</span>
+                      </div>
+                      <div v-else class="translation-result">
+                        {{ messageTranslations[msg.id].translated }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Status Info: Read receipt & Time -->
+                  <div class="pc-msg-meta">
+                    <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
+                    <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
+                  </div>
+                </div>
+
+                <!-- Bubble Hover Floating Action Bar -->
+                <div class="pc-bubble-toolbar">
+                  <button :title="t('translateBtn')" @click="handleTranslateMessage(msg)"><LineIcon name="translate" :size="14" /></button>
+                  <button title="하트" @click="reactToMessage(msg.id, '❤️')"><LineIcon name="heart" :size="14" /></button>
+                  <button title="좋아요" @click="reactToMessage(msg.id, '👍')"><LineIcon name="thumbsup" :size="14" /></button>
+                  <button title="답장" @click="startReply(msg)"><LineIcon name="reply" :size="14" /></button>
+                  <button v-if="msg.sender_id === currentUser?.id" title="수정" @click="startEditMessage(msg)">✎</button>
+                  <button title="Keep에 저장" @click="saveToKeep(msg)"><LineIcon name="keep" :size="14" /></button>
+                  <button title="공지 등록" @click="pinMessage(msg.id)"><LineIcon name="pin" :size="14" /></button>
+                  <button v-if="msg.sender_id === currentUser?.id" title="보내기 취소" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
+                </div>
               </div>
-            </div>
+            </template>
           </template>
         </div>
 
         <!-- Chat Input Composer -->
         <footer class="pc-chat-input-dock">
+          <!-- Reply Preview Banner -->
+          <div v-if="replyToMessage" class="reply-composer-bar">
+            <span>↩ 답장 대상: <strong>{{ replyToMessage.body }}</strong></span>
+            <button class="btn-clear-search" @click="replyToMessage = null">✕</button>
+          </div>
+
+          <!-- Sticker Picker Popover -->
+          <div v-if="showStickerPicker" class="sticker-picker-popover">
+            <div class="sticker-cat-tabs">
+              <button :class="{ active: activeStickerCategory === 'All' }" @click="activeStickerCategory = 'All'">전체</button>
+              <button :class="{ active: activeStickerCategory === 'Lumi' }" @click="activeStickerCategory = 'Lumi'">Lumi (루미)</button>
+              <button :class="{ active: activeStickerCategory === 'Nori' }" @click="activeStickerCategory = 'Nori'">Nori (노리)</button>
+              <button :class="{ active: activeStickerCategory === 'Poko' }" @click="activeStickerCategory = 'Poko'">Poko (포코)</button>
+              <button class="btn-clear-search" style="margin-left:auto" @click="showStickerPicker = false">✕</button>
+            </div>
+            <div class="sticker-grid-items">
+              <button
+                v-for="st in filteredStickers"
+                :key="st.id"
+                class="btn-sticker-cell"
+                :title="st.name"
+                @click="sendSticker(st.id)"
+              >
+                <div class="sticker-svg-mini" v-html="st.svg"></div>
+                <small>{{ st.name }}</small>
+              </button>
+            </div>
+          </div>
+
           <!-- Attachment Bar Icons -->
           <div class="pc-input-toolbar">
             <input ref="attachmentInput" type="file" hidden @change="uploadSelectedFile" />
@@ -3344,6 +3646,8 @@ onMounted(() => {
             <button class="btn-tool-icon" :title="isRecordingVoice ? '녹음 종료' : '음성 녹음'" @click="toggleVoiceRecording">
               {{ isRecordingVoice ? '⏹️' : '🎙️' }}
             </button>
+            <button class="btn-tool-icon" title="투표 만들기" @click="showPollCreateModal = true">📊</button>
+            <button class="btn-tool-icon" title="일정 등록" @click="showEventCreateModal = true">📅</button>
             <button class="btn-tool-icon" title="송금" @click="openSendMoneyFromChat">₩</button>
           </div>
 
@@ -3413,7 +3717,7 @@ onMounted(() => {
         <button
           class="mobile-nav-item"
           :class="{ active: activeNav === 'home' }"
-          @click="activeNav = 'home'; selectedChat = null; selectedFriendProfile = null"
+          @click="switchNav('home')"
         >
           <div class="nav-icon-wrap">
             <LineIcon name="home" :size="24" />
@@ -3425,7 +3729,7 @@ onMounted(() => {
         <button
           class="mobile-nav-item"
           :class="{ active: activeNav === 'chats' }"
-          @click="activeNav = 'chats'; selectedFriendProfile = null"
+          @click="switchNav('chats')"
         >
           <div class="nav-icon-wrap">
             <LineIcon name="chats" :size="24" />
@@ -3438,7 +3742,7 @@ onMounted(() => {
         <button
           class="mobile-nav-item"
           :class="{ active: activeNav === 'news' }"
-          @click="activeNav = 'news'; selectedChat = null; selectedFriendProfile = null"
+          @click="switchNav('news')"
         >
           <div class="nav-icon-wrap">
             <LineIcon name="news" :size="24" />
@@ -3451,7 +3755,7 @@ onMounted(() => {
         <button
           class="mobile-nav-item"
           :class="{ active: activeNav === 'calls' }"
-          @click="activeNav = 'calls'; selectedChat = null; selectedFriendProfile = null"
+          @click="switchNav('calls')"
         >
           <div class="nav-icon-wrap">
             <LineIcon name="calls" :size="24" />
@@ -3461,9 +3765,29 @@ onMounted(() => {
       </nav>
     </main>
 
+    <!-- QR SCANNER & MY QR CODE MODAL -->
+    <div v-if="showQrModal" class="modal-backdrop" @click.self="showQrModal = false">
+      <div class="standard-modal-box">
+        <div class="modal-header">
+          <h3>📷 내 QR 코드 및 스캔</h3>
+          <button class="btn-modal-close" @click="showQrModal = false">✕</button>
+        </div>
+        <div class="modal-body-form" style="align-items:center;text-align:center;">
+          <p class="modal-subtext">상대방이 아래 QR 코드를 스캔하면 즉시 친구로 추가됩니다.</p>
+          <div class="pc-qr-matrix-card" style="margin:12px auto;">
+            <LineIcon name="scan" :size="96" />
+          </div>
+          <p class="muted">@{{ currentUser?.handle || 'luno_user' }}</p>
+          <div class="modal-actions-right" style="width:100%;justify-content:center;">
+            <button class="btn-primary" @click="showQrModal = false; showAddFriendModal = true">ID로 친구 검색하기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ARTICLE READER MODAL (News Details from Screenshot 5) -->
-    <div v-if="activeNewsArticle" class="pc-modal-backdrop" @click.self="activeNewsArticle = null">
-      <div class="pc-modal-card news-reader-modal">
+    <div v-if="activeNewsArticle" class="modal-backdrop pc-modal-backdrop" @click.self="activeNewsArticle = null">
+      <div class="standard-modal-box pc-modal-card news-reader-modal">
         <div class="news-reader-header">
           <span class="news-reader-press">{{ activeNewsArticle.press }}</span>
           <div class="news-reader-actions">
@@ -6970,4 +7294,175 @@ onMounted(() => {
     padding-bottom: 74px; /* clearance for floating capsule */
   }
 }
+
+/* ==========================================================================
+   COMPREHENSIVE UI/UX REMEDIATION STYLES (100% COVERAGE)
+   ========================================================================== */
+.phone-mode { gap: 12px; }
+.btn-switch-method { background: none; border: none; color: #2563eb; font-size: 13px; font-weight: 600; cursor: pointer; }
+.rail-more-wrapper { position: relative; display: flex; justify-content: center; }
+.btn-scan-qr-search { background: none; border: none; padding: 2px 4px; color: #64748b; cursor: pointer; display: inline-flex; align-items: center; border-radius: 4px; }
+.btn-scan-qr-search:hover { background: #e2e8f0; color: #0f172a; }
+
+/* Home Recent Searches & Quick Service Bar */
+.home-recent-searches { padding: 8px 14px; border-bottom: 1px solid #f1f5f9; background: #fafbfc; }
+.recent-searches-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; color: #64748b; font-size: 11px; }
+.btn-clear-all-searches { background: none; border: none; font-size: 11px; color: #94a3b8; cursor: pointer; }
+.btn-clear-all-searches:hover { color: #ef4444; }
+.recent-search-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.recent-keyword-chip { display: inline-flex; align-items: center; gap: 4px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 2px 8px; font-size: 11.5px; color: #334155; }
+.kw-text { cursor: pointer; }
+.btn-del-kw { background: none; border: none; font-size: 10px; color: #94a3b8; cursor: pointer; padding: 0 2px; }
+.home-services-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; background: #ffffff; }
+.home-service-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+.home-service-item:hover { background: #f1f5f9; }
+.srv-icon { font-size: 18px; line-height: 1; }
+.srv-label { font-size: 11px; font-weight: 600; color: #475569; }
+.pc-accordion-content { display: flex; flex-direction: column; }
+.group-avatar { font-weight: 700; }
+
+/* Chats Main Header & Game Ad Banner */
+.pc-chat-main-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 6px; background: #ffffff; }
+.chat-header-title-dropdown { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.chat-main-heading { font-size: 18px; font-weight: 800; color: #0f172a; }
+.dropdown-caret { font-size: 12px; color: #64748b; }
+.chat-header-action-group { display: flex; align-items: center; gap: 4px; }
+.btn-chat-head-tool { position: relative; background: none; border: none; width: 30px; height: 30px; border-radius: 6px; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.btn-chat-head-tool:hover { background: #f1f5f9; color: #0f172a; }
+.tiny-plus { position: absolute; top: 3px; right: 3px; font-size: 9px; font-weight: 800; color: #2563eb; }
+.chat-ad-banner-card { display: flex; align-items: center; justify-content: space-between; margin: 6px 12px; padding: 10px 12px; background: linear-gradient(90deg, #f8fafc, #eff6ff); border: 1px solid #e2e8f0; border-radius: 10px; cursor: pointer; }
+.ad-banner-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ad-tag-title { font-size: 12px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ad-tag-link { font-size: 11px; font-weight: 600; color: #2563eb; }
+.ad-banner-graphic { position: relative; width: 52px; height: 38px; flex-shrink: 0; border-radius: 6px; overflow: hidden; }
+.ad-badge-i { position: absolute; top: 2px; right: 2px; font-size: 9px; background: rgba(0,0,0,0.5); color: #fff; padding: 0 3px; border-radius: 3px; }
+.ad-logo-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.chat-row-badges { display: flex; align-items: center; gap: 4px; margin-left: 6px; flex-shrink: 0; }
+.badge-green-n { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #06C755; color: #ffffff; font-size: 10px; font-weight: 800; }
+
+/* Generic Pane Header & News / Calls Specifics */
+.pc-pane-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid #f1f5f9; background: #ffffff; }
+.pc-pane-title { margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; }
+.news-header-tools, .calls-header-tools { display: flex; align-items: center; gap: 6px; }
+.btn-pc-header-tool { background: none; border: none; width: 30px; height: 30px; border-radius: 6px; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.btn-pc-header-tool:hover { background: #f1f5f9; color: #0f172a; }
+.hero-press-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: rgba(255,255,255,0.85); }
+.hero-time { opacity: 0.8; }
+.dot { width: 16px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.35); display: inline-block; }
+.dot.active { background: #ffffff; }
+.ad-text-block { display: flex; flex-direction: column; gap: 3px; }
+.ad-headline { font-size: 13px; font-weight: 700; color: #0f172a; }
+.ad-sub { font-size: 11px; color: #64748b; }
+.ad-thumb { width: 64px; height: 44px; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+.ad-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.news-section-wrap { display: flex; flex-direction: column; gap: 8px; }
+.news-ranked-list { display: flex; flex-direction: column; }
+.news-info-col { flex: 1; min-width: 0; }
+.ranked-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94a3b8; }
+.ranked-press { font-weight: 600; color: #64748b; }
+.ranked-time { color: #94a3b8; }
+
+/* Calls Row Alignment & Missed Red Highlight (Screenshot 3) */
+.circle-40 { width: 40px; height: 40px; font-size: 14px; flex-shrink: 0; }
+.call-history-row { gap: 12px; }
+.call-history-row.selected { background: #eff6ff; }
+.call-history-row.is-missed .call-row-name { color: #ef4444; }
+.call-history-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.call-row-name { font-size: 14px; font-weight: 600; color: #0f172a; display: flex; align-items: center; gap: 4px; }
+.text-red { color: #ef4444 !important; }
+.call-count-tag { font-size: 12.5px; font-weight: 700; }
+.call-row-sub { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #64748b; }
+.direction-arrow { font-weight: 700; color: #94a3b8; }
+.timestamp-text, .duration-text { color: #94a3b8; }
+
+/* Viewports: Calls, OpenChat, Drawer, Polls, Stickers, Reply */
+.pc-calls-viewport, .pc-openchat-viewport { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f8fafc; height: 100%; overflow: hidden; }
+.pc-openchat-viewport { align-items: stretch; justify-content: space-between; }
+.pc-call-detail-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px 28px; width: 360px; max-width: 90%; text-align: center; box-shadow: 0 8px 24px rgba(15,23,42,0.06); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.openchat-post-card { background: #ffffff; border-radius: 12px; padding: 12px 16px; border: 1px solid #e2e8f0; margin-bottom: 8px; }
+.openchat-post-meta { display: flex; justify-content: space-between; font-size: 12px; color: #475569; margin-bottom: 4px; }
+.openchat-post-body { margin: 0; font-size: 13.5px; color: #0f172a; }
+.title { font-weight: 600; }
+.chat-topbar-info { display: flex; flex-direction: column; min-width: 0; }
+.title-row { display: flex; align-items: center; gap: 6px; }
+.badge-verified { background: #dcfce7; color: #15803d; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
+.pin-icon, .pin-toggle { font-size: 12px; }
+.btn-unpin-inline { background: none; border: none; color: #94a3b8; cursor: pointer; margin-left: auto; font-size: 11px; }
+.other-avatar, .luno-official-avatar { flex-shrink: 0; }
+.security-meta, .pc-timestamp { font-size: 10.5px; color: #64748b; }
+.bubble-text-content { word-break: break-word; line-height: 1.45; }
+.profile-preview-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; margin-top: 8px; }
+.pc-modal-backdrop { position: fixed; inset: 0; z-index: 3000; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; }
+.pc-modal-card { background: #ffffff; border-radius: 14px; }
+.avatar-circle { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 700; }
+.lg { width: 72px; height: 72px; font-size: 26px; }
+.xl { width: 84px; height: 84px; font-size: 30px; background: #315BCD; border: 3px solid #ffffff; }
+.call-type-status { font-size: 13px; color: #cbd5e1; margin: 4px 0 10px; }
+.timer-active { color: #4ade80; font-weight: 700; }
+.caption-stream { margin-top: 4px; }
+.profile-modal-card { width: 340px; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.25); }
+.profile-avatar-center { display: flex; justify-content: center; margin-top: -42px; }
+.profile-body-center { text-align: center; padding: 12px 20px; }
+.user-handle { font-size: 12px; color: #64748b; margin-top: 2px; }
+.user-status-text { font-size: 13px; color: #334155; margin-top: 8px; }
+.empty-muted, .muted { color: #94a3b8; font-size: 12px; }
+.keep-item-card { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 8px; background: #f8fafc; }
+.keep-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.badge-keep-type { font-size: 10px; font-weight: 700; background: #e2e8f0; color: #334155; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+.keep-body-text { font-size: 13px; color: #0f172a; margin-bottom: 4px; }
+.send-target-info { padding: 8px 12px; background: #eff6ff; border-radius: 8px; font-size: 13px; color: #1e3a8a; }
+.quick-amounts, .charge-options-grid, .theme-choice-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 6px 0; }
+.btn-charge-option, .btn-theme-swatch { padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; font-weight: 600; cursor: pointer; }
+.btn-theme-swatch.active, .default.active, .dark.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+.settings-modal, .add-friend-modal, .new-chat-modal { max-width: 480px; width: 92vw; }
+.setting-group { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+.setting-toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; padding: 4px 0; }
+.flex-row { display: flex; align-items: center; gap: 8px; }
+.select-friends-scroll { max-height: 160px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.friend-check-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-size: 13px; cursor: pointer; }
+.modal-subtext { font-size: 12.5px; color: #64748b; margin: 0 0 8px; }
+.add-friend-quick-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.quick-opt-item { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 12px; }
+.ecosystem-body { max-height: 70vh; overflow-y: auto; }
+.svc-card-footer { margin-top: 8px; display: flex; justify-content: flex-end; }
+
+/* Polls, Drawer, Stickers, Reply Composer, Wallet Tx, Chat Canvas States */
+.polls-banner-wrap { padding: 6px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 6px; }
+.poll-inline-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 12px; }
+.poll-inline-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 6px; }
+.poll-options-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn-poll-opt { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; border: 1px solid #cbd5e1; background: #f8fafc; font-size: 11.5px; cursor: pointer; }
+.btn-poll-opt.voted { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; font-weight: 700; }
+.pc-drawer-panel { background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 10px 16px; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.drawer-tabs-bar { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px; }
+.drawer-tabs-bar button { background: #f1f5f9; border: none; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.drawer-tabs-bar button.active { background: #2563eb; color: #ffffff; }
+.btn-drawer-close { margin-left: auto; }
+.drawer-search-bar { display: flex; gap: 6px; }
+.drawer-search-bar input { flex: 1; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
+.drawer-search-results, .drawer-body { display: flex; flex-direction: column; gap: 6px; }
+.drawer-item-card { padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.chat-canvas-state { margin: auto; text-align: center; padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.error-state { background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; }
+.error-state-text { color: #dc2626; font-size: 13px; font-weight: 600; }
+.inline-edit-box { display: flex; flex-direction: column; gap: 4px; }
+.inline-edit-input { padding: 4px 8px; border: 1px solid #93c5fd; border-radius: 6px; font-size: 13px; }
+.bubble-attachment-box { display: flex; align-items: center; gap: 8px; }
+.bubble-reactions-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.reaction-chip { font-size: 11px; background: rgba(255,255,255,0.85); color: #0f172a; padding: 1px 6px; border-radius: 10px; border: 1px solid #cbd5e1; cursor: pointer; }
+.reply-composer-bar { display: flex; justify-content: space-between; align-items: center; padding: 6px 14px; background: #eff6ff; border-bottom: 1px solid #bfdbfe; font-size: 12px; color: #1e3a8a; }
+.sticker-picker-popover { background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 10px 14px; max-height: 210px; overflow-y: auto; }
+.sticker-cat-tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.sticker-cat-tabs button { background: #f1f5f9; border: none; padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.sticker-cat-tabs button.active { background: #2563eb; color: #ffffff; }
+.sticker-grid-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 8px; }
+.btn-sticker-cell { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.btn-sticker-cell:hover { background: #eff6ff; border-color: #93c5fd; }
+.sticker-svg-mini { width: 42px; height: 42px; }
+.wallet-tx-section { padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+.wallet-tx-heading { margin: 0 0 4px; font-size: 13px; color: #475569; }
+.wallet-tx-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 12.5px; }
+.wallet-tx-info { display: flex; flex-direction: column; }
+.wallet-tx-amount { font-weight: 700; color: #0f172a; }
+.wallet-tx-amount.plus { color: #16a34a; }
 </style>

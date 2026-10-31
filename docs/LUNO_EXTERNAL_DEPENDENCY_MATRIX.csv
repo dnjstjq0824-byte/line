@@ -1,0 +1,7 @@
+dependency_id,category,provider_or_module,env_var_required,fallback_or_dev_mode,production_status
+D001,Database,PostgreSQL 16 / Cloudflare Durable Object Storage,DATABASE_URL / MESSENGER_BACKEND,SQLite compat (pgsqlite) & DO Storage,READY
+D002,Auth Crypto,JWT HMAC-SHA256 & Argon2id,JWT_SECRET,Deterministic test secret in local test only,READY
+D003,Push Android,Firebase Cloud Messaging (FCM HTTP v1),FCM_PROJECT_ID / FCM_SERVICE_ACCOUNT_JSON,Push health endpoint reports configuration state,CONFIG_REQUIRED_FOR_EXTERNAL_PUSH
+D004,Push iOS,Apple Push Notification service (APNs),APNS_KEY_ID / APNS_TEAM_ID / APNS_PRIVATE_KEY,Push health endpoint reports configuration state,CONFIG_REQUIRED_FOR_EXTERNAL_PUSH
+D005,WebRTC NAT,Google STUN / Coturn TURN Server,TURN_SERVER_URL,stun:stun.l.google.com:19302,READY
+D006,AI Translation,LUNO Neural Dictionary & Gemini API Bridge,AI_PROVIDER_API_KEY,Built-in LUNO KO/EN/JA/TH neural dictionary + API bridge,READY
