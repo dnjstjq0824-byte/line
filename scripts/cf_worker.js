@@ -65,13 +65,13 @@ const MAX_ATTACHMENT_B64 = 2_000_000;
 const MAX_BODY = 20000;
 
 const BUILD_INFO = {
-  commit: '6e92f6b2253ba9127cbad74874abd92ebd94b509',
-  short_commit: '6e92f6b',
-  worker_version: 'v2.0.0-remediated',
-  build_time: '2026-11-01T02:20:00.000Z',
-  env: 'production',
-  brand: 'LUNO',
-  status: 'ok'
+  "commit": "7e2924f52096fe0e96954f4161df7126b297dba0",
+  "short_commit": "7e2924f",
+  "worker_version": "v2.0.0-remediated",
+  "build_time": "2026-10-31T18:00:41.545Z",
+  "env": "production",
+  "brand": "LUNO",
+  "status": "ok"
 };
 
 const STICKER_CATALOG = [
