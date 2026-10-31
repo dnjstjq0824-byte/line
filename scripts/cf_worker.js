@@ -65,10 +65,10 @@ const MAX_ATTACHMENT_B64 = 2_000_000;
 const MAX_BODY = 20000;
 
 const BUILD_INFO = {
-  "commit": "7e2924f52096fe0e96954f4161df7126b297dba0",
-  "short_commit": "7e2924f",
+  "commit": "76bd3f57afa4914288a915dbbf073216b6d3012c",
+  "short_commit": "76bd3f5",
   "worker_version": "v2.0.0-remediated",
-  "build_time": "2026-10-31T18:00:41.545Z",
+  "build_time": "2026-10-31T18:02:46.674Z",
   "env": "production",
   "brand": "LUNO",
   "status": "ok"
@@ -120,6 +120,8 @@ async function setPassword(user, password) {
 }
 async function checkPassword(user, password) {
   if (!user || typeof password !== 'string') return false;
+  const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!']);
+  if (REVOKED_LEGACY_PASSWORDS.has(password)) return false;
   if (user.password && user.password === password) return true;
   if (user.raw_password && user.raw_password === password) return true;
   if (user.pw_hash && (user.pw_hash === password || user.pw_hash === 'sha256:' + password)) return true;
@@ -2121,14 +2123,25 @@ async function syncFromD1(db) {
   try {
     const userRows = await db.prepare("SELECT * FROM users").all();
     if (userRows && userRows.results) {
+      const REVOKED_LEGACY_PASSWORDS = new Set([
+        'LineAdmin#2026!',
+        'LineUser#2026!',
+        'sha256:LineAdmin#2026!',
+        'sha256:LineUser#2026!',
+        'Admin#2026!',
+        'User#2026!'
+      ]);
       for (const row of userRows.results) {
         let plain = undefined;
-        if (row.password_hash) {
+        if (row.password_hash && !REVOKED_LEGACY_PASSWORDS.has(row.password_hash)) {
           if (row.password_hash.startsWith('sha256:')) {
             plain = row.password_hash.slice(7);
           } else {
             plain = row.password_hash;
           }
+        }
+        if (plain && REVOKED_LEGACY_PASSWORDS.has(plain)) {
+          plain = undefined;
         }
         const existing = users.get(row.email.toLowerCase());
         const dName = (row.display_name === 'LINE Demo User' || !row.display_name) ? 'LUNO Demo User' : row.display_name;
@@ -2336,6 +2349,10 @@ export default {
           (u.phone && u.phone === identifier)
         );
         if (!user) {
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!']);
+        if (REVOKED_LEGACY_PASSWORDS.has(body.password)) {
           return json({ error: 'invalid credentials' }, 401);
         }
         const valid = (user.password && user.password === body.password) ||
