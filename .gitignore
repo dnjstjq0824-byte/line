@@ -30,3 +30,10 @@ dist_cf/
 
 *.apk
 
+# Large raw WBS ledgers (tracked via .gz compressed counterparts)
+docs/roadmap/luno-100k/LUNO_100K_WBS.csv
+docs/roadmap/luno-100k/LUNO_100K_WBS.jsonl
+docs/roadmap/luno-100k/LUNO_QA_TASK_REGISTER.csv
+docs/roadmap/luno-100k/LUNO_ACCEPTANCE_CRITERIA.csv
+docs/roadmap/luno-100k/LUNO_SECURITY_TASK_REGISTER.csv
+

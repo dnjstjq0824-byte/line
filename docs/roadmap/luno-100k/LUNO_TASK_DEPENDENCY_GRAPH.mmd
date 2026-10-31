@@ -1,0 +1,81 @@
+flowchart TD
+    %% =========================================================================
+    %% LUNO GLOBAL MESSENGER — 100,000 ATOMIC TASK ARCHITECTURAL DEPENDENCY GRAPH
+    %% =========================================================================
+
+    subgraph WS01 ["WS01: 제품 기획·브랜드·디자인 (10,000 Tasks)"]
+        PKG01["PKG01: Brand Identity"] --> PKG02["PKG02: Design Tokens"]
+        PKG02 --> PKG03["PKG03: Typography"]
+        PKG03 --> PKG04["PKG04: UI Component Library"]
+        PKG04 --> PKG08["PKG08: Theme System"]
+    end
+
+    subgraph WS02 ["WS02: 계정·인증·이메일 (10,000 Tasks)"]
+        PKG11["PKG11: Registration"] --> PKG13["PKG13: Email Verification"]
+        PKG13 --> PKG15["PKG15: Phone SMS OTP"]
+        PKG15 --> PKG16["PKG16: Dynamic QR Login"]
+        PKG16 --> PKG18["PKG18: Session & Devices"]
+    end
+
+    subgraph WS06 ["WS06: DB·영속성·동기화 (10,000 Tasks)"]
+        PKG51["PKG51: PostgreSQL Schema"] --> PKG52["PKG52: Cloudflare D1 Sync"]
+        PKG52 --> PKG53["PKG53: Transactional Outbox"]
+        PKG53 --> PKG54["PKG54: Sync Cursors"]
+        PKG54 --> PKG55["PKG55: De-duplication"]
+    end
+
+    subgraph WS03 ["WS03: 프로필·친구·관계망 (10,000 Tasks)"]
+        PKG21["PKG21: User Profile"] --> PKG22["PKG22: Friend Search"]
+        PKG22 --> PKG23["PKG23: Request & Approval"]
+        PKG23 --> PKG25["PKG25: Social Graph Edges"]
+    end
+
+    subgraph WS04 ["WS04: 1:1 실시간 메시징 (10,000 Tasks)"]
+        PKG31["PKG31: Message Dispatch"] --> PKG32["PKG32: WebSocket Transport"]
+        PKG32 --> PKG33["PKG33: Sent/Delivered/Read"]
+        PKG33 --> PKG40["PKG40: Offline Queue"]
+    end
+
+    subgraph WS05 ["WS05: 그룹·커뮤니티 (10,000 Tasks)"]
+        PKG41["PKG41: Group Creation"] --> PKG42["PKG42: Member Invites"]
+        PKG42 --> PKG43["PKG43: Group RBAC"]
+        PKG43 --> PKG44["PKG44: Multicast Fanout"]
+    end
+
+    subgraph WS07 ["WS07: 미디어·파일·통화·알림 (10,000 Tasks)"]
+        PKG61["PKG61: Image Ingestion"] --> PKG65["PKG65: S3 Storage & Signed URLs"]
+        PKG65 --> PKG67["PKG67: WebRTC Calling"]
+        PKG67 --> PKG69["PKG69: Push Notifications"]
+    end
+
+    subgraph WS08 ["WS08: 보안·E2EE·개인정보 (10,000 Tasks)"]
+        PKG71["PKG71: Signal Ratchet"] --> PKG72["PKG72: Pre-Key Bundles"]
+        PKG72 --> PKG73["PKG73: Safety Numbers"]
+        PKG73 --> PKG76["PKG76: Encrypted Attachments"]
+    end
+
+    subgraph WS09 ["WS09: PC·모바일·다국어 (10,000 Tasks)"]
+        PKG81["PKG81: PC 3-Column Workstation"] --> PKG82["PKG82: PC 2-Column Auth Window"]
+        PKG81 --> PKG84["PKG84: Mobile Flutter Native"]
+        PKG84 --> PKG87["PKG87: 13-Language i18n"]
+    end
+
+    subgraph WS10 ["WS10: Open Scanner 통합·QA·DevOps (10,000 Tasks)"]
+        PKG91["PKG91: 13-Service Launcher"] --> PKG93["PKG93: AI Real-Time Translation"]
+        PKG93 --> PKG97["PKG97: Automated E2E Suite"]
+        PKG97 --> PKG100["PKG100: Commercial Launch Gates"]
+    end
+
+    %% Cross-Workstream Core Foundation Links
+    PKG04 --> PKG81
+    PKG04 --> PKG84
+    PKG18 --> PKG51
+    PKG51 --> PKG25
+    PKG51 --> PKG31
+    PKG25 --> PKG41
+    PKG32 --> PKG44
+    PKG71 --> PKG31
+    PKG76 --> PKG65
+    PKG69 --> PKG84
+    PKG81 --> PKG91
+    PKG97 --> PKG100

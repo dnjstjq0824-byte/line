@@ -1,21 +1,34 @@
 /* ==========================================================================
-   OPEN MESSENGER — DESIGN TOKENS (Open Scanner Ecosystem Directive)
+   LUNO GLOBAL MESSENGER — DESIGN TOKENS (PO Master Directive Chapter 2.B)
+   Friendly Global Communication + Intelligent Minimalism
    ========================================================================== */
 
 :root {
-  /* Brand Primary & Accents */
-  --om-primary: #2563EB;
-  --om-primary-hover: #1D4ED8;
-  --om-primary-light: #EFF6FF;
-  --om-cyan: #22C7E8;
-  --om-cyan-light: #ECFEFF;
+  /* LUNO Official Brand Palette */
+  --luno-primary: #4F7CFF;
+  --luno-blue: #4F7CFF;
+  --luno-sky: #8EC5FF;
+  --luno-mint: #5EE6C2;
+  --luno-navy: #14213D;
+  --luno-cloud: #F7FAFF;
+
+  /* Typography Stack (Pretendard / Inter / Noto Sans) */
+  --luno-font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+
+  /* Brand Primary & Accents (Aliased for Full Backward Compatibility) */
+  --om-primary: var(--luno-blue, #4F7CFF);
+  --om-primary-hover: #3b66e8;
+  --om-primary-light: #eaf1ff;
+  --om-cyan: var(--luno-sky, #8EC5FF);
+  --om-cyan-light: #f0f7ff;
+  --om-mint: var(--luno-mint, #5EE6C2);
   --om-violet: #7C3AED;
   --om-violet-light: #F5F3FF;
 
   /* Neutrals & Surfaces */
-  --om-midnight: #0B1020;
-  --om-midnight-surface: #0F172A;
-  --om-bg: #F7F9FC;
+  --om-midnight: var(--luno-navy, #14213D);
+  --om-midnight-surface: #1e293b;
+  --om-bg: var(--luno-cloud, #F7FAFF);
   --om-surface: #FFFFFF;
   --om-border: #E2E8F0;
   --om-border-light: #F1F5F9;
@@ -51,13 +64,14 @@
 
 /* Dark Theme Overrides */
 [data-theme='dark'] {
-  --om-bg: #0B1020;
-  --om-surface: #0F172A;
-  --om-border: #1E293B;
-  --om-border-light: #1E293B;
+  --om-bg: #14213D;
+  --om-surface: #1E293B;
+  --om-border: #334155;
+  --om-border-light: #334155;
   --om-text: #F8FAFC;
   --om-text-muted: #94A3B8;
   --om-text-subtle: #64748B;
   --om-primary-light: #1E3A8A;
   --om-cyan-light: #164E63;
 }
+

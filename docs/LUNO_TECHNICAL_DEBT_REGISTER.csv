@@ -1,0 +1,6 @@
+debt_id,category,severity,description,mitigation,status
+"TD-001","Third-Party Telecom","HIGH","Real SMS OTP requires commercial telco gateway contract (Twilio/Aligo) for non-test phone numbers.","Test carrier fallback (123456) currently active in staging and edge worker.","OPEN_EXTERNAL"
+"TD-002","Apple Push Services","MEDIUM","iOS Native APNs push requires Apple Developer paid team key (.p8).","WebPush and WebSocket real-time delivery active as primary channels.","OPEN_EXTERNAL"
+"TD-003","SFU Scaling","LOW","WebRTC calling currently operates P2P mesh for 1:1 and small calls; 10+ participant calls require LiveKit SFU server.","Calling works flawlessly for 1:1; cluster provisioning scheduled for Phase 9.","PLANNED"
+"TD-004","Offline Delta Cursor","LOW","Client-side IndexedDB local SQLite cache can be expanded for full multi-gigabyte historical archive on desktop.","In-memory and server cursor sync currently keeps recent 500 messages per room.","IN_PROGRESS"
+"TD-005","Brand Consistency","LOW","Ensure all legacy documentation files reference LUNO as the canonical global brand name.","Brand token CSS and manifests updated to LUNO with dual compatibility.","RESOLVED"
