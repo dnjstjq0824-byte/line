@@ -153,6 +153,12 @@ const selectedFriendProfile = ref<User | null>(null)
 const friendSearchQuery = ref('')
 const friendsSectionOpen = ref(true)
 const groupsSectionOpen = ref(true)
+const favoritesSectionOpen = ref(true)
+const officialSectionOpen = ref(true)
+const chatWallpaper = ref<'skyblue' | 'slate' | 'mint' | 'dark'>('skyblue')
+const messagesCanvasRef = ref<HTMLElement | null>(null)
+const callFilter = ref<'all' | 'missed'>('all')
+const activeHeroSlideIndex = ref(0)
 const isPanelCollapsed = ref(false)
 const chatSortAsc = ref(false)
 const showNewChatModal = ref(false)
@@ -176,21 +182,64 @@ export interface NewsArticle {
 
 const showQrModal = ref(false)
 
-const newsCategories = ['전체', '인기', '경제', 'IT/과학', '글로벌', '엔터']
+const newsCategories = ['전체', '인기', '경제', 'IT/과학', '글로벌', '엔터', '북마크']
 const selectedNewsCategory = ref('전체')
 const activeNewsArticle = ref<NewsArticle | null>(null)
 const newsBookmarks = ref<Set<string>>(new Set())
 
-const heroNews = ref<NewsArticle>({
-  id: 'news-hero-01',
-  title: '단독 "SKY 학벌 중시하는 서울, 삶의 질은 세계 113위"',
-  press: '매일경제',
-  category: '경제',
-  published_at: '10분 전',
-  image_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-  summary: '서울의 글로벌 경쟁력과 정주 여건을 종합 평가한 결과, 교육열과 학벌 지표 대비 삶의 질 지수는 113위로 나타났다...',
-  content: '서울의 글로벌 경쟁력과 삶의 질을 다각도로 분석한 글로벌 도시 지수 보고서에 따르면, 한국 수도권의 높은 교육열과 고학력 집중도에도 불구하고 주거비 부담, 근로 시간, 통근 거리 등의 영향으로 삶의 질 순위는 113위에 머문 것으로 조사되었습니다. 전문가들은 지속 가능한 도시 발전을 위해 주거 안정과 문화 공간 확충이 시급하다고 지적했습니다.'
-})
+const heroNewsSlides = ref<NewsArticle[]>([
+  {
+    id: 'news-hero-01',
+    title: '단독 "SKY 학벌 중시하는 서울, 삶의 질은 세계 113위"',
+    press: '매일경제',
+    category: '경제',
+    published_at: '10분 전',
+    image_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
+    summary: '서울의 글로벌 경쟁력과 정주 여건을 종합 평가한 결과, 교육열과 학벌 지표 대비 삶의 질 지수는 113위로 나타났다...',
+    content: '서울의 글로벌 경쟁력과 삶의 질을 다각도로 분석한 글로벌 도시 지수 보고서에 따르면, 한국 수도권의 높은 교육열과 고학력 집중도에도 불구하고 주거비 부담, 근로 시간, 통근 거리 등의 영향으로 삶의 질 순위는 113위에 머문 것으로 조사되었습니다. 전문가들은 지속 가능한 도시 발전을 위해 주거 안정과 문화 공간 확충이 시급하다고 지적했습니다.'
+  },
+  {
+    id: 'news-hero-02',
+    title: '글로벌 AI 메신저 LUNO, 실시간 다국어 동시통역 2.0 전격 출시',
+    press: '디지털타임스',
+    category: 'IT/과학',
+    published_at: '18분 전',
+    image_url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80',
+    summary: '음성·영상 통화 중 0.2초 이내 초저지연 AI 통역 자막을 제공하는 LUNO 2.0 엔진이 글로벌 배포를 시작했다...',
+    content: 'Open Scanner 생태계의 핵심 커뮤니케이션 플랫폼 LUNO가 초저지연 AI 실시간 통역 자막과 Signal급 종단간 암호화(Letter Sealing)를 결합한 신규 업데이트를 발표했습니다.'
+  },
+  {
+    id: 'news-hero-03',
+    title: '미 연준 금리 동결 시사… 아시아 증시 일제히 강세 출발',
+    press: '한국경제',
+    category: '경제',
+    published_at: '32분 전',
+    image_url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80',
+    summary: '글로벌 인플레이션 둔화 지표가 확인되면서 코스피와 나스닥 선물 지수가 동반 상승세를 기록 중이다...',
+    content: '주요국 물가 상승률이 안정권에 접어들면서 기술주와 반도체 섹터를 중심으로 외국인 매수세가 유입되고 있습니다.'
+  },
+  {
+    id: 'news-hero-04',
+    title: 'K-콘텐츠 글로벌 열풍 지속… 신작 드라마 아시아 12개국 1위',
+    press: '스포츠조선',
+    category: '엔터',
+    published_at: '45분 전',
+    image_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80',
+    summary: '주말 첫 방송을 시작한 한국 드라마가 일본, 태국, 대만 등 아시아 주요 OTT 차트 정상을 석권했다...',
+    content: '탄탄한 각본과 배우들의 열연이 어우러진 신작 드라마가 글로벌 팬들의 호평 속에 기록적인 시청 시간을 달성하고 있습니다.'
+  },
+  {
+    id: 'news-hero-05',
+    title: '차세대 클라우드 엣지 네트워크, 전 세계 응답속도 35ms 이하 달성',
+    press: '전자신문',
+    category: '글로벌',
+    published_at: '1시간 전',
+    image_url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&auto=format&fit=crop&q=80',
+    summary: '전 세계 300개 이상의 엣지 데이터센터를 연결한 메시징 인프라가 지연 없는 실시간 통신 표준을 제시했다...',
+    content: '글로벌 어디서나 끊김 없는 메시지 동기화와 고화질 WebRTC 통화를 보장하는 엣지 네트워크 기술이 상용화되었습니다.'
+  }
+])
+const heroNews = computed(() => heroNewsSlides.value[activeHeroSlideIndex.value] || heroNewsSlides.value[0])
 
 const popularNewsList = ref<NewsArticle[]>([
   {
@@ -240,11 +289,22 @@ const popularNewsList = ref<NewsArticle[]>([
 ])
 
 const filteredPopularNews = computed(() => {
+  if (selectedNewsCategory.value === '북마크') {
+    const all = [...heroNewsSlides.value, ...popularNewsList.value]
+    return all.filter(a => newsBookmarks.value.has(a.id))
+  }
   if (selectedNewsCategory.value === '전체' || selectedNewsCategory.value === '인기') {
     return popularNewsList.value
   }
   const filtered = popularNewsList.value.filter(a => a.category === selectedNewsCategory.value)
   return filtered.length > 0 ? filtered : popularNewsList.value
+})
+
+const filteredCallHistory = computed(() => {
+  if (callFilter.value === 'missed') {
+    return callHistoryList.value.filter(c => c.direction === 'missed')
+  }
+  return callHistoryList.value
 })
 
 function openNewsArticle(article: NewsArticle) {
@@ -614,36 +674,158 @@ async function startCallWithUser(friend: User, kind: 'voice' | 'video') {
   await startCall(kind)
 }
 
-function openFriendContextMenu(e: MouseEvent, friend: User) {
+async function toggleFriendFavorite(friend: User) {
+  await wrap(async () => {
+    const next = !(friend as any).is_favorite
+    await api(`/api/v1/friends/${friend.id}`, 'PATCH', { favorite: next })
+    ;(friend as any).is_favorite = next
+    await loadFriends()
+    note.value = next ? `★ ${friend.display_name}님을 즐겨찾기에 추가했습니다.` : `${friend.display_name}님을 즐겨찾기에서 해제했습니다.`
+  })
+}
+
+async function toggleFriendBlock(friend: User) {
+  await wrap(async () => {
+    const next = !(friend as any).is_blocked
+    await api(`/api/v1/friends/${friend.id}`, 'PATCH', { blocked: next })
+    ;(friend as any).is_blocked = next
+    await loadFriends()
+    note.value = next ? `🚫 ${friend.display_name}님을 차단했습니다.` : `${friend.display_name}님 차단을 해제했습니다.`
+  })
+}
+
+async function followOrOpenOfficialAccount(oa: { id: string; name: string; followed: boolean }) {
+  await wrap(async () => {
+    const res = await api<{ conversation_id?: string }>(`/api/v1/official-accounts/${oa.id}/follow`, 'POST', {})
+    await Promise.all([loadOfficialAccounts(), loadChats()])
+    if (res.conversation_id) {
+      await selectChat(res.conversation_id)
+    }
+  })
+}
+
+async function openKeepMemoChat() {
+  await selectChat('keep-memo')
+}
+
+async function toggleChatPin(chat: Chat) {
+  await wrap(async () => {
+    const next = !(chat as any).pinned
+    await api(`/api/v1/conversations/${chat.id}/meta`, 'PATCH', { pinned: next })
+    ;(chat as any).pinned = next
+    await loadChats()
+    note.value = next ? '📌 대화방을 상단에 고정했습니다.' : '상단 고정을 해제했습니다.'
+  })
+}
+
+async function toggleChatMute(chat: Chat) {
+  await wrap(async () => {
+    const next = !(chat as any).muted
+    await api(`/api/v1/conversations/${chat.id}/meta`, 'PATCH', { muted: next })
+    ;(chat as any).muted = next
+    await loadChats()
+    note.value = next ? '🔕 대화방 알림을 껐습니다.' : '🔔 대화방 알림을 켰습니다.'
+  })
+}
+
+async function markChatAsRead(chat: Chat) {
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${chat.id}/read`, 'POST', { sequence: chat.last_sequence || 999999 })
+    await loadChats()
+    note.value = '✓ 읽음 처리되었습니다.'
+  })
+}
+
+async function markAllChatsRead() {
+  await wrap(async () => {
+    await api('/api/v1/conversations/read-all', 'POST', {})
+    await loadChats()
+    note.value = '✓✓ 모든 대화방을 읽음 처리했습니다.'
+  })
+}
+
+async function leaveOrHideChat(chat: Chat) {
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${chat.id}`, 'DELETE')
+    if (selectedChatId.value === chat.id) selectedChatId.value = ''
+    await loadChats()
+    note.value = '대화방에서 나갔습니다.'
+  })
+}
+
+function openChatContextMenu(e: MouseEvent, chat: Chat) {
   e.preventDefault()
+  const isPinned = !!(chat as any).pinned
+  const isMuted = !!(chat as any).muted
   const items: ContextMenuItem[] = [
     {
-      label: '1:1 대화',
+      label: isPinned ? '📌 상단 고정 해제' : '📌 대화방 상단 고정',
+      action: () => toggleChatPin(chat)
+    },
+    {
+      label: isMuted ? '🔔 알림 켜기' : '🔕 알림 끄기',
+      action: () => toggleChatMute(chat)
+    },
+    {
+      label: '✓ 읽음으로 표시',
+      action: () => markChatAsRead(chat)
+    },
+    {
+      label: '🚪 대화방 나가기',
+      danger: true,
+      separator: true,
+      action: () => leaveOrHideChat(chat)
+    }
+  ]
+  contextMenu.value = {
+    visible: true,
+    x: Math.min(e.clientX, window.innerWidth - 180),
+    y: Math.min(e.clientY, window.innerHeight - 220),
+    items
+  }
+}
+
+function openFriendContextMenu(e: MouseEvent, friend: User) {
+  e.preventDefault()
+  const isFav = !!(friend as any).is_favorite
+  const isBlk = !!(friend as any).is_blocked
+  const items: ContextMenuItem[] = [
+    {
+      label: '💬 1:1 대화',
       action: () => startDirectChat(friend)
     },
     {
-      label: '음성 통화',
+      label: isFav ? '★ 즐겨찾기 해제' : '☆ 즐겨찾기 추가',
+      action: () => toggleFriendFavorite(friend)
+    },
+    {
+      label: '📞 음성 통화',
       action: () => startCallWithUser(friend, 'voice')
     },
     {
-      label: '영상 통화',
+      label: '📹 영상 통화',
       action: () => startCallWithUser(friend, 'video')
     },
     {
-      label: '프로필 보기',
+      label: '👤 프로필 보기',
       action: () => { activeProfileUser.value = friend }
     },
     {
-      label: '송금하기',
+      label: '💸 송금하기',
       separator: true,
       action: () => openSendMoneyModal(friend)
+    },
+    {
+      label: isBlk ? '차단 해제' : '🚫 차단하기',
+      danger: !isBlk,
+      action: () => toggleFriendBlock(friend)
     }
   ]
 
   contextMenu.value = {
     visible: true,
     x: Math.min(e.clientX, window.innerWidth - 180),
-    y: Math.min(e.clientY, window.innerHeight - 220),
+    y: Math.min(e.clientY, window.innerHeight - 260),
     items
   }
 }
@@ -735,6 +917,7 @@ const formattedQrCountdown = computed(() => {
 })
 
 const groupChats = computed(() => chats.value.filter(c => c.kind === 'group'))
+const favoriteFriends = computed(() => filteredFriends.value.filter(f => (f as any).is_favorite))
 
 const filteredFriends = computed(() => {
   if (!friendSearchQuery.value.trim()) return friends.value
@@ -1193,6 +1376,7 @@ async function selectChat(convId: string) {
         }
       }
     }
+    scrollToBottom()
     await Promise.all([loadChats(), loadPolls(convId)])
   } catch (e: any) {
     if (selectedChatId.value === convId && version === chatSelectVersion) {
@@ -1337,6 +1521,8 @@ async function sendMessage() {
     if (!messages.value.some(m => m.id === res.message.id)) {
       messages.value.push(res.message)
     }
+    playSendSound()
+    scrollToBottom()
     await loadChats()
   } catch (e) {
     void queueOfflineMessage({
@@ -1421,20 +1607,116 @@ async function toggleVoiceRecording() {
   }
 }
 
-async function sendSticker(stickerChar: string) {
+function scrollToBottom() {
+  setTimeout(() => {
+    if (messagesCanvasRef.value) {
+      messagesCanvasRef.value.scrollTop = messagesCanvasRef.value.scrollHeight
+    }
+  }, 40)
+}
+
+async function sendSticker(stickerId: string) {
   if (!selectedChatId.value) return
   showStickerPicker.value = false
+  const found = LINE_STICKERS.find(s => s.id === stickerId)
   await wrap(async () => {
     const res = await api<{ message: Message }>(`/api/v1/conversations/${selectedChatId.value}/messages`, 'POST', {
       client_id: newClientID(),
       kind: 'sticker',
-      body: stickerChar
+      body: stickerId,
+      metadata: {
+        sticker_id: stickerId,
+        character: found?.character || 'Lumi',
+        label: found?.name || stickerId
+      }
     })
     if (!messages.value.some(m => m.id === res.message.id)) {
       messages.value.push(res.message)
     }
+    playSendSound()
+    scrollToBottom()
     await loadChats()
   })
+}
+
+async function sendLocationMessage() {
+  if (!selectedChatId.value) return
+  const convId = selectedChatId.value
+  await wrap(async () => {
+    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
+      client_id: newClientID(),
+      kind: 'location',
+      body: '서울특별시 강남구 테헤란로 152 (역삼동)',
+      metadata: {
+        lat: 37.5006,
+        lng: 127.0364,
+        label: '서울특별시 강남구 테헤란로 152 (강남파이낸스센터)'
+      }
+    })
+    if (!messages.value.some(m => m.id === res.message.id)) {
+      messages.value.push(res.message)
+    }
+    playSendSound()
+    scrollToBottom()
+    await loadChats()
+    note.value = '📍 현재 위치 정보가 전송되었습니다.'
+  })
+}
+
+async function sendContactMessage() {
+  if (!selectedChatId.value) return
+  const convId = selectedChatId.value
+  const f = friends.value[0]
+  await wrap(async () => {
+    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
+      client_id: newClientID(),
+      kind: 'contact',
+      body: f?.display_name || 'K 🙏',
+      metadata: {
+        user_id: f?.id || 'peer-k',
+        handle: f?.handle || 'k_pray',
+        display_name: f?.display_name || 'K 🙏'
+      }
+    })
+    if (!messages.value.some(m => m.id === res.message.id)) {
+      messages.value.push(res.message)
+    }
+    playSendSound()
+    scrollToBottom()
+    await loadChats()
+    note.value = '👤 연락처 카드를 공유했습니다.'
+  })
+}
+
+async function captureScreenToChat() {
+  if (!selectedChatId.value) {
+    switchNav('chats')
+    if (chats.value.length > 0) await selectChat(chats.value[0].id)
+  }
+  if (!selectedChatId.value) return
+  const convId = selectedChatId.value
+  await wrap(async () => {
+    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
+      client_id: newClientID(),
+      kind: 'text',
+      body: '📸 [화면 캡처 공유] ' + new Date().toLocaleTimeString('ko-KR') + ' 데스크톱 작업 영역 스냅샷'
+    })
+    if (!messages.value.some(m => m.id === res.message.id)) {
+      messages.value.push(res.message)
+    }
+    playSendSound()
+    scrollToBottom()
+    await loadChats()
+    note.value = '✂️ 화면 캡처가 대화방에 전송되었습니다.'
+  })
+}
+
+function cycleWallpaper() {
+  const order: Array<'skyblue' | 'slate' | 'mint' | 'dark'> = ['skyblue', 'slate', 'mint', 'dark']
+  const next = order[(order.indexOf(chatWallpaper.value) + 1) % order.length]
+  chatWallpaper.value = next
+  const names: Record<string, string> = { skyblue: 'LINE 스카이블루', slate: '클린 화이트', mint: '민트 브리즈', dark: '미드나잇 다크' }
+  note.value = `🎨 대화방 배경이 [${names[next]}]로 변경되었습니다.`
 }
 
 function chooseAttachment(kind: 'image' | 'voice' | 'file') {
@@ -2682,6 +2964,11 @@ onMounted(() => {
             <span style="font-size: 16px;">📱</span>
           </a>
 
+          <!-- Screen Capture Button (Screenshot 1 & 4) -->
+          <button class="pc-rail-btn small" title="화면 캡처 전송" @click="captureScreenToChat">
+            <span style="font-size: 15px;">✂️</span>
+          </button>
+
           <!-- Keep Button -->
           <button class="pc-rail-btn small" :title="t('navKeep')" @click="showKeepModal = true">
             <LineIcon name="keep" :size="19" />
@@ -2791,7 +3078,7 @@ onMounted(() => {
               </div>
               <!-- Action Chips: Keep 메모 & 앨범 모아보기 (Matching Screenshot 4) -->
               <div class="my-profile-action-chips">
-                <button type="button" class="btn-profile-chip" @click="showKeepModal = true">
+                <button type="button" class="btn-profile-chip" @click="openKeepMemoChat">
                   <LineIcon name="keep" :size="13" />
                   <span>{{ t('keepMemo') }}</span>
                 </button>
@@ -2799,6 +3086,33 @@ onMounted(() => {
                   <LineIcon name="camera" :size="13" />
                   <span>{{ t('albumView') }}</span>
                 </button>
+              </div>
+            </div>
+
+            <!-- Accordion 0: Favorites (즐겨찾기) -->
+            <div v-if="favoriteFriends.length > 0" class="pc-accordion-section">
+              <div class="pc-accordion-header" @click="favoritesSectionOpen = !favoritesSectionOpen">
+                <span class="accordion-title">즐겨찾기 {{ favoriteFriends.length }}</span>
+                <span class="accordion-caret">{{ favoritesSectionOpen ? '⌵' : '›' }}</span>
+              </div>
+              <div v-show="favoritesSectionOpen" class="pc-accordion-content">
+                <div
+                  v-for="fav in favoriteFriends"
+                  :key="'fav-' + fav.id"
+                  class="pc-friend-item-row"
+                  :class="{ selected: selectedFriendProfile?.id === fav.id }"
+                  @click="selectFriend(fav)"
+                  @dblclick="startDirectChat(fav)"
+                  @contextmenu.prevent="openFriendContextMenu($event, fav)"
+                >
+                  <div class="pc-avatar circle-38" :style="{ background: fav.avatar_color || 'var(--om-primary, #4F7CFF)' }">
+                    {{ fav.display_name.slice(0, 1) }}
+                  </div>
+                  <div class="friend-item-meta">
+                    <div class="friend-item-name">★ {{ fav.display_name }}</div>
+                    <div class="friend-item-sub">{{ fav.status_message || fav.bio || 'LUNO 즐겨찾기 친구' }}</div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2830,6 +3144,30 @@ onMounted(() => {
               </div>
             </div>
 
+            <!-- Accordion 1.5: Official Accounts (공식 계정) -->
+            <div v-if="officialAccounts.length > 0" class="pc-accordion-section">
+              <div class="pc-accordion-header" @click="officialSectionOpen = !officialSectionOpen">
+                <span class="accordion-title">공식 계정 {{ officialAccounts.length }}</span>
+                <span class="accordion-caret">{{ officialSectionOpen ? '⌵' : '›' }}</span>
+              </div>
+              <div v-show="officialSectionOpen" class="pc-accordion-content">
+                <div
+                  v-for="oa in officialAccounts"
+                  :key="oa.id"
+                  class="pc-friend-item-row"
+                  @click="followOrOpenOfficialAccount(oa)"
+                >
+                  <div class="pc-avatar circle-38" :style="{ background: oa.color || '#06C755' }">
+                    🛡️
+                  </div>
+                  <div class="friend-item-meta">
+                    <div class="friend-item-name">{{ oa.name }} <span class="badge-verified">공식</span></div>
+                    <div class="friend-item-sub">{{ oa.description }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Accordion 2: Friends (친구 - Screenshots 4 & 5) -->
             <div class="pc-accordion-section">
               <div class="pc-accordion-header" @click="friendsSectionOpen = !friendsSectionOpen">
@@ -2850,7 +3188,10 @@ onMounted(() => {
                     {{ f.display_name.slice(0, 1) }}
                   </div>
                   <div class="friend-item-meta">
-                    <div class="friend-item-name">{{ f.display_name }}</div>
+                    <div class="friend-item-name">
+                      <span v-if="(f as any).is_favorite" class="fav-star-inline">★</span>
+                      {{ f.display_name }}
+                    </div>
                     <div class="friend-item-sub">{{ f.status_message || f.bio || 'LUNO 친구' }}</div>
                   </div>
                 </div>
@@ -2868,8 +3209,11 @@ onMounted(() => {
               <span class="dropdown-caret">▾</span>
             </div>
             <div class="chat-header-action-group">
-              <button class="btn-chat-head-tool" title="정렬 및 필터" @click="chatFilter = chatFilter === 'unread' ? 'all' : 'unread'">
-                <LineIcon name="drawer" :size="16" />
+              <button class="btn-chat-head-tool" title="모든 대화 읽음 처리" @click="markAllChatsRead">
+                ✓✓
+              </button>
+              <button class="btn-chat-head-tool" :title="chatSortAsc ? '이름순 정렬 중' : '최신순 정렬 중'" @click="chatSortAsc = !chatSortAsc">
+                ⇅
               </button>
               <button class="btn-chat-head-tool" title="사진 및 파일 모아보기" @click="toggleDrawer('media')">
                 <LineIcon name="photo" :size="16" />
@@ -2925,16 +3269,19 @@ onMounted(() => {
               class="pc-chat-item-row"
               :class="{ selected: selectedChatId === c.id }"
               @click="selectChat(c.id)"
+              @contextmenu.prevent="openChatContextMenu($event, c)"
             >
-              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #8EC5FF)' : c.official ? 'var(--om-mint, #5EE6C2)' : 'var(--om-primary, #4F7CFF)' }">
+              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #8EC5FF)' : c.official ? '#06C755' : 'var(--om-primary, #4F7CFF)' }">
                 <span v-if="c.official">🛡️</span>
                 <span v-else>{{ c.title ? c.title.slice(0, 1) : 'L' }}</span>
               </div>
               <div class="pc-chat-item-meta">
                 <div class="chat-row-top">
                   <div class="chat-row-title">
+                    <span v-if="(c as any).pinned" class="chat-pin-mark" title="상단 고정됨">📌</span>
                     {{ c.title || '대화방' }}
                     <span v-if="c.kind === 'group'" class="member-count-badge">({{ c.member_count || 2 }})</span>
+                    <span v-if="(c as any).muted" class="chat-mute-mark" title="알림 꺼짐">🔕</span>
                   </div>
                   <span class="chat-row-time">{{ formatTime(c.updated_at || '') }}</span>
                 </div>
@@ -2995,13 +3342,15 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
-              <!-- Carousel Dots Indicator -->
-              <div class="hero-carousel-dots">
-                <span class="dot active"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
+              <!-- Carousel Dots Indicator (Interactive 5 Slides - Screenshot 9) -->
+              <div class="hero-carousel-dots" @click.stop>
+                <span
+                  v-for="(slide, idx) in heroNewsSlides"
+                  :key="slide.id"
+                  class="dot"
+                  :class="{ active: activeHeroSlideIndex === idx }"
+                  @click.stop="activeHeroSlideIndex = idx"
+                ></span>
               </div>
             </div>
 
@@ -3058,10 +3407,16 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- Calls Filter Subtabs -->
+          <div class="pc-chat-subtabs-row">
+            <button class="btn-subtab" :class="{ active: callFilter === 'all' }" @click="callFilter = 'all'">전체 ({{ callHistoryList.length }})</button>
+            <button class="btn-subtab" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">부재중</button>
+          </div>
+
           <!-- Calls Scroll List -->
           <div class="pc-pane-scroll calls-scroll">
             <div
-              v-for="log in callHistoryList"
+              v-for="log in filteredCallHistory"
               :key="log.id"
               class="call-history-row"
               :class="{ 'is-missed': log.direction === 'missed', selected: selectedCallRecord?.id === log.id }"
@@ -3211,6 +3566,9 @@ onMounted(() => {
                 <LineIcon name="chats" :size="16" />
                 <span>1:1 대화방 이동</span>
               </button>
+              <button type="button" class="btn-subaction-pill" @click="removeCallRecord(selectedCallRecord.id); selectedCallRecord = callHistoryList[0] || null">
+                <span>🗑️ 이력 삭제</span>
+              </button>
             </div>
           </div>
         </div>
@@ -3304,6 +3662,7 @@ onMounted(() => {
               </select>
             </div>
 
+            <button class="btn-chat-action" title="배경 테마 변경" @click="cycleWallpaper">🎨</button>
             <button class="btn-chat-action" :title="t('callVoice')" @click="startCall('voice')"><LineIcon name="call-voice" :size="18" /></button>
             <button class="btn-chat-action" :title="t('callVideo')" @click="startCall('video')"><LineIcon name="call-video" :size="18" /></button>
             <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" title="일정 캘린더" @click="toggleDrawer('events')"><LineIcon name="calendar" :size="18" /></button>
@@ -3412,7 +3771,7 @@ onMounted(() => {
         </div>
 
         <!-- Message History Canvas -->
-        <div class="pc-chat-messages-canvas">
+        <div ref="messagesCanvasRef" class="pc-chat-messages-canvas" :class="'wallpaper-' + chatWallpaper">
           <!-- Loading State -->
           <div v-if="isLoadingMessages" class="chat-canvas-state">
             <p class="empty-muted">대화 내용을 불러오는 중입니다...</p>
@@ -3551,7 +3910,17 @@ onMounted(() => {
                         <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="editingMessageId = ''">취소</button>
                       </div>
                     </div>
-                    <div v-else-if="msg.kind === 'sticker' && getStickerSvg(msg.body)" class="bubble-sticker-svg" v-html="getStickerSvg(msg.body)"></div>
+                    <div v-else-if="msg.kind === 'sticker' && getStickerSvg(String(msg.metadata?.sticker_id || msg.body))" class="bubble-sticker-svg" v-html="getStickerSvg(String(msg.metadata?.sticker_id || msg.body))"></div>
+                    <div v-else-if="msg.kind === 'location'" class="bubble-location-card">
+                      <div class="loc-card-top">📍 위치 공유</div>
+                      <strong class="loc-card-label">{{ msg.metadata?.label || msg.body }}</strong>
+                      <small class="loc-card-coords">위도 {{ msg.metadata?.lat || 37.5006 }}, 경도 {{ msg.metadata?.lng || 127.0364 }}</small>
+                    </div>
+                    <div v-else-if="msg.kind === 'contact'" class="bubble-contact-card">
+                      <div class="contact-card-top">👤 연락처 카드</div>
+                      <strong class="contact-card-name">{{ msg.body }}</strong>
+                      <small class="contact-card-handle">@{{ msg.metadata?.handle || 'luno_friend' }}</small>
+                    </div>
                     <div v-else-if="msg.metadata?.attachment_id" class="bubble-attachment-box">
                       <span>📎 {{ msg.body }}</span>
                       <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="downloadAttachment(msg)">다운로드</button>
@@ -3606,6 +3975,11 @@ onMounted(() => {
           </template>
         </div>
 
+        <!-- Floating Scroll-to-Bottom Button (Matching Screenshot 7) -->
+        <button class="btn-scroll-bottom" title="맨 아래로 이동" @click="scrollToBottom">
+          ↓
+        </button>
+
         <!-- Chat Input Composer -->
         <footer class="pc-chat-input-dock">
           <!-- Reply Preview Banner -->
@@ -3648,6 +4022,9 @@ onMounted(() => {
             </button>
             <button class="btn-tool-icon" title="투표 만들기" @click="showPollCreateModal = true">📊</button>
             <button class="btn-tool-icon" title="일정 등록" @click="showEventCreateModal = true">📅</button>
+            <button class="btn-tool-icon" title="위치 공유" @click="sendLocationMessage">📍</button>
+            <button class="btn-tool-icon" title="연락처 공유" @click="sendContactMessage">👤</button>
+            <button class="btn-tool-icon" title="화면 캡처" @click="captureScreenToChat">✂️</button>
             <button class="btn-tool-icon" title="송금" @click="openSendMoneyFromChat">₩</button>
           </div>
 
@@ -3694,6 +4071,9 @@ onMounted(() => {
               <button type="button" class="btn-subaction-pill" title="송금하기" @click="openSendMoneyModal(selectedFriendProfile)">
                 <LineIcon name="money" :size="16" />
                 <span>송금하기</span>
+              </button>
+              <button type="button" class="btn-subaction-pill" title="즐겨찾기" @click="toggleFriendFavorite(selectedFriendProfile)">
+                <span>{{ (selectedFriendProfile as any).is_favorite ? '★ 즐겨찾기됨' : '☆ 즐겨찾기' }}</span>
               </button>
             </div>
           </div>
@@ -7465,4 +7845,95 @@ onMounted(() => {
 .wallet-tx-info { display: flex; flex-direction: column; }
 .wallet-tx-amount { font-weight: 700; color: #0f172a; }
 .wallet-tx-amount.plus { color: #16a34a; }
+
+/* Classic LINE Sky-Blue Wallpaper & Rich Message Cards (Screenshots 6 & 7) */
+.wallpaper-skyblue {
+  background: #8CABD9 !important;
+}
+.wallpaper-slate {
+  background: #F1F5F9 !important;
+}
+.wallpaper-mint {
+  background: #DCFCE7 !important;
+}
+.wallpaper-dark {
+  background: #0F172A !important;
+}
+.wallpaper-skyblue .pc-msg-row.mine .pc-speech-bubble {
+  background: #85E249;
+  color: #0F172A;
+}
+.wallpaper-skyblue .pc-msg-row.mine .luno-ai-translation-box {
+  background: rgba(15, 23, 42, 0.08);
+  border-left-color: #0F172A;
+  color: #0F172A;
+}
+.wallpaper-skyblue .pc-msg-row.mine .badge-engine {
+  color: #0F172A;
+}
+.wallpaper-skyblue .pc-msg-meta,
+.wallpaper-skyblue .pc-timestamp,
+.wallpaper-skyblue .pc-read-receipt {
+  color: rgba(15, 23, 42, 0.78);
+}
+.btn-scroll-bottom {
+  position: absolute;
+  right: 20px;
+  bottom: 152px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.btn-scroll-bottom:hover {
+  background: #ffffff;
+  transform: translateY(-2px);
+}
+.bubble-location-card,
+.bubble-contact-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 180px;
+}
+.loc-card-top,
+.contact-card-top {
+  font-size: 10.5px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+.loc-card-label,
+.contact-card-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.loc-card-coords,
+.contact-card-handle {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.fav-star-inline {
+  color: #f59e0b;
+  margin-right: 4px;
+}
+.chat-pin-mark {
+  font-size: 11px;
+  margin-right: 3px;
+}
+.chat-mute-mark {
+  font-size: 11px;
+  margin-left: 3px;
+  opacity: 0.7;
+}
 </style>

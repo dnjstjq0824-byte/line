@@ -534,12 +534,24 @@ const INLINE_MIME = /^(image\/(png|jpeg|gif|webp)|audio\/(webm|ogg|mp4|mpeg|wav)
  */
 
 const PEER_USERS = [
-  { id: 'peer-k', display_name: 'K 🙏', email: 'k@luno.local', avatar_color: '#315BCD', status_message: '기도하며 준비 중' },
-  { id: 'peer-dodo', display_name: '도천재 도도형님', email: 'dodo@luno.local', avatar_color: '#06c755', status_message: '최고의 개발자' },
-  { id: 'peer-daechul', display_name: '이대철', email: 'daechul@luno.local', avatar_color: '#8b5cf6', status_message: '' },
-  { id: 'peer-tuk', display_name: 'tuk', email: 'tuk@luno.local', avatar_color: '#f59e0b', status_message: 'Online' },
-  { id: 'peer-care', display_name: 'care 😸', email: 'care@luno.local', avatar_color: '#ec4899', status_message: 'Thank you' },
-  { id: 'peer-woralak', display_name: 'Woralak Duethesong', email: 'woralak@luno.local', avatar_color: '#06b6d4', status_message: 'Bangkok' }
+  { id: 'peer-k', display_name: 'K 🙏', handle: 'k_pray', email: 'k@luno.local', avatar_color: '#315BCD', status_message: '기도하며 준비 중' },
+  { id: 'peer-dodo', display_name: '도천재 도도형님', handle: 'dodo_genius', email: 'dodo@luno.local', avatar_color: '#06c755', status_message: '최고의 개발자' },
+  { id: 'peer-daechul', display_name: '이대철', handle: 'daechul_lee', email: 'daechul@luno.local', avatar_color: '#8b5cf6', status_message: '' },
+  { id: 'peer-tuk', display_name: 'tuk', handle: 'tuk_official', email: 'tuk@luno.local', avatar_color: '#f59e0b', status_message: 'Online' },
+  { id: 'peer-care', display_name: '😸care😸', handle: 'care_cat', email: 'care@luno.local', avatar_color: '#ec4899', status_message: 'Thank you' },
+  { id: 'peer-nunsinee', display_name: 'Nunsinee8995', handle: 'nunsinee8995', email: 'nunsinee@luno.local', avatar_color: '#14b8a6', status_message: 'BKK ✨' },
+  { id: 'peer-spasdream', display_name: '"Spasdream ✨', handle: 'spasdream', email: 'spasdream@luno.local', avatar_color: '#6366f1', status_message: 'Seoul trip' },
+  { id: 'peer-tonggg', display_name: "TONGGG'", handle: 'tonggg', email: 'tonggg@luno.local', avatar_color: '#10b981', status_message: 'Hi there' },
+  { id: 'peer-bbiw', display_name: 'B_biw', handle: 'b_biw', email: 'bbiw@luno.local', avatar_color: '#0ea5e9', status_message: 'Sunset lover' },
+  { id: 'peer-hyungchul', display_name: '형철♡위', handle: 'hyungchul_wi', email: 'hyungchul@luno.local', avatar_color: '#f43f5e', status_message: '행복하자 ♡' },
+  { id: 'peer-breezy', display_name: 'breezy_au', handle: 'breezy_au', email: 'breezy@luno.local', avatar_color: '#84cc16', status_message: 'IG: _breezy_au' },
+  { id: 'peer-woralak', display_name: 'Woralak Duethesong', handle: 'woralak_d', email: 'woralak@luno.local', avatar_color: '#06b6d4', status_message: 'Bangkok' },
+  { id: 'peer-adhd', display_name: 'ADHD환자', handle: 'adhd_joy', email: 'adhd@luno.local', avatar_color: '#f97316', status_message: 'hahaha' },
+  { id: 'peer-suhyun', display_name: '2016217012 박수현', handle: 'suhyun_park', email: 'suhyun@luno.local', avatar_color: '#a855f7', status_message: '졸업 프로젝트 중' },
+  { id: 'peer-andrew', display_name: 'andrew', handle: 'andrew_dev', email: 'andrew@luno.local', avatar_color: '#3b82f6', status_message: 'Building products' },
+  { id: 'peer-andy', display_name: 'Andy', handle: 'andy_kr', email: 'andy@luno.local', avatar_color: '#0284c7', status_message: 'Coffee first ☕' },
+  { id: 'peer-annie', display_name: 'Annie', handle: 'annie_lee', email: 'annie@luno.local', avatar_color: '#e11d48', status_message: 'Have a lovely day' },
+  { id: 'peer-apinan', display_name: 'Apinan 🐶', handle: 'iamapinan', email: 'apinan@luno.local', avatar_color: '#4f46e5', status_message: '@iamapinan' }
 ];
 
 function initPeerUsers() {
@@ -562,6 +574,7 @@ function resolveConversationId(cid, userId) {
   if (cid === 'oa-notice' || cid === 'chat-sec-01' || cid === 'oa_notice') {
     return `conv-oa-notice-${userId}`;
   }
+  if (cid === 'keep-memo' || cid === 'chat-keep') return `conv-keep-${userId}`;
   if (cid === 'chat-k-01') return `conv-k-${userId}`;
   if (cid === 'chat-dodo-01') return `conv-dodo-${userId}`;
   if (cid === 'chat-daechul-01') return `conv-daechul-${userId}`;
@@ -574,6 +587,29 @@ function resolveConversationId(cid, userId) {
 function ensureDefaultConversationsForUser(userId) {
   if (!userId) return;
   initPeerUsers();
+
+  // Ensure all peer friendships exist for this user
+  for (const p of PEER_USERS) {
+    friendships.set(`${userId}:${p.id}`, true);
+    friendships.set(`${p.id}:${userId}`, true);
+  }
+
+  // 0. Keep 메모 (Self-chat memo room)
+  const keepCid = `conv-keep-${userId}`;
+  if (!conversations.has(keepCid)) {
+    conversations.set(keepCid, {
+      id: keepCid,
+      kind: 'direct',
+      title: 'Keep 메모',
+      members: [userId],
+      last_sequence: 2,
+      updated_at: '2026-08-01T11:30:00Z'
+    });
+    messages.set(keepCid, [
+      { id: `m-keep-${userId}-1`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-1', sequence: 1, kind: 'text', body: '나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.', read_count: 1, created_at: '2026-08-01T11:00:00Z' },
+      { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: 'https://line-messenger.dnjstjqppk.workers.dev/ 프로덕션 점검 완료', read_count: 1, created_at: '2026-08-01T11:30:00Z' }
+    ]);
+  }
 
   // 1. Official Security Notice Channel
   const secCid = `conv-oa-notice-${userId}`;
@@ -622,11 +658,9 @@ function ensureDefaultConversationsForUser(userId) {
     ]);
   }
 
-  // 2. K 🙏 (Direct Chat with Call Bubbles from Screenshot 2)
+  // 2. K 🙏 (Direct Chat with Call Bubbles from Screenshot 1 & 7)
   const kCid = `conv-k-${userId}`;
   if (!conversations.has(kCid)) {
-    friendships.set(`${userId}:peer-k`, true);
-    friendships.set(`peer-k:${userId}`, true);
     conversations.set(kCid, {
       id: kCid,
       kind: 'direct',
@@ -651,8 +685,6 @@ function ensureDefaultConversationsForUser(userId) {
   // 3. 도천재 도도형님
   const dodoCid = `conv-dodo-${userId}`;
   if (!conversations.has(dodoCid)) {
-    friendships.set(`${userId}:peer-dodo`, true);
-    friendships.set(`peer-dodo:${userId}`, true);
     conversations.set(dodoCid, {
       id: dodoCid,
       kind: 'direct',
@@ -667,27 +699,160 @@ function ensureDefaultConversationsForUser(userId) {
     ]);
   }
 
-  // 4. 이대철
+  // 4. 😸care😸 (Screenshot 1 & 8)
+  const careCid = `conv-care-${userId}`;
+  if (!conversations.has(careCid)) {
+    conversations.set(careCid, {
+      id: careCid,
+      kind: 'direct',
+      title: '😸care😸',
+      members: [userId, 'peer-care'],
+      last_sequence: 1,
+      updated_at: '2026-10-09T14:20:00Z'
+    });
+    messages.set(careCid, [
+      { id: `m-care-${userId}-1`, conversation_id: careCid, sender_id: 'peer-care', client_id: 'care-1', sequence: 1, kind: 'text', body: 'Thank you', created_at: '2026-10-09T14:20:00Z' }
+    ]);
+  }
+
+  // 5. Nunsinee8995 (Screenshot 1)
+  const nunsineeCid = `conv-nunsinee-${userId}`;
+  if (!conversations.has(nunsineeCid)) {
+    conversations.set(nunsineeCid, {
+      id: nunsineeCid,
+      kind: 'direct',
+      title: 'Nunsinee8995',
+      members: [userId, 'peer-nunsinee'],
+      last_sequence: 1,
+      updated_at: '2026-09-30T15:00:00Z'
+    });
+    messages.set(nunsineeCid, [
+      { id: `m-nunsinee-${userId}-1`, conversation_id: nunsineeCid, sender_id: 'peer-nunsinee', client_id: 'nunsinee-1', sequence: 1, kind: 'text', body: 'Ok', created_at: '2026-09-30T15:00:00Z' }
+    ]);
+    readCursors.set(`${nunsineeCid}:${userId}`, 1);
+  }
+
+  // 6. "Spasdream ✨ (Screenshot 1)
+  const spasdreamCid = `conv-spasdream-${userId}`;
+  if (!conversations.has(spasdreamCid)) {
+    conversations.set(spasdreamCid, {
+      id: spasdreamCid,
+      kind: 'direct',
+      title: '"Spasdream ✨',
+      members: [userId, 'peer-spasdream'],
+      last_sequence: 1,
+      updated_at: '2026-09-29T18:20:00Z'
+    });
+    messages.set(spasdreamCid, [
+      { id: `m-spasdream-${userId}-1`, conversation_id: spasdreamCid, sender_id: 'peer-spasdream', client_id: 'spasdream-1', sequence: 1, kind: 'text', body: 'oppa arrive seoul', created_at: '2026-09-29T18:20:00Z' }
+    ]);
+    readCursors.set(`${spasdreamCid}:${userId}`, 1);
+  }
+
+  // 7. TONGGG' (Screenshot 1)
+  const tongggCid = `conv-tonggg-${userId}`;
+  if (!conversations.has(tongggCid)) {
+    conversations.set(tongggCid, {
+      id: tongggCid,
+      kind: 'direct',
+      title: "TONGGG'",
+      members: [userId, 'peer-tonggg'],
+      last_sequence: 1,
+      updated_at: '2026-09-26T16:10:00Z'
+    });
+    messages.set(tongggCid, [
+      { id: `m-tonggg-${userId}-1`, conversation_id: tongggCid, sender_id: 'peer-tonggg', client_id: 'tonggg-1', sequence: 1, kind: 'text', body: 'Hi', created_at: '2026-09-26T16:10:00Z' }
+    ]);
+    readCursors.set(`${tongggCid}:${userId}`, 1);
+  }
+
+  // 8. B_biw (Screenshot 1)
+  const bbiwCid = `conv-bbiw-${userId}`;
+  if (!conversations.has(bbiwCid)) {
+    conversations.set(bbiwCid, {
+      id: bbiwCid,
+      kind: 'direct',
+      title: 'B_biw',
+      members: [userId, 'peer-bbiw'],
+      last_sequence: 1,
+      updated_at: '2026-09-26T14:00:00Z'
+    });
+    messages.set(bbiwCid, [
+      { id: `m-bbiw-${userId}-1`, conversation_id: bbiwCid, sender_id: 'peer-bbiw', client_id: 'bbiw-1', sequence: 1, kind: 'text', body: 'Ok', created_at: '2026-09-26T14:00:00Z' }
+    ]);
+    readCursors.set(`${bbiwCid}:${userId}`, 1);
+  }
+
+  // 9. 형철♡위 (Screenshot 1)
+  const hcCid = `conv-hyungchul-${userId}`;
+  if (!conversations.has(hcCid)) {
+    conversations.set(hcCid, {
+      id: hcCid,
+      kind: 'direct',
+      title: '형철♡위',
+      members: [userId, 'peer-hyungchul'],
+      last_sequence: 1,
+      updated_at: '2026-09-26T11:30:00Z'
+    });
+    messages.set(hcCid, [
+      { id: `m-hc-${userId}-1`, conversation_id: hcCid, sender_id: userId, client_id: 'hc-1', sequence: 1, kind: 'call_status', body: '통화가 취소됨', metadata: { call_type: 'voice', call_status: 'cancelled' }, created_at: '2026-09-26T11:30:00Z' }
+    ]);
+    readCursors.set(`${hcCid}:${userId}`, 1);
+  }
+
+  // 10. breezy_au (Screenshot 1)
+  const breezyCid = `conv-breezy-${userId}`;
+  if (!conversations.has(breezyCid)) {
+    conversations.set(breezyCid, {
+      id: breezyCid,
+      kind: 'direct',
+      title: 'breezy_au',
+      members: [userId, 'peer-breezy'],
+      last_sequence: 1,
+      updated_at: '2026-09-19T20:00:00Z'
+    });
+    messages.set(breezyCid, [
+      { id: `m-breezy-${userId}-1`, conversation_id: breezyCid, sender_id: 'peer-breezy', client_id: 'breezy-1', sequence: 1, kind: 'text', body: '辛苦了 姐姐', created_at: '2026-09-19T20:00:00Z' }
+    ]);
+    readCursors.set(`${breezyCid}:${userId}`, 1);
+  }
+
+  // 11. Group Chat: K 🙏, 초롱이, 배원섭 (3) (Screenshot 1)
+  const grpCid = `conv-grp-k-${userId}`;
+  if (!conversations.has(grpCid)) {
+    conversations.set(grpCid, {
+      id: grpCid,
+      kind: 'group',
+      title: 'K 🙏, 초롱이, 배원섭',
+      members: [userId, 'peer-k', 'peer-care'],
+      owner_id: userId,
+      last_sequence: 2,
+      updated_at: '2026-09-17T19:00:00Z'
+    });
+    messages.set(grpCid, [
+      { id: `m-grp-${userId}-1`, conversation_id: grpCid, sender_id: 'peer-k', client_id: 'grp-1', sequence: 1, kind: 'text', body: '이번 주 모임 장소 공유합니다!', created_at: '2026-09-17T18:55:00Z' },
+      { id: `m-grp-${userId}-2`, conversation_id: grpCid, sender_id: 'peer-care', client_id: 'grp-2', sequence: 2, kind: 'text', body: 'ㅋㅋ', created_at: '2026-09-17T19:00:00Z' }
+    ]);
+    readCursors.set(`${grpCid}:${userId}`, 2);
+  }
+
+  // 12. 이대철 (Screenshot 8)
   const daechulCid = `conv-daechul-${userId}`;
   if (!conversations.has(daechulCid)) {
-    friendships.set(`${userId}:peer-daechul`, true);
-    friendships.set(`peer-daechul:${userId}`, true);
     conversations.set(daechulCid, {
       id: daechulCid,
       kind: 'direct',
       title: '이대철',
       members: [userId, 'peer-daechul'],
       last_sequence: 0,
-      updated_at: '2026-10-29T10:00:00Z'
+      updated_at: '2026-09-10T10:00:00Z'
     });
     messages.set(daechulCid, []);
   }
 
-  // 5. tuk
+  // 13. tuk (Screenshot 8)
   const tukCid = `conv-tuk-${userId}`;
   if (!conversations.has(tukCid)) {
-    friendships.set(`${userId}:peer-tuk`, true);
-    friendships.set(`peer-tuk:${userId}`, true);
     conversations.set(tukCid, {
       id: tukCid,
       kind: 'direct',
@@ -699,31 +864,12 @@ function ensureDefaultConversationsForUser(userId) {
     messages.set(tukCid, [
       { id: `m-tuk-${userId}-1`, conversation_id: tukCid, sender_id: 'peer-tuk', client_id: 'tuk-1', sequence: 1, kind: 'text', body: 'Ok', created_at: '2026-09-04T12:00:00Z' }
     ]);
+    readCursors.set(`${tukCid}:${userId}`, 1);
   }
 
-  // 6. care 😸
-  const careCid = `conv-care-${userId}`;
-  if (!conversations.has(careCid)) {
-    friendships.set(`${userId}:peer-care`, true);
-    friendships.set(`peer-care:${userId}`, true);
-    conversations.set(careCid, {
-      id: careCid,
-      kind: 'direct',
-      title: 'care 😸',
-      members: [userId, 'peer-care'],
-      last_sequence: 1,
-      updated_at: '2026-08-19T14:20:00Z'
-    });
-    messages.set(careCid, [
-      { id: `m-care-${userId}-1`, conversation_id: careCid, sender_id: 'peer-care', client_id: 'care-1', sequence: 1, kind: 'text', body: 'Thank you', created_at: '2026-08-19T14:20:00Z' }
-    ]);
-  }
-
-  // 7. Woralak Duethesong
+  // 14. Woralak Duethesong (Screenshot 8)
   const woralakCid = `conv-woralak-${userId}`;
   if (!conversations.has(woralakCid)) {
-    friendships.set(`${userId}:peer-woralak`, true);
-    friendships.set(`peer-woralak:${userId}`, true);
     conversations.set(woralakCid, {
       id: woralakCid,
       kind: 'direct',
@@ -735,6 +881,7 @@ function ensureDefaultConversationsForUser(userId) {
     messages.set(woralakCid, [
       { id: `m-woralak-${userId}-1`, conversation_id: woralakCid, sender_id: 'peer-woralak', client_id: 'woralak-1', sequence: 1, kind: 'text', body: 'Woralak Duethesong님이 사진을 보냈습니다.', created_at: '2026-08-06T18:00:00Z' }
     ]);
+    readCursors.set(`${woralakCid}:${userId}`, 1);
   }
 }
 
@@ -905,6 +1052,16 @@ async function extended(p, request, url, me, token) {
   }
 
   // ---------- Conversations ----------
+  if (p === 'conversations/read-all' && method === 'POST') {
+    ensureDefaultConversationsForUser(myId);
+    for (const conv of conversations.values()) {
+      if (conv.members.includes(myId)) {
+        readCursors.set(`${conv.id}:${myId}`, conv.last_sequence || 0);
+        conv.unread_count = 0;
+      }
+    }
+    return json({ status: 'read_all' });
+  }
   if (p === 'conversations') {
     if (method === 'GET') {
       ensureDefaultConversationsForUser(myId);
@@ -975,7 +1132,7 @@ async function extended(p, request, url, me, token) {
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/meta$/)) && method === 'PATCH') {
     const b = await readJson(request);
-    const meta = cMeta(m[1], myId);
+    const meta = cMeta(resolveConversationId(m[1], myId), myId);
     for (const k of ['pinned', 'muted', 'hidden']) if (typeof b[k] === 'boolean') meta[k] = b[k];
     return json({ status: 'updated', meta });
   }
@@ -1041,10 +1198,15 @@ async function extended(p, request, url, me, token) {
         if (!body) return bad('메시지를 입력하세요');
         if (body.length > MAX_BODY) return bad('메시지가 너무 깁니다');
       } else if (kind === 'sticker') {
-        const pack = STICKER_CATALOG.find(pk => pk.id === meta.pack_id);
-        if (!pack || !pack.stickers.includes(body)) return bad('올바르지 않은 스티커입니다');
-        if (!packsOf(myId).has(pack.id)) return bad('보유하지 않은 스티커입니다', 403);
-        metadata.pack_id = pack.id;
+        if (meta.sticker_id) {
+          metadata = { ...meta };
+          body = body || meta.label || '스티커';
+        } else {
+          const pack = STICKER_CATALOG.find(pk => pk.id === meta.pack_id);
+          if (!pack || !pack.stickers.includes(body)) return bad('올바르지 않은 스티커입니다');
+          if (!packsOf(myId).has(pack.id)) return bad('보유하지 않은 스티커입니다', 403);
+          metadata.pack_id = pack.id;
+        }
       } else if (kind === 'location') {
         const lat = Number(meta.lat), lng = Number(meta.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return bad('위치 좌표가 올바르지 않습니다');
@@ -1052,15 +1214,24 @@ async function extended(p, request, url, me, token) {
         body = metadata.label || `위도 ${lat.toFixed(4)}, 경도 ${lng.toFixed(4)}`;
       } else if (kind === 'contact') {
         const u = usersById.get(meta.user_id);
-        if (!u) return bad('연락처 사용자를 찾을 수 없습니다', 404);
-        metadata = { user_id: u.id, handle: u.handle };
-        body = u.display_name;
+        if (!u && !meta.display_name) return bad('연락처 사용자를 찾을 수 없습니다', 404);
+        metadata = u ? { user_id: u.id, handle: u.handle } : { ...meta };
+        body = u ? u.display_name : (meta.display_name || body || '연락처');
+      } else if (kind === 'call_status' || kind === 'security_notice' || kind === 'pay' || kind === 'transfer' || kind === 'ciphertext') {
+        metadata = { ...meta };
+        body = clip(body || kind, MAX_BODY);
       } else {
         const att = attachmentStore.get(meta.attachment_id);
-        if (!att || att.conversation_id !== cid) return bad('첨부 파일을 찾을 수 없습니다', 404);
-        metadata = { attachment_id: att.id, mime_type: att.mime, name: att.name, size_bytes: att.size };
-        if (kind === 'voice') metadata.duration = intIn(meta.duration, 0, 300) ?? 0;
-        body = clip(body || att.name, 200);
+        if (att && att.conversation_id === cid) {
+          metadata = { attachment_id: att.id, mime_type: att.mime, name: att.name, size_bytes: att.size };
+          if (kind === 'voice') metadata.duration = intIn(meta.duration, 0, 300) ?? 0;
+          body = clip(body || att.name, 200);
+        } else if (meta.url || meta.filename || meta.duration !== undefined) {
+          metadata = { ...meta };
+          body = clip(body || meta.filename || kind, 200);
+        } else {
+          return bad('첨부 파일을 찾을 수 없습니다', 404);
+        }
       }
       if (Array.isArray(meta.mentions)) {
         metadata.mentions = Array.from(new Set(meta.mentions.filter(x => (x === 'all' && conv.kind === 'group') || conv.members.includes(x)))).slice(0, 50);
@@ -2251,7 +2422,7 @@ export default {
 
       // All conversation subresources share the same membership boundary.
       const conversationPath = p.match(/^conversations\/([^/]+)(?:\/|$)/);
-      if (conversationPath) {
+      if (conversationPath && conversationPath[1] !== 'read-all') {
         ensureDefaultConversationsForUser(authUser.id);
         const resolvedCid = resolveConversationId(conversationPath[1], authUser.id);
         const conversation = conversations.get(resolvedCid);

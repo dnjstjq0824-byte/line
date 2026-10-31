@@ -68,5 +68,30 @@ test('P0-1 & P0-2: Verify official security channel and sample conversations res
     body: '실시간 메시지 전송 테스트'
   });
   assert.equal(postRes.status, 201, 'Posting message should return 201 Created');
+
+  // 5. Verify Keep Memo self-chat resolves and works
+  const keepMsgRes = await api('conversations/keep-memo/messages?limit=50', token);
+  assert.equal(keepMsgRes.status, 200, 'Keep memo conversation must return 200 OK');
+  const keepData = await keepMsgRes.json();
+  assert.ok(keepData.messages.length >= 2, 'Keep memo should have initial memo messages');
+
+  // 6. Verify LUNO custom sticker, location, contact, and call_status messages work
+  for (const payload of [
+    { client_id: `st-${Date.now()}`, kind: 'sticker', body: 'lumi-hi', metadata: { sticker_id: 'lumi-hi', character: 'Lumi', label: '안녕!' } },
+    { client_id: `loc-${Date.now()}`, kind: 'location', body: '강남역', metadata: { lat: 37.5006, lng: 127.0364, label: '강남역' } },
+    { client_id: `cnt-${Date.now()}`, kind: 'contact', body: 'K 🙏', metadata: { user_id: 'peer-k', handle: 'k_pray', display_name: 'K 🙏' } },
+    { client_id: `call-${Date.now()}`, kind: 'call_status', body: '음성통화', metadata: { duration: '01:12', status: 'completed', call_type: 'voice' } }
+  ]) {
+    const r = await api(`conversations/${kConv.id}/messages`, token, 'POST', payload);
+    assert.equal(r.status, 201, `Posting ${payload.kind} message must return 201 Created`);
+  }
+
+  // 7. Verify conversation pin/mute and read-all and friend favorite
+  const metaRes = await api(`conversations/${kConv.id}/meta`, token, 'PATCH', { pinned: true, muted: true });
+  assert.equal(metaRes.status, 200, 'Pinning and muting conversation should return 200');
+  const readAllRes = await api('conversations/read-all', token, 'POST', {});
+  assert.equal(readAllRes.status, 200, 'Marking all conversations read should return 200');
+  const favRes = await api('friends/peer-adhd', token, 'PATCH', { favorite: true });
+  assert.equal(favRes.status, 200, 'Favoriting friend should return 200');
 });
 
