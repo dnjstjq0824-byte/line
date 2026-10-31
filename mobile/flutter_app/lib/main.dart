@@ -1092,6 +1092,183 @@ class _HomeState extends State<Home> {
   }
 
   // ==========================================================================
+  // NEWS TAB (Screenshot 5 Reference Implementation)
+  // ==========================================================================
+  Widget _buildNewsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        // Featured Hero News Card
+        Card(
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 180,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blueGrey.shade900, Colors.black87],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '단독 "SKY 학벌 중시하는 서울, 삶의 질은 세계 113위"',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, height: 1.3),
+                    ),
+                    SizedBox(height: 4),
+                    Text('매일경제 · 10분 전', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Ad Banner (Screenshot 5)
+        Card(
+          elevation: 0,
+          color: lunoCloudWhite,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: lunoMistGray)),
+          child: const ListTile(
+            dense: true,
+            leading: Text('AD', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: lunoSlateGray)),
+            title: Text('타협 없는 모바일 액션 · 몬스터헌터 아웃랜더스', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            subtitle: Text('사전 예약하기 >', style: TextStyle(fontSize: 11, color: lunoElectricBlue)),
+            trailing: Icon(Icons.videogame_asset, color: lunoElectricBlue),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text('오늘의 인기 기사', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        ),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          leading: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(color: lunoMistGray, borderRadius: BorderRadius.circular(8)),
+            alignment: Alignment.center,
+            child: const Text('1', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          title: const Text("시청자 콱 물었다...시청률 '12.9%' 인기 드라마", maxLines: 2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          subtitle: const Text('TV리포트 · 25분 전', style: TextStyle(fontSize: 11, color: lunoSlateGray)),
+        ),
+        const Divider(height: 1, color: lunoMistGray),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          leading: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(color: lunoMistGray, borderRadius: BorderRadius.circular(8)),
+            alignment: Alignment.center,
+            child: const Text('2', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          title: const Text('김혜수, 故 최불암 빈소서 무릎 꿇고 조의... 깊은 애도', maxLines: 2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          subtitle: const Text('스포츠조선 · 40분 전', style: TextStyle(fontSize: 11, color: lunoSlateGray)),
+        ),
+        const Divider(height: 1, color: lunoMistGray),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          leading: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(color: lunoMistGray, borderRadius: BorderRadius.circular(8)),
+            alignment: Alignment.center,
+            child: const Text('3', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          title: const Text('[단독] 차세대 AI 메신저 LUNO, 글로벌 500만 돌파', maxLines: 2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          subtitle: const Text('전자신문 · 1시간 전', style: TextStyle(fontSize: 11, color: lunoSlateGray)),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================================================
+  // CALLS TAB (Screenshot 3 Reference Implementation)
+  // ==========================================================================
+  Widget _buildCallsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text('통화', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ),
+        ListTile(
+          leading: const CircleAvatar(backgroundColor: lunoElectricBlue, child: Text('K', style: TextStyle(color: Colors.white))),
+          title: const Row(
+            children: [
+              Text('K 🙏', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              SizedBox(width: 4),
+              Text('(3)', style: TextStyle(fontSize: 13, color: lunoSlateGray)),
+            ],
+          ),
+          subtitle: const Row(
+            children: [
+              Icon(Icons.call_received, size: 14, color: lunoSlateGray),
+              SizedBox(width: 4),
+              Text('화요일', style: TextStyle(fontSize: 12, color: lunoSlateGray)),
+            ],
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.phone, color: lunoSuccessGreen),
+            onPressed: () => _startCall('voice'),
+          ),
+        ),
+        const Divider(height: 1, color: lunoMistGray),
+        ListTile(
+          leading: const CircleAvatar(backgroundColor: lunoElectricBlue, child: Text('K', style: TextStyle(color: Colors.white))),
+          title: const Row(
+            children: [
+              Text('K 🙏', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red)),
+              SizedBox(width: 4),
+              Text('(2)', style: TextStyle(fontSize: 13, color: Colors.red)),
+            ],
+          ),
+          subtitle: const Row(
+            children: [
+              Icon(Icons.call_missed, size: 14, color: Colors.red),
+              SizedBox(width: 4),
+              Text('화요일 · 부재중 전화', style: TextStyle(fontSize: 12, color: Colors.red)),
+            ],
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.phone, color: lunoSuccessGreen),
+            onPressed: () => _startCall('voice'),
+          ),
+        ),
+        const Divider(height: 1, color: lunoMistGray),
+        ListTile(
+          leading: const CircleAvatar(backgroundColor: Colors.teal, child: Text('T', style: TextStyle(color: Colors.white))),
+          title: const Text('tuk (2)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          subtitle: const Row(
+            children: [
+              Icon(Icons.call_made, size: 14, color: lunoSlateGray),
+              SizedBox(width: 4),
+              Text('8. 24. · 통화시간 3:12', style: TextStyle(fontSize: 12, color: lunoSlateGray)),
+            ],
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.phone, color: lunoSuccessGreen),
+            onPressed: () => _startCall('voice'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================================================
   // ACTIVE CHAT VIEWPORT
   // ==========================================================================
   Widget _buildActiveChatRoom() {
@@ -1420,7 +1597,7 @@ class _HomeState extends State<Home> {
               ),
             ),
           ),
-        // AUTHENTICATED TABS
+        // AUTHENTICATED TABS (IA 4 Core Tabs: Home, Chats, News, Calls)
         if (selfId.isNotEmpty && selectedId.isEmpty)
           Expanded(
             child: IndexedStack(
@@ -1428,8 +1605,8 @@ class _HomeState extends State<Home> {
               children: [
                 _buildHomeFriendsTab(),
                 _buildChatsTab(),
-                _buildFeedTab(),
-                _buildOpenChatTab(),
+                _buildNewsTab(),
+                _buildCallsTab(),
                 _buildWalletTab(),
                 _buildSettingsTab(),
               ],
@@ -1440,15 +1617,13 @@ class _HomeState extends State<Home> {
       ]),
       bottomNavigationBar: (selfId.isNotEmpty && selectedId.isEmpty)
           ? NavigationBar(
-              selectedIndex: currentTab,
+              selectedIndex: currentTab > 3 ? 0 : currentTab,
               onDestinationSelected: (idx) => setState(() => currentTab = idx),
               destinations: const [
-                NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '홈'),
+                NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '홈'),
                 NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: '대화'),
-                NavigationDestination(icon: Icon(Icons.play_circle_outline), selectedIcon: Icon(Icons.play_circle), label: '피드'),
-                NavigationDestination(icon: Icon(Icons.forum_outlined), selectedIcon: Icon(Icons.forum), label: '라운지'),
-                NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: '지갑'),
-                NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: '설정'),
+                NavigationDestination(icon: Icon(Icons.newspaper_outlined), selectedIcon: Icon(Icons.newspaper), label: '뉴스'),
+                NavigationDestination(icon: Icon(Icons.phone_outlined), selectedIcon: Icon(Icons.phone), label: '통화'),
               ],
             )
           : null,

@@ -56,6 +56,7 @@ export type Chat = {
   hidden?: boolean
   notice?: string
   official?: boolean
+  badge_n?: boolean
   member_count?: number
   members?: User[]
   updated_at?: string
