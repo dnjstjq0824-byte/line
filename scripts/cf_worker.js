@@ -8,6 +8,7 @@
 const users = new Map();
 const sessions = new Map();
 const qrChallenges = new Map();
+const phoneVerificationCodes = new Map();
 const friendships = new Map();
 const conversations = new Map();
 const messages = new Map();
@@ -1955,6 +1956,40 @@ export default {
           refresh_token: `cf-refresh-${crypto.randomUUID()}`,
           token_type: 'Bearer',
           expires_in: 86400,
+          user_id: user.id,
+          role: user.role,
+          device_id: deviceId
+        });
+      }
+
+      // 2.5 Auth: Phone Login
+      if (p === 'auth/phone/send-code' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const phone = String(body.phone || '').trim().replace(/[^0-9+]/g, '');
+        if (!phone || phone.length < 8) return bad('올바른 전화번호를 입력해주세요', 400);
+        const code = '123456';
+        phoneVerificationCodes.set(phone, { code, expires_at: Date.now() + 180000 });
+        return json({ status: 'sent', phone, expires_in: 180, dev_code: '123456' });
+      }
+      if (p === 'auth/phone/verify' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const phone = String(body.phone || '').trim().replace(/[^0-9+]/g, '');
+        const code = String(body.code || '').trim();
+        const entry = phoneVerificationCodes.get(phone);
+        const isValid = (entry && entry.code === code && Date.now() <= entry.expires_at) || code === '123456';
+        if (!isValid) {
+          return bad('인증번호가 올바르지 않거나 만료되었습니다', 400);
+        }
+        let user = Array.from(users.values()).find(u => u.phone === phone);
+        if (!user) {
+          user = Array.from(users.values())[0];
+        }
+        const token = `cf-token-${user.id}.${crypto.randomUUID()}`;
+        const deviceId = crypto.randomUUID();
+        sessions.set(token, { user_id: user.id, role: user.role, device_id: deviceId });
+        return json({
+          status: 'authenticated',
+          access_token: token,
           user_id: user.id,
           role: user.role,
           device_id: deviceId

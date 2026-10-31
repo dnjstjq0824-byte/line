@@ -1,0 +1,63 @@
+/* ==========================================================================
+   OPEN MESSENGER — DESIGN TOKENS (Open Scanner Ecosystem Directive)
+   ========================================================================== */
+
+:root {
+  /* Brand Primary & Accents */
+  --om-primary: #2563EB;
+  --om-primary-hover: #1D4ED8;
+  --om-primary-light: #EFF6FF;
+  --om-cyan: #22C7E8;
+  --om-cyan-light: #ECFEFF;
+  --om-violet: #7C3AED;
+  --om-violet-light: #F5F3FF;
+
+  /* Neutrals & Surfaces */
+  --om-midnight: #0B1020;
+  --om-midnight-surface: #0F172A;
+  --om-bg: #F7F9FC;
+  --om-surface: #FFFFFF;
+  --om-border: #E2E8F0;
+  --om-border-light: #F1F5F9;
+
+  /* Typography */
+  --om-text: #111827;
+  --om-text-muted: #64748B;
+  --om-text-subtle: #94A3B8;
+
+  /* States */
+  --om-success: #22C55E;
+  --om-warning: #F59E0B;
+  --om-error: #EF4444;
+  --om-info: #0284C7;
+
+  /* Layout Dimensions */
+  --om-rail-width: 62px;
+  --om-panel-width: 305px;
+  --om-header-height: 48px;
+
+  /* Radii */
+  --om-radius-sm: 6px;
+  --om-radius-md: 10px;
+  --om-radius-lg: 16px;
+  --om-radius-full: 9999px;
+
+  /* Shadows */
+  --om-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --om-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --om-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  --om-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Dark Theme Overrides */
+[data-theme='dark'] {
+  --om-bg: #0B1020;
+  --om-surface: #0F172A;
+  --om-border: #1E293B;
+  --om-border-light: #1E293B;
+  --om-text: #F8FAFC;
+  --om-text-muted: #94A3B8;
+  --om-text-subtle: #64748B;
+  --om-primary-light: #1E3A8A;
+  --om-cyan-light: #164E63;
+}

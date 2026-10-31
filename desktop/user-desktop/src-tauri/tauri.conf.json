@@ -1,7 +1,7 @@
 {
-  "productName": "LUNO",
+  "productName": "Open Messenger",
   "version": "2.0.0",
-  "identifier": "com.luno.messenger",
+  "identifier": "com.openscanner.messenger",
   "build": {
     "beforeDevCommand": "cd ../../ && npm run dev:user",
     "beforeBuildCommand": "cd ../../ && npm run build -w @messenger/user-web",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "LUNO — Connect Beyond Borders",
+        "title": "Open Messenger — Open Scanner Ecosystem",
         "width": 1100,
         "height": 760,
         "minWidth": 700,

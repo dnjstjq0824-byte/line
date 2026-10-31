@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 64" width="320" height="64" fill="none">
+  <defs>
+    <linearGradient id="omGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22C7E8" />
+      <stop offset="50%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#7C3AED" />
+    </linearGradient>
+  </defs>
+  <!-- Open Scanner Aperture / Bubble Symbol -->
+  <g transform="translate(4, 8)">
+    <rect width="48" height="48" rx="14" fill="url(#omGrad)" />
+    <!-- Scanner Eye / Chat Bubble Aperture -->
+    <circle cx="24" cy="24" r="14" fill="#FFFFFF" fill-opacity="0.2" />
+    <path d="M16 22a8 8 0 0 1 14.93-3.92L33 22l-3.92 1.07A8 8 0 0 1 16 22z" fill="#FFFFFF" />
+    <circle cx="24" cy="24" r="4.5" fill="#FFFFFF" />
+    <circle cx="31" cy="33" r="2.5" fill="#22C7E8" />
+  </g>
+  <!-- Text: OPEN MESSENGER -->
+  <text x="64" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Pretendard', 'Inter', sans-serif" font-weight="900" font-size="20" fill="#0B1020" letter-spacing="-0.5">OPEN <tspan fill="#2563EB">MESSENGER</tspan></text>
+  <text x="64" y="47" font-family="-apple-system, BlinkMacSystemFont, 'Pretendard', 'Inter', sans-serif" font-weight="600" font-size="11" fill="#64748B" letter-spacing="0.5">OPEN SCANNER ECOSYSTEM</text>
+</svg>

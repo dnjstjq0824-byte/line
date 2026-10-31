@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+  <defs>
+    <linearGradient id="omIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22C7E8" />
+      <stop offset="50%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#7C3AED" />
+    </linearGradient>
+    <filter id="omShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#2563EB" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="32" fill="url(#omIconGrad)" filter="url(#omShadow)"/>
+  <!-- Scanner Aperture + Chat Bubble -->
+  <path d="M40 38h48a18 18 0 0 1 18 18v22a18 18 0 0 1-18 18H58l-18 12v-12h-0a18 18 0 0 1-18-18V56a18 18 0 0 1 18-18z" fill="#FFFFFF" fill-opacity="0.95"/>
+  <circle cx="64" cy="67" r="16" fill="url(#omIconGrad)" fill-opacity="0.2"/>
+  <circle cx="64" cy="67" r="9" fill="#2563EB"/>
+  <circle cx="76" cy="55" r="4.5" fill="#22C7E8"/>
+</svg>

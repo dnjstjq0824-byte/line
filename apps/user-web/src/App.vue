@@ -3,7 +3,7 @@ import LineIcon from './components/LineIcon.vue'
 import LineContextMenu, { type ContextMenuItem } from './components/LineContextMenu.vue'
 import { LINE_STICKERS, type LineSticker } from './line-stickers'
 import { playSendSound, playReceiveSound } from './sound-effects'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   SUPPORTED_LOCALES,
   UI_DICTIONARY,
@@ -126,11 +126,53 @@ const currentUser = ref<User | null>(null)
 const error = ref('')
 const note = ref('')
 
-// --- Navigation Tabs ---
-// 'home' (Friends/Profile), 'chats', 'voom' (Timeline/Stories), 'openchat', 'wallet' (Pay/Services)
-const activeNav = ref<'home' | 'chats' | 'voom' | 'openchat' | 'wallet'>('chats')
-const activeTheme = ref<'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight'>('mint')
+// --- Navigation Tabs (Open Messenger 14 Global Nav Rail) ---
+export type NavItem =
+  | 'home'
+  | 'chats'
+  | 'voom'
+  | 'openchat'
+  | 'wallet'
+  | 'add-friends'
+  | 'open-search'
+  | 'open-mail'
+  | 'open-apps'
+  | 'open-video'
+  | 'open-stream'
+  | 'open-ai'
+  | 'open-services'
+
+const activeNav = ref<NavItem>('chats')
+const activeTheme = ref<'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight'>('midnight')
 const darkMode = ref(false)
+
+// --- Open Messenger PC Desktop State ---
+const selectedFriendProfile = ref<User | null>(null)
+const friendSearchQuery = ref('')
+const friendsSectionOpen = ref(true)
+const groupsSectionOpen = ref(true)
+const isPanelCollapsed = ref(false)
+const chatSortAsc = ref(false)
+const showNewChatModal = ref(false)
+const showEcosystemHub = ref(false)
+const activeEcosystemId = ref<string | null>(null)
+const notificationsEnabled = ref(true)
+
+// --- Phone Auth State (Article 3.C) ---
+const authMethod = ref<'email' | 'phone'>('email')
+const autoLoginCheck = ref(true)
+const startOnBootCheck = ref(false)
+const showPassword = ref(false)
+const phoneInput = ref('')
+const phoneCountryCode = ref('+82')
+const phoneCodeInput = ref('')
+const phoneCodeSent = ref(false)
+const phoneTimer = ref(180)
+let phoneTimerInterval: ReturnType<typeof setInterval> | null = null
+
+// --- Dynamic QR Code Countdown (Article 3.B) ---
+const qrCountdown = ref(180)
+let qrCountdownInterval: ReturnType<typeof setInterval> | null = null
 
 // --- Messenger Domain Data ---
 const chats = ref<Chat[]>([])
@@ -388,10 +430,34 @@ function formatTime(iso: string) {
 // Compute total unread count
 const totalUnreadCount = computed(() => chats.value.reduce((sum, c) => sum + (c.unread_count || 0), 0))
 
+const formattedPhoneTimer = computed(() => {
+  const m = Math.floor(phoneTimer.value / 60).toString().padStart(2, '0')
+  const s = (phoneTimer.value % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+})
+
+const formattedQrCountdown = computed(() => {
+  const m = Math.floor(qrCountdown.value / 60).toString().padStart(2, '0')
+  const s = (qrCountdown.value % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+})
+
+const groupChats = computed(() => chats.value.filter(c => c.kind === 'group'))
+
+const filteredFriends = computed(() => {
+  if (!friendSearchQuery.value.trim()) return friends.value
+  const q = friendSearchQuery.value.toLowerCase().trim()
+  return friends.value.filter(f =>
+    (f.display_name || '').toLowerCase().includes(q) ||
+    (f.status_message || '').toLowerCase().includes(q) ||
+    (f.handle || '').toLowerCase().includes(q)
+  )
+})
+
 // Chat search / filter
 const chatFilter = ref<'all' | 'direct' | 'group' | 'unread'>('all')
 const filteredChats = computed(() => {
-  return chats.value.filter(c => {
+  let list = chats.value.filter(c => {
     if (chatFilter.value === 'direct' && c.kind !== 'direct') return false
     if (chatFilter.value === 'group' && c.kind !== 'group') return false
     if (chatFilter.value === 'unread' && (!c.unread_count || c.unread_count === 0)) return false
@@ -401,6 +467,10 @@ const filteredChats = computed(() => {
     }
     return true
   })
+  if (chatSortAsc.value) {
+    list = [...list].sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+  }
+  return list
 })
 
 // Keep filtered items
@@ -469,24 +539,44 @@ async function initLetterSealing() {
   } catch {}
 }
 
+function startQrCountdown() {
+  if (qrCountdownInterval) clearInterval(qrCountdownInterval)
+  qrCountdown.value = 180
+  qrCountdownInterval = setInterval(() => {
+    if (qrCountdown.value > 0) {
+      qrCountdown.value--
+    } else {
+      if (qrCountdownInterval) clearInterval(qrCountdownInterval)
+      if (qrPollInterval) clearInterval(qrPollInterval)
+    }
+  }, 1000)
+}
+
+function refreshQr() {
+  startQrCountdown()
+  startQrLoginChallenge()
+}
+
 async function startQrLoginChallenge() {
   await wrap(async () => {
+    startQrCountdown()
     const res = await request<{ challenge_id: string; qr_token: string }>('/api/v1/auth/qr/challenge', null, 'POST', {})
     qrChallengeID.value = res.challenge_id
     qrToken.value = res.qr_token
-    note.value = '모바일 LINE 설정 화면에서 QR 코드 번호를 승인하세요.'
+    note.value = 'Open Messenger 모바일 화면에서 QR 코드를 스캔하세요.'
     if (qrPollInterval) clearInterval(qrPollInterval)
     qrPollInterval = setInterval(async () => {
       try {
         const p = await request<any>('/api/v1/auth/qr/poll', null, 'POST', {
           challenge_id: qrChallengeID.value,
           qr_token: qrToken.value,
-          device_name: 'LINE Web QR Client',
+          device_name: 'Open Messenger Web QR Client',
           platform: 'web'
         })
         if (p && p.access_token) {
           if (qrPollInterval) clearInterval(qrPollInterval)
           qrPollInterval = null
+          if (qrCountdownInterval) clearInterval(qrCountdownInterval)
           token.value = p.access_token
           currentDeviceId = p.device_id || ''
           currentUser.value = await api<User>('/api/v1/me')
@@ -499,6 +589,94 @@ async function startQrLoginChallenge() {
       } catch {}
     }, 2500)
   })
+}
+
+async function sendPhoneCode() {
+  if (!phoneInput.value.trim()) {
+    error.value = '휴대폰 번호를 입력해 주세요.'
+    return
+  }
+  await wrap(async () => {
+    const res = await request<{ message: string; expiresInSec: number; debugCode?: string }>('/api/v1/auth/phone/send-code', null, 'POST', {
+      phone_number: phoneInput.value.trim(),
+      country_code: phoneCountryCode.value
+    })
+    phoneCodeSent.value = true
+    phoneTimer.value = res.expiresInSec || 180
+    if (res.debugCode) {
+      phoneCodeInput.value = res.debugCode
+      note.value = `인증번호가 발송되었습니다. (테스트용 자동입력: ${res.debugCode})`
+    } else {
+      note.value = '인증번호가 SMS로 발송되었습니다.'
+    }
+    if (phoneTimerInterval) clearInterval(phoneTimerInterval)
+    phoneTimerInterval = setInterval(() => {
+      if (phoneTimer.value > 0) phoneTimer.value--
+      else if (phoneTimerInterval) clearInterval(phoneTimerInterval)
+    }, 1000)
+  })
+}
+
+async function verifyPhoneLogin() {
+  if (!phoneCodeInput.value.trim()) {
+    error.value = '인증번호 6자리를 입력해 주세요.'
+    return
+  }
+  await wrap(async () => {
+    const res = await request<any>('/api/v1/auth/phone/verify', null, 'POST', {
+      phone_number: phoneInput.value.trim(),
+      code: phoneCodeInput.value.trim(),
+      device_name: 'Open Messenger Desktop PC'
+    })
+    token.value = res.access_token
+    currentDeviceId = res.device_id || ''
+    currentUser.value = res.user || await api<User>('/api/v1/me')
+    editProfileName.value = currentUser.value?.display_name || ''
+    editProfileBio.value = currentUser.value?.bio || currentUser.value?.status_message || ''
+    editProfileHandle.value = currentUser.value?.handle || ''
+    if (phoneTimerInterval) clearInterval(phoneTimerInterval)
+    await initLetterSealing()
+    await loadInitialData()
+    await connectRealtime()
+  })
+}
+
+function selectFriend(f: User) {
+  selectedFriendProfile.value = f
+  selectedChatId.value = ''
+}
+
+function onStartChatFromProfile(f: User) {
+  selectedFriendProfile.value = null
+  startDirectChat(f)
+}
+
+function toggleNotifications() {
+  notificationsEnabled.value = !notificationsEnabled.value
+  note.value = notificationsEnabled.value ? '알림이 켜졌습니다.' : '방해금지 모드: 알림이 꺼졌습니다.'
+}
+
+function openEcosystemService(serviceId: string) {
+  activeEcosystemId.value = serviceId
+  if (serviceId === 'open-ai') {
+    autoTranslateEnabled.value = true
+    note.value = 'Open AI 지능형 비서가 활성화되었습니다. 메시지 번역 및 AI 통역 기능을 이용하세요.'
+  } else if (serviceId === 'open-video') {
+    if (friends.value.length > 0) {
+      startCallWithUser(friends.value[0], 'video')
+    } else {
+      note.value = '영상 통화를 진행할 대화 상대를 선택해 주세요.'
+    }
+  } else if (serviceId === 'open-cloud') {
+    showKeepModal.value = true
+  } else if (serviceId === 'open-chat') {
+    activeNav.value = 'openchat'
+  } else if (serviceId === 'open-search') {
+    activeNav.value = 'chats'
+    searchKeyword.value = ''
+  } else {
+    showEcosystemHub.value = true
+  }
 }
 
 async function approveQrLogin() {
@@ -694,6 +872,7 @@ async function loadDevices() {
 let chatSelectVersion = 0
 async function selectChat(convId: string) {
   selectedChatId.value = convId
+  selectedFriendProfile.value = null
   replyToMessage.value = null
   activeDrawer.value = 'none'
   const version = ++chatSelectVersion
@@ -1351,8 +1530,8 @@ async function publishStory() {
   if (!newStoryText.value.trim()) return
   await wrap(async () => {
     const bgs = [
-      'linear-gradient(135deg, #06C755, #0ea5e9)',
-      'linear-gradient(135deg, #f97316, #ec4899)',
+      'linear-gradient(135deg, #2563EB, #22C7E8)',
+      'linear-gradient(135deg, #7C3AED, #2563EB)',
       'linear-gradient(135deg, #6366f1, #8b5cf6)'
     ]
     const chosenBg = bgs[Math.floor(Math.random() * bgs.length)]
@@ -1536,6 +1715,158 @@ async function deleteUserAccount() {
   })
 }
 
+export interface EcosystemServiceItem {
+  id: string
+  name: string
+  nameKo: string
+  icon: string
+  category: 'core' | 'communication' | 'productivity' | 'lifestyle' | 'developer'
+  status: 'active' | 'beta' | 'preview'
+  statusText: string
+  description: string
+  actionUrl?: string
+}
+
+const ECOSYSTEM_SERVICES: EcosystemServiceItem[] = [
+  {
+    id: 'open-search',
+    name: 'Open Search',
+    nameKo: '통합 검색 & 지식 베이스',
+    icon: 'open-search',
+    category: 'core',
+    status: 'active',
+    statusText: '운영 중 (v2.4)',
+    description: '대화방, 메시지, 파일 및 외부 웹 정보를 통합 인덱싱하여 검색합니다.'
+  },
+  {
+    id: 'open-mail',
+    name: 'Open Mail',
+    nameKo: '보안 메일 시스템',
+    icon: 'open-mail',
+    category: 'communication',
+    status: 'active',
+    statusText: '연동 완료',
+    description: '메신저 계정과 일원화된 엔드투엔드 암호화 비즈니스 메일 서비스입니다.'
+  },
+  {
+    id: 'open-apps',
+    name: 'Open Apps',
+    nameKo: '생태계 앱 허브',
+    icon: 'open-apps',
+    category: 'productivity',
+    status: 'active',
+    statusText: '공식 런처',
+    description: 'Open Scanner 생태계의 모든 웹 & 데스크톱 애플리케이션 모음입니다.'
+  },
+  {
+    id: 'open-video',
+    name: 'Open Video',
+    nameKo: '고화질 영상 회의',
+    icon: 'open-video',
+    category: 'communication',
+    status: 'active',
+    statusText: 'WebRTC SFU 지원',
+    description: '실시간 AI 통역 자막과 노이즈 캔슬링을 지원하는 다자간 고화질 화상회의 솔루션입니다.'
+  },
+  {
+    id: 'open-stream',
+    name: 'Open Stream',
+    nameKo: '라이브 스트리밍 & 보이스 룸',
+    icon: 'open-stream',
+    category: 'communication',
+    status: 'beta',
+    statusText: '베타 테스트 중',
+    description: '크리에이터 및 커뮤니티를 위한 초저지연 라이브 방송과 오디오 룸입니다.'
+  },
+  {
+    id: 'open-ai',
+    name: 'Open AI Assistant',
+    nameKo: '지능형 AI 비서 & 실시간 통번역',
+    icon: 'open-ai',
+    category: 'core',
+    status: 'active',
+    statusText: '운영 중 (Gemini 2.5 Pro)',
+    description: '메시지 다국어 자동번역, 음성 실시간 통역, 대화 요약 및 스마트 답장을 제공합니다.'
+  },
+  {
+    id: 'open-shopping',
+    name: 'Open Shopping',
+    nameKo: '소셜 커머스 & 간편 결제',
+    icon: 'money',
+    category: 'lifestyle',
+    status: 'beta',
+    statusText: 'LUNO Pay 연동',
+    description: '채팅 중 선물하기, 디지털 쿠폰 구매, 간편 결제 및 정산 플랫폼입니다.'
+  },
+  {
+    id: 'open-news',
+    name: 'Open News',
+    nameKo: '실시간 뉴스 & 토픽',
+    icon: 'globe',
+    category: 'lifestyle',
+    status: 'preview',
+    statusText: '피드 준비 중',
+    description: '신뢰할 수 있는 언론사의 맞춤형 속보와 인기 토픽을 실시간으로 전달합니다.'
+  },
+  {
+    id: 'open-travel',
+    name: 'Open Travel',
+    nameKo: '여행 & 모빌리티',
+    icon: 'globe',
+    category: 'lifestyle',
+    status: 'preview',
+    statusText: '개발 중',
+    description: '여행 일정 공유, 항공/호텔 예약, 그룹 여행 정산 기능을 제공합니다.'
+  },
+  {
+    id: 'open-cloud',
+    name: 'Open Cloud (Keep Vault)',
+    nameKo: '암호화 클라우드 저장소',
+    icon: 'keep',
+    category: 'productivity',
+    status: 'active',
+    statusText: 'E2EE 암호화 적용',
+    description: '사진, 대용량 파일, 링크, 메모를 기기 간 즉시 동기화하는 영구 보관소입니다.'
+  },
+  {
+    id: 'open-workspace',
+    name: 'Open Workspace',
+    nameKo: '실시간 공동 문서 & 스프레드시트',
+    icon: 'file',
+    category: 'productivity',
+    status: 'beta',
+    statusText: '협업 에디터 탑재',
+    description: '팀원과 함께 채팅창 내에서 실시간으로 문서를 작성하고 공유합니다.'
+  },
+  {
+    id: 'open-chat',
+    name: 'Open Chat (공개 커뮤니티)',
+    nameKo: '관심사 기반 오픈채팅',
+    icon: 'openchat',
+    category: 'communication',
+    status: 'active',
+    statusText: '공식 운영 중',
+    description: '개인정보 노출 없이 익명 프로필로 대화할 수 있는 주제별 오픈 커뮤니티입니다.'
+  },
+  {
+    id: 'open-developer',
+    name: 'Open Developer Platform',
+    nameKo: '개발자 센터 & 봇 API',
+    icon: 'settings',
+    category: 'developer',
+    status: 'active',
+    statusText: 'REST/WebSocket/SDK 완비',
+    description: '메시징 봇, 웹훅, OAuth 연동, 엔터프라이즈 통합 API 콘솔입니다.',
+    actionUrl: './developer/'
+  }
+]
+
+onMounted(() => {
+  if (!currentUser.value) {
+    refreshQr()
+  }
+})
+
 </script>
 
 <template>
@@ -1550,17 +1881,20 @@ async function deleteUserAccount() {
       <button class="btn-dismiss" @click="note = ''">✕</button>
     </div>
 
-    <!-- 1. AUTH SCREEN: LUNO Desktop Login Window -->
+    <!-- 1. AUTH SCREEN: Open Messenger Dedicated PC Desktop 2-Column Window (Matching Screenshots 2 & 3) -->
     <main v-if="!currentUser" class="pc-auth-viewport">
-      <div class="pc-login-card">
-        <!-- Title bar with window controls & language selector -->
+      <div class="pc-auth-window-2col">
+        <!-- Title bar with window controls & branding -->
         <div class="pc-window-bar">
-          <div class="pc-win-dots">
-            <span class="dot close"></span>
-            <span class="dot min"></span>
-            <span class="dot max"></span>
+          <div class="pc-win-left-controls">
+            <button class="btn-win-menu" title="메뉴">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <button class="btn-win-help" title="도움말">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </button>
           </div>
-          <span class="pc-win-title">LUNO</span>
+          <span class="pc-win-title">Open Messenger</span>
           <div class="pc-win-tools">
             <div class="pc-locale-pills">
               <button
@@ -1577,73 +1911,244 @@ async function deleteUserAccount() {
             <button class="btn-win-dark" @click="toggleDarkMode" :title="isDarkMode ? '라이트 모드' : '다크 모드'">
               <LineIcon :name="isDarkMode ? 'sun' : 'moon'" :size="13" />
             </button>
+            <div class="pc-win-sys-controls">
+              <button class="btn-sys-tool" title="최소화">−</button>
+              <button class="btn-sys-tool" title="최대화">□</button>
+              <button class="btn-sys-tool close" title="닫기">✕</button>
+            </div>
           </div>
         </div>
 
-        <div class="pc-login-body">
-          <!-- Logo Header -->
-          <div class="pc-brand-header">
-            <img class="pc-luno-logo" :src="`${basePath}brand/luno-web-logo.svg`" alt="LUNO — Connect Beyond Borders" width="200" height="60" />
-            <p class="pc-brand-slogan">{{ t('brandSlogan') }}</p>
-          </div>
+        <div class="pc-auth-body-2col">
+          <!-- LEFT COLUMN: Credentials Login & Sign-up -->
+          <div class="pc-auth-col form-col">
+            <!-- Brand Logo Header -->
+            <div class="pc-brand-header-left">
+              <img class="pc-om-logo" :src="`${basePath}brand/open-messenger-logo.svg`" alt="Open Messenger" height="42" />
+            </div>
 
-          <!-- Login Method Tabs -->
-          <div class="pc-auth-nav-tabs">
-            <button :class="{ active: authTab === 'email' }" @click="authTab = 'email'">{{ t('loginEmailTab') }}</button>
-            <button :class="{ active: authTab === 'qr' }" @click="authTab = 'qr'; startQrLoginChallenge()">{{ t('loginQrTab') }}</button>
-          </div>
+            <!-- Email Login Mode -->
+            <form v-if="authMethod === 'email'" class="pc-login-form-inner" @submit.prevent="authAction">
+              <div class="pc-input-row">
+                <input
+                  v-model="email"
+                  type="email"
+                  :placeholder="t('emailPlaceholder')"
+                  required
+                  autocomplete="username"
+                  class="pc-login-input"
+                />
+              </div>
+              <div v-if="registerMode" class="pc-input-row">
+                <input
+                  v-model="displayName"
+                  type="text"
+                  :placeholder="t('namePlaceholder')"
+                  required
+                  class="pc-login-input"
+                />
+              </div>
+              <div class="pc-input-row password-wrap">
+                <input
+                  v-model="password"
+                  :type="showPassword ? 'text' : 'password'"
+                  :placeholder="t('passwordPlaceholder')"
+                  required
+                  autocomplete="current-password"
+                  class="pc-login-input"
+                />
+                <button type="button" class="btn-eye-toggle" @click="showPassword = !showPassword" tabindex="-1">
+                  {{ showPassword ? '🙈' : '👁️' }}
+                </button>
+              </div>
 
-          <!-- Email Login & Sign-up -->
-          <div v-if="authTab === 'email'" class="pc-tab-content">
-            <form class="pc-login-form" @submit.prevent="authAction">
-              <div class="pc-input-wrap">
-                <input v-model="email" type="email" :placeholder="t('emailPlaceholder')" required autocomplete="username" />
-              </div>
-              <div v-if="registerMode" class="pc-input-wrap">
-                <input v-model="displayName" type="text" :placeholder="t('namePlaceholder')" required />
-              </div>
-              <div class="pc-input-wrap">
-                <input v-model="password" type="password" :placeholder="t('passwordPlaceholder')" required autocomplete="current-password" />
-              </div>
+              <!-- Login Action Button -->
+              <button class="btn-pc-submit-full" type="submit" :disabled="!email || !password">
+                {{ registerMode ? t('signUpBtn') : t('signInBtn') }}
+              </button>
 
-              <div class="pc-form-helpers">
-                <label class="pc-remember-check">
-                  <input type="checkbox" checked />
+              <!-- Checkbox & Link Options (Matching Screenshot 2 & 3) -->
+              <div class="pc-login-options-row">
+                <label class="pc-custom-check">
+                  <input type="checkbox" v-model="autoLoginCheck" />
                   <span>{{ t('rememberMe') }}</span>
                 </label>
-                <button type="button" class="btn-register-toggle" @click="registerMode = !registerMode">
+                <button type="button" class="btn-subtle-link" @click="note = '비밀번호 재설정 링크가 이메일로 발송되었습니다.'">
+                  {{ t('findPassword') }}
+                </button>
+              </div>
+
+              <div class="pc-login-options-row">
+                <label class="pc-custom-check">
+                  <input type="checkbox" v-model="startOnBootCheck" />
+                  <span>{{ t('startOnBoot') }}</span>
+                </label>
+                <button type="button" class="btn-subtle-link accent" @click="registerMode = !registerMode">
                   {{ registerMode ? t('backToLogin') : t('createAccount') }}
                 </button>
               </div>
 
-              <button class="btn-pc-submit" type="submit">
-                {{ registerMode ? t('signUpBtn') : t('signInBtn') }}
-              </button>
+              <!-- Switch to Phone Login (Matching Screenshot 2 & 3) -->
+              <div class="pc-login-bottom-switch">
+                <button type="button" class="btn-switch-auth-link" @click="authMethod = 'phone'">
+                  {{ t('loginPhoneTab') }} &gt;
+                </button>
+              </div>
+
+              <!-- Quick One-Click Demo Credentials -->
+              <div class="pc-demo-chips-compact">
+                <span class="demo-caption">{{ t('quickDemoLabel') }}</span>
+                <div class="demo-pill-group">
+                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('user@line.local', 'LineUser#2026!')">{{ t('demoUser') }}</button>
+                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('alice@line-test.local', 'AliceStrongPass#2026')">{{ t('demoAlice') }}</button>
+                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('admin@line.local', 'LineAdmin#2026!')">{{ t('demoAdmin') }}</button>
+                </div>
+              </div>
             </form>
 
-            <!-- Quick Demo Accounts -->
-            <div class="pc-demo-section">
-              <div class="demo-label">{{ t('quickDemoLabel') }}</div>
-              <div class="demo-buttons-group">
-                <button class="btn-demo-chip" @click="quickDemoLogin('user@line.local', 'LineUser#2026!')">{{ t('demoUser') }}</button>
-                <button class="btn-demo-chip" @click="quickDemoLogin('alice@line-test.local', 'AliceStrongPass#2026')">{{ t('demoAlice') }}</button>
-                <button class="btn-demo-chip" @click="quickDemoLogin('admin@line.local', 'LineAdmin#2026!')">{{ t('demoAdmin') }}</button>
+            <!-- Phone Login Mode (Article 3.C) -->
+            <form v-else class="pc-login-form-inner phone-mode" @submit.prevent="verifyPhoneLogin">
+              <div class="pc-input-row phone-composite">
+                <select v-model="phoneCountryCode" class="pc-country-select" aria-label="국가 코드">
+                  <option value="+82">KR +82</option>
+                  <option value="+1">US +1</option>
+                  <option value="+81">JP +81</option>
+                  <option value="+66">TH +66</option>
+                </select>
+                <input
+                  v-model="phoneInput"
+                  type="tel"
+                  placeholder="010-1234-5678"
+                  required
+                  class="pc-login-input phone-input"
+                />
+                <button type="button" class="btn-send-code" @click="sendPhoneCode">
+                  {{ phoneCodeSent ? '재발송' : '인증요청' }}
+                </button>
               </div>
-            </div>
+
+              <div v-if="phoneCodeSent" class="pc-input-row code-wrap">
+                <input
+                  v-model="phoneCodeInput"
+                  type="text"
+                  placeholder="인증번호 6자리 입력"
+                  maxlength="6"
+                  required
+                  class="pc-login-input"
+                />
+                <span class="phone-timer-pill">{{ formattedPhoneTimer }}</span>
+              </div>
+
+              <button class="btn-pc-submit-full" type="submit" :disabled="!phoneCodeInput.trim()">
+                휴대폰으로 로그인
+              </button>
+
+              <div class="pc-login-bottom-switch">
+                <button type="button" class="btn-switch-method" @click="authMethod = 'email'">
+                  &lt; 이메일로 로그인
+                </button>
+              </div>
+            </form>
           </div>
 
-          <!-- QR Code Login -->
-          <div v-else class="pc-tab-content qr-mode">
-            <div class="pc-qr-box">
-              <svg viewBox="0 0 100 100" width="130" height="130" fill="#14213D">
-                <path d="M10 10h30v30h-30z M16 16v18h18v-18z M22 22h6v6h-6z M60 10h30v30h-30z M66 16v18h18v-18z M72 22h6v6h-6z M10 60h30v30h-30z M16 66v18h18v-18z M22 72h6v6h-6z M50 15h6v12h-6z M70 50h10v10h-10z M50 50h10v10h-10z M60 65h10v15h-10z M80 65h10v25h-10z M50 80h10v10h-10z" />
-              </svg>
+          <!-- Vertical Divider Line -->
+          <div class="pc-auth-col-divider"></div>
+
+          <!-- RIGHT COLUMN: QR Code Login (Matching Screenshots 2 & 3) -->
+          <div class="pc-auth-col qr-col">
+            <div class="pc-qr-box-inner">
+              <h3 class="pc-qr-heading">{{ t('loginQrTab') }}</h3>
+              <div class="pc-qr-matrix-card">
+                <!-- High Fidelity Dynamic QR Code SVG with Open Messenger Center Badge -->
+                <svg viewBox="0 0 140 140" width="160" height="160" class="qr-svg-matrix">
+                  <!-- QR Background -->
+                  <rect width="140" height="140" fill="#FFFFFF" rx="8" />
+                  <!-- Top-Left Finder Square -->
+                  <rect x="10" y="10" width="34" height="34" fill="#0B1020" rx="3" />
+                  <rect x="15" y="15" width="24" height="24" fill="#FFFFFF" rx="2" />
+                  <rect x="19" y="19" width="16" height="16" fill="#0B1020" rx="1.5" />
+                  <!-- Top-Right Finder Square -->
+                  <rect x="96" y="10" width="34" height="34" fill="#0B1020" rx="3" />
+                  <rect x="101" y="15" width="24" height="24" fill="#FFFFFF" rx="2" />
+                  <rect x="105" y="19" width="16" height="16" fill="#0B1020" rx="1.5" />
+                  <!-- Bottom-Left Finder Square -->
+                  <rect x="10" y="96" width="34" height="34" fill="#0B1020" rx="3" />
+                  <rect x="15" y="101" width="24" height="24" fill="#FFFFFF" rx="2" />
+                  <rect x="19" y="105" width="16" height="16" fill="#0B1020" rx="1.5" />
+                  <!-- QR Data Modules / Matrix Pattern -->
+                  <g fill="#0B1020">
+                    <rect x="48" y="12" width="6" height="6" />
+                    <rect x="58" y="12" width="6" height="6" />
+                    <rect x="76" y="12" width="6" height="6" />
+                    <rect x="86" y="12" width="6" height="6" />
+                    <rect x="48" y="24" width="6" height="6" />
+                    <rect x="68" y="24" width="6" height="6" />
+                    <rect x="86" y="24" width="6" height="6" />
+                    <rect x="48" y="36" width="6" height="6" />
+                    <rect x="58" y="36" width="6" height="6" />
+                    <rect x="76" y="36" width="6" height="6" />
+                    <rect x="12" y="48" width="6" height="6" />
+                    <rect x="24" y="48" width="6" height="6" />
+                    <rect x="36" y="48" width="6" height="6" />
+                    <rect x="96" y="48" width="6" height="6" />
+                    <rect x="108" y="48" width="6" height="6" />
+                    <rect x="120" y="48" width="6" height="6" />
+                    <rect x="12" y="60" width="6" height="6" />
+                    <rect x="30" y="60" width="6" height="6" />
+                    <rect x="96" y="60" width="6" height="6" />
+                    <rect x="114" y="60" width="6" height="6" />
+                    <rect x="12" y="72" width="6" height="6" />
+                    <rect x="24" y="72" width="6" height="6" />
+                    <rect x="36" y="72" width="6" height="6" />
+                    <rect x="102" y="72" width="6" height="6" />
+                    <rect x="120" y="72" width="6" height="6" />
+                    <rect x="48" y="96" width="6" height="6" />
+                    <rect x="68" y="96" width="6" height="6" />
+                    <rect x="86" y="96" width="6" height="6" />
+                    <rect x="104" y="96" width="6" height="6" />
+                    <rect x="118" y="96" width="6" height="6" />
+                    <rect x="48" y="108" width="6" height="6" />
+                    <rect x="76" y="108" width="6" height="6" />
+                    <rect x="96" y="108" width="6" height="6" />
+                    <rect x="114" y="108" width="6" height="6" />
+                    <rect x="58" y="120" width="6" height="6" />
+                    <rect x="76" y="120" width="6" height="6" />
+                    <rect x="104" y="120" width="6" height="6" />
+                    <rect x="120" y="120" width="6" height="6" />
+                  </g>
+                  <!-- Center Brand Aperture Badge -->
+                  <rect x="52" y="52" width="36" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" />
+                  <defs>
+                    <linearGradient id="qrLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#22C7E8" />
+                      <stop offset="50%" stop-color="#2563EB" />
+                      <stop offset="100%" stop-color="#7C3AED" />
+                    </linearGradient>
+                  </defs>
+                  <rect x="56" y="56" width="28" height="28" rx="6" fill="url(#qrLogoGrad)" />
+                  <circle cx="70" cy="70" r="7" fill="#FFFFFF" fill-opacity="0.3" />
+                  <circle cx="70" cy="70" r="3" fill="#FFFFFF" />
+                  <circle cx="76" cy="76" r="1.5" fill="#22C7E8" />
+                </svg>
+              </div>
+
+              <!-- Instruction Text (Screenshot 2 & 3) -->
+              <p class="pc-qr-instruction">
+                Open Messenger 모바일 버전 검색창에서<br>
+                QR 코드 리더를 열어 QR 코드를 스캔해 주세요.
+              </p>
+
+              <!-- Expiry & Reload Pill -->
+              <div class="pc-qr-timer-pill">
+                <span>유효시간: <strong>{{ formattedQrCountdown }}</strong></span>
+                <button type="button" class="btn-qr-reload" @click="refreshQr" title="새로고침">
+                  새로고침 ↻
+                </button>
+              </div>
+              <div v-if="qrChallengeID" class="pc-qr-session-id">
+                <small>Session: {{ qrChallengeID.slice(0, 8) }}...</small>
+              </div>
             </div>
-            <p class="qr-guide">스마트폰의 LUNO 앱에서<br><strong>설정 &gt; QR코드</strong>로 스캔하여 로그인하세요.</p>
-            <div v-if="qrChallengeID" class="qr-details">
-              <small>Challenge: {{ qrChallengeID.slice(0, 8) }}... | Token: {{ qrToken.slice(0, 8) }}...</small>
-            </div>
-            <button class="btn-qr-reload" @click="startQrLoginChallenge">새로고침</button>
           </div>
         </div>
       </div>
@@ -1651,12 +2156,12 @@ async function deleteUserAccount() {
 
     <!-- 2. AUTHENTIC LINE PC DESKTOP MESSENGER (3-Pane Workspace) -->
     <main v-else class="pc-workspace">
-      <!-- (Column 1) Sleek Dark Charcoal Dock (60px) -->
+      <!-- (Column 1) Sleek Midnight Navy Dock Rail (62px) -->
       <nav class="pc-rail">
         <div class="pc-rail-top">
-          <!-- Current User Profile Avatar with Online Dot -->
+          <!-- 1. My Profile Avatar with Online Dot -->
           <div class="pc-user-avatar-trigger" title="내 프로필" @click="showUserMenu = !showUserMenu">
-            <div class="pc-avatar circle-36" :style="{ background: currentUser.avatar_color || '#06C755' }">
+            <div class="pc-avatar circle-36" :style="{ background: currentUser.avatar_color || 'var(--om-primary, #2563EB)' }">
               {{ currentUser.display_name.slice(0, 1) }}
             </div>
             <span class="pc-dot-online"></span>
@@ -1676,7 +2181,19 @@ async function deleteUserAccount() {
             <button class="dropdown-item logout" @click="logout">로그아웃</button>
           </div>
 
-          <!-- Nav 1: Friends (친구) -->
+          <!-- 2. Chats (대화) -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'chats' }"
+            :title="t('navChats')"
+            @click="activeNav = 'chats'; selectedFriendProfile = null"
+          >
+            <span class="pc-rail-indicator"></span>
+            <LineIcon name="chats" :size="22" />
+            <span v-if="totalUnreadCount > 0" class="pc-unread-pill">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
+          </button>
+
+          <!-- 3. Friends (친구) -->
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'home' }"
@@ -1687,233 +2204,279 @@ async function deleteUserAccount() {
             <LineIcon name="friends" :size="22" />
           </button>
 
-          <!-- Nav 2: Chats (대화) -->
+          <!-- 4. Add Friends (친구 추가) -->
           <button
             class="pc-rail-btn"
-            :class="{ active: activeNav === 'chats' }"
-            :title="t('navChats')"
-            @click="activeNav = 'chats'"
+            title="친구 추가"
+            @click="showAddFriendModal = true"
           >
-            <span class="pc-rail-indicator"></span>
-            <LineIcon name="chats" :size="22" />
-            <span v-if="totalUnreadCount > 0" class="pc-unread-pill">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
+            <LineIcon name="add-friends" :size="20" />
           </button>
 
-          <!-- Nav 3: Channels / Feed -->
+          <!-- 5. Open Scanner Search -->
           <button
             class="pc-rail-btn"
-            :class="{ active: activeNav === 'voom' }"
-            :title="t('navChannels')"
-            @click="activeNav = 'voom'"
+            title="Open Scanner Search (통합 검색)"
+            @click="openEcosystemService('open-search')"
           >
-            <span class="pc-rail-indicator"></span>
-            <LineIcon name="voom" :size="22" />
+            <LineIcon name="open-search" :size="20" />
           </button>
 
-          <!-- Nav 4: Spaces / OpenSpace -->
+          <!-- 6. Open Mail -->
           <button
             class="pc-rail-btn"
-            :class="{ active: activeNav === 'openchat' }"
-            :title="t('navOpenChat')"
-            @click="activeNav = 'openchat'"
+            title="Open Mail (보안 메일)"
+            @click="openEcosystemService('open-mail')"
           >
-            <span class="pc-rail-indicator"></span>
-            <LineIcon name="openchat" :size="22" />
+            <LineIcon name="open-mail" :size="20" />
           </button>
 
-          <!-- Nav 5: Wallet / LUNO Pay -->
+          <!-- 7. Open Apps (앱 허브) -->
           <button
             class="pc-rail-btn"
-            :class="{ active: activeNav === 'wallet' }"
-            :title="t('navWallet')"
-            @click="activeNav = 'wallet'"
+            title="Open Apps (생태계 앱)"
+            @click="openEcosystemService('open-apps')"
           >
-            <span class="pc-rail-indicator"></span>
-            <LineIcon name="wallet" :size="22" />
+            <LineIcon name="open-apps" :size="20" />
+          </button>
+
+          <!-- 8. Open Video (화상 회의) -->
+          <button
+            class="pc-rail-btn"
+            title="Open Video (화상 회의)"
+            @click="openEcosystemService('open-video')"
+          >
+            <LineIcon name="open-video" :size="20" />
+          </button>
+
+          <!-- 9. Open Stream (라이브 방송) -->
+          <button
+            class="pc-rail-btn"
+            title="Open Stream (라이브 방송)"
+            @click="openEcosystemService('open-stream')"
+          >
+            <LineIcon name="open-stream" :size="20" />
+          </button>
+
+          <!-- 10. Open AI (지능형 AI 비서) -->
+          <button
+            class="pc-rail-btn"
+            title="Open AI (지능형 비서 & 실시간 번역)"
+            @click="openEcosystemService('open-ai')"
+          >
+            <LineIcon name="open-ai" :size="20" />
+          </button>
+
+          <!-- 11. Open Services (전체 생태계) -->
+          <button
+            class="pc-rail-btn"
+            title="Open Services (전체 플랫폼)"
+            @click="openEcosystemService('open-services')"
+          >
+            <LineIcon name="open-services" :size="20" />
           </button>
         </div>
 
         <div class="pc-rail-bottom">
           <!-- Mobile APK Download Button -->
-          <a href="./download.html" target="_blank" class="pc-rail-btn small" title="📱 LUNO 모바일 앱 다운로드 (Android APK)" style="text-decoration: none;">
+          <a href="./download.html" target="_blank" class="pc-rail-btn small" title="📱 Open Messenger 모바일 앱 (APK)" style="text-decoration: none;">
             <span style="font-size: 16px;">📱</span>
           </a>
 
           <!-- Keep Button -->
           <button class="pc-rail-btn small" :title="t('navKeep')" @click="showKeepModal = true">
-            <LineIcon name="keep" :size="20" />
+            <LineIcon name="keep" :size="19" />
           </button>
 
-          <!-- Consoles Menu Button (...) -->
+          <!-- 12. Notifications Toggle -->
+          <button
+            class="pc-rail-btn small"
+            :title="notificationsEnabled ? '알림 켜짐' : '방해금지 (알림 꺼짐)'"
+            @click="toggleNotifications"
+          >
+            <LineIcon :name="notificationsEnabled ? 'bell' : 'bell-off'" :size="19" />
+          </button>
+
+          <!-- 13. Settings Button -->
+          <button class="pc-rail-btn small" :title="t('navSettings')" @click="showSettingsModal = true">
+            <LineIcon name="settings" :size="19" />
+          </button>
+
+          <!-- 14. More / Consoles Menu Button -->
           <div class="rail-more-wrapper">
-            <button class="pc-rail-btn small" :title="t('navConsoles')" @click="showConsolesMenu = !showConsolesMenu">
-              <LineIcon name="more" :size="20" />
+            <button class="pc-rail-btn small" title="더보기 / 플랫폼 콘솔" @click="showConsolesMenu = !showConsolesMenu">
+              <LineIcon name="more" :size="19" />
             </button>
 
             <!-- Consoles Dropdown Popover -->
             <div v-if="showConsolesMenu" class="pc-dropdown-menu consoles-menu" @click="showConsolesMenu = false">
-              <div class="dropdown-heading">🏢 LUNO 플랫폼 관리 콘솔</div>
+              <div class="dropdown-heading">🌐 Open Scanner 생태계 콘솔</div>
               <a href="./admin/" target="_blank" class="dropdown-item">👑 관리자 콘솔 (Admin)</a>
               <a href="./partner/" target="_blank" class="dropdown-item">🏢 파트너 콘솔 (Official)</a>
               <a href="./developer/" target="_blank" class="dropdown-item">💻 개발자 콘솔 (Developers)</a>
               <a href="./creator/" target="_blank" class="dropdown-item">🎨 크리에이터 마켓</a>
               <a href="./ads/" target="_blank" class="dropdown-item">📢 광고주 센터</a>
               <div class="dropdown-sep"></div>
-              <a href="./download.html" target="_blank" class="dropdown-item" style="color: #315BCD; font-weight: 700;">📱 모바일 앱 다운로드 (APK)</a>
+              <button class="dropdown-item" @click="showEcosystemHub = true">🚀 Open Scanner 생태계 허브</button>
+              <a href="./download.html" target="_blank" class="dropdown-item" style="color: var(--om-primary, #2563EB); font-weight: 700;">📱 모바일 앱 다운로드 (APK)</a>
               <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
               <button class="dropdown-item logout" @click="logout">로그아웃</button>
             </div>
           </div>
-
-          <!-- Settings Button -->
-          <button class="pc-rail-btn small" :title="t('navSettings')" @click="showSettingsModal = true">
-            <LineIcon name="settings" :size="20" />
-          </button>
         </div>
       </nav>
 
-      <!-- (Column 2) Second Sidebar List Pane (310px) -->
-      <aside class="pc-side-pane">
-        <!-- VIEW 1: FRIENDS (친구) -->
+      <!-- (Column 2) Second Sidebar List Pane (~305px) -->
+      <aside class="pc-side-pane" :class="{ 'is-collapsed': isPanelCollapsed }">
+        <!-- VIEW 1: FRIENDS (친구 - Screenshots 4 & 5) -->
         <div v-if="activeNav === 'home'" class="pc-pane-body">
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('navFriends') }}</h2>
-            <div class="pc-pane-tools">
-              <button class="btn-pc-header-tool" title="친구 추가" @click="showAddFriendModal = true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-              </button>
+          <!-- Top Search Header with Collapse Toggle -->
+          <div class="pc-search-bar-header">
+            <div class="pc-search-box-wrap">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" class="pc-pane-search-input" />
+              <button v-if="friendSearchQuery" class="btn-clear-search" @click="friendSearchQuery = ''">✕</button>
             </div>
-          </div>
-
-          <!-- Clean Search Input -->
-          <div class="pc-search-box">
-            <div class="pc-search-inner">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input v-model="searchKeyword" :placeholder="t('searchPlaceholder')" />
-              <button v-if="searchKeyword" class="btn-search-clear" @click="searchKeyword = ''">✕</button>
-            </div>
+            <button class="btn-pane-collapse" title="접기/펼치기" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
           </div>
 
           <!-- Friends List Scroll Area -->
           <div class="pc-pane-scroll">
-            <!-- My Profile Card -->
-            <div class="pc-my-card" @click="activeProfileUser = currentUser">
-              <div class="pc-avatar circle-46" :style="{ background: currentUser.avatar_color || '#315BCD' }">
-                {{ currentUser.display_name.slice(0, 1) }}
-              </div>
-              <div class="pc-card-meta">
-                <div class="name-line">{{ currentUser.display_name }}</div>
-                <div class="status-line">{{ currentUser.status_message || t('myProfileStatus') }}</div>
-              </div>
-            </div>
-
-            <!-- Birthday Category -->
-            <div class="pc-category">
-              <div class="category-title">{{ t('birthdayFriends') }}</div>
-              <div class="pc-row-item" @click="startDirectChat({ id: '00000000-0000-0000-0000-000000000003', display_name: 'Alice Kim' })">
-                <div class="pc-avatar circle-38" style="background:#f97316">A</div>
-                <div class="pc-row-meta">
-                  <div class="row-name">Alice Kim 🎂</div>
-                  <div class="row-desc">오늘 생일입니다 🎉</div>
+            <!-- My Profile Card with Keep & Album Buttons (Screenshot 4 & 5) -->
+            <div class="pc-my-profile-card">
+              <div class="my-profile-top-row" @click="activeProfileUser = currentUser">
+                <div class="pc-avatar circle-46" :style="{ background: currentUser.avatar_color || 'var(--om-primary, #2563EB)' }">
+                  {{ currentUser.display_name.slice(0, 1) }}
+                </div>
+                <div class="my-profile-meta">
+                  <div class="my-name-text">{{ currentUser.display_name }}</div>
+                  <div class="my-status-text">{{ currentUser.status_message || t('myProfileStatus') }}</div>
                 </div>
               </div>
-            </div>
-
-            <!-- Official Accounts Category -->
-            <div class="pc-category">
-              <div class="category-title">{{ t('officialChannels') }} {{ officialAccounts.length }}</div>
-              <div
-                v-for="oa in officialAccounts"
-                :key="oa.id"
-                class="pc-row-item"
-                @click="startDirectChat({ id: oa.id, display_name: oa.name, official: true })"
-              >
-                <div class="pc-avatar circle-38" :style="{ background: oa.color || '#315BCD' }">
-                  {{ oa.name.slice(0, 1) }}
-                </div>
-                <div class="pc-row-meta">
-                  <div class="row-name">{{ oa.name }} <span class="badge-verified">✓</span></div>
-                  <div class="row-desc">{{ oa.description }}</div>
-                </div>
+              <!-- Action Chips: Keep 메모 & 앨범 모아보기 (Matching Screenshot 4) -->
+              <div class="my-profile-action-chips">
+                <button type="button" class="btn-profile-chip" @click="showKeepModal = true">
+                  <LineIcon name="keep" :size="13" />
+                  <span>{{ t('keepMemo') }}</span>
+                </button>
+                <button type="button" class="btn-profile-chip" @click="toggleDrawer('albums')">
+                  <LineIcon name="camera" :size="13" />
+                  <span>{{ t('albumView') }}</span>
+                </button>
               </div>
             </div>
 
-            <!-- Friends Category -->
-            <div class="pc-category">
-              <div class="category-title">{{ t('friendsList') }} {{ friends.length }}</div>
-              <div
-                v-for="f in friends"
-                :key="f.id"
-                class="pc-row-item"
-                @click="startDirectChat(f)"
-                @contextmenu.prevent="openFriendContextMenu($event, f)"
-              >
-                <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || '#315BCD' }">
-                  {{ f.display_name.slice(0, 1) }}
+            <!-- Accordion 1: Groups (그룹 - Screenshots 4 & 5) -->
+            <div class="pc-accordion-section">
+              <div class="pc-accordion-header" @click="groupsSectionOpen = !groupsSectionOpen">
+                <span class="accordion-title">{{ t('groupSection') }} {{ groupChats.length }}</span>
+                <span class="accordion-caret">{{ groupsSectionOpen ? '⌵' : '›' }}</span>
+              </div>
+              <div v-show="groupsSectionOpen" class="pc-accordion-content">
+                <div
+                  v-for="grp in groupChats"
+                  :key="grp.id"
+                  class="pc-friend-item-row"
+                  :class="{ selected: selectedChatId === grp.id }"
+                  @click="selectChat(grp.id)"
+                >
+                  <div class="pc-avatar circle-38 group-avatar" style="background: var(--om-cyan, #22C7E8);">
+                    {{ grp.title ? grp.title.slice(0, 1) : 'G' }}
+                  </div>
+                  <div class="friend-item-meta">
+                    <div class="friend-item-name">
+                      {{ grp.title }}
+                      <span class="group-count">({{ grp.member_count || 2 }})</span>
+                    </div>
+                    <div class="friend-item-sub">{{ grp.last_message?.body || '그룹 대화방' }}</div>
+                  </div>
                 </div>
-                <div class="pc-row-meta">
-                  <div class="row-name">{{ f.display_name }}</div>
-                  <div class="row-desc">{{ f.status_message || f.bio || 'LUNO 친구' }}</div>
+              </div>
+            </div>
+
+            <!-- Accordion 2: Friends (친구 - Screenshots 4 & 5) -->
+            <div class="pc-accordion-section">
+              <div class="pc-accordion-header" @click="friendsSectionOpen = !friendsSectionOpen">
+                <span class="accordion-title">{{ t('friendSection') }} {{ filteredFriends.length }}</span>
+                <span class="accordion-caret">{{ friendsSectionOpen ? '⌵' : '›' }}</span>
+              </div>
+              <div v-show="friendsSectionOpen" class="pc-accordion-content">
+                <div
+                  v-for="f in filteredFriends"
+                  :key="f.id"
+                  class="pc-friend-item-row"
+                  :class="{ selected: selectedFriendProfile?.id === f.id }"
+                  @click="selectFriend(f)"
+                  @dblclick="startDirectChat(f)"
+                  @contextmenu.prevent="openFriendContextMenu($event, f)"
+                >
+                  <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || 'var(--om-primary, #2563EB)' }">
+                    {{ f.display_name.slice(0, 1) }}
+                  </div>
+                  <div class="friend-item-meta">
+                    <div class="friend-item-name">{{ f.display_name }}</div>
+                    <div class="friend-item-sub">{{ f.status_message || f.bio || 'Open Messenger 친구' }}</div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- VIEW 2: CHATS (대화) -->
+        <!-- VIEW 2: CHATS (전체 대화 - Screenshot 1) -->
         <div v-else-if="activeNav === 'chats'" class="pc-pane-body">
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('navChats') }}</h2>
-            <div class="pc-pane-tools">
-              <button class="btn-pc-header-tool" title="그룹 대화방 만들기" @click="showCreateGroupModal = true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              </button>
+          <!-- Top Sub-Tabs: 전체 | 친구 | 그룹 | ⇄ (Screenshot 1) -->
+          <div class="pc-chat-subtabs-row">
+            <button class="btn-subtab" :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">{{ t('tabAll') }}</button>
+            <button class="btn-subtab" :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">{{ t('tabDirect') }}</button>
+            <button class="btn-subtab" :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">{{ t('tabGroup') }}</button>
+            <button class="btn-subtab filter-btn" :class="{ active: chatFilter === 'unread' }" @click="chatFilter = chatFilter === 'unread' ? 'all' : 'unread'" title="정렬 및 필터">⇄</button>
+          </div>
+
+          <!-- Search Bar with Sort (⇅) and Collapse (<) -->
+          <div class="pc-search-bar-header">
+            <div class="pc-search-box-wrap">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input v-model="searchKeyword" :placeholder="t('searchPlaceholder')" class="pc-pane-search-input" />
+              <button v-if="searchKeyword" class="btn-clear-search" @click="searchKeyword = ''">✕</button>
             </div>
+            <button class="btn-pane-sort" :class="{ active: chatSortAsc }" title="이름순 정렬" @click="chatSortAsc = !chatSortAsc">⇅</button>
+            <button class="btn-pane-collapse" title="접기/펼치기" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
           </div>
 
-          <!-- Chat Filter Tabs -->
-          <div class="pc-filter-tabs">
-            <button :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">{{ t('filterAll') }}</button>
-            <button :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">{{ t('filterDirect') }}</button>
-            <button :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">{{ t('filterGroup') }}</button>
-            <button :class="{ active: chatFilter === 'unread' }" @click="chatFilter = 'unread'">{{ t('filterUnread') }}</button>
-          </div>
-
-          <!-- Search Box -->
-          <div class="pc-search-box">
-            <div class="pc-search-inner">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input v-model="searchKeyword" placeholder="대화방 또는 메시지 검색" />
-            </div>
-          </div>
-
-          <!-- Chats Scroll List -->
+          <!-- Chats Scroll List (Screenshot 1) -->
           <div class="pc-pane-scroll">
             <div
               v-for="c in filteredChats"
               :key="c.id"
-              class="pc-chat-row"
+              class="pc-chat-item-row"
               :class="{ selected: selectedChatId === c.id }"
               @click="selectChat(c.id)"
             >
-              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }">
-                {{ c.title ? c.title.slice(0, 1) : 'L' }}
+              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #22C7E8)' : 'var(--om-primary, #2563EB)' }">
+                {{ c.title ? c.title.slice(0, 1) : 'O' }}
               </div>
-              <div class="pc-chat-meta">
-                <div class="chat-top-line">
-                  <div class="chat-title-text">
+              <div class="pc-chat-item-meta">
+                <div class="chat-row-top">
+                  <div class="chat-row-title">
                     {{ c.title || '대화방' }}
-                    <span v-if="c.kind === 'group'" class="member-count">{{ c.member_count || 2 }}</span>
+                    <span v-if="c.kind === 'group'" class="member-count-badge">({{ c.member_count || 2 }})</span>
                   </div>
-                  <span class="chat-timestamp">{{ formatTime(c.updated_at || '') }}</span>
+                  <span class="chat-row-time">{{ formatTime(c.updated_at || '') }}</span>
                 </div>
-                <div class="chat-bottom-line">
-                  <span class="chat-last-message">{{ c.last_message?.body || '메시지가 없습니다' }}</span>
-                  <span v-if="c.unread_count > 0" class="chat-unread-badge">{{ c.unread_count }}</span>
+                <div class="chat-row-bottom">
+                  <span class="chat-row-preview">{{ c.last_message?.body || '메시지가 없습니다.' }}</span>
+                  <span v-if="c.unread_count && c.unread_count > 0" class="chat-unread-pill">{{ c.unread_count }}</span>
                 </div>
               </div>
             </div>
           </div>
+
+          <!-- Floating Action Button (FAB) New Chat (Screenshot 1) -->
+          <button class="pc-floating-add-btn" title="새 대화 시작" @click="showNewChatModal = true">
+            <LineIcon name="chats" :size="20" />
+            <span class="fab-plus-mark">+</span>
+          </button>
         </div>
 
         <!-- VIEW 3: VOOM -->
@@ -1928,7 +2491,7 @@ async function deleteUserAccount() {
               <small>스토리 추가</small>
             </div>
             <div v-for="s in stories" :key="s.id" class="story-item">
-              <div class="story-ring" :style="{ background: s.bg || '#06C755' }">{{ (s.author_name || 'L').slice(0, 1) }}</div>
+              <div class="story-ring" :style="{ background: s.bg || 'var(--om-primary, #2563EB)' }">{{ (s.author_name || 'L').slice(0, 1) }}</div>
               <small>{{ s.author_name || '친구' }}</small>
             </div>
           </div>
@@ -2149,11 +2712,44 @@ async function deleteUserAccount() {
         </footer>
       </section>
 
-      <!-- Clean Neutral Desktop Empty State (LUNO Brand) -->
+      <!-- Case B: Friend Profile Selected Preview (Screenshot 5) -->
+      <section v-else-if="selectedFriendProfile" class="pc-friend-profile-viewport">
+        <div class="pc-profile-preview-card">
+          <div class="profile-preview-avatar" :style="{ background: selectedFriendProfile.avatar_color || 'var(--om-primary, #2563EB)' }">
+            {{ selectedFriendProfile.display_name.slice(0, 1) }}
+          </div>
+          <h2 class="profile-preview-name">{{ selectedFriendProfile.display_name }}</h2>
+          <p v-if="selectedFriendProfile.status_message || selectedFriendProfile.bio" class="profile-preview-bio">
+            {{ selectedFriendProfile.status_message || selectedFriendProfile.bio }}
+          </p>
+          <div class="profile-preview-actions">
+            <!-- Large Prominent Start Chat Button (Matching Screenshot 5) -->
+            <button class="btn-start-chat-large" @click="onStartChatFromProfile(selectedFriendProfile)">
+              {{ t('startChatBtn') }}
+            </button>
+            <div class="profile-preview-subactions">
+              <button type="button" class="btn-subaction-pill" title="음성 통화" @click="startCallWithUser(selectedFriendProfile, 'voice')">
+                <LineIcon name="call-voice" :size="16" />
+                <span>음성 통화</span>
+              </button>
+              <button type="button" class="btn-subaction-pill" title="영상 통화" @click="startCallWithUser(selectedFriendProfile, 'video')">
+                <LineIcon name="call-video" :size="16" />
+                <span>영상 통화</span>
+              </button>
+              <button type="button" class="btn-subaction-pill" title="송금하기" @click="openSendMoneyModal(selectedFriendProfile)">
+                <LineIcon name="money" :size="16" />
+                <span>송금하기</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Case C: Clean Neutral Desktop Empty State (Screenshots 1 & 4) -->
       <section v-else class="pc-empty-canvas">
         <div class="pc-empty-dialog">
           <div class="pc-watermark-wrap">
-            <LineIcon name="luno-logo" :size="80" />
+            <LineIcon name="open-messenger-logo" :size="84" />
           </div>
           <h3 class="pc-empty-title">{{ t('emptyChatTitle') }}</h3>
           <p class="pc-empty-desc">{{ t('emptyChatDesc') }}</p>
@@ -2232,7 +2828,7 @@ async function deleteUserAccount() {
     <!-- PROFILE MODAL (Full LINE User Profile View) -->
     <div v-if="activeProfileUser" class="modal-backdrop" @click.self="activeProfileUser = null">
       <div class="profile-modal-card">
-        <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || '#06C755' }">
+        <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || 'var(--om-primary, #2563EB)' }">
           <button class="btn-modal-close" @click="activeProfileUser = null">✕</button>
         </div>
         <div class="profile-avatar-center">
@@ -2611,18 +3207,138 @@ async function deleteUserAccount() {
       </div>
     </div>
 
-    <!-- ADD FRIEND MODAL -->
+    <!-- ADD FRIEND MODAL (Article 2.C) -->
     <div v-if="showAddFriendModal" class="modal-backdrop" @click.self="showAddFriendModal = false">
-      <div class="standard-modal-box">
+      <div class="standard-modal-box add-friend-modal">
         <div class="modal-header">
-          <h3>➕ 친구 추가</h3>
+          <h3>➕ {{ t('navFriends') }} 추가</h3>
           <button class="btn-modal-close" @click="showAddFriendModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <label>라인 아이디(ID)로 검색</label>
+          <p class="modal-subtext">Open Scanner 생태계의 친구를 ID, 이메일, 전화번호로 검색하여 추가하세요.</p>
+          <label>사용자 ID 또는 이메일 검색</label>
           <div class="flex-row">
-            <input v-model="addFriendHandleInput" placeholder="예: alice_kim" />
+            <input v-model="addFriendHandleInput" placeholder="예: alice_kim 또는 alice@line-test.local" @keydown.enter.prevent="addFriendByHandle" />
             <button class="btn-primary" @click="addFriendByHandle">추가</button>
+          </div>
+          <div class="add-friend-quick-options">
+            <div class="quick-opt-item">
+              <span class="icon">📱</span>
+              <div>
+                <strong>QR 코드로 친구 추가</strong>
+                <small>모바일 카메라로 상대방 QR 코드를 스캔하세요.</small>
+              </div>
+            </div>
+            <div class="quick-opt-item">
+              <span class="icon">🔗</span>
+              <div>
+                <strong>초대 링크 공유</strong>
+                <small>초대 링크를 생성하여 친구를 메신저로 초대합니다.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW CHAT MODAL (Floating Action Button 💬+) -->
+    <div v-if="showNewChatModal" class="modal-backdrop" @click.self="showNewChatModal = false">
+      <div class="standard-modal-box new-chat-modal">
+        <div class="modal-header">
+          <h3>💬 새 대화 시작</h3>
+          <button class="btn-modal-close" @click="showNewChatModal = false">✕</button>
+        </div>
+        <div class="modal-body-form">
+          <div class="new-chat-options-grid">
+            <button class="btn-new-chat-type" @click="showNewChatModal = false; showCreateGroupModal = true">
+              <span class="type-icon">👥</span>
+              <div class="type-text">
+                <strong>그룹 대화방 만들기</strong>
+                <small>여러 친구를 한 번에 초대하여 그룹 대화를 나눕니다.</small>
+              </div>
+            </button>
+            <button class="btn-new-chat-type" @click="showNewChatModal = false; activeNav = 'openchat'">
+              <span class="type-icon">🌐</span>
+              <div class="type-text">
+                <strong>오픈채팅 참여하기</strong>
+                <small>공통 관심사 주제의 대화방을 둘러보고 대화에 참여합니다.</small>
+              </div>
+            </button>
+          </div>
+
+          <label style="margin-top: 14px;">친구 목록에서 1:1 대화 시작</label>
+          <div class="select-friends-scroll" style="max-height: 180px;">
+            <div
+              v-for="f in friends"
+              :key="'new-chat-' + f.id"
+              class="quick-pick-friend-row"
+              @click="startDirectChat(f); showNewChatModal = false"
+            >
+              <div class="pc-avatar circle-34" :style="{ background: f.avatar_color || 'var(--om-primary, #2563EB)' }">
+                {{ f.display_name.slice(0, 1) }}
+              </div>
+              <div class="friend-pick-meta">
+                <strong>{{ f.display_name }}</strong>
+                <small>{{ f.status_message || f.bio || 'Open Messenger' }}</small>
+              </div>
+              <button class="btn-mini-chat">대화</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPEN SCANNER ECOSYSTEM CENTER MODAL (Article 4 & Left Rail) -->
+    <div v-if="showEcosystemHub" class="modal-backdrop" @click.self="showEcosystemHub = false">
+      <div class="standard-modal-box ecosystem-modal">
+        <div class="modal-header">
+          <div class="ecosystem-modal-title">
+            <LineIcon name="open-messenger-logo" :size="24" />
+            <h3>Open Scanner 생태계 서비스 센터</h3>
+          </div>
+          <button class="btn-modal-close" @click="showEcosystemHub = false">✕</button>
+        </div>
+        <div class="modal-body-form ecosystem-body">
+          <p class="ecosystem-intro">
+            Open Messenger는 Open Scanner 생태계의 모든 서비스를 연결하는 중앙 허브입니다.
+          </p>
+          <div class="ecosystem-cards-grid">
+            <div
+              v-for="svc in ECOSYSTEM_SERVICES"
+              :key="svc.id"
+              class="ecosystem-card"
+              :class="svc.status"
+            >
+              <div class="ecosystem-card-header">
+                <div class="svc-icon-box">
+                  <LineIcon :name="svc.icon" :size="20" />
+                </div>
+                <div class="svc-names">
+                  <strong>{{ svc.name }}</strong>
+                  <span class="svc-ko">{{ svc.nameKo }}</span>
+                </div>
+                <span class="svc-status-pill" :class="svc.status">{{ svc.statusText }}</span>
+              </div>
+              <p class="svc-desc">{{ svc.description }}</p>
+              <div class="svc-card-footer">
+                <a
+                  v-if="svc.actionUrl"
+                  :href="svc.actionUrl"
+                  target="_blank"
+                  class="btn-svc-action link"
+                >
+                  콘솔 열기 ↗
+                </a>
+                <button
+                  v-else
+                  type="button"
+                  class="btn-svc-action"
+                  @click="openEcosystemService(svc.id); showEcosystemHub = false"
+                >
+                  {{ svc.status === 'preview' ? '준비 중 안내' : '실행하기' }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2644,14 +3360,14 @@ async function deleteUserAccount() {
    AUTHENTIC LINE PC DESKTOP DESIGN SYSTEM
    ========================================================================== */
 .line-desktop-app {
-  --line-green: var(--luno-deep-blue);
-  --line-green-hover: var(--luno-deep-blue-hover);
-  --line-slate-bg: var(--luno-bg-chat-canvas);
-  --line-rail-bg: var(--luno-bg-rail);
-  --line-side-bg: var(--luno-bg-surface);
-  --line-border: var(--luno-border-color);
-  --line-text-dark: var(--luno-text-primary);
-  --line-text-sub: var(--luno-text-secondary);
+  --line-green: var(--om-primary, #2563EB);
+  --line-green-hover: var(--om-primary-hover, #1D4ED8);
+  --line-slate-bg: var(--om-bg, #F7F9FC);
+  --line-rail-bg: var(--om-midnight, #0B1020);
+  --line-side-bg: var(--om-surface, #FFFFFF);
+  --line-border: var(--om-border, #E2E8F0);
+  --line-text-dark: var(--om-text, #111827);
+  --line-text-sub: var(--om-text-muted, #64748B);
 }
 
 .pc-luno-logo { display: block; margin: 0 auto; max-width: 100%; object-fit: contain; }
@@ -2683,224 +3399,460 @@ async function deleteUserAccount() {
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
 }
 .floating-alert.error { background: #fee2e2; color: #b91c1c; border: 1px solid #f87171; }
-.floating-alert.note { background: #dcfce7; color: #15803d; border: 1px solid #4ade80; }
+.floating-alert.note { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; }
 .btn-dismiss { background: none; border: none; cursor: pointer; font-size: 12px; color: inherit; }
 
 /* ==========================================================================
-   AUTH SCREEN: AUTHENTIC LINE PC LOGIN WINDOW
+   AUTH SCREEN: AUTHENTIC OPEN MESSENGER PC 2-COLUMN LOGIN WINDOW (Screenshots 2 & 3)
    ========================================================================== */
 .pc-auth-viewport {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #20252b;
+  background: radial-gradient(circle at 50% 30%, #1e293b, #0b1020);
   height: 100vh;
   width: 100vw;
+  padding: 20px;
+  box-sizing: border-box;
 }
-.pc-login-card {
-  width: 360px;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+
+.pc-auth-window-2col {
+  width: 760px;
+  max-width: 96vw;
+  min-height: 480px;
+  background: var(--om-surface, #ffffff);
+  border-radius: var(--om-radius-md, 10px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
+
 .pc-window-bar {
-  height: 32px;
+  height: 38px;
   background: #f8fafc;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--om-border, #e2e8f0);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 12px;
   position: relative;
+  user-select: none;
 }
-.pc-win-dots {
+
+[data-theme='dark'] .pc-window-bar {
+  background: #0f172a;
+  border-bottom-color: #1e293b;
+}
+
+.pc-win-left-controls {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
 }
-.pc-win-dots .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.pc-win-dots .dot.close { background: #ff5f56; }
-.pc-win-dots .dot.min { background: #ffbd2e; }
-.pc-win-dots .dot.max { background: #27c93f; }
-.pc-win-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-  letter-spacing: 0.5px;
-}
-.pc-login-body {
-  padding: 28px 24px 24px;
-}
-.pc-brand-header {
-  text-align: center;
-  margin-bottom: 20px;
-}
-.pc-line-badge {
-  display: inline-block;
-  background: #06C755;
-  color: #ffffff;
-  font-weight: 900;
-  font-size: 26px;
-  letter-spacing: 0.5px;
-  padding: 8px 22px;
-  border-radius: 12px;
-}
-.pc-auth-nav-tabs {
-  display: flex;
-  border-bottom: 2px solid #f1f5f9;
-  margin-bottom: 20px;
-}
-.pc-auth-nav-tabs button {
-  flex: 1;
-  padding: 10px 0;
+
+.btn-win-menu, .btn-win-help {
   background: none;
   border: none;
-  font-size: 13px;
-  font-weight: 600;
-  color: #8892a0;
+  padding: 4px 6px;
+  color: #64748b;
   cursor: pointer;
-  position: relative;
-  transition: all 0.15s;
-}
-.pc-auth-nav-tabs button.active {
-  color: #111827;
-  font-weight: 700;
-}
-.pc-auth-nav-tabs button.active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #06C755;
-}
-.pc-input-wrap {
-  margin-bottom: 12px;
-}
-.pc-input-wrap input {
-  width: 100%;
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid #d1d5db;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-win-menu:hover, .btn-win-help:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.pc-win-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.3px;
+}
+
+.pc-win-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pc-win-sys-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid #cbd5e1;
+}
+
+.btn-sys-tool {
+  background: none;
+  border: none;
+  width: 24px;
+  height: 24px;
   font-size: 13px;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-sys-tool:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.btn-sys-tool.close:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* 2-Column Body */
+.pc-auth-body-2col {
+  display: flex;
+  flex: 1;
+  min-height: 440px;
+}
+
+.pc-auth-col {
+  flex: 1;
+  padding: 36px 38px 28px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.pc-auth-col.form-col {
+  justify-content: space-between;
+}
+
+.pc-auth-col-divider {
+  width: 1px;
+  background: var(--om-border, #e2e8f0);
+}
+
+[data-theme='dark'] .pc-auth-col-divider {
+  background: #1e293b;
+}
+
+.pc-brand-header-left {
+  margin-bottom: 24px;
+}
+
+.pc-om-logo {
+  display: block;
+  max-width: 210px;
+  object-fit: contain;
+}
+
+.pc-login-form-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pc-input-row {
+  position: relative;
+  width: 100%;
+}
+
+.pc-login-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--om-text, #111827);
   box-sizing: border-box;
   outline: none;
-  transition: border-color 0.15s;
+  transition: all 0.15s ease;
 }
-.pc-input-wrap input:focus {
-  border-color: #06C755;
+
+.pc-login-input:focus {
+  border-color: var(--om-primary, #2563EB);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
-.pc-form-helpers {
+
+.password-wrap .pc-login-input {
+  padding-right: 36px;
+}
+
+.btn-eye-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+}
+
+.btn-pc-submit-full {
+  width: 100%;
+  height: 44px;
+  background: var(--om-primary, #2563EB);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 4px;
+}
+
+.btn-pc-submit-full:hover:not(:disabled) {
+  background: var(--om-primary-hover, #1D4ED8);
+}
+
+.btn-pc-submit-full:disabled {
+  background: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.pc-login-options-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  color: #4b5563;
-  margin: 10px 0 16px;
+  color: #64748b;
+  margin-top: 4px;
 }
-.pc-remember-check {
-  display: flex;
+
+.pc-custom-check {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
+  user-select: none;
 }
-.btn-register-toggle {
+
+.pc-custom-check input[type="checkbox"] {
+  accent-color: var(--om-primary, #2563EB);
+  cursor: pointer;
+}
+
+.btn-subtle-link {
   background: none;
   border: none;
-  color: #06C755;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn-pc-submit {
-  width: 100%;
-  height: 44px;
-  background: #06C755;
-  color: #ffffff;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-pc-submit:hover { background: #05b34c; }
-
-.pc-demo-section {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px dashed #e2e8f0;
-}
-.demo-label {
-  font-size: 11px;
-  font-weight: 600;
   color: #64748b;
-  margin-bottom: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
 }
-.demo-buttons-group {
+.btn-subtle-link:hover {
+  color: var(--om-primary, #2563EB);
+  text-decoration: underline;
+}
+.btn-subtle-link.accent {
+  color: var(--om-primary, #2563EB);
+  font-weight: 600;
+}
+
+.pc-login-bottom-switch {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.btn-switch-auth-link {
+  background: none;
+  border: none;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.btn-switch-auth-link:hover {
+  color: var(--om-primary, #2563EB);
+}
+
+.pc-demo-chips-compact {
+  margin-top: 12px;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px dashed #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.demo-caption {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.demo-pill-group {
   display: flex;
   gap: 6px;
-}
-.btn-demo-chip {
   flex: 1;
-  padding: 6px 0;
-  background: #f8fafc;
+}
+
+.btn-demo-pill {
+  flex: 1;
+  padding: 4px 6px;
+  background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
   color: #334155;
   cursor: pointer;
+  transition: all 0.15s;
 }
-.btn-demo-chip:hover {
-  background: #e8f8ee;
-  border-color: #06C755;
-  color: #06C755;
+.btn-demo-pill:hover {
+  background: #eff6ff;
+  border-color: var(--om-primary, #2563EB);
+  color: var(--om-primary, #2563EB);
 }
 
-/* QR Tab */
-.pc-tab-content.qr-mode {
-  text-align: center;
-  padding: 10px 0;
+/* Phone Composite Input */
+.phone-composite {
+  display: flex;
+  gap: 6px;
 }
-.pc-qr-box {
-  display: inline-block;
-  padding: 12px;
+
+.pc-country-select {
+  height: 42px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.qr-guide {
   font-size: 12px;
-  color: #4b5563;
-  margin: 12px 0 6px;
-  line-height: 1.4;
-}
-.qr-details {
-  font-size: 10px;
-  color: #64748b;
-  margin-bottom: 12px;
-}
-.btn-qr-reload {
-  padding: 6px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #ffffff;
-  font-size: 11px;
   font-weight: 600;
+  color: #334155;
+  outline: none;
+}
+
+.phone-composite .phone-input {
+  flex: 1;
+}
+
+.btn-send-code {
+  white-space: nowrap;
+  padding: 0 12px;
+  height: 42px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
   cursor: pointer;
+}
+.btn-send-code:hover {
+  background: #e2e8f0;
+}
+
+.code-wrap {
+  position: relative;
+}
+
+.phone-timer-pill {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: #ef4444;
+}
+
+/* RIGHT COLUMN: QR Login */
+.pc-auth-col.qr-col {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: #fafbfc;
+}
+
+[data-theme='dark'] .pc-auth-col.qr-col {
+  background: #0d1526;
+}
+
+.pc-qr-box-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 270px;
+}
+
+.pc-qr-heading {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--om-text, #111827);
+  margin: 0 0 16px 0;
+  letter-spacing: -0.3px;
+}
+
+.pc-qr-matrix-card {
+  padding: 10px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  margin-bottom: 16px;
+}
+
+.qr-svg-matrix {
+  display: block;
+}
+
+.pc-qr-instruction {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+  margin: 0 0 14px 0;
+}
+
+.pc-qr-timer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #475569;
+  background: #ffffff;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+}
+
+.pc-qr-timer-pill strong {
+  color: var(--om-primary, #2563EB);
+}
+
+.btn-qr-reload {
+  background: none;
+  border: none;
+  color: var(--om-primary, #2563EB);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.btn-qr-reload:hover {
+  text-decoration: underline;
+}
+
+.pc-qr-session-id {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 10px;
 }
 
 /* ==========================================================================
@@ -2914,29 +3866,30 @@ async function deleteUserAccount() {
   overflow: hidden;
 }
 
-/* (Column 1) Leftmost Rail Dock (60px) */
+/* (Column 1) Leftmost Rail Dock (62px) */
 .pc-rail {
-  width: 60px;
-  background: #20252b;
+  width: var(--om-rail-width, 62px);
+  background: var(--om-midnight, #0B1020);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 0;
+  padding: 16px 0 12px;
   flex-shrink: 0;
   z-index: 100;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 .pc-rail-top, .pc-rail-bottom {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
 }
 .pc-user-avatar-trigger {
   position: relative;
   cursor: pointer;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .pc-avatar {
   border-radius: 50%;
@@ -2958,36 +3911,36 @@ async function deleteUserAccount() {
   right: 0;
   width: 10px;
   height: 10px;
-  background: #06C755;
-  border: 2px solid #20252b;
+  background: var(--om-success, #22C55E);
+  border: 2px solid var(--om-midnight, #0B1020);
   border-radius: 50%;
 }
 
 .pc-rail-btn {
-  width: 52px;
-  height: 48px;
+  width: 48px;
+  height: 44px;
   background: none;
   border: none;
-  color: #7b8794;
+  color: #94A3B8;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
   border-radius: 8px;
 }
 .pc-rail-btn.small {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
 }
 .pc-rail-btn:hover {
-  color: #ffffff;
-  background: rgba(255,255,255,0.06);
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.08);
 }
 .pc-rail-btn.active {
-  color: #ffffff;
-  background: rgba(255,255,255,0.1);
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.12);
 }
 .pc-rail-indicator {
   display: none;
@@ -2998,31 +3951,32 @@ async function deleteUserAccount() {
   left: 0;
   width: 3px;
   height: 24px;
-  background: #06C755;
-  border-radius: 0 2px 2px 0;
+  background: var(--om-cyan, #22C7E8);
+  border-radius: 0 4px 4px 0;
 }
 .pc-unread-pill {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  background: #06C755;
+  top: 4px;
+  right: 4px;
+  background: var(--om-primary, #2563EB);
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
   padding: 1px 5px;
   border-radius: 10px;
+  border: 2px solid var(--om-midnight, #0B1020);
 }
 
 /* Dropdown menus from rail */
 .pc-dropdown-menu {
   position: absolute;
   left: 64px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--om-surface, #ffffff);
+  border: 1px solid var(--om-border, #e2e8f0);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   padding: 6px 0;
-  min-width: 190px;
+  min-width: 200px;
   z-index: 1000;
   animation: fadeIn 0.15s ease-out;
 }
@@ -3031,7 +3985,7 @@ async function deleteUserAccount() {
 .dropdown-header {
   padding: 8px 14px;
 }
-.dropdown-header strong { display: block; font-size: 13px; color: #111827; }
+.dropdown-header strong { display: block; font-size: 13px; color: var(--om-text, #111827); }
 .dropdown-header small { color: #64748b; font-size: 11px; }
 .dropdown-heading {
   padding: 6px 14px;
@@ -3041,7 +3995,7 @@ async function deleteUserAccount() {
 }
 .dropdown-sep {
   height: 1px;
-  background: #f1f5f9;
+  background: var(--om-border-light, #f1f5f9);
   margin: 4px 0;
 }
 .dropdown-item {
@@ -3059,124 +4013,184 @@ async function deleteUserAccount() {
 }
 .dropdown-item:hover {
   background: #f1f5f9;
-  color: #06C755;
+  color: var(--om-primary, #2563EB);
 }
 .dropdown-item.logout {
   color: #ef4444;
 }
 
-/* (Column 2) Second Sidebar List Pane (310px) */
+/* (Column 2) Second Sidebar List Pane (~305px) */
 .pc-side-pane {
-  width: 310px;
-  background: #ffffff;
-  border-right: 1px solid #e9edf1;
+  width: var(--om-panel-width, 305px);
+  background: var(--om-surface, #ffffff);
+  border-right: 1px solid var(--om-border, #e9edf1);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   height: 100vh;
+  position: relative;
+  transition: width 0.2s ease;
 }
+
+.pc-side-pane.is-collapsed {
+  width: 52px;
+  overflow: hidden;
+}
+
 .pc-pane-body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
 }
-.pc-pane-header {
-  height: 52px;
-  padding: 0 16px;
+
+/* Subtabs in Chats View (Screenshot 1) */
+.pc-chat-subtabs-row {
   display: flex;
+  height: 42px;
+  border-bottom: 1px solid var(--om-border, #e2e8f0);
+  background: var(--om-surface, #ffffff);
   align-items: center;
-  justify-content: space-between;
 }
-.pc-pane-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: #111827;
-}
-.btn-pc-header-tool {
+
+.btn-subtab {
+  flex: 1;
+  height: 100%;
   background: none;
   border: none;
-  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
   cursor: pointer;
-  padding: 4px;
-  display: grid;
-  place-items: center;
-  border-radius: 4px;
-}
-.btn-pc-header-tool:hover { background: #f1f5f9; }
-
-.pc-search-box {
-  padding: 0 12px 8px;
-}
-.pc-search-inner {
-  height: 32px;
-  background: #f2f4f6;
-  border-radius: 6px;
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  gap: 6px;
+  justify-content: center;
+  transition: color 0.15s ease;
 }
-.pc-search-inner input {
+
+.btn-subtab:hover {
+  color: var(--om-text, #111827);
+}
+
+.btn-subtab.active {
+  color: var(--om-text, #111827);
+  font-weight: 700;
+}
+
+.btn-subtab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20%;
+  right: 20%;
+  height: 2.5px;
+  background: var(--om-primary, #2563EB);
+  border-radius: 2px 2px 0 0;
+}
+
+.btn-subtab.filter-btn {
+  flex: 0 0 38px;
+  font-size: 15px;
+}
+
+/* Search Bar Header */
+.pc-search-bar-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--om-border, #e2e8f0);
+  background: var(--om-surface, #ffffff);
+}
+
+.pc-search-box-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.pc-pane-search-input {
   flex: 1;
   border: none;
   background: none;
   outline: none;
   font-size: 12px;
-}
-.btn-search-clear {
-  background: none;
-  border: none;
-  font-size: 11px;
-  color: #94a3b8;
-  cursor: pointer;
+  color: var(--om-text, #111827);
 }
 
-.pc-filter-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 0 12px 8px;
-}
-.pc-filter-tabs button {
-  flex: 1;
-  padding: 5px 0;
+.btn-clear-search {
+  background: none;
   border: none;
-  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.btn-pane-sort, .btn-pane-collapse {
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
   color: #64748b;
   font-size: 12px;
-  font-weight: 600;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
-.pc-filter-tabs button.active {
-  background: #06C755;
-  color: #ffffff;
+
+.btn-pane-sort:hover, .btn-pane-collapse:hover {
+  background: #f1f5f9;
+  color: var(--om-text, #111827);
+}
+
+.btn-pane-sort.active {
+  background: #eff6ff;
+  border-color: var(--om-primary, #2563EB);
+  color: var(--om-primary, #2563EB);
 }
 
 .pc-pane-scroll {
   flex: 1;
   overflow-y: auto;
 }
-.pc-my-card {
-  padding: 10px 16px;
+
+/* My Profile Card (Screenshots 4 & 5) */
+.pc-my-profile-card {
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--om-border, #e2e8f0);
+}
+
+.my-profile-top-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
 }
-.pc-my-card:hover { background: #f8fafc; }
-.pc-card-meta {
+
+.my-profile-meta {
   flex: 1;
   min-width: 0;
 }
-.name-line {
+
+.my-name-text {
   font-size: 14px;
   font-weight: 700;
-  color: #111827;
+  color: var(--om-text, #111827);
 }
-.status-line {
-  font-size: 12px;
+
+.my-status-text {
+  font-size: 11px;
   color: #64748b;
   white-space: nowrap;
   overflow: hidden;
@@ -3184,35 +4198,101 @@ async function deleteUserAccount() {
   margin-top: 2px;
 }
 
-.pc-category {
-  padding-bottom: 4px;
+.my-profile-action-chips {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
-.category-title {
-  padding: 10px 16px 4px;
+
+.btn-profile-chip {
+  flex: 1;
+  height: 28px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-profile-chip:hover {
+  background: #e2e8f0;
+  color: var(--om-primary, #2563EB);
+}
+
+/* Accordions (Screenshots 4 & 5) */
+.pc-accordion-section {
+  padding-bottom: 4px;
+}
+
+.pc-accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.accordion-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.accordion-caret {
+  font-size: 13px;
   color: #94a3b8;
 }
-.pc-row-item {
-  height: 52px;
-  padding: 0 16px;
+
+.pc-friend-item-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 1px 6px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.12s ease;
 }
-.pc-row-item:hover { background: #f4f6f8; }
-.pc-row-meta {
+
+.pc-friend-item-row:hover {
+  background: #f1f5f9;
+}
+
+.pc-friend-item-row.selected {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.friend-item-meta {
   flex: 1;
   min-width: 0;
 }
-.row-name {
+
+.friend-item-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--om-text, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.row-desc {
+
+.group-count {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.friend-item-sub {
   font-size: 11px;
   color: #64748b;
   white-space: nowrap;
@@ -3220,71 +4300,392 @@ async function deleteUserAccount() {
   text-overflow: ellipsis;
   margin-top: 1px;
 }
-.badge-verified { color: #06C755; font-size: 11px; font-weight: 700; }
 
-/* Chats List Rows */
-.pc-chat-row {
-  height: 64px;
-  padding: 0 16px;
+/* Chats List Rows (Screenshot 1) */
+.pc-chat-item-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f8fafc;
   cursor: pointer;
-  border-bottom: 1px solid rgba(0,0,0,0.02);
-  transition: background 0.1s;
+  transition: background 0.12s ease;
 }
-.pc-chat-row:hover { background: #f4f6f8; }
-.pc-chat-row.selected {
-  background: #e8f8ee;
+
+.pc-chat-item-row:hover {
+  background: #f1f5f9;
 }
-.pc-chat-meta {
+
+.pc-chat-item-row.selected {
+  background: #eff6ff;
+}
+
+.pc-chat-item-meta {
   flex: 1;
   min-width: 0;
 }
-.chat-top-line {
+
+.chat-row-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-.chat-title-text {
+
+.chat-row-title {
   font-size: 13px;
   font-weight: 700;
-  color: #111827;
+  color: var(--om-text, #111827);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-.member-count {
+
+.member-count-badge {
   font-size: 11px;
   color: #94a3b8;
   font-weight: 400;
-  margin-left: 4px;
 }
-.chat-timestamp {
+
+.chat-row-time {
   font-size: 10px;
   color: #94a3b8;
+  flex-shrink: 0;
 }
-.chat-bottom-line {
+
+.chat-row-bottom {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 3px;
 }
-.chat-last-message {
+
+.chat-row-preview {
   font-size: 12px;
   color: #64748b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 170px;
+  max-width: 180px;
 }
-.chat-unread-badge {
-  background: #06C755;
+
+.chat-unread-pill {
+  background: var(--om-primary, #2563EB);
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
-  padding: 1px 6px;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 9px;
+  padding: 0 5px;
+  box-sizing: border-box;
+}
+
+/* Floating Action Button (FAB) (Screenshot 1) */
+.pc-floating-add-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 18px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--om-primary, #2563EB);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+  z-index: 50;
+}
+
+.pc-floating-add-btn:hover {
+  background: var(--om-primary-hover, #1D4ED8);
+  transform: scale(1.06);
+}
+
+.fab-plus-mark {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 900;
+  bottom: 7px;
+  right: 7px;
+  background: var(--om-cyan, #22C7E8);
+  color: #0B1020;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Friend Profile View (Screenshot 5) */
+.pc-friend-profile-viewport {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--om-surface, #ffffff);
+  height: 100vh;
+}
+
+.pc-profile-preview-card {
+  text-align: center;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.profile-preview-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 34px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.2);
+}
+
+.profile-preview-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--om-text, #111827);
+  margin: 0 0 6px 0;
+}
+
+.profile-preview-bio {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 24px 0;
+}
+
+.btn-start-chat-large {
+  width: 160px;
+  height: 44px;
+  background: var(--om-primary, #2563EB);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  transition: all 0.15s ease;
+}
+
+.btn-start-chat-large:hover {
+  background: var(--om-primary-hover, #1D4ED8);
+  transform: translateY(-1px);
+}
+
+.profile-preview-subactions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn-subaction-pill {
+  padding: 6px 12px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-subaction-pill:hover {
+  background: #e2e8f0;
+  color: var(--om-primary, #2563EB);
+}
+
+/* Ecosystem Hub Modal */
+.ecosystem-modal {
+  width: 740px !important;
+  max-width: 95vw;
+}
+.ecosystem-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ecosystem-modal-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--om-text, #111827);
+}
+.ecosystem-intro {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 0 12px 0;
+}
+.ecosystem-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.ecosystem-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+.ecosystem-card:hover {
+  border-color: var(--om-primary, #2563EB);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+.ecosystem-card.active { border-left: 3px solid var(--om-primary, #2563EB); }
+.ecosystem-card.beta { border-left: 3px solid var(--om-cyan, #22C7E8); }
+.ecosystem-card.preview { border-left: 3px solid #94a3b8; opacity: 0.85; }
+
+.ecosystem-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.svc-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  display: grid;
+  place-items: center;
+  color: var(--om-primary, #2563EB);
+  flex-shrink: 0;
+}
+.svc-names {
+  flex: 1;
+  min-width: 0;
+}
+.svc-names strong {
+  display: block;
+  font-size: 13px;
+  color: var(--om-text, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.svc-ko {
+  font-size: 10px;
+  color: #64748b;
+  display: block;
+}
+.svc-status-pill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
   border-radius: 10px;
+  white-space: nowrap;
+}
+.svc-status-pill.active { background: #dcfce7; color: #15803d; }
+.svc-status-pill.beta { background: #e0f2fe; color: #0369a1; }
+.svc-status-pill.preview { background: #f1f5f9; color: #64748b; }
+.svc-desc {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0;
+}
+.btn-svc-action {
+  width: 100%;
+  height: 30px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.btn-svc-action:hover {
+  background: #eff6ff;
+  border-color: var(--om-primary, #2563EB);
+  color: var(--om-primary, #2563EB);
+}
+.btn-svc-action.link {
+  color: var(--om-primary, #2563EB);
+}
+
+/* New Chat Options */
+.new-chat-options-grid {
+  display: flex;
+  gap: 10px;
+}
+.btn-new-chat-type {
+  flex: 1;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.btn-new-chat-type:hover {
+  background: #eff6ff;
+  border-color: var(--om-primary, #2563EB);
+}
+.type-icon { font-size: 24px; }
+.type-text strong { display: block; font-size: 13px; color: var(--om-text, #111827); }
+.type-text small { font-size: 11px; color: #64748b; }
+
+.quick-pick-friend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.quick-pick-friend-row:hover { background: #f1f5f9; }
+.friend-pick-meta { flex: 1; min-width: 0; }
+.friend-pick-meta strong { display: block; font-size: 12px; color: #111827; }
+.friend-pick-meta small { font-size: 10px; color: #64748b; }
+.btn-mini-chat {
+  padding: 4px 10px;
+  background: var(--om-primary, #2563EB);
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /* (Column 3) Right Main Chat View */
@@ -3396,7 +4797,7 @@ async function deleteUserAccount() {
   border-top-left-radius: 2px;
 }
 .pc-msg-row.mine .pc-speech-bubble {
-  background: #06C755;
+  background: var(--om-primary, #2563EB);
   color: #ffffff;
   border-top-right-radius: 2px;
 }
@@ -3504,13 +4905,17 @@ async function deleteUserAccount() {
 .btn-green-send {
   height: 28px;
   padding: 0 14px;
-  background: #06C755;
+  background: var(--om-primary, #2563EB);
   color: #ffffff;
   border: none;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.btn-green-send:hover:not(:disabled) {
+  background: var(--om-primary-hover, #1d4ed8);
 }
 .btn-green-send:disabled {
   background: #e2e8f0;
@@ -3587,14 +4992,15 @@ async function deleteUserAccount() {
   gap: 8px;
   margin-top: 10px;
 }
-.btn-primary { background: #06C755; color: white; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-primary { background: var(--om-primary, #2563EB); color: white; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.15s; }
+.btn-primary:hover { background: var(--om-primary-hover, #1d4ed8); }
 .btn-secondary { background: #f1f5f9; color: #475569; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
 
 /* Keep modal, Call modal, etc */
 .keep-modal { width: 440px; }
 .keep-filter-bar { display: flex; gap: 6px; padding: 10px 18px; border-bottom: 1px solid #f1f5f9; }
 .keep-filter-bar button { padding: 4px 10px; font-size: 11px; border: none; border-radius: 12px; background: #f1f5f9; cursor: pointer; }
-.keep-filter-bar button.active { background: #06C755; color: white; }
+.keep-filter-bar button.active { background: var(--om-primary, #2563EB); color: white; }
 .keep-search-input { width: calc(100% - 36px); margin: 8px 18px; padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; }
 .keep-scroll-content { max-height: 280px; overflow-y: auto; padding: 0 18px 18px; }
 .keep-card { padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
@@ -3607,7 +5013,7 @@ async function deleteUserAccount() {
 .call-controls-row { display: flex; justify-content: center; gap: 12px; margin-top: 18px; }
 .btn-call-circle { width: 44px; height: 44px; border-radius: 50%; background: #334155; border: none; color: white; cursor: pointer; font-size: 18px; display: grid; place-items: center; }
 .btn-call-circle.off { background: #ef4444; }
-.btn-call-answer { background: #06C755; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
+.btn-call-answer { background: var(--om-success, #22c55e); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
 .btn-call-hangup { background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
 
 /* Profile modal */
@@ -3625,8 +5031,8 @@ async function deleteUserAccount() {
 /* VOOM & Stories */
 .stories-row { display: flex; gap: 10px; padding: 12px 16px; overflow-x: auto; border-bottom: 1px solid #f1f5f9; }
 .story-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font-size: 11px; }
-.story-ring { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #06C755; display: grid; place-items: center; color: white; font-weight: 800; font-size: 14px; }
-.story-ring.plus { border-color: #cbd5e1; color: #06C755; font-size: 18px; }
+.story-ring { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--om-primary, #2563EB); display: grid; place-items: center; color: white; font-weight: 800; font-size: 14px; }
+.story-ring.plus { border-color: #cbd5e1; color: var(--om-primary, #2563EB); font-size: 18px; }
 .voom-list { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .voom-card { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: white; }
 .voom-banner { height: 90px; display: grid; place-items: center; font-size: 32px; }
@@ -3638,28 +5044,28 @@ async function deleteUserAccount() {
 /* OpenChat */
 .openchat-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .openchat-card { display: flex; gap: 10px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; }
-.openchat-card:hover { background: #f8fafc; border-color: #06C755; }
+.openchat-card:hover { background: #f8fafc; border-color: var(--om-primary, #2563EB); }
 .card-icon { font-size: 20px; }
 .card-info strong { font-size: 13px; }
 .card-info p { font-size: 11px; color: #64748b; margin: 2px 0 0; }
 
 /* Wallet Card */
-.line-pay-card { margin: 12px; background: linear-gradient(135deg, #06C755, #0ea5e9); color: white; padding: 16px; border-radius: 12px; }
+.line-pay-card { margin: 12px; background: linear-gradient(135deg, var(--om-primary, #2563EB), var(--om-cyan, #22C7E8)); color: white; padding: 16px; border-radius: 12px; }
 .pay-top { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
 .pay-balance { font-size: 22px; font-weight: 900; margin: 10px 0; }
 .pay-actions { display: flex; gap: 8px; }
-.btn-pay-action { flex: 1; padding: 6px; background: white; color: #06C755; font-weight: 700; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.btn-pay-action { flex: 1; padding: 6px; background: white; color: var(--om-primary, #2563EB); font-weight: 700; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .btn-pay-action.secondary { background: rgba(255,255,255,0.2); color: white; }
 .services-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 12px 12px; }
 .service-box { background: #f8fafc; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font-size: 11px; font-weight: 700; }
-.service-box:hover { background: #e8f8ee; }
+.service-box:hover { background: rgba(37, 99, 235, 0.08); }
 .service-box .icon { font-size: 20px; }
 
 /* Sticker Popover */
 .sticker-popover { position: absolute; bottom: 140px; left: 16px; width: 280px; height: 180px; background: white; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow: hidden; z-index: 100; }
 .sticker-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #f1f5f9; padding: 4px; }
 .sticker-tabs button { flex: 1; padding: 4px; font-size: 11px; border: none; background: none; cursor: pointer; }
-.sticker-tabs button.active { font-weight: 700; color: #06C755; border-bottom: 2px solid #06C755; }
+.sticker-tabs button.active { font-weight: 700; color: var(--om-primary, #2563EB); border-bottom: 2px solid var(--om-primary, #2563EB); }
 .btn-close-sticker { background: none; border: none; cursor: pointer; font-size: 12px; color: #94a3b8; }
 .sticker-palette-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px; overflow-y: auto; }
 .sticker-choice-btn { font-size: 22px; background: none; border: none; cursor: pointer; border-radius: 6px; }
@@ -3726,7 +5132,7 @@ async function deleteUserAccount() {
 }
 
 .sticker-tabs button.active {
-  background-color: #06C755;
+  background-color: var(--om-primary, #2563EB);
   color: #ffffff;
   font-weight: 600;
 }
@@ -3810,8 +5216,8 @@ async function deleteUserAccount() {
 }
 
 .btn-tool-icon.active {
-  background-color: #e8f8ee;
-  color: #06C755;
+  background-color: rgba(37, 99, 235, 0.1);
+  color: var(--om-primary, #2563EB);
 }
 
 .btn-tool-icon.recording {

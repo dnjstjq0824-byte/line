@@ -183,12 +183,79 @@
       <polyline points="12 19 5 12 12 5" />
     </svg>
 
-    <svg v-else-if="name === 'luno-logo'" :width="size" :height="size" viewBox="0 0 64 64" fill="none">
-      <rect width="64" height="64" rx="18" fill="#315BCD" />
-      <path d="M15 29C15 19.6112 22.6112 12 32 12H34C43.3888 12 51 19.6112 51 29C51 38.3888 43.3888 46 34 46H25L16.5 51.5C15.5 52.1 14.3 51.2 14.6 50L16.2 42.5C15.4 40.2 15 37.7 15 35V29Z" fill="#FFFFFF" />
-      <path d="M25 26C25 31.5228 29.4772 36 35 36C38.2 36 41 34.5 42.8 32.2" stroke="#315BCD" stroke-width="4.5" stroke-linecap="round" />
-      <circle cx="26" cy="23" r="3" fill="#4F7CFF" />
-      <circle cx="41" cy="23" r="3.5" fill="#5EE6C2" />
+    <svg v-else-if="name === 'add-friends' || name === 'user-plus'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="8.5" cy="7" r="4" />
+      <line x1="20" y1="8" x2="20" y2="14" />
+      <line x1="23" y1="11" x2="17" y2="11" />
+    </svg>
+
+    <svg v-else-if="name === 'open-search'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      <path d="M11 8a3 3 0 0 0-3 3" />
+    </svg>
+
+    <svg v-else-if="name === 'open-mail'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+      <polyline points="22,6 12,13 2,6" />
+    </svg>
+
+    <svg v-else-if="name === 'open-apps'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+    </svg>
+
+    <svg v-else-if="name === 'open-video'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="4" width="15" height="16" rx="2" />
+      <polygon points="17 9 22 6 22 18 17 15" fill="currentColor" stroke="none" />
+    </svg>
+
+    <svg v-else-if="name === 'open-stream'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+      <polygon points="10 7 15 10 10 13" fill="currentColor" stroke="none" />
+    </svg>
+
+    <svg v-else-if="name === 'open-ai'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2l2.4 5.6L20 10l-5.6 2.4L12 18l-2.4-5.6L4 10l5.6-2.4z" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="19" r="2.5" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+
+    <svg v-else-if="name === 'open-services'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <polygon points="12 2 15 8 22 9 17 14 18 21 12 17 6 21 7 14 2 9 9 8" fill="currentColor" stroke="none" />
+    </svg>
+
+    <svg v-else-if="name === 'bell'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+
+    <svg v-else-if="name === 'bell-off'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      <path d="M18.63 13A17.89 17.89 0 0 1 18 8" />
+      <path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+
+    <svg v-else-if="name === 'open-messenger-logo' || name === 'luno-logo'" :width="size" :height="size" viewBox="0 0 64 64" fill="none">
+      <defs>
+        <linearGradient id="iconOmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#22C7E8" />
+          <stop offset="50%" stop-color="#2563EB" />
+          <stop offset="100%" stop-color="#7C3AED" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="18" fill="url(#iconOmGrad)" />
+      <path d="M16 22a8 8 0 0 1 14.93-3.92L33 22l-3.92 1.07A8 8 0 0 1 16 22z" fill="#FFFFFF" />
+      <circle cx="32" cy="32" r="14" fill="#FFFFFF" fill-opacity="0.25" />
+      <circle cx="32" cy="32" r="5" fill="#FFFFFF" />
+      <circle cx="42" cy="44" r="3" fill="#22C7E8" />
     </svg>
   </span>
 </template>
