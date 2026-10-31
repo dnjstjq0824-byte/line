@@ -1260,7 +1260,8 @@ async function extended(p, request, url, me, token) {
         const acct = officialAccounts.get(conv.members.find(x => officialAccounts.has(x)));
         if (acct && kind === 'text') pushMessage(cid, acct.id, { kind: 'text', body: botReply(body, acct) });
       }
-      return json({ message: decorateMessage(msg, myId, cid), duplicate: false }, 201);
+      const decorated = decorateMessage(msg, myId, cid);
+      return json({ ...decorated, message: decorated, duplicate: false }, 201);
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)$/))) {
@@ -2648,7 +2649,7 @@ export default {
           message: newMsg
         });
 
-        return json({ message: newMsg, duplicate: false }, 201);
+        return json({ ...newMsg, message: newMsg, duplicate: false }, 201);
       }
 
       const convMsgDetail = p.match(/^conversations\/([a-zA-Z0-9_-]+)\/messages\/([a-zA-Z0-9_-]+)$/);
