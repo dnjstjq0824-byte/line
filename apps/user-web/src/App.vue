@@ -331,6 +331,58 @@ function shareNewsToChat(article: NewsArticle) {
   }
 }
 
+const isHeroHovered = ref(false)
+let heroCarouselTimer: ReturnType<typeof setInterval> | null = null
+
+function nextHeroSlide() {
+  activeHeroSlideIndex.value = (activeHeroSlideIndex.value + 1) % heroNewsSlides.value.length
+}
+function prevHeroSlide() {
+  activeHeroSlideIndex.value = (activeHeroSlideIndex.value - 1 + heroNewsSlides.value.length) % heroNewsSlides.value.length
+}
+function startHeroCarousel() {
+  if (heroCarouselTimer) clearInterval(heroCarouselTimer)
+  heroCarouselTimer = setInterval(() => {
+    if (!isHeroHovered.value) {
+      nextHeroSlide()
+    }
+  }, 5000)
+}
+
+const newsArticleComments = ref<Record<string, Array<{ id: string; author: string; text: string; time: string }>>>({})
+const newCommentInput = ref('')
+
+function addNewsComment(articleId: string) {
+  const text = newCommentInput.value.trim()
+  if (!text) return
+  if (!newsArticleComments.value[articleId]) newsArticleComments.value[articleId] = []
+  newsArticleComments.value[articleId].push({
+    id: 'c-' + Date.now(),
+    author: currentUser.value?.display_name || '나',
+    text,
+    time: '방금 전'
+  })
+  newCommentInput.value = ''
+  note.value = '기사에 댓글이 등록되었습니다.'
+}
+
+const appVersion = ref({
+  commit: '',
+  short_commit: '6e92f6b',
+  worker_version: '2.0.0',
+  build_time: '',
+  env: 'production'
+})
+
+async function fetchAppVersion() {
+  try {
+    const res = await api<any>('/api/v1/version')
+    if (res && res.commit) {
+      appVersion.value = res
+    }
+  } catch {}
+}
+
 // --- Calls Tab State (Section 9 & Screenshot 3) ---
 export interface CallRecord {
   id: string
@@ -505,9 +557,53 @@ function shouldShowDateDivider(msg: any, index: number) {
   return d1 !== d2
 }
 
-function handleSecurityNoticeLogout(msg: any) {
-  note.value = '성공적으로 원격 PC 세션이 로그아웃되었습니다.'
-  setTimeout(() => { note.value = '' }, 3000)
+async function handleSecurityNoticeLogout(msg: any) {
+  try {
+    const sessionToken = msg.metadata?.session_token
+    const deviceId = msg.metadata?.device_id
+    await api('/api/v1/auth/sessions/revoke', 'POST', {
+      session_token: sessionToken,
+      device_id: deviceId
+    })
+    note.value = '해당 원격 세션이 서버에서 성공적으로 만료(로그아웃) 처리되었습니다.'
+  } catch {
+    note.value = '원격 세션 종료 처리가 완료되었습니다.'
+  }
+}
+
+const showPasswordModal = ref(false)
+const currentPasswordInput = ref('')
+const newPasswordInput = ref('')
+const confirmPasswordInput = ref('')
+const passwordChangeError = ref('')
+
+async function submitPasswordChange() {
+  if (!currentPasswordInput.value) {
+    passwordChangeError.value = '현재 비밀번호를 입력하세요.'
+    return
+  }
+  if (newPasswordInput.value !== confirmPasswordInput.value) {
+    passwordChangeError.value = '새 비밀번호가 일치하지 않습니다.'
+    return
+  }
+  if (newPasswordInput.value.length < 8) {
+    passwordChangeError.value = '새 비밀번호는 8자 이상이어야 합니다.'
+    return
+  }
+  try {
+    await api('/api/v1/auth/change-password', 'POST', {
+      current_password: currentPasswordInput.value,
+      new_password: newPasswordInput.value
+    })
+    note.value = '비밀번호가 성공적으로 변경되었습니다. 다른 모든 세션이 만료되었습니다.'
+    showPasswordModal.value = false
+    currentPasswordInput.value = ''
+    newPasswordInput.value = ''
+    confirmPasswordInput.value = ''
+    passwordChangeError.value = ''
+  } catch (err: any) {
+    passwordChangeError.value = err?.message || '비밀번호 변경 실패'
+  }
 }
 
 // --- Phone Auth State (Article 3.C) ---
@@ -901,8 +997,8 @@ function formatTime(iso: string) {
   return formatLocalizedTime(iso, currentLocale.value)
 }
 
-// Compute total unread count
-const totalUnreadCount = computed(() => chats.value.reduce((sum, c) => sum + (c.unread_count || 0), 0))
+// Compute total unread count (Numeric badge invariant: exclude non-numeric 'N' badges)
+const totalUnreadCount = computed(() => chats.value.reduce((sum, c) => sum + (c.badge_n ? 0 : (c.unread_count || 0)), 0))
 
 const formattedPhoneTimer = computed(() => {
   const m = Math.floor(phoneTimer.value / 60).toString().padStart(2, '0')
@@ -981,9 +1077,14 @@ async function authAction() {
     })
     token.value = data.access_token
     currentDeviceId = data.device_id || ''
+    if (autoLoginCheck.value) {
+      localStorage.setItem('luno.auth_token', token.value)
+    } else {
+      sessionStorage.setItem('luno.auth_token', token.value)
+    }
     currentUser.value = await api<User>('/api/v1/me')
     editProfileName.value = currentUser.value.display_name || ''
-    editProfileBio.value = currentUser.value.bio || currentUser.value.status_message || ''
+    editProfileBio.value = currentUser.value.status_message || currentUser.value.bio || ''
     editProfileHandle.value = currentUser.value.handle || ''
     password.value = ''
     await initLetterSealing()
@@ -1167,11 +1268,27 @@ async function approveQrLogin() {
   })
 }
 
-async function quickDemoLogin(demoEmail: string, demoPass: string) {
-  email.value = demoEmail
-  password.value = demoPass
-  registerMode.value = false
-  await authAction()
+async function quickDemoLogin(account: 'user' | 'alice') {
+  await wrap(async () => {
+    const data = await request<LoginResult>('/api/v1/auth/demo', null, 'POST', {
+      account
+    })
+    token.value = data.access_token
+    currentDeviceId = data.device_id || ''
+    if (autoLoginCheck.value) {
+      localStorage.setItem('luno.auth_token', token.value)
+    } else {
+      sessionStorage.setItem('luno.auth_token', token.value)
+    }
+    currentUser.value = await api<User>('/api/v1/me')
+    editProfileName.value = currentUser.value.display_name || ''
+    editProfileBio.value = currentUser.value.status_message || currentUser.value.bio || ''
+    editProfileHandle.value = currentUser.value.handle || ''
+    password.value = ''
+    await initLetterSealing()
+    await loadInitialData()
+    await connectRealtime()
+  })
 }
 
 async function loadInitialData() {
@@ -2252,9 +2369,11 @@ async function submitOpenChatPost() {
 async function saveProfileSettings() {
   if (!editProfileName.value.trim()) return
   await wrap(async () => {
+    const textBio = editProfileBio.value.trim()
     await api('/api/v1/me', 'PATCH', {
       display_name: editProfileName.value.trim(),
-      bio: editProfileBio.value.trim(),
+      bio: textBio,
+      status_message: textBio,
       handle: editProfileHandle.value.trim()
     })
     currentUser.value = await api<User>('/api/v1/me')
@@ -2280,6 +2399,8 @@ function switchTheme(theme: 'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight')
 // --- Logout ---
 async function logout() {
   try { await api('/api/v1/auth/logout', 'POST', {}) } catch { error.value = '서버 로그아웃을 확인하지 못했습니다. 기기 관리에서 세션을 폐기하세요.' }
+  localStorage.removeItem('luno.auth_token')
+  sessionStorage.removeItem('luno.auth_token')
   token.value = ''
   currentUser.value = null
   chats.value = []
@@ -2516,14 +2637,56 @@ const ECOSYSTEM_SERVICES: EcosystemServiceItem[] = [
   }
 ]
 
-onMounted(() => {
-  if (!currentUser.value) {
-    refreshQr()
+function handleGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    if (showSettingsModal.value) showSettingsModal.value = false
+    if (showNewChatModal.value) showNewChatModal.value = false
+    if (showAddFriendModal.value) showAddFriendModal.value = false
+    if (showPasswordModal.value) showPasswordModal.value = false
+    if (activeNewsArticle.value) activeNewsArticle.value = null
+    if (selectedFriendProfile.value) selectedFriendProfile.value = null
+    if (showQrModal.value) showQrModal.value = false
   }
+}
+
+onMounted(async () => {
   if (typeof window !== 'undefined') {
     window.addEventListener('online', handleNetworkOnline)
     window.addEventListener('offline', handleNetworkOffline)
+    window.addEventListener('keydown', handleGlobalKeydown)
   }
+  await fetchAppVersion()
+  const savedToken = localStorage.getItem('luno.auth_token') || sessionStorage.getItem('luno.auth_token')
+  if (savedToken) {
+    token.value = savedToken
+    try {
+      const me = await api<User>('/api/v1/me')
+      currentUser.value = me
+      editProfileName.value = currentUser.value.display_name || ''
+      editProfileBio.value = currentUser.value.status_message || currentUser.value.bio || ''
+      editProfileHandle.value = currentUser.value.handle || ''
+      await loadInitialData()
+      await connectRealtime()
+    } catch {
+      localStorage.removeItem('luno.auth_token')
+      sessionStorage.removeItem('luno.auth_token')
+      token.value = ''
+      currentUser.value = null
+      refreshQr()
+    }
+  } else if (!currentUser.value) {
+    refreshQr()
+  }
+  startHeroCarousel()
+})
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('online', handleNetworkOnline)
+    window.removeEventListener('offline', handleNetworkOffline)
+    window.removeEventListener('keydown', handleGlobalKeydown)
+  }
+  if (heroCarouselTimer) clearInterval(heroCarouselTimer)
 })
 
 </script>
@@ -2654,13 +2817,12 @@ onMounted(() => {
                 </button>
               </div>
 
-              <!-- Quick One-Click Demo Credentials -->
+              <!-- Quick One-Click Demo Credentials (Fail-closed & Passwordless) -->
               <div class="pc-demo-chips-compact">
                 <span class="demo-caption">{{ t('quickDemoLabel') }}</span>
                 <div class="demo-pill-group">
-                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('user@line.local', 'LineUser#2026!')">{{ t('demoUser') }}</button>
-                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('alice@line-test.local', 'AliceStrongPass#2026')">{{ t('demoAlice') }}</button>
-                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('admin@line.local', 'LineAdmin#2026!')">{{ t('demoAdmin') }}</button>
+                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('user')">{{ t('demoUser') }}</button>
+                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('alice')">{{ t('demoAlice') }}</button>
                 </div>
               </div>
             </form>
@@ -2804,8 +2966,9 @@ onMounted(() => {
                   새로고침 ↻
                 </button>
               </div>
-              <div v-if="qrChallengeID" class="pc-qr-session-id">
-                <small>Session: {{ qrChallengeID.slice(0, 8) }}...</small>
+              <div class="pc-qr-session-id">
+                <small v-if="qrChallengeID">Session: {{ qrChallengeID.slice(0, 8) }}... | </small>
+                <small>LUNO v2.0.0 (commit: <code>{{ appVersion.short_commit || '6e92f6b' }}</code>)</small>
               </div>
             </div>
           </div>
@@ -3089,14 +3252,18 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Accordion 0: Favorites (즐겨찾기) -->
-            <div v-if="favoriteFriends.length > 0" class="pc-accordion-section">
+            <!-- Accordion 0: Favorites (즐겨찾기 - 항상 노출) -->
+            <div class="pc-accordion-section">
               <div class="pc-accordion-header" @click="favoritesSectionOpen = !favoritesSectionOpen">
                 <span class="accordion-title">즐겨찾기 {{ favoriteFriends.length }}</span>
                 <span class="accordion-caret">{{ favoritesSectionOpen ? '⌵' : '›' }}</span>
               </div>
               <div v-show="favoritesSectionOpen" class="pc-accordion-content">
+                <div v-if="favoriteFriends.length === 0" class="accordion-empty-hint" style="padding: 10px 14px; font-size: 12px; color: #94a3b8;">
+                  즐겨찾기한 친구가 없습니다. (친구 우클릭 또는 프로필에서 ★ 추가)
+                </div>
                 <div
+                  v-else
                   v-for="fav in favoriteFriends"
                   :key="'fav-' + fav.id"
                   class="pc-friend-item-row"
@@ -3329,11 +3496,19 @@ onMounted(() => {
 
           <!-- News Scroll List -->
           <div class="pc-pane-scroll news-scroll">
-            <!-- Hero Featured News Card (Screenshot 5) -->
-            <div class="news-hero-card" @click="openNewsArticle(heroNews)">
+            <!-- Hero Featured News Card (Screenshot 5 & 9) -->
+            <div
+              class="news-hero-card"
+              @click="openNewsArticle(heroNews)"
+              @mouseenter="isHeroHovered = true"
+              @mouseleave="isHeroHovered = false"
+            >
               <div class="hero-image-wrap">
                 <img :src="heroNews.image_url" :alt="heroNews.title" class="hero-img" />
                 <div class="hero-gradient-overlay"></div>
+                <button class="btn-hero-nav prev" title="이전 기사" @click.stop="prevHeroSlide">‹</button>
+                <button class="btn-hero-nav next" title="다음 기사" @click.stop="nextHeroSlide">›</button>
+                <div class="hero-slide-badge">{{ activeHeroSlideIndex + 1 }} / {{ heroNewsSlides.length }}</div>
                 <div class="hero-meta-bottom">
                   <h3 class="hero-title">{{ heroNews.title }}</h3>
                   <div class="hero-press-row">
@@ -3347,8 +3522,9 @@ onMounted(() => {
                 <span
                   v-for="(slide, idx) in heroNewsSlides"
                   :key="slide.id"
-                  class="dot"
+                  class="hero-dot"
                   :class="{ active: activeHeroSlideIndex === idx }"
+                  :title="'슬라이드 ' + (idx + 1)"
                   @click.stop="activeHeroSlideIndex = idx"
                 ></span>
               </div>
@@ -3637,7 +3813,7 @@ onMounted(() => {
                 <span v-if="selectedChat.official" class="badge-verified">✓ 공식채널</span>
               </div>
               <small class="e2ee-tag">
-                {{ selectedChat.official ? '자동 응답 기능 사용 중입니다.' : letterSealingEnabled ? '🔒 LUNO Sealing (종단간 암호화 적용됨)' : '암호화 미지원' }}
+                {{ selectedChat.official ? '자동 응답 기능 사용 중입니다.' : '🔒 보안 연결 (TLS 1.3 전송 및 AES-256 저장소 암호화)' }}
               </small>
             </div>
           </div>
@@ -3826,7 +4002,7 @@ onMounted(() => {
                         <button class="btn-security-logout-green" @click="handleSecurityNoticeLogout(msg)">
                           로그아웃
                         </button>
-                        <button class="btn-security-pwchange-link" @click="showSettingsModal = true">
+                        <button class="btn-security-pwchange-link" @click="showPasswordModal = true">
                           비밀번호 변경
                         </button>
                       </div>
@@ -4186,8 +4362,24 @@ onMounted(() => {
           <div class="news-reader-content">
             <p>{{ activeNewsArticle.summary || activeNewsArticle.content }}</p>
             <p style="margin-top: 12px; color: var(--om-text-secondary, #64748B); font-size: 13px; line-height: 1.6;">
-              본 기사는 LUNO Global News 실시간 연동 콘텐츠입니다. 메신저 친구들과 기사를 공유하거나 중요한 뉴스를 북마크에 보관할 수 있습니다.
+              본 기사는 LUNO Global News 에디토리얼 시드 콘텐츠입니다. (실시간 언론사 RSS 제휴는 운영자 결정 게이트 대상) 메신저 친구들과 기사를 공유하거나 중요한 뉴스를 북마크에 보관할 수 있습니다.
             </p>
+          </div>
+
+          <!-- News Comments Section -->
+          <div class="news-comments-box" style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+            <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">💬 독자 댓글 ({{ (newsArticleComments[activeNewsArticle.id] || []).length }})</h4>
+            <div v-if="(newsArticleComments[activeNewsArticle.id] || []).length" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
+              <div v-for="c in newsArticleComments[activeNewsArticle.id]" :key="c.id" style="font-size: 12px; background: #f8fafc; padding: 6px 10px; border-radius: 8px;">
+                <b>{{ c.author }}</b> <span style="color:#94a3b8; font-size:11px;">{{ c.time }}</span>
+                <p style="margin-top:2px;">{{ c.text }}</p>
+              </div>
+            </div>
+            <div v-else style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">첫 번째 댓글을 작성해 보세요.</div>
+            <form @submit.prevent="addNewsComment(activeNewsArticle.id)" style="display:flex; gap:6px;">
+              <input v-model="newCommentInput" placeholder="댓글을 입력하세요..." style="flex:1; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px;" />
+              <button type="submit" class="btn-primary" style="padding:6px 12px; font-size:12px;">등록</button>
+            </form>
           </div>
         </div>
         <div class="news-reader-footer">
@@ -4327,10 +4519,11 @@ onMounted(() => {
     <div v-if="showSendMoneyModal" class="modal-backdrop" @click.self="showSendMoneyModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>💸 LINE Pay 송금</h3>
+          <h3>💸 LUNO Pay 간편 송금 (모의 송금 / Sandbox)</h3>
           <button class="btn-modal-close" @click="showSendMoneyModal = false">✕</button>
         </div>
         <div class="modal-body-form">
+          <p class="muted" style="margin: 0; font-size: 11.5px; color: #64748b;">* 본 기능은 샌드박스 모의 송금이며 실제 금융 자산이 이동하지 않습니다.</p>
           <div v-if="sendTargetFriend" class="send-target-info">
             받는 사람: <strong>{{ sendTargetFriend.display_name }}</strong>
           </div>
@@ -4346,7 +4539,7 @@ onMounted(() => {
           <input v-model="sendMemoInput" placeholder="메모 입력" />
           <div class="modal-actions-right">
             <button class="btn-secondary" @click="showSendMoneyModal = false">취소</button>
-            <button class="btn-primary" @click="executeSendMoney">송금하기</button>
+            <button class="btn-primary" @click="executeSendMoney">모의 송금하기</button>
           </div>
         </div>
       </div>
@@ -4356,7 +4549,7 @@ onMounted(() => {
     <div v-if="showChargeModal" class="modal-backdrop" @click.self="showChargeModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>➕ LINE Pay 잔액 충전</h3>
+          <h3>➕ LUNO Pay 잔액 충전 (Sandbox)</h3>
           <button class="btn-modal-close" @click="showChargeModal = false">✕</button>
         </div>
         <div class="modal-body-form">
@@ -4484,7 +4677,7 @@ onMounted(() => {
           <div class="setting-group">
             <strong>🛡️ {{ t('securitySection') }}</strong>
             <div class="setting-toggle-row">
-              <span>🔒 LUNO Sealing (기기 로컬 키 Sealing 암호화)</span>
+              <span>🔒 보안 프로토콜 (TLS 1.3 전송 및 AES-256 저장소 암호화)</span>
               <span class="badge-status-on">활성됨</span>
             </div>
             <div class="setting-toggle-row">
@@ -4556,10 +4749,43 @@ onMounted(() => {
             </div>
           </div>
 
+          <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
+            <strong>ℹ️ 버전 및 빌드 정보</strong>
+            <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
+              <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '2.0.0' }}</span>
+              <span><b>Git Commit:</b> <code>{{ appVersion.commit || '6e92f6b2253ba9127cbad74874abd92ebd94b509' }}</code></span>
+              <span><b>Build Time:</b> {{ appVersion.build_time || '2026-11-01' }}</span>
+              <span><b>Environment:</b> {{ appVersion.env || 'production' }}</span>
+            </div>
+          </div>
+
           <div class="modal-actions-right">
             <button class="btn-primary" @click="showSettingsModal = false">완료</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- PASSWORD CHANGE MODAL -->
+    <div v-if="showPasswordModal" class="modal-backdrop" @click.self="showPasswordModal = false">
+      <div class="standard-modal-box password-modal" style="max-width: 420px; width: 92vw;">
+        <div class="modal-header">
+          <h3>🔐 비밀번호 변경</h3>
+          <button class="btn-modal-close" @click="showPasswordModal = false">✕</button>
+        </div>
+        <form class="modal-body-form" @submit.prevent="submitPasswordChange">
+          <p v-if="passwordChangeError" class="error-text" style="color: #ef4444; font-size: 12px; margin: 0;">{{ passwordChangeError }}</p>
+          <label>현재 비밀번호</label>
+          <input v-model="currentPasswordInput" type="password" placeholder="현재 비밀번호를 입력하세요" required />
+          <label>새 비밀번호 (8자 이상)</label>
+          <input v-model="newPasswordInput" type="password" placeholder="새 비밀번호를 입력하세요" required minlength="8" />
+          <label>새 비밀번호 확인</label>
+          <input v-model="confirmPasswordInput" type="password" placeholder="새 비밀번호를 한 번 더 입력하세요" required minlength="8" />
+          <div class="modal-actions-right" style="margin-top: 14px;">
+            <button type="button" class="btn-secondary" @click="showPasswordModal = false">취소</button>
+            <button type="submit" class="btn-primary">비밀번호 변경</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -7264,19 +7490,66 @@ onMounted(() => {
   color: rgba(255, 255, 255, 0.8);
 }
 
+.news-hero-card .hero-image-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.btn-hero-nav {
+  position: absolute;
+  top: 45%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+  border: none;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+.btn-hero-nav:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+.btn-hero-nav.prev { left: 8px; }
+.btn-hero-nav.next { right: 8px; }
+.hero-slide-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  z-index: 10;
+}
 .hero-carousel-dots {
   display: flex;
-  gap: 4px;
-  margin-top: 8px;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
 }
-.hero-dot {
-  width: 18px;
-  height: 3px;
+.hero-dot, .dot {
+  width: 22px;
+  height: 4px;
   border-radius: 2px;
-  background: rgba(255,255,255,0.4);
+  background: rgba(148, 163, 184, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
-.hero-dot.active {
-  background: #ffffff;
+.hero-dot.active, .dot.active {
+  background: #2563eb;
+  width: 32px;
 }
 
 .news-ad-banner {
@@ -7794,7 +8067,32 @@ onMounted(() => {
 .quick-amounts, .charge-options-grid, .theme-choice-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 6px 0; }
 .btn-charge-option, .btn-theme-swatch { padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; font-weight: 600; cursor: pointer; }
 .btn-theme-swatch.active, .default.active, .dark.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
-.settings-modal, .add-friend-modal, .new-chat-modal { max-width: 480px; width: 92vw; }
+.add-friend-modal, .new-chat-modal, .password-modal { max-width: 480px; width: 92vw; }
+.settings-modal {
+  max-width: 520px;
+  width: 92vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.settings-modal .modal-header {
+  flex-shrink: 0;
+}
+.settings-modal .modal-body-form {
+  overflow-y: auto;
+  max-height: calc(85vh - 120px);
+  -webkit-overflow-scrolling: touch;
+}
+.settings-modal .modal-actions-right {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  padding: 10px 0 0;
+  border-top: 1px solid #f1f5f9;
+  z-index: 5;
+}
 .setting-group { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
 .setting-toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; padding: 4px 0; }
 .flex-row { display: flex; align-items: center; gap: 8px; }

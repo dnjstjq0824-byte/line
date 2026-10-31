@@ -90,8 +90,8 @@ async function addAdGroup() {
     <p class="note" v-if="note">{{ note }}</p>
 
     <form v-if="!token" @submit.prevent="login">
-      <div style="margin:8px 0;padding:8px 12px;background:#eef5fc;border-radius:8px;font-size:12px;color:#2c5282">
-        <strong>💡 기본 계정:</strong> <code>admin@line.local</code> / <code>LineAdmin#2026!</code> 또는 <code>user@line.local</code> / <code>LineUser#2026!</code>
+      <div style="margin:8px 0;padding:8px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#64748b">
+        <span>🔒 광고주 계정으로 로그인해 주세요.</span>
       </div>
       <input v-model="email" type="email" placeholder="이메일" required />
       <input v-model="password" type="password" placeholder="비밀번호" required />

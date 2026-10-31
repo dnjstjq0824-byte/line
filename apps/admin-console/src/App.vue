@@ -93,8 +93,8 @@ async function saveFeatureFlag() {
 
     <form v-if="!token" @submit.prevent="login" class="panel">
       <h2>관리자 인증</h2>
-      <div style="margin:8px 0;padding:8px 12px;background:#eef5fc;border-radius:8px;font-size:12px;color:#2c5282">
-        <strong>💡 기본 관리자 계정:</strong> <code>admin@line.local</code> / <code>LineAdmin#2026!</code>
+      <div style="margin:8px 0;padding:8px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#64748b">
+        <span>🔒 보안 구역: 관리자 권한이 부여된 계정만 로그인이 가능합니다.</span>
       </div>
       <input type="email" v-model="email" placeholder="이메일" required />
       <input type="password" v-model="password" placeholder="비밀번호" required />

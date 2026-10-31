@@ -346,7 +346,7 @@ func (a *App) enrichMessages(ctx context.Context, convID string, msgs []Message)
 var allowedMessageKinds = map[string]bool{
 	"text": true, "image": true, "video": true, "audio": true, "voice": true, "file": true,
 	"sticker": true, "location": true, "contact": true, "system": true, "poll": true, "pay": true, "call": true,
-	"call_status": true, "security_notice": true,
+	"call_status": true, "security_notice": true, "transfer": true, "ciphertext": true,
 }
 
 func (a *App) sendMessage(w http.ResponseWriter, r *http.Request) {

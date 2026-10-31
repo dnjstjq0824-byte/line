@@ -38,9 +38,9 @@ async function login(email, password) {
 }
 
 test('private chat access and one-use realtime tickets', async () => {
-  const alice = await login('alice@line-test.local', 'AliceStrongPass#2026');
-  const bob = await login('bob@line-test.local', 'BobStrongPass#2026');
-  const outsider = await login('user@line.local', 'LineUser#2026!');
+  const alice = await login('alice@line-test.local', 'Alice#Rotated$48wT');
+  const bob = await login('bob@line-test.local', 'Bob#Rotated$31qR');
+  const outsider = await login('user@line.local', 'LunoUser#Rotated$72mP');
   const cid = '00000000-0000-0000-0000-000000000010';
   assert.equal((await api('ws-ticket', null, 'POST')).status, 401);
   assert.equal((await api('ws', null, 'GET', undefined, { Upgrade: 'websocket' })).status, 401);
@@ -176,7 +176,7 @@ test('private chat access and one-use realtime tickets', async () => {
   assert.equal(likes, 1);
 
   // Admin Moderation test
-  const adminToken = await login('admin@line.local', 'LineAdmin#2026!');
+  const adminToken = await login('admin@line.local', 'LunoAdmin#RotatedEdge$99xK');
   const modRes = await api('admin/moderation/actions', adminToken, 'POST', {
     subject_user_id: '00000000-0000-0000-0000-000000000003',
     action: 'warn',

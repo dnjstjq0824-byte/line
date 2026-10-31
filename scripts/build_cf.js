@@ -47,5 +47,34 @@ for (const sub of subApps) {
   }
 }
 
-console.log('✅ Combined Cloudflare distribution prepared in ./dist_cf');
+// 3. Generate version.json and update worker BUILD_INFO
+let gitCommit = 'unknown';
+try {
+  gitCommit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+} catch (e) {
+  console.warn('Could not read git commit:', e.message);
+}
+const buildTime = new Date().toISOString();
+const versionData = {
+  commit: gitCommit,
+  short_commit: gitCommit.length >= 7 ? gitCommit.slice(0, 7) : gitCommit,
+  worker_version: 'v2.0.0-remediated',
+  build_time: buildTime,
+  env: 'production',
+  brand: 'LUNO',
+  status: 'ok'
+};
+
+fs.writeFileSync(path.join(distRoot, 'version.json'), JSON.stringify(versionData, null, 2));
+const workerPath = path.join(__dirname, 'cf_worker.js');
+if (fs.existsSync(workerPath)) {
+  let workerCode = fs.readFileSync(workerPath, 'utf8');
+  workerCode = workerCode.replace(
+    /const BUILD_INFO = \{[\s\S]*?\};/,
+    `const BUILD_INFO = ${JSON.stringify(versionData, null, 2)};`
+  );
+  fs.writeFileSync(workerPath, workerCode, 'utf8');
+}
+
+console.log(`✅ Combined Cloudflare distribution prepared in ./dist_cf (Commit: ${versionData.short_commit})`);
 

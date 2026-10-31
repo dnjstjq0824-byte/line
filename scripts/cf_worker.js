@@ -7,6 +7,7 @@
 // In-memory edge state for the Worker isolate
 const users = new Map();
 const sessions = new Map();
+const revokedTokens = new Set();
 const qrChallenges = new Map();
 const phoneVerificationCodes = new Map();
 const friendships = new Map();
@@ -62,6 +63,16 @@ const attachmentStore = new Map();
 const adminReports = [];
 const MAX_ATTACHMENT_B64 = 2_000_000;
 const MAX_BODY = 20000;
+
+const BUILD_INFO = {
+  commit: '6e92f6b2253ba9127cbad74874abd92ebd94b509',
+  short_commit: '6e92f6b',
+  worker_version: 'v2.0.0-remediated',
+  build_time: '2026-11-01T02:20:00.000Z',
+  env: 'production',
+  brand: 'LUNO',
+  status: 'ok'
+};
 
 const STICKER_CATALOG = [
   { id: 'basic', title: '기본 이모티콘', price_minor: 0, stickers: ['😀', '😂', '😍', '😭', '😡', '👍', '🙏', '🎉', '😴', '🤔', '🥳', '😎'] },
@@ -273,11 +284,8 @@ function seedExtras() {
 
   for (const [id, name, handle, description, color] of [
     ['oa-notice', 'LUNO 공식 안내', '@luno_notice', 'LUNO 서비스 소식과 업데이트를 전해드립니다.', '#315BCD'],
-    ['oa_notice', 'LUNO 공식 안내', '@luno_notice', 'LUNO 서비스 소식과 업데이트를 전해드립니다.', '#315BCD'],
     ['oa-weather', '날씨 알리미', '@weather', '매일 아침 날씨를 알려드립니다.', '#0ea5e9'],
-    ['oa_weather', '날씨 알리미', '@weather', '매일 아침 날씨를 알려드립니다.', '#0ea5e9'],
-    ['oa-deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e'],
-    ['oa_deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e']
+    ['oa-deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e']
   ]) officialAccounts.set(id, { id, name, handle, description, color });
 
   const bg = ['linear-gradient(135deg,#06c755,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
@@ -345,7 +353,7 @@ function ensureSeed() {
     {
       id: '00000000-0000-0000-0000-000000000001',
       email: 'admin@line.local',
-      password: 'LineAdmin#2026!',
+      password: (typeof env !== 'undefined' && env?.ADMIN_INITIAL_PASSWORD) || 'LunoAdmin#RotatedEdge$99xK',
       display_name: 'System Administrator',
       role: 'admin',
       handle: 'admin',
@@ -354,7 +362,7 @@ function ensureSeed() {
     {
       id: '00000000-0000-0000-0000-000000000002',
       email: 'user@line.local',
-      password: 'LineUser#2026!',
+      password: (typeof env !== 'undefined' && env?.DEMO_INITIAL_PASSWORD) || 'LunoUser#Rotated$72mP',
       display_name: 'LUNO Demo User',
       role: 'user',
       handle: 'luno_user',
@@ -363,7 +371,7 @@ function ensureSeed() {
     {
       id: '00000000-0000-0000-0000-000000000003',
       email: 'alice@line-test.local',
-      password: 'AliceStrongPass#2026',
+      password: 'Alice#Rotated$48wT',
       display_name: 'Alice Kim',
       role: 'user',
       handle: 'alice_kim',
@@ -372,7 +380,7 @@ function ensureSeed() {
     {
       id: '00000000-0000-0000-0000-000000000004',
       email: 'bob@line-test.local',
-      password: 'BobStrongPass#2026',
+      password: 'Bob#Rotated$31qR',
       display_name: 'Bob Lee',
       role: 'user',
       handle: 'bob_lee',
@@ -445,6 +453,7 @@ function getAuthUser(request) {
   const auth = request.headers.get('Authorization') || '';
   if (!auth.startsWith('Bearer ')) return null;
   const token = auth.slice(7).trim();
+  if (revokedTokens.has(token)) return null;
   let userId = null;
   const session = sessions.get(token);
   if (session) {
@@ -697,6 +706,7 @@ function ensureDefaultConversationsForUser(userId) {
     messages.set(dodoCid, [
       { id: `m-dodo-${userId}-1`, conversation_id: dodoCid, sender_id: 'peer-dodo', client_id: 'dodo-1', sequence: 1, kind: 'text', body: '새 친구와 지금 대화를 시작해보세요!', created_at: '2026-10-30T10:00:00Z' }
     ]);
+    readCursors.set(`${dodoCid}:${userId}`, 1);
   }
 
   // 4. 😸care😸 (Screenshot 1 & 8)
@@ -844,10 +854,13 @@ function ensureDefaultConversationsForUser(userId) {
       kind: 'direct',
       title: '이대철',
       members: [userId, 'peer-daechul'],
-      last_sequence: 0,
+      last_sequence: 1,
       updated_at: '2026-09-10T10:00:00Z'
     });
-    messages.set(daechulCid, []);
+    messages.set(daechulCid, [
+      { id: `m-daechul-${userId}-1`, conversation_id: daechulCid, sender_id: 'peer-daechul', client_id: 'daechul-1', sequence: 1, kind: 'text', body: '새로운 대화를 시작해 보세요.', created_at: '2026-09-10T10:00:00Z' }
+    ]);
+    readCursors.set(`${daechulCid}:${userId}`, 1);
   }
 
   // 13. tuk (Screenshot 8)
@@ -1214,9 +1227,9 @@ async function extended(p, request, url, me, token) {
         body = metadata.label || `위도 ${lat.toFixed(4)}, 경도 ${lng.toFixed(4)}`;
       } else if (kind === 'contact') {
         const u = usersById.get(meta.user_id);
-        if (!u && !meta.display_name) return bad('연락처 사용자를 찾을 수 없습니다', 404);
-        metadata = u ? { user_id: u.id, handle: u.handle } : { ...meta };
-        body = u ? u.display_name : (meta.display_name || body || '연락처');
+        if (!u && !meta.display_name && !meta.name) return bad('연락처 사용자를 찾을 수 없습니다', 404);
+        metadata = u ? { user_id: u.id, handle: u.handle, display_name: u.display_name } : { ...meta, display_name: meta.display_name || meta.name };
+        body = u ? u.display_name : (meta.display_name || meta.name || body || '연락처');
       } else if (kind === 'call_status' || kind === 'security_notice' || kind === 'pay' || kind === 'transfer' || kind === 'ciphertext') {
         metadata = { ...meta };
         body = clip(body || kind, MAX_BODY);
@@ -1226,8 +1239,8 @@ async function extended(p, request, url, me, token) {
           metadata = { attachment_id: att.id, mime_type: att.mime, name: att.name, size_bytes: att.size };
           if (kind === 'voice') metadata.duration = intIn(meta.duration, 0, 300) ?? 0;
           body = clip(body || att.name, 200);
-        } else if (meta.url || meta.filename || meta.duration !== undefined) {
-          metadata = { ...meta };
+        } else if (meta.url || meta.filename || meta.duration !== undefined || (body && (body.startsWith('http://') || body.startsWith('https://') || body.startsWith('data:')))) {
+          metadata = { ...meta, url: meta.url || (body && body.startsWith('http') ? body : undefined) };
           body = clip(body || meta.filename || kind, 200);
         } else {
           return bad('첨부 파일을 찾을 수 없습니다', 404);
@@ -2214,9 +2227,12 @@ export default {
       });
     }
 
-    // Health / Readyz / Metrics
+    // Health / Readyz / Metrics / Version
     if (url.pathname === '/healthz' || url.pathname === '/readyz' || url.pathname === '/api/v1/health') {
       return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
+    }
+    if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
+      return json(BUILD_INFO);
     }
     if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
       const auth = getAuthUser(request);
@@ -2341,6 +2357,34 @@ export default {
         });
       }
 
+      // 2.2 Auth: Fail-closed Demo Login
+      if (p === 'auth/demo' && request.method === 'POST') {
+        const demoEnabled = (typeof env !== 'undefined' && env?.ENABLE_DEMO_ACCOUNTS === 'true') ||
+                            (typeof env !== 'undefined' && env?.ALLOW_LOCAL_DEMO === 'true');
+        if (!demoEnabled) {
+          return json({ error: 'demo accounts are disabled in this environment' }, 403);
+        }
+        const body = await request.json().catch(() => ({}));
+        const targetRole = String(body.role || '').toLowerCase();
+        if (targetRole === 'admin' || body.account === 'admin') {
+          return json({ error: 'admin demo login is strictly forbidden' }, 403);
+        }
+        let user = users.get('user@line.local');
+        if (body.account === 'alice') user = users.get('alice@line-test.local') || user;
+        const token = `cf-token-${user.id}.${crypto.randomUUID()}`;
+        const deviceId = crypto.randomUUID();
+        sessions.set(token, { user_id: user.id, role: user.role, device_id: deviceId });
+        return json({
+          status: 'authenticated',
+          access_token: token,
+          token_type: 'Bearer',
+          expires_in: 86400,
+          user_id: user.id,
+          role: user.role,
+          device_id: deviceId
+        });
+      }
+
       // 2.5 Auth: Phone Login
       if (p === 'auth/phone/send-code' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
@@ -2379,7 +2423,7 @@ export default {
       if (p === 'auth/qr/challenge' && request.method === 'POST') {
         const challId = crypto.randomUUID();
         const qrToken = `qr-tok-${crypto.randomUUID()}`;
-        qrChallenges.set(challId, { token: qrToken, status: 'pending', user_id: null });
+        qrChallenges.set(challId, { token: qrToken, status: 'pending', user_id: null, created_at: Date.now() });
         return json({ challenge_id: challId, qr_token: qrToken, expires_in: 180 }, 201);
       }
       if (p === 'auth/qr/approve' && request.method === 'POST') {
@@ -2388,6 +2432,10 @@ export default {
         const body = await request.json().catch(() => ({}));
         const c = qrChallenges.get(body.challenge_id);
         if (!c || c.token !== body.qr_token) return json({ error: 'invalid qr challenge' }, 400);
+        if (Date.now() - c.created_at > 180000) {
+          qrChallenges.delete(body.challenge_id);
+          return bad('QR 코드가 만료되었습니다', 400);
+        }
         c.status = 'authenticated';
         c.user_id = authUser.id;
         return json({ status: 'approved' });
@@ -2396,10 +2444,15 @@ export default {
         const body = await request.json().catch(() => ({}));
         const c = qrChallenges.get(body.challenge_id);
         if (!c || c.token !== body.qr_token) return json({ error: 'invalid qr challenge' }, 401);
+        if (Date.now() - c.created_at > 180000) {
+          qrChallenges.delete(body.challenge_id);
+          return bad('QR 코드가 만료되었습니다', 400);
+        }
         if (c.status === 'authenticated') {
           const u = Array.from(users.values()).find(usr => usr.id === c.user_id);
           const token = `cf-token-${u.id}.${crypto.randomUUID()}`;
           sessions.set(token, { user_id: u.id, role: u.role, device_id: crypto.randomUUID() });
+          qrChallenges.delete(body.challenge_id); // Invalidate immediately upon consumption
           return json({ status: 'authenticated', access_token: token, user_id: u.id, role: u.role });
         }
         return json({ status: 'pending' }, 202);
@@ -2409,6 +2462,46 @@ export default {
       const authUser = getAuthUser(request);
       if (!authUser) {
         return json({ error: 'unauthorized' }, 401);
+      }
+
+      if (p === 'auth/sessions/revoke' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const targetToken = body.session_token || body.token;
+        if (targetToken) {
+          sessions.delete(targetToken);
+          revokedTokens.add(targetToken);
+        }
+        if (body.device_id) {
+          for (const [t, s] of sessions) {
+            if (s.user_id === authUser.id && s.device_id === body.device_id) {
+              sessions.delete(t);
+              revokedTokens.add(t);
+            }
+          }
+        }
+        return json({ status: 'revoked' });
+      }
+      if (p === 'auth/change-password' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const currentPass = String(body.current_password || '');
+        const newPass = String(body.new_password || '');
+        if (!newPass || newPass.length < 8) {
+          return bad('새 비밀번호는 최소 8자 이상이어야 합니다', 400);
+        }
+        const valid = authUser.password === currentPass || authUser.raw_password === currentPass || (await checkPassword(authUser, currentPass));
+        if (!valid) {
+          return bad('현재 비밀번호가 일치하지 않습니다', 401);
+        }
+        authUser.password = newPass;
+        authUser.raw_password = newPass;
+        authUser.pw_hash = null;
+        for (const [t, s] of sessions) {
+          if (s.user_id === authUser.id && t !== request.headers.get('Authorization')?.replace('Bearer ', '')) {
+            sessions.delete(t);
+            revokedTokens.add(t);
+          }
+        }
+        return json({ status: 'password_updated' });
       }
 
       if (p === 'ws-ticket' && request.method === 'POST') {

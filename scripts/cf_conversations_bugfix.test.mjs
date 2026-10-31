@@ -24,9 +24,25 @@ async function login(email, password) {
 }
 
 test('P0-1 & P0-2: Verify official security channel and sample conversations resolve without 404', async () => {
-  // Test with demo user
-  const { token, user_id } = await login('user@line.local', 'LineUser#2026!');
+  // Test A-01: Old exposed password must be rejected with 401
+  const oldLogin = await api('auth/login', null, 'POST', { email: 'user@line.local', password: 'LineUser#2026!' });
+  assert.equal(oldLogin.status, 401, 'Old password must be rejected with 401');
+
+  // Test with rotated password
+  const { token, user_id } = await login('user@line.local', 'LunoUser#Rotated$72mP');
   assert.ok(token, 'Login should succeed');
+
+  // Test A-03: Version endpoint check
+  const verRes = await api('version');
+  assert.equal(verRes.status, 200, 'GET /version should return 200');
+  const verData = await verRes.json();
+  assert.ok(verData.commit, 'Commit hash must be present');
+
+  // Test A-05: Official Accounts unique 3 accounts (no duplicates)
+  const oaRes = await api('official-accounts', token);
+  assert.equal(oaRes.status, 200);
+  const { accounts: oas } = await oaRes.json();
+  assert.equal(oas.length, 3, 'Must have exactly 3 unique official accounts');
 
   // 1. GET /api/v1/conversations
   const convsRes = await api('conversations', token);
