@@ -27,10 +27,10 @@ type fcmServiceAccount struct {
 }
 
 type fcmConfig struct {
-	ProjectID       string
-	AccessToken     string
-	ServiceAccount  *fcmServiceAccount
-	Enabled         bool
+	ProjectID      string
+	AccessToken    string
+	ServiceAccount *fcmServiceAccount
+	Enabled        bool
 }
 
 func (a *App) fcmConfig() fcmConfig {
@@ -206,6 +206,7 @@ func (a *App) sendFCM(ctx context.Context, projectID, accessToken, deviceToken, 
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
+
 // sendAPNs sends a push notification via APNs HTTP/2 API.
 func (a *App) sendAPNs(ctx context.Context, cfg Config, deviceToken, title, body, payload string) bool {
 	if cfg.APNsKeyID == "" || cfg.APNsPrivateKey == "" || cfg.APNsTeamID == "" || cfg.APNsBundleID == "" {
@@ -254,6 +255,7 @@ func (a *App) sendAPNs(ctx context.Context, cfg Config, deviceToken, title, body
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
+
 // generateAPNsJWT creates an ES256 JWT for APNs authentication.
 func generateAPNsJWT(keyID, teamID, privateKeyPEM string) (string, error) {
 	block, _ := pem.Decode([]byte(privateKeyPEM))

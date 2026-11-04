@@ -687,9 +687,9 @@ func (a *App) recoverAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, 200, map[string]string{
-		"status":           "recovery_token_sent_if_account_exists",
-		"challenge_id":     challengeID,
-		"recovery_code":    code, // Remove in production; deliver via email/SMS
+		"status":        "recovery_token_sent_if_account_exists",
+		"challenge_id":  challengeID,
+		"recovery_code": code, // Remove in production; deliver via email/SMS
 	})
 }
 

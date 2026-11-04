@@ -32,10 +32,10 @@ func (a *App) mediaHealth(w http.ResponseWriter, r *http.Request) {
 	a.db.QueryRowContext(r.Context(), "SELECT count(*) FROM chat.upload_sessions WHERE status IN ('pending', 'uploading')").Scan(&pendingUploads)
 
 	send(w, 200, map[string]any{
-		"status":           "ok",
+		"status":            "ok",
 		"total_attachments": totalAttachments,
-		"total_bytes":      totalBytes,
-		"pending_uploads":  pendingUploads,
+		"total_bytes":       totalBytes,
+		"pending_uploads":   pendingUploads,
 	})
 }
 
@@ -47,9 +47,9 @@ func (a *App) dbStats(w http.ResponseWriter, r *http.Request) {
 	a.db.QueryRowContext(r.Context(), "SELECT count(*) FROM chat.conversations WHERE deleted_at IS NULL").Scan(&conversationCount)
 
 	send(w, 200, map[string]any{
-		"users":          userCount,
-		"messages":       messageCount,
-		"conversations":  conversationCount,
-		"timestamp":      time.Now().UTC().Format(time.RFC3339),
+		"users":         userCount,
+		"messages":      messageCount,
+		"conversations": conversationCount,
+		"timestamp":     time.Now().UTC().Format(time.RFC3339),
 	})
 }

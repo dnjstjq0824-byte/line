@@ -1264,6 +1264,7 @@ func (a *App) unifiedSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	send(w, 200, map[string]any{"messages": msgs})
 }
+
 // runOutboxRelay periodically drains durable delivery outbox rows and notifies local sockets.
 func (a *App) runOutboxRelay(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)

@@ -30,4 +30,3 @@ func TestApplyAllPhasesSchema(t *testing.T) {
 		t.Fatalf("expected UUID length 36, got %q", id)
 	}
 }
-

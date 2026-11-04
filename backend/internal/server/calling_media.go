@@ -619,6 +619,7 @@ func (a *App) listCommunityPosts(w http.ResponseWriter, r *http.Request) {
 	}
 	send(w, 200, map[string]any{"posts": out})
 }
+
 // makeThumbnail creates a small 64x64 PNG thumbnail for image content.
 func makeThumbnail(content []byte) string {
 	img, _, err := image.Decode(bytes.NewReader(content))
