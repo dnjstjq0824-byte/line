@@ -23,6 +23,9 @@ Fixed findings:
 | Medium | SQLite cannot execute PostgreSQL ADD COLUMN IF NOT EXISTS | Inspect local table metadata and add only absent columns; complete migration replay passes. |
 | Medium | Backend CI ignored database-only changes and skipped actual PostgreSQL tests | Add database path trigger, isolated PostgreSQL 16 service, initial schema creation, incremental replay, and test DSN. Remote CI execution is not yet verified. |
 | Medium | Web CI ignored Worker-only changes | Include scripts/config/lockfile changes and all Worker suites; use npm ci. |
+| High | Initial PostgreSQL schema referenced calling.calls before creating it | Move calls creation before call_signals. The real PostgreSQL CI failed before the repair; schema creation now passes. |
+| High | Nullable UUID lookups coalesced UUID values with an invalid empty UUID literal | Cast UUID to TEXT before COALESCE in message, session, QR, audit, support and wallet queries. Actual PostgreSQL message sends failed before repair and pass afterward; the other query changes are not individually runtime-certified on PostgreSQL. |
+| Medium | Idempotent message retries returned the encrypted stored body | Decrypt retry responses; SQLite restart regression and actual PostgreSQL retry-body assertion pass. |
 
 No broad refactor or production deployment. Existing features were not declared
 complete based on static endpoint presence. No application mock was replaced as
@@ -42,9 +45,16 @@ PostgreSQL constraint, locking, index, rollback, or populated-database upgrade
 correctness. The compatibility driver deliberately makes initial CREATE clauses
 idempotent; the original PostgreSQL initial migration is for an empty DB only.
 
-No live database connection was supplied. PostgreSQL tests skipped locally;
-no production DB was queried or changed. Production applied-migration history,
-schema diff, data integrity and code-to-live-schema consistency are BLOCKED.
+No local PostgreSQL connection was supplied; its tests skipped locally. A new
+ephemeral PostgreSQL 16 database in GitHub CI then exercised real schema creation,
+two incremental migration applications and both PostgreSQL test functions with
+the full Go race suite. The first CI exposed a forward-reference DDL error; the
+second exposed invalid UUID COALESCE queries. Both were repaired, and the third
+[Backend CI run](https://github.com/dnjstjq0824-byte/line/actions/runs/41814416389)
+passed on commit `54e8583fb256167fa7d9b2a90a241d73a981aa5c`.
+No production DB was queried or changed. Production applied-migration history,
+schema diff, populated upgrade, full data integrity and code-to-live-schema
+consistency remain BLOCKED.
 The D1 schema and Go PostgreSQL schema are separate implementations, and their
 entire API/storage parity has not been established. D1 tests emulate its API over
 Node SQLite; they are not Cloudflare runtime verification.
@@ -59,7 +69,7 @@ Node SQLite; they are not Cloudflare runtime verification.
 | Web applications | Unverified | No UI changes | Six vue-tsc/Vite builds PASS; browser user flows not tested |
 | Go messaging/auth/media | Unverified | Startup validation only | Existing integration/regression suite PASS on SQLite; full product acceptance PARTIAL |
 | Flutter app | Unverified | No mobile changes | Analyze PASS; four tests PASS; physical-device flows unverified |
-| PostgreSQL behavior | BLOCKED | Add isolated CI service | Still BLOCKED locally; CI result pending |
+| PostgreSQL behavior | FAIL in first two CI runs | Repair DDL order and UUID queries; add isolated CI service | PASS for both PostgreSQL test functions and schema replay in CI; complete API/database acceptance remains PARTIAL |
 | Remaining master-directive features | Unverified | No completeness claim | PARTIAL; full feature-by-feature acceptance still required |
 
 ## D. Realtime, security and performance
@@ -104,13 +114,18 @@ Executed locally:
 | `flutter test` | 4 tests PASS |
 | Editor diagnostics on changed Go and Worker source | No errors |
 | `git diff --check` | PASS |
+| PostgreSQL 16 CI: fresh schema + migrations 002–005 twice | PASS after forward-reference repair |
+| PostgreSQL-enabled `go test ./... -race` + `go vet ./...` in CI | PASS after nullable UUID repair |
+| Vue Applications CI (43 Worker tests and all web builds) | PASS on initial source-change commit; later source changes only affect Go/SQL/docs |
 
 Logs in [Go test evidence](FOUNDATION_GO_TEST_EVIDENCE_20261104.jsonl) preserve
 the actual test output and skip events. No all-repository lint script exists;
-type checking/vet do not substitute for a complete lint policy. Race testing,
-desktop builds, browser E2E, mobile release/device tests, live Cloudflare tests,
+type checking/vet do not substitute for a complete lint policy. Desktop builds,
+browser E2E, mobile release/device tests, live Cloudflare tests,
 security penetration tests and performance tests were not run in this checkpoint.
-CI configuration is added, but does not count as a completed test run.
+CI outcomes above were retrieved from actual completed GitHub runs, not inferred
+from configuration. The successful backend run includes both PostgreSQL tests;
+local skip events in the evidence file are retained rather than rewritten.
 
 ## F. Git delivery
 
@@ -119,6 +134,12 @@ Use a feature branch because a push to main automatically deploys Cloudflare and
 the directive prohibits unapproved production deployment. Commit and remote HEAD
 verification are reported in the final response; the report cannot embed its own
 commit hash. No force push, production migration, or deployment is authorized here.
+
+Implementation commits: `c83f01c` (initial hardening), `5d394aa` (DDL order),
+`54e8583` (UUID queries and retry responses). The last commit passed
+[backend CI](https://github.com/dnjstjq0824-byte/line/actions/runs/41814416389).
+[Web CI](https://github.com/dnjstjq0824-byte/line/actions/runs/41813552700) passed
+for the Worker/web changes. A report-only commit records these outcomes.
 
 ## G. Final product readiness
 
