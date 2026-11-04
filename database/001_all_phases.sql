@@ -213,16 +213,16 @@ CREATE TABLE realtime.outbox_deliveries (
 );
 CREATE INDEX outbox_deliveries_instance_idx ON realtime.outbox_deliveries(instance_id, outbox_id);
 
-CREATE TABLE calling.call_signals (
- id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, call_id UUID NOT NULL REFERENCES calling.calls(id),
- from_user_id UUID NOT NULL REFERENCES identity.users(id), signal_type TEXT NOT NULL,
- sdp TEXT, candidate TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 CREATE TABLE calling.calls (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), conversation_id UUID REFERENCES chat.conversations(id),
  initiated_by UUID NOT NULL REFERENCES identity.users(id), kind TEXT NOT NULL CHECK(kind IN ('voice','video')),
  state TEXT NOT NULL DEFAULT 'ringing', started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
  connected_at TIMESTAMPTZ, ended_at TIMESTAMPTZ, end_reason TEXT
+);
+CREATE TABLE calling.call_signals (
+ id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, call_id UUID NOT NULL REFERENCES calling.calls(id),
+ from_user_id UUID NOT NULL REFERENCES identity.users(id), signal_type TEXT NOT NULL,
+ sdp TEXT, candidate TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE calling.participants (
  call_id UUID NOT NULL REFERENCES calling.calls(id), user_id UUID NOT NULL REFERENCES identity.users(id),
