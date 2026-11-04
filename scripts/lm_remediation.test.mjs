@@ -122,10 +122,10 @@ test('LM-04 & A-06 & A-07: Badge Invariant and read-all idempotency', async () =
 
 test('LM-07 & A-10: Session revocation and password change', async () => {
   const userLogin = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
-  const { access_token: token } = await userLogin.json();
+  const { access_token: token, device_id: sessionId } = await userLogin.json();
 
-  // 1. Session revocation
-  const revokeRes = await api('auth/sessions/revoke', 'POST', { session_token: token }, token);
+  // 1. Session revocation: a concrete session_id is required (raw tokens are never accepted)
+  const revokeRes = await api('auth/sessions/revoke', 'POST', { session_id: sessionId }, token);
   assert.equal(revokeRes.status, 200);
 
   // Subsequent call with revoked token must fail with 401

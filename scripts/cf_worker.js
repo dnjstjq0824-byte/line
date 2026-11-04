@@ -8,6 +8,9 @@
 const users = new Map();
 const sessions = new Map();
 const revokedTokens = new Set();
+let CURRENT_ENV = null;
+let CURRENT_CTX = null;
+const AUTH_CTX = new WeakMap();
 const qrChallenges = new Map();
 const phoneVerificationCodes = new Map();
 const friendships = new Map();
@@ -65,10 +68,10 @@ const MAX_ATTACHMENT_B64 = 2_000_000;
 const MAX_BODY = 20000;
 
 const BUILD_INFO = {
-  "commit": "76f03a7aa089d10b46039ae18fc0e66db22d4385",
-  "short_commit": "76f03a7",
+  "commit": "516fafa1d85bb879fbe590697269a90104574c3e",
+  "short_commit": "516fafa",
   "worker_version": "v2.0.0-remediated",
-  "build_time": "2026-10-31T18:06:13.833Z",
+  "build_time": "2026-11-04T08:13:17.382Z",
   "env": "production",
   "brand": "LUNO",
   "status": "ok"
@@ -96,6 +99,430 @@ const DEFAULT_PREFS = {
 
 function now() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
+
+// ======================================================================
+// Durable persistence layer (Cloudflare D1)
+// Source of truth for sessions, user-generated messages, read cursors,
+// attachments and the security audit trail. In-memory Maps are only a
+// per-isolate cache; every read path re-hydrates from D1 first.
+// Raw access tokens are never stored: only their SHA-256 digest.
+// ======================================================================
+const SESSION_TTL_MS = 86400 * 1000;
+const LUNO_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS luno_sessions (
+    token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT,
+    device_name TEXT, platform TEXT, ip TEXT, created_at TEXT NOT NULL, last_seen_at TEXT,
+    revoked_at TEXT, revoked_by TEXT)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_luno_sessions_sid ON luno_sessions(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_sessions_user ON luno_sessions(user_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_messages (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, client_id TEXT,
+    sequence INTEGER NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', metadata TEXT,
+    reply_to TEXT, created_at TEXT NOT NULL, unsent INTEGER NOT NULL DEFAULT 0, edited_at TEXT)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_luno_messages_seq ON luno_messages(conversation_id, sequence)`,
+  `CREATE TABLE IF NOT EXISTS luno_read_cursors (
+    conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, sequence INTEGER NOT NULL, updated_at TEXT NOT NULL,
+    PRIMARY KEY (conversation_id, user_id))`,
+  `CREATE TABLE IF NOT EXISTS luno_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, target TEXT, detail TEXT, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_ws_tickets (
+    ticket TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_ws_tickets_exp ON luno_ws_tickets(expires_at)`,
+  `CREATE TABLE IF NOT EXISTS luno_attachments (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, owner_id TEXT NOT NULL, name TEXT NOT NULL,
+    mime TEXT NOT NULL, size INTEGER NOT NULL, b64 TEXT NOT NULL, created_at TEXT NOT NULL)`
+];
+let schemaReady = null;
+function dbOf() { return CURRENT_ENV && CURRENT_ENV.DB ? CURRENT_ENV.DB : null; }
+async function ensureSchema() {
+  const db = dbOf();
+  if (!db) return false;
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      for (const sql of LUNO_SCHEMA) await db.prepare(sql).run();
+      return true;
+    })().catch(err => { schemaReady = null; throw err; });
+  }
+  return schemaReady;
+}
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text)));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function parsePbkdf2(stored) {
+  if (typeof stored !== 'string' || !stored.startsWith('pbkdf2$')) return null;
+  const [, salt, hash] = stored.split('$');
+  return salt && hash ? { salt, hash } : null;
+}
+function clientInfo(request) {
+  const ua = request.headers.get('User-Agent') || '';
+  const cf = request.cf || {};
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  let platform = 'Unknown';
+  if (/Android/i.test(ua)) platform = 'Android';
+  else if (/iPhone|iPad|iOS/i.test(ua)) platform = 'iOS';
+  else if (/Windows/i.test(ua)) platform = 'Windows';
+  else if (/Mac OS X|Macintosh/i.test(ua)) platform = 'macOS';
+  else if (/Linux/i.test(ua)) platform = 'Linux';
+  const agent = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Safari\//.test(ua) ? 'Safari' : /dart|okhttp/i.test(ua) ? 'LUNO App' : 'API client';
+  const location = [cf.country, cf.region, cf.city].filter(Boolean).join(' ') || '알 수 없음';
+  return { ip: ip || '알 수 없음', location, platform, device_name: `${platform} · ${agent}` };
+}
+// ---------- Realtime tickets ----------
+async function persistWsTicket(ticket, userId, expiresAt) {
+  const db = dbOf();
+  if (!db) return false;
+  await ensureSchema();
+  await db.prepare('INSERT INTO luno_ws_tickets (ticket, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
+    .bind(ticket, userId, expiresAt, now()).run();
+  // Opportunistic cleanup; expired rows are never redeemable anyway.
+  await db.prepare('DELETE FROM luno_ws_tickets WHERE expires_at <= ?').bind(Date.now()).run().catch(() => {});
+  return true;
+}
+
+// Returns the granted user id, or null. One use only: the row is deleted in the
+// same statement that reads it, so two concurrent upgrades cannot both win.
+async function redeemWsTicket(ticket) {
+  if (!ticket) return null;
+  const db = dbOf();
+  if (db) {
+    // Drop any local copy first so this isolate cannot honour it after the
+    // authoritative row is gone.
+    wsTickets.delete(ticket);
+    await ensureSchema();
+    const row = await db
+      .prepare('DELETE FROM luno_ws_tickets WHERE ticket = ? AND expires_at > ? RETURNING user_id')
+      .bind(ticket, Date.now())
+      .first()
+      .catch(() => null);
+    return row && row.user_id ? row.user_id : null;
+  }
+  // No database: a single isolate's Map is all there is.
+  const local = wsTickets.get(ticket);
+  if (!local) return null;
+  wsTickets.delete(ticket);
+  return local.expiresAt > Date.now() ? local.userId : null;
+}
+
+async function persistAudit(actor, action, target, detail) {
+  addAudit(actor, action, target);
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT INTO luno_audit (actor, action, target, detail, created_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(actor || null, action, target || null, detail ? JSON.stringify(detail) : null, now()).run();
+}
+
+// ---------- Sessions ----------
+async function createSession(user, request) {
+  const token = `cf-token-${user.id}.${crypto.randomUUID()}`;
+  const sessionId = crypto.randomUUID();
+  const created = now();
+  const info = clientInfo(request);
+  sessions.set(token, { user_id: user.id, role: user.role, device_id: sessionId, created_at: created, device_name: info.device_name, platform: info.platform, ip: info.ip });
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    await db.prepare('INSERT INTO luno_sessions (token_hash, session_id, user_id, role, device_name, platform, ip, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(await sha256Hex(token), sessionId, user.id, user.role || 'user', info.device_name, info.platform, info.ip, created, created).run();
+  }
+  await recordLoginEvent(user, sessionId, info);
+  return { token, deviceId: sessionId };
+}
+async function findSessionById(sid) {
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    const row = await db.prepare('SELECT session_id, user_id, revoked_at FROM luno_sessions WHERE session_id = ?').bind(sid).first();
+    return row && !row.revoked_at ? { session_id: row.session_id, user_id: row.user_id } : null;
+  }
+  for (const s of sessions.values()) if (s.device_id === sid) return { session_id: sid, user_id: s.user_id };
+  return null;
+}
+async function revokeSessionById(sid, by) {
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    await db.prepare('UPDATE luno_sessions SET revoked_at = ?, revoked_by = ? WHERE session_id = ? AND revoked_at IS NULL').bind(now(), by, sid).run();
+  }
+  for (const [tok, s] of Array.from(sessions)) if (s.device_id === sid) { sessions.delete(tok); revokedTokens.add(tok); }
+}
+async function revokeOtherSessions(userId, keepSid, by) {
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    await db.prepare('UPDATE luno_sessions SET revoked_at = ?, revoked_by = ? WHERE user_id = ? AND session_id <> ? AND revoked_at IS NULL').bind(now(), by, userId, keepSid || '').run();
+  }
+  for (const [tok, s] of Array.from(sessions)) {
+    if (s.user_id === userId && s.device_id !== keepSid) { sessions.delete(tok); revokedTokens.add(tok); }
+  }
+}
+async function listSessionsFor(userId, currentSid) {
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    const { results } = await db.prepare('SELECT session_id, device_name, platform, ip, created_at, last_seen_at FROM luno_sessions WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 50').bind(userId).all();
+    const cutoff = Date.now() - SESSION_TTL_MS;
+    return (results || []).filter(r => Date.parse(r.created_at) > cutoff).map(r => ({
+      id: r.session_id, device_id: r.session_id, name: r.device_name || '기기', platform: r.platform || '', ip: r.ip || '',
+      trusted: false, current: r.session_id === currentSid, created_at: r.created_at, last_seen_at: r.last_seen_at || r.created_at
+    }));
+  }
+  const out = [];
+  for (const s of sessions.values()) if (s.user_id === userId) {
+    out.push({ id: s.device_id, device_id: s.device_id, name: s.device_name || '기기', platform: s.platform || '', ip: s.ip || '', trusted: false, current: s.device_id === currentSid, created_at: s.created_at || null, last_seen_at: s.created_at || null });
+  }
+  return out;
+}
+async function persistPassword(user) {
+  const db = dbOf();
+  if (!db || !user.pw_hash || !user.pw_salt) return;
+  await ensureSchema();
+  await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").bind(`pbkdf2$${user.pw_salt}$${user.pw_hash}`, user.id).run();
+}
+
+// ---------- Messages / read state ----------
+function rowToMessage(r) {
+  let metadata;
+  if (r.metadata) { try { metadata = JSON.parse(r.metadata); } catch { metadata = undefined; } }
+  const m = {
+    id: r.id, conversation_id: r.conversation_id, sender_id: r.sender_id, client_id: r.client_id, sequence: r.sequence,
+    kind: r.kind, body: r.body ?? '', reply_to: r.reply_to || undefined, metadata, created_at: r.created_at, persisted: true
+  };
+  if (r.unsent) m.unsent = true;
+  if (r.edited_at) m.edited_at = r.edited_at;
+  return m;
+}
+function applyRows(cid, rows) {
+  const conv = conversations.get(cid);
+  const keep = (messages.get(cid) || []).filter(m => !m.persisted);
+  const list = keep.concat(rows.map(rowToMessage)).sort((a, b) => a.sequence - b.sequence);
+  messages.set(cid, list);
+  if (conv) {
+    const max = list.reduce((a, m) => Math.max(a, m.sequence || 0), 0);
+    if (max > (conv.last_sequence || 0)) conv.last_sequence = max;
+    const lastAt = list.length ? list[list.length - 1].created_at : null;
+    if (lastAt && String(lastAt) > String(conv.updated_at || '')) conv.updated_at = lastAt;
+  }
+}
+async function hydrateConversation(cid) {
+  const db = dbOf();
+  if (!db || !cid) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? ORDER BY sequence DESC LIMIT 500').bind(cid).all();
+  applyRows(cid, (results || []).reverse());
+}
+async function hydrateCursors(userId) {
+  const db = dbOf();
+  if (!db || !userId) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT conversation_id, sequence FROM luno_read_cursors WHERE user_id = ?').bind(userId).all();
+  for (const r of results || []) {
+    const key = `${r.conversation_id}:${userId}`;
+    if (r.sequence > (readCursors.get(key) || 0)) readCursors.set(key, r.sequence);
+  }
+}
+async function hydrateUserConversations(userId) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  const cids = Array.from(conversations.values()).filter(c => c.members.includes(userId)).map(c => c.id);
+  if (cids.length) {
+    const ph = cids.map(() => '?').join(',');
+    const { results } = await db.prepare(
+      `SELECT * FROM (SELECT m.*, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY sequence DESC) AS rn FROM luno_messages m WHERE conversation_id IN (${ph})) WHERE rn <= 200 ORDER BY conversation_id, sequence`
+    ).bind(...cids).all();
+    const byConv = new Map();
+    for (const r of results || []) { if (!byConv.has(r.conversation_id)) byConv.set(r.conversation_id, []); byConv.get(r.conversation_id).push(r); }
+    for (const cid of cids) applyRows(cid, byConv.get(cid) || []);
+  }
+  await hydrateCursors(userId);
+}
+async function persistCursor(cid, userId, seq) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT INTO luno_read_cursors (conversation_id, user_id, sequence, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(conversation_id, user_id) DO UPDATE SET sequence = MAX(sequence, excluded.sequence), updated_at = excluded.updated_at')
+    .bind(cid, userId, seq, now()).run();
+}
+async function persistMessageUpdate(msg) {
+  const db = dbOf();
+  if (!db || !msg.persisted) return;
+  await ensureSchema();
+  await db.prepare('UPDATE luno_messages SET body = ?, metadata = ?, unsent = ?, edited_at = ? WHERE id = ?')
+    .bind(msg.body ?? '', msg.metadata ? JSON.stringify(msg.metadata) : null, msg.unsent ? 1 : 0, msg.edited_at || null, msg.id).run();
+}
+// Append a message durably. The (conversation_id, sequence) unique index arbitrates
+// concurrent writers on different isolates; on a collision we re-hydrate and retry.
+async function pushPersistent(cid, senderId, fields) {
+  const db = dbOf();
+  if (!db) return pushMessage(cid, senderId, fields);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await hydrateConversation(cid);
+    const msg = pushMessage(cid, senderId, fields, true);
+    try {
+      await db.prepare('INSERT INTO luno_messages (id, conversation_id, sender_id, client_id, sequence, kind, body, metadata, reply_to, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(msg.id, cid, senderId, msg.client_id || null, msg.sequence, msg.kind, msg.body ?? '', msg.metadata ? JSON.stringify(msg.metadata) : null, msg.reply_to || null, msg.created_at).run();
+    } catch (err) {
+      messages.set(cid, (messages.get(cid) || []).filter(m => m.id !== msg.id));
+      const conv = conversations.get(cid);
+      if (conv) conv.last_sequence = msg.sequence - 1;
+      if (attempt < 4 && /UNIQUE|constraint/i.test(String(err && err.message))) continue;
+      throw err;
+    }
+    msg.persisted = true;
+    broadcast({ type: 'message.created', conversation_id: cid, message: msg });
+    return msg;
+  }
+}
+// A security notice exists only because a real login happened (never on read).
+async function recordLoginEvent(user, sessionId, info) {
+  if (!user || !user.id || officialAccounts.has(user.id)) return;
+  ensureDefaultConversationsForUser(user.id);
+  const cid = `conv-oa-notice-${user.id}`;
+  await pushPersistent(cid, 'oa-notice', {
+    kind: 'security_notice', body: '로그인 성공',
+    metadata: { session_id: sessionId, ip: info.ip, location: info.location, device: info.device_name, platform: info.platform }
+  });
+  const real = (messages.get(cid) || []).filter(m => m.kind === 'security_notice' && m.metadata && m.metadata.session_id);
+  if (real.length > 5) {
+    const drop = new Set(real.slice(0, real.length - 5).map(m => m.id));
+    messages.set(cid, (messages.get(cid) || []).filter(m => !drop.has(m.id)));
+    const db = dbOf();
+    if (db) for (const id of drop) await db.prepare('DELETE FROM luno_messages WHERE id = ?').bind(id).run();
+  }
+}
+
+// ---------- Attachments ----------
+async function persistAttachment(att) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT INTO luno_attachments (id, conversation_id, owner_id, name, mime, size, b64, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(att.id, att.conversation_id, att.owner, att.name, att.mime, att.size, att.b64, now()).run();
+}
+async function loadAttachment(id) {
+  if (!id) return null;
+  const hit = attachmentStore.get(id);
+  if (hit) return hit;
+  const db = dbOf();
+  if (!db) return null;
+  await ensureSchema();
+  const r = await db.prepare('SELECT * FROM luno_attachments WHERE id = ?').bind(String(id)).first();
+  if (!r) return null;
+  const att = { id: r.id, owner: r.owner_id, conversation_id: r.conversation_id, name: r.name, mime: r.mime, size: r.size, b64: r.b64 };
+  attachmentStore.set(att.id, att);
+  return att;
+}
+
+// ---------- LUNO editorial SAMPLE content (G-4: explicitly labelled, not real press) ----------
+const NEWS_SAMPLE = [
+  {
+    "id": "news-hero-01",
+    "title": "단독 \"SKY 학벌 중시하는 서울, 삶의 질은 세계 113위\"",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "경제",
+    "published_at": "2026-10-31T08:50:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80",
+    "summary": "서울의 글로벌 경쟁력과 정주 여건을 종합 평가한 결과, 교육열과 학벌 지표 대비 삶의 질 지수는 113위로 나타났다...",
+    "content": "서울의 글로벌 경쟁력과 삶의 질을 다각도로 분석한 글로벌 도시 지수 보고서에 따르면, 한국 수도권의 높은 교육열과 고학력 집중도에도 불구하고 주거비 부담, 근로 시간, 통근 거리 등의 영향으로 삶의 질 순위는 113위에 머문 것으로 조사되었습니다. 전문가들은 지속 가능한 도시 발전을 위해 주거 안정과 문화 공간 확충이 시급하다고 지적했습니다.",
+    "sample": true
+  },
+  {
+    "id": "news-hero-02",
+    "title": "[샘플] 뉴스 카드 예시 2",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "IT/과학",
+    "published_at": "2026-10-31T08:42:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80",
+    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
+    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
+    "sample": true
+  },
+  {
+    "id": "news-hero-03",
+    "title": "미 연준 금리 동결 시사… 아시아 증시 일제히 강세 출발",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "경제",
+    "published_at": "2026-10-31T08:28:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80",
+    "summary": "글로벌 인플레이션 둔화 지표가 확인되면서 코스피와 나스닥 선물 지수가 동반 상승세를 기록 중이다...",
+    "content": "주요국 물가 상승률이 안정권에 접어들면서 기술주와 반도체 섹터를 중심으로 외국인 매수세가 유입되고 있습니다.",
+    "sample": true
+  },
+  {
+    "id": "news-hero-04",
+    "title": "K-콘텐츠 글로벌 열풍 지속… 신작 드라마 아시아 12개국 1위",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "엔터",
+    "published_at": "2026-10-31T08:15:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80",
+    "summary": "주말 첫 방송을 시작한 한국 드라마가 일본, 태국, 대만 등 아시아 주요 OTT 차트 정상을 석권했다...",
+    "content": "탄탄한 각본과 배우들의 열연이 어우러진 신작 드라마가 글로벌 팬들의 호평 속에 기록적인 시청 시간을 달성하고 있습니다.",
+    "sample": true
+  },
+  {
+    "id": "news-hero-05",
+    "title": "[샘플] 뉴스 카드 예시 5",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "글로벌",
+    "published_at": "2026-10-31T08:00:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&auto=format&fit=crop&q=80",
+    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
+    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
+    "sample": true
+  },
+  {
+    "id": "news-pop-01",
+    "rank": 1,
+    "title": "시청자 콱 물었다...시청률 '12.9%' 인기→종영 20년 만에 다시 부활한 韓 드라마",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "엔터",
+    "published_at": "2026-10-31T08:35:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+    "summary": "20년 만에 리메이크된 명작 드라마가 첫 방송부터 두 자릿수 시청률을 기록하며 화제의 중심에 섰다...",
+    "content": "20년 전 안방극장을 뜨겁게 달궜던 명작 드라마가 현대적 감각으로 재해석되어 돌아왔습니다. 첫 방송부터 최고 시청률 12.9%를 돌파하며 OTT 플랫폼과 방송가에서 뜨거운 반응을 이끌어내고 있습니다.",
+    "sample": true
+  },
+  {
+    "id": "news-pop-02",
+    "rank": 2,
+    "title": "[샘플] 뉴스 카드 예시 7",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "엔터",
+    "published_at": "2026-10-31T08:20:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
+    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
+    "sample": true
+  },
+  {
+    "id": "news-pop-03",
+    "rank": 3,
+    "title": "[샘플] 뉴스 카드 예시 8",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "IT/과학",
+    "published_at": "2026-10-31T08:00:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=300&auto=format&fit=crop&q=80",
+    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
+    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
+    "sample": true
+  },
+  {
+    "id": "news-pop-04",
+    "rank": 4,
+    "title": "한국은행 \"연내 디지털 화폐(CBDC) 실거래 테스트 본격화\"",
+    "press": "LUNO 에디토리얼(샘플)",
+    "category": "경제",
+    "published_at": "2026-10-31T07:00:00.000Z",
+    "image_url": "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=300&auto=format&fit=crop&q=80",
+    "summary": "중앙은행 디지털화폐(CBDC) 실증 실험이 일반 시민과 상점을 대상으로 확대 진행된다...",
+    "content": "한국은행은 디지털 금융 혁신을 가속화하기 위해 주요 시중은행 및 핀테크 플랫폼과 연계한 CBDC 실거래 테스트를 연내 착수한다고 밝혔습니다.",
+    "sample": true
+  }
+];
+
 
 async function pbkdf2(password, saltHex) {
   try {
@@ -219,7 +646,7 @@ function mentionedIn(cid, userId) {
   return (messages.get(cid) || []).some(m => m.sequence > cursor && m.sender_id !== userId && !m.unsent &&
     (m.metadata?.mentions || []).some(x => x === userId || x === 'all'));
 }
-function pushMessage(cid, senderId, fields) {
+function pushMessage(cid, senderId, fields, deferBroadcast = false) {
   const conv = conversations.get(cid);
   conv.last_sequence = (conv.last_sequence || 0) + 1;
   conv.updated_at = now();
@@ -232,7 +659,7 @@ function pushMessage(cid, senderId, fields) {
   list.push(msg);
   messages.set(cid, list);
   if (!officialAccounts.has(senderId)) readCursors.set(`${cid}:${senderId}`, msg.sequence);
-  broadcast({ type: 'message.created', conversation_id: cid, message: msg });
+  if (!deferBroadcast) broadcast({ type: 'message.created', conversation_id: cid, message: msg });
   return msg;
 }
 function systemMessage(cid, body) {
@@ -319,7 +746,72 @@ const featureFlags = [
   { key: 'openchat_live_streaming', enabled: true, description: 'Public community voice stages' }
 ];
 
+// =====================================================================
+// Cross-isolate realtime delivery
+//
+// activeSockets below is a per-isolate Map, so it can only ever reach clients
+// that happen to be served by this same isolate. A UserSocketHub Durable
+// Object -- one per user id -- owns that user's sockets instead, so a write on
+// any isolate reaches every device of every recipient.
+//
+// Both paths are kept. With no USER_HUB binding (local tests, or a deployment
+// that has not enabled Durable Objects) the hub calls are no-ops and the
+// previous per-isolate behaviour stands unchanged. With the binding present the
+// /ws upgrade is handed to the hub, so activeSockets stays empty in this
+// isolate and there is no double delivery.
+// =====================================================================
+function hubBinding() {
+  return CURRENT_ENV && CURRENT_ENV.USER_HUB ? CURRENT_ENV.USER_HUB : null;
+}
+
+async function hubDeliver(userIds, payload) {
+  const hub = hubBinding();
+  if (!hub) return 0;
+  const unique = Array.from(new Set(Array.from(userIds || []).filter(Boolean)));
+  if (!unique.length) return 0;
+  const body = JSON.stringify(payload);
+  const results = await Promise.all(unique.map(async userId => {
+    try {
+      const stub = hub.get(hub.idFromName(String(userId)));
+      const res = await stub.fetch('https://user-hub.internal/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      return res && res.ok ? 1 : 0;
+    } catch (err) {
+      // A hub that cannot be reached must never fail the write that triggered it:
+      // the message is already committed and will be picked up by the next fetch.
+      console.error('[LUNO hub push failed]', userId, err && err.message ? err.message : err);
+      return 0;
+    }
+  }));
+  return results.reduce((a, b) => a + b, 0);
+}
+
+// Every call site is synchronous fire-and-forget. Keep that contract and let the
+// runtime finish the delivery after the response has been returned.
+function hubFanOut(userIds, payload) {
+  if (!hubBinding()) return;
+  const task = hubDeliver(userIds, payload);
+  if (CURRENT_CTX && typeof CURRENT_CTX.waitUntil === 'function') CURRENT_CTX.waitUntil(task);
+  else task.catch(() => {});
+}
+
+// The recipients of a broadcast: conversation members, or the members of a
+// public community room.
+function broadcastRecipients(payload) {
+  const conversationId = payload.conversation_id || callSessions.get(payload.call_id)?.conversation_id;
+  const conversation = conversations.get(conversationId);
+  if (conversation) return conversation.members || [];
+  if (payload.room_id && communityRooms.get(payload.room_id)?.visibility === 'public') {
+    return Array.from((roomMembers.get(payload.room_id) || new Map()).keys());
+  }
+  return [];
+}
+
 function notifyUser(userId, payload) {
+  hubFanOut([userId], payload);
   const msg = JSON.stringify(payload);
   for (const [ws, socketUserId] of activeSockets) {
     if (socketUserId !== userId) continue;
@@ -332,6 +824,7 @@ function notifyUser(userId, payload) {
 }
 
 function broadcast(payload) {
+  hubFanOut(broadcastRecipients(payload), payload);
   const msg = JSON.stringify(payload);
   const conversationId = payload.conversation_id || callSessions.get(payload.call_id)?.conversation_id;
   const conversation = conversations.get(conversationId);
@@ -348,14 +841,18 @@ function broadcast(payload) {
 }
 
 // Helper: Seed default accounts and base data if empty
-function ensureSeed() {
+function ensureSeed(env) {
   if (users.size > 0) return;
+  const seedPassword = (name, fallback) => {
+    const configured = env && env[name];
+    return typeof configured === 'string' && configured.length > 0 ? configured : fallback;
+  };
 
   const seeds = [
     {
       id: '00000000-0000-0000-0000-000000000001',
       email: 'admin@line.local',
-      password: (typeof env !== 'undefined' && env?.ADMIN_INITIAL_PASSWORD) || 'LunoAdmin#RotatedEdge$99xK',
+      password: seedPassword('ADMIN_INITIAL_PASSWORD', 'LunoAdmin#RotatedEdge$99xK'),
       display_name: 'System Administrator',
       role: 'admin',
       handle: 'admin',
@@ -364,7 +861,7 @@ function ensureSeed() {
     {
       id: '00000000-0000-0000-0000-000000000002',
       email: 'user@line.local',
-      password: (typeof env !== 'undefined' && env?.DEMO_INITIAL_PASSWORD) || 'LunoUser#Rotated$72mP',
+      password: seedPassword('DEMO_INITIAL_PASSWORD', 'LunoUser#Rotated$72mP'),
       display_name: 'LUNO Demo User',
       role: 'user',
       handle: 'luno_user',
@@ -451,28 +948,54 @@ function json(data, status = 200, headers = {}) {
   });
 }
 
-function getAuthUser(request) {
+// Authentication is session-backed only: a token is valid iff its digest exists in D1 (or the
+// in-memory store when no D1 is bound), has not been revoked and is inside its TTL. The old
+// stateless "cf-token-<userId>.*" fallback accepted any forged token and is removed.
+async function loadUserFromD1(id) {
+  const db = dbOf();
+  if (!db) return null;
+  const row = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
+  if (!row) return null;
+  const hashed = parsePbkdf2(row.password_hash);
+  const u = {
+    id: row.id, email: row.email,
+    password: hashed ? undefined : row.password_hash, pw_hash: hashed ? hashed.hash : undefined, pw_salt: hashed ? hashed.salt : undefined,
+    display_name: row.display_name || row.email.split('@')[0], role: row.email.includes('admin') ? 'admin' : 'user',
+    bio: row.bio || '', status_message: row.status_message || '', created_at: row.created_at
+  };
+  users.set(row.email.toLowerCase(), u);
+  usersById.set(u.id, u);
+  return u;
+}
+async function getAuthUser(request) {
   const auth = request.headers.get('Authorization') || '';
   if (!auth.startsWith('Bearer ')) return null;
   const token = auth.slice(7).trim();
-  if (revokedTokens.has(token)) return null;
-  let userId = null;
-  const session = sessions.get(token);
-  if (session) {
-    userId = session.user_id;
-  } else if (token.startsWith('cf-token-')) {
-    const dotIdx = token.indexOf('.');
-    if (dotIdx !== -1) {
-      userId = token.slice('cf-token-'.length, dotIdx);
+  if (!token || revokedTokens.has(token)) return null;
+  let session = sessions.get(token);
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    const row = await db.prepare('SELECT session_id, user_id, role, created_at, revoked_at FROM luno_sessions WHERE token_hash = ?').bind(await sha256Hex(token)).first();
+    if (!row || row.revoked_at || Date.parse(row.created_at) + SESSION_TTL_MS < Date.now()) {
+      sessions.delete(token);
+      return null;
     }
+    session = { ...(session || {}), user_id: row.user_id, role: row.role, device_id: row.session_id, created_at: row.created_at };
+    sessions.set(token, session);
+  } else if (!session) {
+    return null;
   }
-  if (!userId) return null;
-  const user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId) || null;
-  if (user && user.state === 'suspended') return null;
+  const userId = session.user_id;
+  let user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId) || null;
+  if (!user) user = await loadUserFromD1(userId);
+  if (!user || user.state === 'suspended' || user.state === 'deleted') return null;
+  AUTH_CTX.set(request, { token, session_id: session.device_id });
   return user;
 }
 
 function sendTo(userIds, payload) {
+  hubFanOut(userIds, payload);
   const msg = JSON.stringify(payload);
   const set = new Set(userIds);
   for (const [ws, userId] of activeSockets) {
@@ -647,9 +1170,10 @@ function ensureDefaultConversationsForUser(userId) {
         metadata: {
           ip: '49.172.105.64',
           location: 'South Korea Seoul Eunpyeong-gu',
-          device: 'WINDOWS PC'
+          device: 'WINDOWS PC',
+          sample: true
         },
-        created_at: new Date(Date.now() - 3600000).toISOString()
+        created_at: '2026-08-01T10:00:00Z'
       },
       {
         id: `msg-sec-${userId}-2`,
@@ -662,9 +1186,10 @@ function ensureDefaultConversationsForUser(userId) {
         metadata: {
           ip: '49.172.105.64',
           location: 'South Korea Seoul Eunpyeong-gu',
-          device: 'WINDOWS PC'
+          device: 'WINDOWS PC',
+          sample: true
         },
-        created_at: new Date(Date.now() - 60000).toISOString()
+        created_at: '2026-08-01T10:59:00Z'
       }
     ]);
   }
@@ -952,22 +1477,35 @@ async function extended(p, request, url, me, token) {
       return json({ ...prefs });
     }
   }
-  if (p === 'me/devices' && method === 'GET') {
-    const list = [];
-    for (const [tok, s] of sessions) if (s.user_id === myId) list.push({ device_id: s.device_id, current: tok === token, created_at: s.created_at || null });
-    return json({ devices: list });
+  if (p === 'auth/logout' && method === 'POST') {
+    const sid = sessions.get(token)?.device_id;
+    if (sid) {
+      await revokeSessionById(sid, myId);
+      await persistAudit(myId, 'session.logout', sid, {});
+    }
+    return json({ status: 'logged_out' });
   }
-  if ((m = p.match(/^me\/devices\/([\w-]+)$/)) && method === 'DELETE') {
-    for (const [tok, s] of Array.from(sessions)) if (s.user_id === myId && s.device_id === m[1]) sessions.delete(tok);
-    return json({ status: 'revoked' });
+  if ((p === 'me/devices' || p === 'devices') && method === 'GET') {
+    return json({ devices: await listSessionsFor(myId, sessions.get(token)?.device_id) });
+  }
+  if ((m = p.match(/^(?:me\/)?devices\/([\w-]+)$/)) && method === 'DELETE') {
+    const target = await findSessionById(m[1]);
+    if (!target) return bad('기기 세션을 찾을 수 없습니다', 404);
+    if (target.user_id !== myId) return bad('다른 사용자의 세션은 종료할 수 없습니다', 403);
+    const self = sessions.get(token)?.device_id === m[1];
+    await revokeSessionById(m[1], myId);
+    await persistAudit(myId, self ? 'session.revoke.self' : 'session.revoke.remote', m[1], { via: 'devices' });
+    return json({ status: 'revoked', session_id: m[1], self });
   }
   if (p === 'me/password' && method === 'POST') {
     const b = await readJson(request);
     if (!(await checkPassword(me, b.old_password))) return bad('현재 비밀번호가 일치하지 않습니다', 403);
     if (typeof b.new_password !== 'string' || b.new_password.length < 10) return bad('새 비밀번호는 10자 이상이어야 합니다');
     await setPassword(me, b.new_password);
-    for (const [tok, s] of Array.from(sessions)) if (s.user_id === myId && tok !== token) sessions.delete(tok);
-    return json({ status: 'changed' });
+    await persistPassword(me);
+    await revokeOtherSessions(myId, sessions.get(token)?.device_id, myId);
+    await persistAudit(myId, 'password.change', myId, { other_sessions: 'revoked' });
+    return json({ status: 'changed', other_sessions_revoked: true });
   }
   if (p === 'me/qr' && method === 'GET') return json({ code: `LINE-FRIEND:${me.handle}`, handle: me.handle });
   if (p === 'me/stickers' && method === 'GET') {
@@ -1069,9 +1607,12 @@ async function extended(p, request, url, me, token) {
   // ---------- Conversations ----------
   if (p === 'conversations/read-all' && method === 'POST') {
     ensureDefaultConversationsForUser(myId);
+    await hydrateUserConversations(myId);
     for (const conv of conversations.values()) {
       if (conv.members.includes(myId)) {
-        readCursors.set(`${conv.id}:${myId}`, conv.last_sequence || 0);
+        const seq = conv.last_sequence || 0;
+        if (seq > (readCursors.get(`${conv.id}:${myId}`) || 0)) readCursors.set(`${conv.id}:${myId}`, seq);
+        await persistCursor(conv.id, myId, seq);
         conv.unread_count = 0;
       }
     }
@@ -1080,11 +1621,14 @@ async function extended(p, request, url, me, token) {
   if (p === 'conversations') {
     if (method === 'GET') {
       ensureDefaultConversationsForUser(myId);
+      await hydrateUserConversations(myId);
       const includeHidden = url.searchParams.get('include_hidden') === '1';
       const list = Array.from(conversations.values()).filter(c => c.members.includes(myId))
         .map(c => chatSummary(c, myId)).filter(c => includeHidden || !c.hidden)
         .sort((a, b) => (b.pinned - a.pinned) || String(b.updated_at).localeCompare(String(a.updated_at)));
-      return json({ conversations: list });
+      // Invariant: nav badge === sum of numeric per-room unread; 'N' (badge_n) rooms are excluded everywhere.
+      const unread_total = list.reduce((sum, c) => sum + (c.badge_n ? 0 : (c.unread_count || 0)), 0);
+      return json({ conversations: list, unread_total });
     }
     if (method === 'POST') {
       const b = await readJson(request);
@@ -1123,6 +1667,7 @@ async function extended(p, request, url, me, token) {
   }
   if ((m = p.match(/^conversations\/([\w-]+)$/))) {
     const conv = conversations.get(resolveConversationId(m[1], myId));
+    if (!conv) return bad('대화방을 찾을 수 없습니다', 404);
     if (method === 'GET') return json(chatSummary(conv, myId));
     if (method === 'PATCH') {
       const b = await readJson(request);
@@ -1186,6 +1731,8 @@ async function extended(p, request, url, me, token) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (method === 'GET') {
+      await hydrateConversation(cid);
+      await hydrateCursors(myId);
       const before = intIn(url.searchParams.get('before_sequence') || 0, 0, 1e9) || 0;
       const limit = intIn(url.searchParams.get('limit') || 50, 1, 100) || 50;
       const hs = hiddenMsgs.get(myId);
@@ -1196,6 +1743,7 @@ async function extended(p, request, url, me, token) {
     if (method === 'POST') {
       const b = await readJson(request);
       const kind = b.kind || 'text';
+      await hydrateConversation(cid);
       if (!MESSAGE_KINDS.has(kind)) return bad('지원하지 않는 메시지 종류입니다');
       if (conv.kind === 'direct') {
         const other = conv.members.find(x => x !== myId);
@@ -1236,7 +1784,7 @@ async function extended(p, request, url, me, token) {
         metadata = { ...meta };
         body = clip(body || kind, MAX_BODY);
       } else {
-        const att = attachmentStore.get(meta.attachment_id);
+        const att = await loadAttachment(meta.attachment_id);
         if (att && att.conversation_id === cid) {
           metadata = { attachment_id: att.id, mime_type: att.mime, name: att.name, size_bytes: att.size };
           if (kind === 'voice') metadata.duration = intIn(meta.duration, 0, 300) ?? 0;
@@ -1257,10 +1805,11 @@ async function extended(p, request, url, me, token) {
         if (!(messages.get(cid) || []).some(x => x.id === b.reply_to)) return bad('답장할 메시지를 찾을 수 없습니다', 404);
         replyTo = b.reply_to;
       }
-      const msg = pushMessage(cid, myId, { client_id: b.client_id, kind, body, reply_to: replyTo, metadata: Object.keys(metadata).length ? metadata : undefined });
+      const msg = await pushPersistent(cid, myId, { client_id: b.client_id, kind, body, reply_to: replyTo, metadata: Object.keys(metadata).length ? metadata : undefined });
+      await persistCursor(cid, myId, msg.sequence);
       if (conv.official) {
         const acct = officialAccounts.get(conv.members.find(x => officialAccounts.has(x)));
-        if (acct && kind === 'text') pushMessage(cid, acct.id, { kind: 'text', body: botReply(body, acct) });
+        if (acct && kind === 'text') await pushPersistent(cid, acct.id, { kind: 'text', body: botReply(body, acct) });
       }
       const decorated = decorateMessage(msg, myId, cid);
       return json({ ...decorated, message: decorated, duplicate: false }, 201);
@@ -1268,6 +1817,7 @@ async function extended(p, request, url, me, token) {
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)$/))) {
     const cid = resolveConversationId(m[1], myId);
+    await hydrateConversation(cid);
     const list = messages.get(cid) || [];
     const msg = list.find(x => x.id === m[2]);
     if (!msg) return bad('메시지를 찾을 수 없습니다', 404);
@@ -1279,6 +1829,7 @@ async function extended(p, request, url, me, token) {
       if (!text) return bad('메시지를 입력하세요');
       msg.body = text;
       msg.edited_at = now();
+      await persistMessageUpdate(msg);
       broadcast({ type: 'message.updated', conversation_id: cid, message_id: msg.id, body: msg.body });
       return json({ status: 'edited', message: decorateMessage(msg, myId, cid) });
     }
@@ -1287,6 +1838,7 @@ async function extended(p, request, url, me, token) {
       msg.unsent = true;
       msg.body = '';
       msg.metadata = undefined;
+      await persistMessageUpdate(msg);
       const pins = pinnedMessages.get(cid);
       if (pins) pinnedMessages.set(cid, pins.filter(x => x.message_id !== msg.id));
       broadcast({ type: 'message.unsent', conversation_id: cid, message_id: msg.id });
@@ -1317,11 +1869,14 @@ async function extended(p, request, url, me, token) {
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/read$/)) && method === 'POST') {
     const conv = conversations.get(resolveConversationId(m[1], myId));
+    await hydrateConversation(conv.id);
+    await hydrateCursors(myId);
     const b = await readJson(request);
     const seq = intIn(b.sequence ?? conv.last_sequence, 0, 1e9) ?? 0;
     const key = `${conv.id}:${myId}`;
     const next = Math.max(readCursors.get(key) || 0, Math.min(seq, conv.last_sequence || 0));
     readCursors.set(key, next);
+    await persistCursor(conv.id, myId, next);
     broadcast({ type: 'conversation.read', conversation_id: conv.id, user_id: myId, sequence: next });
     return json({ status: 'read', sequence: next });
   }
@@ -1502,11 +2057,12 @@ async function extended(p, request, url, me, token) {
     const mime = typeof b.mime_type === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(b.mime_type) ? b.mime_type.toLowerCase() : 'application/octet-stream';
     const size = Math.floor(b.content_base64.length * 3 / 4);
     const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, size, b64: b.content_base64 };
+    await persistAttachment(att);
     attachmentStore.set(att.id, att);
     return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: size }, 201);
   }
   if ((m = p.match(/^attachments\/([\w-]+)$/)) && method === 'GET') {
-    const att = attachmentStore.get(m[1]);
+    const att = await loadAttachment(m[1]);
     if (!att || !conversations.get(att.conversation_id)?.members.includes(myId)) return bad('파일을 찾을 수 없습니다', 404);
     const bin = atob(att.b64);
     const bytes = new Uint8Array(bin.length);
@@ -1536,13 +2092,41 @@ async function extended(p, request, url, me, token) {
     return json({ id: call.id, state: 'ringing', kind: call.kind }, 201);
   }
   if (p === 'calls' && method === 'GET') {
-    const out = Array.from(callSessions.values()).filter(c => conversations.get(c.conversation_id)?.members.includes(myId))
-      .sort((a, b2) => b2.started_at.localeCompare(a.started_at)).slice(0, 100).map(c => {
-        const conv = conversations.get(c.conversation_id);
-        const duration = c.connected_at && c.ended_at ? Math.round((Date.parse(c.ended_at) - Date.parse(c.connected_at)) / 1000) : 0;
-        return { id: c.id, conversation_id: c.conversation_id, title: chatSummary(conv, myId).title, kind: c.kind, state: c.state, result: c.result || '', duration, outgoing: c.initiated_by === myId, started_at: c.started_at };
-      });
-    return json({ calls: out });
+    await hydrateUserConversations(myId);
+    const peerColor = id => usersById.get(id)?.avatar_color || officialAccounts.get(id)?.color || '#06c755';
+    const rows = [];
+    for (const c of callSessions.values()) {
+      const conv = conversations.get(c.conversation_id);
+      if (!conv || !conv.members.includes(myId)) continue;
+      const peerId = conv.members.find(x => x !== myId) || null;
+      const duration = c.connected_at && c.ended_at ? Math.round((Date.parse(c.ended_at) - Date.parse(c.connected_at)) / 1000) : 0;
+      rows.push({ id: c.id, conversation_id: c.conversation_id, peer_id: peerId, peer_color: peerColor(peerId), title: chatSummary(conv, myId).title, kind: c.kind, state: c.state, result: c.result || '', duration, outgoing: c.initiated_by === myId, started_at: c.started_at, source: 'session' });
+    }
+    // Call history is the ledger of call_status messages, so the list always agrees with the chat bubbles.
+    for (const conv of conversations.values()) {
+      if (!conv.members.includes(myId)) continue;
+      const peerId = conv.members.find(x => x !== myId) || null;
+      const title = chatSummary(conv, myId).title;
+      for (const msg of messages.get(conv.id) || []) {
+        if (msg.kind !== 'call_status' || msg.unsent) continue;
+        const st = msg.metadata?.call_status || msg.metadata?.status || 'completed';
+        const dur = String(msg.metadata?.duration || '');
+        const secs = dur.includes(':') ? dur.split(':').reduce((a, x) => a * 60 + Number(x || 0), 0) : (Number(dur) || 0);
+        rows.push({ id: msg.id, conversation_id: conv.id, peer_id: peerId, peer_color: peerColor(peerId), title, kind: msg.metadata?.call_type || 'voice', state: 'ended', result: st, duration: secs, outgoing: msg.sender_id === myId, started_at: msg.created_at, source: 'message' });
+      }
+    }
+    rows.sort((a, b2) => String(b2.started_at).localeCompare(String(a.started_at)));
+    return json({ calls: rows.slice(0, 100) });
+  }
+  if (p === 'news' && method === 'GET') {
+    const withRank = NEWS_SAMPLE.filter(a => a.rank);
+    return json({
+      sample: true,
+      source: 'LUNO 에디토리얼 샘플 콘텐츠 (실제 언론 기사가 아닙니다)',
+      hero: NEWS_SAMPLE.filter(a => !a.rank),
+      popular: withRank,
+      fetched_at: now()
+    });
   }
   if ((m = p.match(/^calls\/([\w-]+)\/state$/)) && method === 'POST') {
     const call = callSessions.get(m[1]);
@@ -1834,7 +2418,7 @@ async function extended(p, request, url, me, token) {
       if (target.role === 'admin') return bad('관리자 계정에는 제재를 적용할 수 없습니다', 403);
       if (b.action === 'suspend') {
         target.state = 'suspended';
-        for (const [tok, s] of Array.from(sessions)) if (s.user_id === target.id) sessions.delete(tok);
+        await revokeOtherSessions(target.id, '', myId);
       } else if (b.action === 'activate') target.state = 'active';
       if (b.report_id) {
         const rep = adminReports.find(r => r.id === b.report_id);
@@ -2087,7 +2671,7 @@ async function extended(p, request, url, me, token) {
   if (p === 'me/delete-account' && method === 'POST') {
     me.state = 'deleted';
     me.display_name = '탈퇴한 사용자';
-    for (const [tok, s] of Array.from(sessions)) if (s.user_id === myId) sessions.delete(tok);
+    await revokeOtherSessions(myId, '', myId);
     return json({ status: 'account_deleted', message: '계정이 영구 삭제 처리되었습니다.' });
   }
 
@@ -2132,8 +2716,9 @@ async function syncFromD1(db) {
         'User#2026!'
       ]);
       for (const row of userRows.results) {
+        const hashed = parsePbkdf2(row.password_hash);
         let plain = undefined;
-        if (row.password_hash && !REVOKED_LEGACY_PASSWORDS.has(row.password_hash)) {
+        if (row.password_hash && !hashed && !REVOKED_LEGACY_PASSWORDS.has(row.password_hash)) {
           if (row.password_hash.startsWith('sha256:')) {
             plain = row.password_hash.slice(7);
           } else {
@@ -2148,10 +2733,10 @@ async function syncFromD1(db) {
         const u = {
           id: row.id,
           email: row.email,
-          password: plain || existing?.password,
-          raw_password: plain || existing?.raw_password,
-          pw_hash: row.password_hash,
-          pw_salt: existing?.pw_salt,
+          password: hashed ? undefined : (plain || existing?.password),
+          raw_password: hashed ? undefined : (plain || existing?.raw_password),
+          pw_hash: hashed ? hashed.hash : row.password_hash,
+          pw_salt: hashed ? hashed.salt : existing?.pw_salt,
           display_name: dName,
           role: row.email.includes('admin') ? 'admin' : 'user',
           bio: (row.bio && !row.bio.includes('LINE')) ? row.bio : 'LUNO Global Messenger User',
@@ -2178,7 +2763,7 @@ let booted = null;
 function boot(env) {
   if (!booted) {
     booted = (async () => {
-      ensureSeed();
+      ensureSeed(env);
       seedExtras();
       await hashPendingPasswords();
       if (env && env.DB) {
@@ -2190,7 +2775,7 @@ function boot(env) {
 }
 const loginFailures = new Map();
 
-export default {
+const workerCore = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 	if (url.pathname === '/api/v1/store/orders' && request.method === 'POST') {
@@ -2221,8 +2806,17 @@ export default {
       }
     }
     const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-    const isEdgeHost = url.hostname.endsWith('.workers.dev') || url.hostname.endsWith('.pages.dev') || env.ALLOW_EDGE_STANDALONE === 'true';
-    const localDemo = (env.ALLOW_LOCAL_DEMO === 'true' && (isLocal || isEdgeHost)) || env.ALLOW_EDGE_STANDALONE === 'true';
+    // .workers.dev / .pages.dev are Cloudflare's own preview hostnames and can never be a
+    // customer-facing production domain, so they are the only implicitly approved edge hosts.
+    const isEdgeHost = url.hostname.endsWith('.workers.dev') || url.hostname.endsWith('.pages.dev');
+    // Any further standalone host must be named explicitly. A blanket "allow every host"
+    // switch is deliberately not supported: it would serve the in-memory demo backend --
+    // including POST /auth/demo, which mints a real session for a seeded account with no
+    // password -- on a production custom domain.
+    const allowedStandaloneHosts = String(env.STANDALONE_HOSTS || '')
+      .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+    const isNamedStandaloneHost = allowedStandaloneHosts.includes(url.hostname.toLowerCase());
+    const localDemo = env.ALLOW_LOCAL_DEMO === 'true' && (isLocal || isEdgeHost || isNamedStandaloneHost);
     if (!localDemo) {
       if (backendRoute) return json({ error: 'persistent backend must be configured' }, 503);
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Assets unavailable', { status: 503 });
@@ -2242,14 +2836,14 @@ export default {
     }
 
     // Health / Readyz / Metrics / Version
-    if (url.pathname === '/healthz' || url.pathname === '/readyz' || url.pathname === '/api/v1/health') {
+    if (url.pathname === '/healthz' || url.pathname === '/readyz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
       return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
     }
     if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
       return json(BUILD_INFO);
     }
     if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
-      const auth = getAuthUser(request);
+      const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
       const b = await request.json().catch(() => ({}));
       const text = String(b.text || '').trim();
@@ -2274,10 +2868,19 @@ export default {
         return new Response('Expected Upgrade: websocket', { status: 426 });
       }
       const ticket = url.searchParams.get('ticket');
-      const grant = wsTickets.get(ticket);
-      wsTickets.delete(ticket);
-      if (!grant || grant.expiresAt <= Date.now()) {
+      const grantedUserId = await redeemWsTicket(ticket);
+      if (!grantedUserId) {
         return json({ error: 'invalid or expired websocket ticket' }, 401);
+      }
+      const grant = { userId: grantedUserId };
+      // With Durable Objects enabled the socket belongs to the user's hub, not to
+      // this isolate, which is what makes delivery work across isolates.
+      const hub = hubBinding();
+      if (hub) {
+        const stub = hub.get(hub.idFromName(String(grant.userId)));
+        return stub.fetch('https://user-hub.internal/connect', {
+          headers: { Upgrade: 'websocket' }
+        });
       }
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
@@ -2308,33 +2911,26 @@ export default {
         if (!email || !body.password) return json({ error: 'invalid email or password' }, 400);
         if (users.has(email)) return json({ error: 'account already exists' }, 409);
 
+        if (typeof body.password !== 'string' || body.password.length < 8) return json({ error: 'password must be at least 8 characters' }, 400);
         const newUser = {
           id: crypto.randomUUID(),
           email,
-          password: body.password,
           display_name: body.display_name || email.split('@')[0],
           role: 'user',
           handle: body.handle || `user_${crypto.randomUUID().slice(0, 6)}`,
           bio: 'New Messenger User',
           created_at: new Date().toISOString()
         };
+        await setPassword(newUser, body.password);
+        if (!newUser.pw_hash || !newUser.pw_salt) return json({ error: 'internal_error' }, 500);
         users.set(email, newUser);
         usersById.set(newUser.id, newUser);
         if (env.DB) {
-          ctx.waitUntil(d1Run(
-            env.DB,
-            "INSERT OR REPLACE INTO users (id, email, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
-            newUser.id,
-            newUser.email,
-            newUser.password,
-            newUser.display_name,
-            newUser.bio
-          ));
-          ctx.waitUntil(d1Run(
-            env.DB,
-            "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 100000, datetime('now'))",
-            newUser.id
-          ));
+          // Passwords are persisted only as PBKDF2 digests; writes are awaited so a redeploy never loses the account.
+          await ensureSchema();
+          await env.DB.prepare("INSERT OR REPLACE INTO users (id, email, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
+            .bind(newUser.id, newUser.email, `pbkdf2$${newUser.pw_salt}$${newUser.pw_hash}`, newUser.display_name, newUser.bio).run();
+          await d1Run(env.DB, "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 100000, datetime('now'))", newUser.id);
         }
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);
       }
@@ -2348,7 +2944,7 @@ export default {
           (u.handle && u.handle.toLowerCase() === identifier) ||
           (u.phone && u.phone === identifier)
         );
-        if (!user) {
+        if (!user || user.state === 'suspended' || user.state === 'deleted') {
           return json({ error: 'invalid credentials' }, 401);
         }
         const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!']);
@@ -2361,9 +2957,7 @@ export default {
         if (!valid) {
           return json({ error: 'invalid credentials' }, 401);
         }
-        const token = `cf-token-${user.id}.${crypto.randomUUID()}`;
-        const deviceId = crypto.randomUUID();
-        sessions.set(token, { user_id: user.id, role: user.role, device_id: deviceId });
+        const { token, deviceId } = await createSession(user, request);
         return json({
           access_token: token,
           refresh_token: `cf-refresh-${crypto.randomUUID()}`,
@@ -2387,11 +2981,12 @@ export default {
         if (targetRole === 'admin' || body.account === 'admin') {
           return json({ error: 'admin demo login is strictly forbidden' }, 403);
         }
-        let user = users.get('user@line.local');
-        if (body.account === 'alice') user = users.get('alice@line-test.local') || user;
-        const token = `cf-token-${user.id}.${crypto.randomUUID()}`;
-        const deviceId = crypto.randomUUID();
-        sessions.set(token, { user_id: user.id, role: user.role, device_id: deviceId });
+        // Strict allow-list: undefined, empty or unknown accounts are rejected, never defaulted.
+        const account = typeof body.account === 'string' ? body.account.trim().toLowerCase() : '';
+        if (!['user', 'alice'].includes(account)) return bad('지원하지 않는 데모 계정입니다 (user, alice만 허용)', 400);
+        const user = users.get(account === 'alice' ? 'alice@line-test.local' : 'user@line.local');
+        if (!user) return bad('데모 계정을 사용할 수 없습니다', 503);
+        const { token, deviceId } = await createSession(user, request);
         return json({
           status: 'authenticated',
           access_token: token,
@@ -2408,26 +3003,26 @@ export default {
         const body = await request.json().catch(() => ({}));
         const phone = String(body.phone || '').trim().replace(/[^0-9+]/g, '');
         if (!phone || phone.length < 8) return bad('올바른 전화번호를 입력해주세요', 400);
-        const code = '123456';
+        // No SMS provider is integrated: fail closed unless an operator explicitly enables dev codes.
+        if (env.ALLOW_DEV_PHONE_CODE !== 'true') return json({ error: 'phone login unavailable: SMS provider not configured' }, 501);
+        const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
         phoneVerificationCodes.set(phone, { code, expires_at: Date.now() + 180000 });
-        return json({ status: 'sent', phone, expires_in: 180, dev_code: '123456' });
+        return json({ status: 'sent', phone, expires_in: 180, dev_code: code });
       }
       if (p === 'auth/phone/verify' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
         const phone = String(body.phone || '').trim().replace(/[^0-9+]/g, '');
         const code = String(body.code || '').trim();
         const entry = phoneVerificationCodes.get(phone);
-        const isValid = (entry && entry.code === code && Date.now() <= entry.expires_at) || code === '123456';
+        const isValid = !!entry && entry.code === code && Date.now() <= entry.expires_at;
         if (!isValid) {
           return bad('인증번호가 올바르지 않거나 만료되었습니다', 400);
         }
-        let user = Array.from(users.values()).find(u => u.phone === phone);
-        if (!user) {
-          user = Array.from(users.values())[0];
-        }
-        const token = `cf-token-${user.id}.${crypto.randomUUID()}`;
-        const deviceId = crypto.randomUUID();
-        sessions.set(token, { user_id: user.id, role: user.role, device_id: deviceId });
+        phoneVerificationCodes.delete(phone);
+        const user = Array.from(users.values()).find(u => u.phone === phone);
+        if (!user) return bad('가입되지 않은 전화번호입니다', 404);
+        if (user.role === 'admin') return bad('관리자 계정은 전화번호로 로그인할 수 없습니다', 403);
+        const { token, deviceId } = await createSession(user, request);
         return json({
           status: 'authenticated',
           access_token: token,
@@ -2445,7 +3040,7 @@ export default {
         return json({ challenge_id: challId, qr_token: qrToken, expires_in: 180 }, 201);
       }
       if (p === 'auth/qr/approve' && request.method === 'POST') {
-        const authUser = getAuthUser(request);
+        const authUser = await getAuthUser(request);
         if (!authUser) return json({ error: 'unauthorized' }, 401);
         const body = await request.json().catch(() => ({}));
         const c = qrChallenges.get(body.challenge_id);
@@ -2468,8 +3063,7 @@ export default {
         }
         if (c.status === 'authenticated') {
           const u = Array.from(users.values()).find(usr => usr.id === c.user_id);
-          const token = `cf-token-${u.id}.${crypto.randomUUID()}`;
-          sessions.set(token, { user_id: u.id, role: u.role, device_id: crypto.randomUUID() });
+          const { token } = await createSession(u, request);
           qrChallenges.delete(body.challenge_id); // Invalidate immediately upon consumption
           return json({ status: 'authenticated', access_token: token, user_id: u.id, role: u.role });
         }
@@ -2477,27 +3071,23 @@ export default {
       }
 
       // Protected routes check
-      const authUser = getAuthUser(request);
+      const authUser = await getAuthUser(request);
       if (!authUser) {
         return json({ error: 'unauthorized' }, 401);
       }
 
       if (p === 'auth/sessions/revoke' && request.method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const targetToken = body.session_token || body.token;
-        if (targetToken) {
-          sessions.delete(targetToken);
-          revokedTokens.add(targetToken);
-        }
-        if (body.device_id) {
-          for (const [t, s] of sessions) {
-            if (s.user_id === authUser.id && s.device_id === body.device_id) {
-              sessions.delete(t);
-              revokedTokens.add(t);
-            }
-          }
-        }
-        return json({ status: 'revoked' });
+        // Never answer "revoked" unless a concrete, owned, live session was actually invalidated.
+        const body = await readJson(request);
+        const sid = clip(String(body.session_id || body.device_id || ''), 80);
+        if (!sid) return bad('종료할 session_id가 필요합니다', 400);
+        const target = await findSessionById(sid);
+        if (!target) return bad('세션을 찾을 수 없습니다', 404);
+        if (target.user_id !== authUser.id) return bad('다른 사용자의 세션은 종료할 수 없습니다', 403);
+        const self = AUTH_CTX.get(request)?.session_id === sid;
+        await revokeSessionById(sid, authUser.id);
+        await persistAudit(authUser.id, self ? 'session.revoke.self' : 'session.revoke.remote', sid, { via: 'security_notice' });
+        return json({ status: 'revoked', session_id: sid, self });
       }
       if (p === 'auth/change-password' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
@@ -2510,16 +3100,12 @@ export default {
         if (!valid) {
           return bad('현재 비밀번호가 일치하지 않습니다', 401);
         }
-        authUser.password = newPass;
-        authUser.raw_password = newPass;
-        authUser.pw_hash = null;
-        for (const [t, s] of sessions) {
-          if (s.user_id === authUser.id && t !== request.headers.get('Authorization')?.replace('Bearer ', '')) {
-            sessions.delete(t);
-            revokedTokens.add(t);
-          }
-        }
-        return json({ status: 'password_updated' });
+        await setPassword(authUser, newPass);
+        await persistPassword(authUser);
+        // Policy: a password change invalidates every OTHER session; the current one stays signed in.
+        await revokeOtherSessions(authUser.id, AUTH_CTX.get(request)?.session_id, authUser.id);
+        await persistAudit(authUser.id, 'password.change', authUser.id, { other_sessions: 'revoked' });
+        return json({ status: 'password_updated', other_sessions_revoked: true });
       }
 
       if (p === 'ws-ticket' && request.method === 'POST') {
@@ -2527,7 +3113,11 @@ export default {
           if (grant.expiresAt <= Date.now()) wsTickets.delete(key);
         }
         const ticket = `wst-${crypto.randomUUID()}`;
-        wsTickets.set(ticket, { userId: authUser.id, expiresAt: Date.now() + 60000 });
+        const ticketExpiresAt = Date.now() + 60000;
+        wsTickets.set(ticket, { userId: authUser.id, expiresAt: ticketExpiresAt });
+        // Also persist it, so the upgrade can be served by a different isolate.
+        await persistWsTicket(ticket, authUser.id, ticketExpiresAt).catch(err =>
+          console.error('[LUNO ws ticket persist failed]', err && err.message ? err.message : err));
         return json({ ticket, expires_in: 60 });
       }
 
@@ -3070,7 +3660,8 @@ export default {
         return json({ messages: foundMsgs, users: [] });
       }
 
-      return json({ status: 'ok', endpoint: p });
+      // Unknown routes are real 404s; a placeholder 200 would masquerade as an implemented endpoint.
+      return json({ error: 'not_found', path: p }, 404);
     }
 
     // Mobile APK Download Landing Page
@@ -3091,5 +3682,86 @@ export default {
     }
 
     return new Response('Cloudflare Edge Worker Ready', { status: 200 });
+  }
+};
+
+/**
+ * One instance per user id, addressed with idFromName(userId). It owns every
+ * live socket for that user across all their devices, and is the only thing a
+ * write path needs to reach in order to deliver to them.
+ *
+ * Uses the WebSocket Hibernation API: the runtime may evict this object while
+ * the sockets stay open, and revive it when a message or a push arrives, so an
+ * idle connection costs nothing. That matters here because a messenger holds
+ * mostly-idle connections open for a long time.
+ */
+export class UserSocketHub {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/connect') {
+      if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
+        return new Response('Expected Upgrade: websocket', { status: 426 });
+      }
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.state.acceptWebSocket(server);
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
+    if (url.pathname === '/push' && request.method === 'POST') {
+      const msg = await request.text();
+      let delivered = 0;
+      for (const ws of this.state.getWebSockets()) {
+        try {
+          ws.send(msg);
+          delivered += 1;
+        } catch {
+          try { ws.close(1011, 'send failed'); } catch { /* already gone */ }
+        }
+      }
+      return new Response(JSON.stringify({ delivered }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response('not found', { status: 404 });
+  }
+
+  // Hibernation handlers. Keeps the ping/pong contract the previous in-isolate
+  // socket handler offered, so clients need no change.
+  webSocketMessage(ws, message) {
+    try {
+      const text = typeof message === 'string' ? message : new TextDecoder().decode(message);
+      const data = JSON.parse(text);
+      if (data && data.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+    } catch { /* ignore malformed client frames */ }
+  }
+
+  webSocketClose(ws, code, reason) {
+    // 1005 means "no status received" and may not be echoed back.
+    try { ws.close(code === 1005 ? 1000 : code, reason); } catch { /* already closed */ }
+  }
+
+  webSocketError() {
+    // The runtime removes the socket; nothing else to clean up.
+  }
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    CURRENT_ENV = env;
+    CURRENT_CTX = ctx || null;
+    try {
+      return await workerCore.fetch(request, env, ctx);
+    } catch (err) {
+      console.error('[LUNO internal error]', err && err.stack ? err.stack : err);
+      return json({ error: 'internal_error' }, 500);
+    }
   }
 };

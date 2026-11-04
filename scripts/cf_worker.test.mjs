@@ -184,3 +184,40 @@ test('private chat access and one-use realtime tickets', async () => {
   });
   assert.equal(modRes.status, 200);
 });
+
+// Regression: the host gate used to be defeated by the very env vars that were deployed in
+// wrangler.jsonc. ALLOW_EDGE_STANDALONE='true' forced the in-memory standalone backend on for
+// EVERY hostname, so a production custom domain served POST /auth/demo -- which mints a real
+// session for a seeded account with no password. The suite only probed {} and
+// { ALLOW_LOCAL_DEMO } and so never saw it. These cases pin the deployed combination.
+test('the standalone demo backend is gated on the hostname, whatever the env vars say', async () => {
+  const hit = (host, env, path = 'auth/login') => worker.fetch(new Request(`https://${host}/api/v1/${path}`, {
+    method: 'POST', body: JSON.stringify({ email: 'user@line.local', password: 'LunoUser#Rotated$72mP' }),
+  }), env);
+
+  const publicHost = 'luno.example';
+  // No env var, in any combination, may open a public host.
+  for (const env of [
+    {},
+    { ALLOW_LOCAL_DEMO: 'true' },
+    { ALLOW_EDGE_STANDALONE: 'true' },
+    { ALLOW_LOCAL_DEMO: 'true', ALLOW_EDGE_STANDALONE: 'true' },
+    { ALLOW_LOCAL_DEMO: 'true', ALLOW_EDGE_STANDALONE: 'true', ENABLE_DEMO_ACCOUNTS: 'true' },
+    { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: 'some.other.host' },
+  ]) {
+    const why = `env ${JSON.stringify(env)} must not open ${publicHost}`;
+    assert.equal((await hit(publicHost, env)).status, 503, why);
+    // /auth/demo is the dangerous one: no password at all.
+    const demo = await hit(publicHost, env, 'auth/demo');
+    assert.equal(demo.status, 503, `${why} (auth/demo)`);
+    assert.equal((await demo.json().catch(() => ({}))).access_token, undefined, 'no token on a public host');
+  }
+
+  // The approved hosts still work, so the live deployment is unaffected.
+  assert.equal((await hit('line-messenger.dnjstjqppk.workers.dev', { ALLOW_LOCAL_DEMO: 'true' })).status, 200);
+  assert.equal((await hit('localhost', { ALLOW_LOCAL_DEMO: 'true' })).status, 200);
+  // A custom host is reachable only by being named explicitly.
+  assert.equal((await hit('staging.luno.example', { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: 'staging.luno.example' })).status, 200);
+  // ...and naming it is still not enough without the master switch.
+  assert.equal((await hit('staging.luno.example', { STANDALONE_HOSTS: 'staging.luno.example' })).status, 503);
+});

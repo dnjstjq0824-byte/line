@@ -16,8 +16,25 @@
       "database_id": "ed6615d0-cc8c-40fa-96b5-82e9382d90f6"
     }
   ],
+  // ---------------------------------------------------------------------------
+  // Durable Objects are DELIBERATELY NOT ENABLED: they need the Workers paid plan.
+  //
+  // scripts/cf_worker.js exports a ready UserSocketHub class and calls into it
+  // through hubFanOut(). With no USER_HUB binding every one of those calls is a
+  // no-op, so the worker runs exactly as it did before: WebSocket delivery is
+  // per-isolate. A recipient served by a different isolate does NOT get a live
+  // push and sees the message on their next fetch instead. Messages themselves are
+  // never lost -- they are committed to D1 and re-hydrated on read.
+  //
+  // To turn it on after upgrading the plan, restore:
+  //   "durable_objects": { "bindings": [{ "name": "USER_HUB", "class_name": "UserSocketHub" }] },
+  //   "migrations": [{ "tag": "v1-user-socket-hub", "new_sqlite_classes": ["UserSocketHub"] }],
+  // Coverage for the enabled path is in scripts/realtime_fanout.test.mjs.
+  // ---------------------------------------------------------------------------
   "vars": {
-    "ALLOW_LOCAL_DEMO": "true",
-    "ALLOW_EDGE_STANDALONE": "true"
+    // Serves the in-memory standalone backend. Only takes effect on localhost,
+    // *.workers.dev / *.pages.dev, or a hostname named in STANDALONE_HOSTS.
+    // Set to "false" once a persistent backend is configured behind a custom domain.
+    "ALLOW_LOCAL_DEMO": "true"
   }
 }
