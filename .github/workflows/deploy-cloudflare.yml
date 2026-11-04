@@ -29,8 +29,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run Cloudflare Edge Worker tests
-        run: node scripts/cf_worker.test.mjs
+      # Every suite gates the deploy. This used to run cf_worker.test.mjs alone, so
+      # the acceptance, remediation, phase and seeded-credential suites could regress
+      # without ever blocking a release.
+      - name: Run Cloudflare Edge Worker test suites
+        run: node --test "scripts/*.test.mjs"
 
       - name: Build all Vue workspaces and prepare Cloudflare distribution
         run: node scripts/build_cf.js
