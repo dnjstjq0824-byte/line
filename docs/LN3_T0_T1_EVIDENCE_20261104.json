@@ -1,0 +1,341 @@
+{
+    "MeasuredUTC":  "2026-11-04T10:46:42.9417049Z",
+    "Mode":  "READ_ONLY_METADATA_AND_PUBLIC_GET",
+    "D1Command":  "npx --no-install wrangler d1 execute line-messenger-db --remote --command \"SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE \u0027sqlite_%\u0027 ORDER BY type,name\" --json",
+    "PublicGET":  [
+                      {
+                          "MeasuredUTC":  "2026-11-04T10:46:45.1130349Z",
+                          "URL":  "https://line-messenger.dnjstjqppk.workers.dev/api/v1/version",
+                          "HTTP":  200,
+                          "Date":  "Wed, 04 Nov 2026 10:46:44 GMT",
+                          "CFRay":  "a553095e5bfdfaf6-NRT",
+                          "Body":  {
+                                       "commit":  "b587897a337b29219410037acc8c373f834bae19",
+                                       "short_commit":  "b587897",
+                                       "worker_version":  "v2.0.0-remediated",
+                                       "build_time":  "2026-11-04T08:52:13.120Z",
+                                       "env":  "production",
+                                       "brand":  "LUNO",
+                                       "status":  "ok"
+                                   }
+                      },
+                      {
+                          "MeasuredUTC":  "2026-11-04T10:46:45.2356880Z",
+                          "URL":  "https://line-messenger.dnjstjqppk.workers.dev/healthz",
+                          "HTTP":  200,
+                          "Date":  "Wed, 04 Nov 2026 10:46:44 GMT",
+                          "CFRay":  "a553096029dffaf6-NRT",
+                          "Body":  {
+                                       "status":  "ok",
+                                       "brand":  "LUNO",
+                                       "runtime":  "cloudflare-worker"
+                                   }
+                      },
+                      {
+                          "MeasuredUTC":  "2026-11-04T10:46:45.3125253Z",
+                          "URL":  "https://line-messenger.dnjstjqppk.workers.dev/readyz",
+                          "HTTP":  200,
+                          "Date":  "Wed, 04 Nov 2026 10:46:44 GMT",
+                          "CFRay":  "a5530960ab98faf6-NRT",
+                          "Body":  {
+                                       "status":  "ok",
+                                       "brand":  "LUNO",
+                                       "runtime":  "cloudflare-worker"
+                                   }
+                      }
+                  ],
+    "Deployments":  [
+                        {
+                            "id":  "8f8f370b-d3e8-417e-b325-4084d95207bc",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "4bd31371-0688-4b99-8dc0-3c47cfc15b66",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-30T16:41:57.166118Z"
+                        },
+                        {
+                            "id":  "bac51180-bd24-48f5-9a91-6402727fb1d1",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "2a51fa57-dd85-45c6-91cb-d81f6b2554fb",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T07:18:27.466656Z"
+                        },
+                        {
+                            "id":  "57413c4e-73af-4e48-b82a-0293f24ea88c",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "efb6f009-8ecc-4727-9d98-098c1bc4360c",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T07:24:21.682425Z"
+                        },
+                        {
+                            "id":  "ad64dd89-2f02-4f0d-a6cb-5655f69eecb7",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "9bdbeccd-08ca-475c-a5ab-45cbe9e8a8ef",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T07:30:56.660779Z"
+                        },
+                        {
+                            "id":  "96ca1b21-5d1b-4729-a7da-bdaea4a1eedf",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "c6e65f02-14b5-4f96-9b1f-69ecf1380957",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T07:49:41.823995Z"
+                        },
+                        {
+                            "id":  "169f2e1e-4b42-4b82-9c4a-8d3a85ac7c32",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "5cc70bce-8610-477b-ac7d-0d8fd0219ee0",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T08:44:58.171458Z"
+                        },
+                        {
+                            "id":  "e72a5575-1f09-4ac9-ab57-eff29c4f233a",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "f6dc55a4-6b69-436f-9531-31a5e33afb6d",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T09:00:54.957143Z"
+                        },
+                        {
+                            "id":  "e28e1e86-1ee3-4a4c-ba51-74b8700854de",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "651ecda0-1062-4f5c-aabd-8d2a58a29c7c",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T18:02:53.479834Z"
+                        },
+                        {
+                            "id":  "d9c571a4-0e46-426e-9c0d-0a1b888b606e",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "9097851e-9a23-4294-9620-d8fd769cbe9c",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-10-31T18:06:20.511816Z"
+                        },
+                        {
+                            "id":  "c1add9b9-4e21-4324-8f00-8f0567c8f54a",
+                            "source":  "wrangler",
+                            "strategy":  "percentage",
+                            "versions":  [
+                                             {
+                                                 "version_id":  "9afb62f5-0834-4e03-93ee-7a6fdc1ab6f0",
+                                                 "percentage":  100
+                                             }
+                                         ],
+                            "created_on":  "2026-11-04T08:52:18.422647Z"
+                        }
+                    ],
+    "D1":  {
+               "results":  [
+                               {
+                                   "type":  "index",
+                                   "name":  "idx_luno_messages_seq",
+                                   "tbl_name":  "luno_messages",
+                                   "sql":  "CREATE UNIQUE INDEX idx_luno_messages_seq ON luno_messages(conversation_id, sequence)"
+                               },
+                               {
+                                   "type":  "index",
+                                   "name":  "idx_luno_sessions_sid",
+                                   "tbl_name":  "luno_sessions",
+                                   "sql":  "CREATE UNIQUE INDEX idx_luno_sessions_sid ON luno_sessions(session_id)"
+                               },
+                               {
+                                   "type":  "index",
+                                   "name":  "idx_luno_sessions_user",
+                                   "tbl_name":  "luno_sessions",
+                                   "sql":  "CREATE INDEX idx_luno_sessions_user ON luno_sessions(user_id)"
+                               },
+                               {
+                                   "type":  "index",
+                                   "name":  "idx_luno_ws_tickets_exp",
+                                   "tbl_name":  "luno_ws_tickets",
+                                   "sql":  "CREATE INDEX idx_luno_ws_tickets_exp ON luno_ws_tickets(expires_at)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "_cf_KV",
+                                   "tbl_name":  "_cf_KV",
+                                   "sql":  "CREATE TABLE _cf_KV (\n        key TEXT PRIMARY KEY,\n        value BLOB\n      ) WITHOUT ROWID"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "albums",
+                                   "tbl_name":  "albums",
+                                   "sql":  "CREATE TABLE albums (\n  id TEXT PRIMARY KEY,\n  conversation_id TEXT NOT NULL,\n  title TEXT NOT NULL,\n  image_urls TEXT NOT NULL,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "conversation_members",
+                                   "tbl_name":  "conversation_members",
+                                   "sql":  "CREATE TABLE conversation_members (\n  conversation_id TEXT NOT NULL,\n  user_id TEXT NOT NULL,\n  role TEXT DEFAULT \u0027member\u0027,\n  last_read_message_id TEXT DEFAULT \u0027\u0027,\n  joined_at TEXT NOT NULL,\n  PRIMARY KEY (conversation_id, user_id)\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "conversations",
+                                   "tbl_name":  "conversations",
+                                   "sql":  "CREATE TABLE conversations (\n  id TEXT PRIMARY KEY,\n  kind TEXT NOT NULL, -- \u0027direct\u0027 | \u0027group\u0027 | \u0027official\u0027 | \u0027openchat\u0027\n  title TEXT NOT NULL,\n  avatar_url TEXT DEFAULT \u0027\u0027,\n  official INTEGER DEFAULT 0,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "events",
+                                   "tbl_name":  "events",
+                                   "sql":  "CREATE TABLE events (\n  id TEXT PRIMARY KEY,\n  conversation_id TEXT NOT NULL,\n  title TEXT NOT NULL,\n  event_date TEXT NOT NULL,\n  location TEXT DEFAULT \u0027\u0027,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "friends",
+                                   "tbl_name":  "friends",
+                                   "sql":  "CREATE TABLE friends (\n  user_id TEXT NOT NULL,\n  friend_id TEXT NOT NULL,\n  status TEXT DEFAULT \u0027accepted\u0027,\n  created_at TEXT NOT NULL,\n  PRIMARY KEY (user_id, friend_id)\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "keep_items",
+                                   "tbl_name":  "keep_items",
+                                   "sql":  "CREATE TABLE keep_items (\n  id TEXT PRIMARY KEY,\n  user_id TEXT NOT NULL,\n  title TEXT NOT NULL,\n  body TEXT NOT NULL,\n  category TEXT DEFAULT \u0027text\u0027,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "luno_attachments",
+                                   "tbl_name":  "luno_attachments",
+                                   "sql":  "CREATE TABLE luno_attachments (\n    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, owner_id TEXT NOT NULL, name TEXT NOT NULL,\n    mime TEXT NOT NULL, size INTEGER NOT NULL, b64 TEXT NOT NULL, created_at TEXT NOT NULL)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "luno_audit",
+                                   "tbl_name":  "luno_audit",
+                                   "sql":  "CREATE TABLE luno_audit (\n    id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, target TEXT, detail TEXT, created_at TEXT NOT NULL)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "luno_messages",
+                                   "tbl_name":  "luno_messages",
+                                   "sql":  "CREATE TABLE luno_messages (\n    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, client_id TEXT,\n    sequence INTEGER NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL DEFAULT \u0027\u0027, metadata TEXT,\n    reply_to TEXT, created_at TEXT NOT NULL, unsent INTEGER NOT NULL DEFAULT 0, edited_at TEXT)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "luno_read_cursors",
+                                   "tbl_name":  "luno_read_cursors",
+                                   "sql":  "CREATE TABLE luno_read_cursors (\n    conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, sequence INTEGER NOT NULL, updated_at TEXT NOT NULL,\n    PRIMARY KEY (conversation_id, user_id))"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "luno_sessions",
+                                   "tbl_name":  "luno_sessions",
+                                   "sql":  "CREATE TABLE luno_sessions (\n    token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT,\n    device_name TEXT, platform TEXT, ip TEXT, created_at TEXT NOT NULL, last_seen_at TEXT,\n    revoked_at TEXT, revoked_by TEXT)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "luno_ws_tickets",
+                                   "tbl_name":  "luno_ws_tickets",
+                                   "sql":  "CREATE TABLE luno_ws_tickets (\n    ticket TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "message_reactions",
+                                   "tbl_name":  "message_reactions",
+                                   "sql":  "CREATE TABLE message_reactions (\n  message_id TEXT NOT NULL,\n  user_id TEXT NOT NULL,\n  emoji TEXT NOT NULL,\n  created_at TEXT NOT NULL,\n  PRIMARY KEY (message_id, user_id, emoji)\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "messages",
+                                   "tbl_name":  "messages",
+                                   "sql":  "CREATE TABLE messages (\n  id TEXT PRIMARY KEY,\n  conversation_id TEXT NOT NULL,\n  sender_id TEXT NOT NULL,\n  body TEXT NOT NULL,\n  kind TEXT DEFAULT \u0027text\u0027, -- \u0027text\u0027 | \u0027sticker\u0027 | \u0027image\u0027 | \u0027file\u0027 | \u0027audio\u0027 | \u0027system\u0027\n  media_url TEXT DEFAULT \u0027\u0027,\n  sticker_id TEXT DEFAULT \u0027\u0027,\n  reply_to_id TEXT DEFAULT \u0027\u0027,\n  is_pinned INTEGER DEFAULT 0,\n  is_unsent INTEGER DEFAULT 0,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "notes",
+                                   "tbl_name":  "notes",
+                                   "sql":  "CREATE TABLE notes (\n  id TEXT PRIMARY KEY,\n  conversation_id TEXT NOT NULL,\n  author_id TEXT NOT NULL,\n  body TEXT NOT NULL,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "openchat_rooms",
+                                   "tbl_name":  "openchat_rooms",
+                                   "sql":  "CREATE TABLE openchat_rooms (\n  id TEXT PRIMARY KEY,\n  name TEXT NOT NULL,\n  description TEXT NOT NULL,\n  category TEXT DEFAULT \u0027general\u0027,\n  cover_url TEXT DEFAULT \u0027\u0027,\n  member_count INTEGER DEFAULT 1,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "polls",
+                                   "tbl_name":  "polls",
+                                   "sql":  "CREATE TABLE polls (\n  id TEXT PRIMARY KEY,\n  conversation_id TEXT NOT NULL,\n  question TEXT NOT NULL,\n  option1 TEXT NOT NULL,\n  option2 TEXT NOT NULL,\n  votes1 INTEGER DEFAULT 0,\n  votes2 INTEGER DEFAULT 0,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "users",
+                                   "tbl_name":  "users",
+                                   "sql":  "CREATE TABLE users (\n  id TEXT PRIMARY KEY,\n  email TEXT UNIQUE NOT NULL,\n  password_hash TEXT NOT NULL,\n  display_name TEXT NOT NULL,\n  avatar_url TEXT DEFAULT \u0027\u0027,\n  status_message TEXT DEFAULT \u0027\u0027,\n  bio TEXT DEFAULT \u0027\u0027,\n  phone_number TEXT DEFAULT \u0027\u0027,\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "wallet_transactions",
+                                   "tbl_name":  "wallet_transactions",
+                                   "sql":  "CREATE TABLE wallet_transactions (\n  id TEXT PRIMARY KEY,\n  from_user_id TEXT NOT NULL,\n  to_user_id TEXT NOT NULL,\n  amount INTEGER NOT NULL,\n  note TEXT DEFAULT \u0027\u0027,\n  created_at TEXT NOT NULL\n)"
+                               },
+                               {
+                                   "type":  "table",
+                                   "name":  "wallets",
+                                   "tbl_name":  "wallets",
+                                   "sql":  "CREATE TABLE wallets (\n  user_id TEXT PRIMARY KEY,\n  balance INTEGER DEFAULT 100000,\n  updated_at TEXT NOT NULL\n)"
+                               }
+                           ],
+               "success":  true,
+               "meta":  {
+                            "served_by":  "v3-prod",
+                            "served_by_region":  "APAC",
+                            "served_by_colo":  "ICN",
+                            "served_by_primary":  true,
+                            "timings":  {
+                                            "sql_duration_ms":  2.1436
+                                        },
+                            "duration":  2.1436,
+                            "changes":  0,
+                            "last_row_id":  0,
+                            "changed_db":  false,
+                            "size_after":  204800,
+                            "rows_read":  71,
+                            "rows_written":  0,
+                            "total_attempts":  1
+                        }
+           }
+}
