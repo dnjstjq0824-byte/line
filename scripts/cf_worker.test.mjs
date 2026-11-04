@@ -1,10 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { after } from 'node:test';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const nativeResponse = globalThis.Response;
+const nativeWebSocketPair = Object.getOwnPropertyDescriptor(globalThis, 'WebSocketPair');
+after(() => {
+  globalThis.Response = nativeResponse;
+  if (nativeWebSocketPair) Object.defineProperty(globalThis, 'WebSocketPair', nativeWebSocketPair);
+  else delete globalThis.WebSocketPair;
+});
 globalThis.Response = class extends nativeResponse {
   constructor(body, init) {
     super(body, init?.status === 101 ? { status: 200 } : init);
@@ -49,10 +55,13 @@ test('private chat access and one-use realtime tickets', async () => {
     assert.equal((await api(`ws?ticket=${ticket}`, null, 'GET', undefined, { Upgrade: 'websocket' })).status, 101);
     assert.equal((await api(`ws?ticket=${ticket}`, null, 'GET', undefined, { Upgrade: 'websocket' })).status, 401);
   }
-  const { ticket } = await (await api('ws-ticket', alice, 'POST')).json();
   const now = Date.now;
+  const issuedAt = now();
   try {
-    Date.now = () => now() + 61000;
+    Date.now = () => issuedAt;
+    const { ticket, expires_in } = await (await api('ws-ticket', alice, 'POST')).json();
+    assert.equal(expires_in, 60);
+    Date.now = () => issuedAt + 60000;
     assert.equal((await api(`ws?ticket=${ticket}`, null, 'GET', undefined, { Upgrade: 'websocket' })).status, 401);
   } finally { Date.now = now; }
   for (const path of ['messages', 'sync', 'pins', 'albums']) {
@@ -225,4 +234,26 @@ test('the standalone demo backend is gated on the hostname, whatever the env var
   assert.equal((await hit('staging.luno.example', { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: 'staging.luno.example' })).status, 200);
   // ...and naming it is still not enough without the master switch.
   assert.equal((await hit('staging.luno.example', { STANDALONE_HOSTS: 'staging.luno.example' })).status, 503);
+});
+
+test('standalone host allowlist matches exact names and requires the literal master switch', async () => {
+  const hit = (host, env) => worker.fetch(new Request(`https://${host}/api/v1/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify({ email: 'user@line.local', password: 'LunoUser#Rotated$72mP' }),
+  }), env);
+  const env = { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: ' other.example, STAGING.LUNO.EXAMPLE , ' };
+  assert.equal((await hit('staging.luno.example', env)).status, 200);
+  for (const host of ['staging.luno.example.evil.test', 'evil-staging.luno.example', 'child.staging.luno.example']) {
+    assert.equal((await hit(host, env)).status, 503, host);
+  }
+  for (const entry of ['*', '*.luno.example', 'https://staging.luno.example', 'staging.luno.example:443']) {
+    assert.equal((await hit('staging.luno.example', { ...env, STANDALONE_HOSTS: entry })).status, 503, entry);
+  }
+  for (const enabled of [undefined, false, true, 'false', 'TRUE', '1']) {
+    assert.equal((await hit('staging.luno.example', { ...env, ALLOW_LOCAL_DEMO: enabled })).status, 503);
+  }
+  for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+    assert.equal((await hit(host, { ALLOW_LOCAL_DEMO: 'true' })).status, 200, host);
+    assert.equal((await hit(host, {})).status, 503, host);
+  }
 });
