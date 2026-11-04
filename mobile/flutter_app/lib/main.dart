@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'luno_design_v2.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -96,23 +97,9 @@ class MessengerApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         title: 'LUNO',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: lunoDeepBlue,
-            primary: lunoDeepBlue,
-            secondary: lunoMint,
-            surface: lunoSurface,
-          ),
-          scaffoldBackgroundColor: lunoBg,
-          useMaterial3: true,
-          fontFamily: 'Pretendard',
-          appBarTheme: const AppBarTheme(
-            backgroundColor: lunoDeepBlue,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            centerTitle: false,
-          ),
-        ),
+        theme: LunoDesignV2.theme(Brightness.light),
+        darkTheme: LunoDesignV2.theme(Brightness.dark),
+        themeMode: ThemeMode.system,
         home: const Home(),
       );
 }
@@ -1746,7 +1733,7 @@ class _HomeState extends State<Home> {
                   width: 350,
                   child: Card(
                     elevation: 0,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.surface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                       side: const BorderSide(color: lunoMistGray),
@@ -1754,13 +1741,13 @@ class _HomeState extends State<Home> {
                     child: Padding(
                       padding: const EdgeInsets.all(22),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        CircleAvatar(
-                          radius: 30,
-                          backgroundColor: lunoDeepBlue,
-                          child: const Text('LUNO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                          child: Image.asset('assets/brand/luno-logo-horizontal-512.png', width: 150, height: 52, fit: BoxFit.contain),
                         ),
                         const SizedBox(height: 10),
-                        Text(register ? '회원가입' : '로그인', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: lunoNavy)),
+                        Text(register ? '회원가입' : '로그인', style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: 4),
                         const Text('Connect Beyond Borders', style: TextStyle(fontSize: 12, color: lunoSlateGray)),
                         Container(

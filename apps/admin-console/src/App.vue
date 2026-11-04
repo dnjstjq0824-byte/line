@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LunoThemeToggle from '../../shared/LunoThemeToggle.vue'
 import { ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
 
@@ -83,7 +84,7 @@ async function saveFeatureFlag() {
       <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
     </nav>
 
-    <header>
+    <header><LunoThemeToggle />
       <h1>LUNO 통합 관리자 센터 (Admin)</h1>
       <span>역할: platform_admin · support · moderator</span>
     </header>

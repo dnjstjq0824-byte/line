@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LunoThemeToggle from '../../shared/LunoThemeToggle.vue'
 import { ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
 
@@ -78,7 +79,7 @@ async function registerMiniApp() {
 </script>
 
 <template>
-  <main>
+  <main class="page"><LunoThemeToggle class="ln-console-theme" />
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;font-size:13px;align-items:center">
       <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
       <span style="color:#ccc">|</span>
@@ -90,7 +91,7 @@ async function registerMiniApp() {
       <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
     </nav>
 
-    <h1>LUNO Developer Center (Developers)</h1>
+    <header><h1>LUNO Developer Center (Developers)</h1></header>
     <p>개발자 조직 · Messaging API 앱 · Webhook 발송 엔진 · Mini App 플랫폼</p>
     <p class="error" role="alert" v-if="error">{{ error }}</p>
     <p class="note" v-if="note">{{ note }}</p>

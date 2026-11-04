@@ -1,0 +1,26 @@
+{
+  "ko": {
+    "auth_intro": "가까워지는 대화, LUNO",
+    "auth_subtitle": "나의 계정으로 대화를 이어가세요.",
+    "qr_preparing": "QR 로그인 화면을 준비하고 있습니다. 이메일 로그인을 이용해 주세요.",
+    "profile_empty": "아직 상태 메시지가 없습니다.",
+    "profile_account": "계정 및 보안",
+    "profile_details": "프로필 정보",
+    "profile_privacy": "공개 범위와 프로필 사진 편집은 준비 중입니다.",
+    "loginPhoneTab": "휴대폰으로 로그인",
+    "startOnBoot": "시작 시 자동 실행 (데스크톱 앱)",
+    "backToLogin": "로그인으로 돌아가기"
+  },
+  "en": {
+    "auth_intro": "A little closer, with LUNO",
+    "auth_subtitle": "Sign in to pick up the conversation.",
+    "qr_preparing": "QR sign-in is being prepared. Please sign in with your email.",
+    "profile_empty": "No status message yet.",
+    "profile_account": "Account and security",
+    "profile_details": "Profile details",
+    "profile_privacy": "Profile visibility and photo editing are being prepared.",
+    "loginPhoneTab": "Sign in with phone",
+    "startOnBoot": "Launch at startup (desktop app)",
+    "backToLogin": "Back to sign in"
+  }
+}

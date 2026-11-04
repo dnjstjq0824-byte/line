@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LunoThemeToggle from '../../shared/LunoThemeToggle.vue'
 import { ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
 
@@ -123,7 +124,7 @@ async function createRichMenu() {
 </script>
 
 <template>
-  <div class="wrap">
+  <div class="wrap page">
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding:10px 14px;background:#fff;border-radius:10px;font-size:13px;align-items:center;border:1px solid #e0e8ee">
       <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
       <span style="color:#ccc">|</span>
@@ -135,7 +136,7 @@ async function createRichMenu() {
       <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
     </nav>
 
-    <header>
+    <header><LunoThemeToggle />
       <h1>LUNO 비즈니스 파트너 센터 (Partner)</h1>
       <p>공식 채널 · CRM · 고객 상담 · 브로드캐스트 캠페인 · 쿠폰</p>
     </header>

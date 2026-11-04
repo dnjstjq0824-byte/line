@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "name": "LUNO Quiet connection",
+  "previous": "LN6 / artifact v41, preserved in the handoff working copy",
+  "light": {
+    "accent": "#4b4ded", "accent-hover": "#3b3dce", "accent-soft": "#eeeeff",
+    "bg": "#f5f6fa", "surface": "#ffffff", "raised": "#ffffff", "subtle": "#f0f2f7",
+    "text": "#202333", "muted": "#656b80", "line": "#e3e6ef", "danger": "#c32e42",
+    "on-accent": "#ffffff", "chat": "#f5f6fa"
+  },
+  "dark": {
+    "accent": "#a3a4ff", "accent-hover": "#b9baff", "accent-soft": "#292947",
+    "bg": "#11131c", "surface": "#1a1d29", "raised": "#222635", "subtle": "#242836",
+    "text": "#eeeef7", "muted": "#afb5ca", "line": "#34394b", "danger": "#ff98a5",
+    "on-accent": "#191a37", "chat": "#151822"
+  },
+  "spacingPx": [4, 8, 12, 16, 20, 24, 32, 48],
+  "radiusPx": {"control": 12, "card": 18, "profile": 24},
+  "layout": {"mobileMaxPx": 700, "tabletMaxPx": 1000, "railPx": 76, "listPx": 340},
+  "fonts": ["Inter", "Pretendard", "Noto Sans KR", "system-ui"]
+}

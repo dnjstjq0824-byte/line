@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import lunoLogo from '../../shared/brand/luno-logo-horizontal.svg'
+import lunoMark from '../../shared/brand/luno-logo-appicon.svg'
+import { handoffText } from '../../shared/handoff-i18n'
 import LineIcon from './components/LineIcon.vue'
 import LineContextMenu, { type ContextMenuItem } from './components/LineContextMenu.vue'
 import { LINE_STICKERS, type LineSticker } from './line-stickers'
@@ -35,15 +38,18 @@ import {
 
 // --- LUNO Multilingual & Accessibility & Theme State ---
 const currentLocale = ref<LunoLocale>(detectInitialLocale())
-const t = (key: string): string => UI_DICTIONARY[currentLocale.value]?.[key] || UI_DICTIONARY.ko[key] || key
+const t = (key: string): string => handoffText(currentLocale.value, key) || UI_DICTIONARY[currentLocale.value]?.[key] || UI_DICTIONARY.en[key] || key
 function setLocale(loc: LunoLocale) {
   currentLocale.value = loc
   localStorage.setItem('luno.locale', loc)
 }
 
-const isDarkMode = ref(false)
+const isDarkMode = ref(localStorage.getItem('luno.design.theme') === 'dark' || (!localStorage.getItem('luno.design.theme') && matchMedia('(prefers-color-scheme: dark)').matches))
+document.documentElement.dataset.theme = isDarkMode.value ? 'dark' : 'light'
 function toggleDarkMode() {
   isDarkMode.value = !isDarkMode.value
+  darkMode.value = isDarkMode.value
+  localStorage.setItem('luno.design.theme', isDarkMode.value ? 'dark' : 'light')
   if (isDarkMode.value) {
     document.documentElement.setAttribute('data-theme', 'dark')
   } else {
@@ -2263,7 +2269,7 @@ async function saveProfileSettings() {
     await api('/api/v1/me', 'PATCH', {
       display_name: editProfileName.value.trim(),
       bio: textBio,
-      status_message: textBio,
+      ...(currentUser.value && 'status_message' in currentUser.value ? { status_message: textBio } : {}),
       handle: editProfileHandle.value.trim()
     })
     currentUser.value = await api<User>('/api/v1/me')
@@ -2570,10 +2576,7 @@ onMounted(async () => {
       sessionStorage.removeItem('luno.auth_token')
       token.value = ''
       currentUser.value = null
-      refreshQr()
     }
-  } else if (!currentUser.value) {
-    refreshQr()
   }
   startHeroCarousel()
 })
@@ -2614,7 +2617,7 @@ onBeforeUnmount(() => {
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             </button>
           </div>
-          <span class="pc-win-title">Open Messenger</span>
+          <span class="pc-win-title">LUNO</span>
           <div class="pc-win-tools">
             <div class="pc-locale-pills">
               <button
@@ -2644,7 +2647,9 @@ onBeforeUnmount(() => {
           <div class="pc-auth-col form-col">
             <!-- Brand Logo Header -->
             <div class="pc-brand-header-left">
-              <img class="pc-om-logo" :src="`${basePath}brand/open-messenger-logo.svg`" alt="Open Messenger" height="42" />
+              <img class="pc-om-logo" :src="lunoLogo" alt="LUNO" height="42" />
+              <h1 class="ln-auth-title">{{ registerMode ? t('hd_signup') : t('login_btn') }}</h1>
+              <p class="ln-auth-subtitle">{{ t('auth_subtitle') }}</p>
             </div>
 
             <!-- Email Login Mode -->
@@ -2693,14 +2698,14 @@ onBeforeUnmount(() => {
                   <input type="checkbox" v-model="autoLoginCheck" />
                   <span>{{ t('rememberMe') }}</span>
                 </label>
-                <button type="button" class="btn-subtle-link" @click="note = '비밀번호 재설정 링크가 이메일로 발송되었습니다.'">
+                <button type="button" class="btn-subtle-link" @click="note = t('soon_tag')">
                   {{ t('findPassword') }}
                 </button>
               </div>
 
               <div class="pc-login-options-row">
                 <label class="pc-custom-check">
-                  <input type="checkbox" v-model="startOnBootCheck" />
+                  <input type="checkbox" v-model="startOnBootCheck" disabled />
                   <span>{{ t('startOnBoot') }}</span>
                 </label>
                 <button type="button" class="btn-subtle-link accent" @click="registerMode = !registerMode">
@@ -2777,88 +2782,18 @@ onBeforeUnmount(() => {
           <div class="pc-auth-col qr-col">
             <div class="pc-qr-box-inner">
               <h3 class="pc-qr-heading">{{ t('loginQrTab') }}</h3>
-              <div class="pc-qr-matrix-card">
+              <div class="pc-qr-matrix-card" :aria-label="t('soon_tag')">
+                <img :src="lunoMark" alt="LUNO" class="ln-qr-brand" />
                 <!-- High Fidelity Dynamic QR Code SVG with Open Messenger Center Badge -->
-                <svg viewBox="0 0 140 140" width="160" height="160" class="qr-svg-matrix">
-                  <!-- QR Background -->
-                  <rect width="140" height="140" fill="#FFFFFF" rx="8" />
-                  <!-- Top-Left Finder Square -->
-                  <rect x="10" y="10" width="34" height="34" fill="#0B1020" rx="3" />
-                  <rect x="15" y="15" width="24" height="24" fill="#FFFFFF" rx="2" />
-                  <rect x="19" y="19" width="16" height="16" fill="#0B1020" rx="1.5" />
-                  <!-- Top-Right Finder Square -->
-                  <rect x="96" y="10" width="34" height="34" fill="#0B1020" rx="3" />
-                  <rect x="101" y="15" width="24" height="24" fill="#FFFFFF" rx="2" />
-                  <rect x="105" y="19" width="16" height="16" fill="#0B1020" rx="1.5" />
-                  <!-- Bottom-Left Finder Square -->
-                  <rect x="10" y="96" width="34" height="34" fill="#0B1020" rx="3" />
-                  <rect x="15" y="101" width="24" height="24" fill="#FFFFFF" rx="2" />
-                  <rect x="19" y="105" width="16" height="16" fill="#0B1020" rx="1.5" />
-                  <!-- QR Data Modules / Matrix Pattern -->
-                  <g fill="#0B1020">
-                    <rect x="48" y="12" width="6" height="6" />
-                    <rect x="58" y="12" width="6" height="6" />
-                    <rect x="76" y="12" width="6" height="6" />
-                    <rect x="86" y="12" width="6" height="6" />
-                    <rect x="48" y="24" width="6" height="6" />
-                    <rect x="68" y="24" width="6" height="6" />
-                    <rect x="86" y="24" width="6" height="6" />
-                    <rect x="48" y="36" width="6" height="6" />
-                    <rect x="58" y="36" width="6" height="6" />
-                    <rect x="76" y="36" width="6" height="6" />
-                    <rect x="12" y="48" width="6" height="6" />
-                    <rect x="24" y="48" width="6" height="6" />
-                    <rect x="36" y="48" width="6" height="6" />
-                    <rect x="96" y="48" width="6" height="6" />
-                    <rect x="108" y="48" width="6" height="6" />
-                    <rect x="120" y="48" width="6" height="6" />
-                    <rect x="12" y="60" width="6" height="6" />
-                    <rect x="30" y="60" width="6" height="6" />
-                    <rect x="96" y="60" width="6" height="6" />
-                    <rect x="114" y="60" width="6" height="6" />
-                    <rect x="12" y="72" width="6" height="6" />
-                    <rect x="24" y="72" width="6" height="6" />
-                    <rect x="36" y="72" width="6" height="6" />
-                    <rect x="102" y="72" width="6" height="6" />
-                    <rect x="120" y="72" width="6" height="6" />
-                    <rect x="48" y="96" width="6" height="6" />
-                    <rect x="68" y="96" width="6" height="6" />
-                    <rect x="86" y="96" width="6" height="6" />
-                    <rect x="104" y="96" width="6" height="6" />
-                    <rect x="118" y="96" width="6" height="6" />
-                    <rect x="48" y="108" width="6" height="6" />
-                    <rect x="76" y="108" width="6" height="6" />
-                    <rect x="96" y="108" width="6" height="6" />
-                    <rect x="114" y="108" width="6" height="6" />
-                    <rect x="58" y="120" width="6" height="6" />
-                    <rect x="76" y="120" width="6" height="6" />
-                    <rect x="104" y="120" width="6" height="6" />
-                    <rect x="120" y="120" width="6" height="6" />
-                  </g>
-                  <!-- Center Brand Aperture Badge -->
-                  <rect x="52" y="52" width="36" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" />
-                  <defs>
-                    <linearGradient id="qrLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#22C7E8" />
-                      <stop offset="50%" stop-color="#2563EB" />
-                      <stop offset="100%" stop-color="#7C3AED" />
-                    </linearGradient>
-                  </defs>
-                  <rect x="56" y="56" width="28" height="28" rx="6" fill="url(#qrLogoGrad)" />
-                  <circle cx="70" cy="70" r="7" fill="#FFFFFF" fill-opacity="0.3" />
-                  <circle cx="70" cy="70" r="3" fill="#FFFFFF" />
-                  <circle cx="76" cy="76" r="1.5" fill="#22C7E8" />
-                </svg>
               </div>
 
               <!-- Instruction Text (Screenshot 2 & 3) -->
               <p class="pc-qr-instruction">
-                Open Messenger 모바일 버전 검색창에서<br>
-                QR 코드 리더를 열어 QR 코드를 스캔해 주세요.
+                {{ t('qr_preparing') }}
               </p>
 
               <!-- Expiry & Reload Pill -->
-              <div class="pc-qr-timer-pill">
+              <div v-if="false" class="pc-qr-timer-pill">
                 <span>유효시간: <strong>{{ formattedQrCountdown }}</strong></span>
                 <button type="button" class="btn-qr-reload" @click="refreshQr" title="새로고침">
                   새로고침 ↻
@@ -3317,12 +3252,12 @@ onBeforeUnmount(() => {
           <!-- CapCom / Open Scanner Game Banner Ad (Screenshot 4) -->
           <div class="chat-ad-banner-card" @click="openEcosystemService('open-apps')">
             <div class="ad-banner-info">
-              <span class="ad-tag-title">CAPCOM 공식 라이선스! 지금 ...</span>
-              <span class="ad-tag-link">AD 게임하기 &gt;</span>
+              <span class="ad-tag-title">LUNO</span>
+              <span class="ad-tag-link">{{ t('soon_tag') }}</span>
             </div>
             <div class="ad-banner-graphic">
               <span class="ad-badge-i">ⓘ</span>
-              <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?w=80&auto=format&fit=crop&q=80" alt="CapCom Game" class="ad-logo-img" />
+              <img :src="lunoMark" alt="LUNO" class="ad-logo-img" />
             </div>
           </div>
 
@@ -4162,7 +4097,7 @@ onBeforeUnmount(() => {
       <section v-else class="pc-empty-canvas">
         <div class="pc-empty-dialog">
           <div class="pc-watermark-wrap">
-            <LineIcon name="open-messenger-logo" :size="84" />
+            <img :src="lunoMark" alt="LUNO" width="72" height="72" />
           </div>
           <h3 class="pc-empty-title">{{ t('emptyChatTitle') }}</h3>
           <p class="pc-empty-desc">{{ t('emptyChatDesc') }}</p>
@@ -4360,27 +4295,33 @@ onBeforeUnmount(() => {
 
     <!-- PROFILE MODAL (Full LINE User Profile View) -->
     <div v-if="activeProfileUser" class="modal-backdrop" @click.self="activeProfileUser = null">
-      <div class="profile-modal-card">
+      <div class="profile-modal-card" role="dialog" aria-modal="true" :aria-label="t('profileTitle')">
         <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || 'var(--om-primary, #2563EB)' }">
           <button class="btn-modal-close" @click="activeProfileUser = null">✕</button>
         </div>
         <div class="profile-avatar-center">
-          <div class="avatar-circle xl">{{ activeProfileUser.display_name.slice(0, 1) }}</div>
+          <div class="avatar-circle xl"><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ activeProfileUser.display_name.slice(0, 1) }}</span></div>
         </div>
         <div class="profile-body-center">
           <h2>{{ activeProfileUser.display_name }}</h2>
-          <div class="user-handle">@{{ activeProfileUser.handle || 'user' }}</div>
-          <p class="user-status-text">"{{ activeProfileUser.status_message || activeProfileUser.bio || '상태메시지가 없습니다.' }}"</p>
+          <div v-if="activeProfileUser.handle" class="user-handle">@{{ activeProfileUser.handle }}</div>
+          <p class="user-status-text">{{ activeProfileUser.status_message || activeProfileUser.bio || t('profile_empty') }}</p>
+          <p v-if="activeProfileUser.id === currentUser?.id && currentUser.email" class="user-handle">{{ currentUser.email }}</p>
         </div>
-        <div class="profile-actions-footer">
+        <div v-if="activeProfileUser.id === currentUser?.id" class="profile-actions-footer">
+          <button class="btn-profile-action" @click="showSettingsModal = true; activeProfileUser = null">{{ t('profileEdit') }}</button>
+          <button class="btn-profile-action" @click="showPasswordModal = true; activeProfileUser = null">{{ t('profile_account') }}</button>
+          <p class="ln-profile-preparing">{{ t('profile_privacy') }}</p>
+        </div>
+        <div v-else class="profile-actions-footer">
           <button class="btn-profile-action" @click="startDirectChat(activeProfileUser); activeProfileUser = null">
-            💬 1:1 대화
+            {{ t('profileChat') }}
           </button>
           <button class="btn-profile-action" @click="startDirectChat(activeProfileUser); startCall('voice'); activeProfileUser = null">
-            📞 무료통화
+            {{ t('profileVoice') }}
           </button>
           <button class="btn-profile-action" @click="startDirectChat(activeProfileUser); startCall('video'); activeProfileUser = null">
-            📹 영상통화
+            {{ t('profileVideo') }}
           </button>
           <button class="btn-profile-action" @click="openSendMoneyModal(activeProfileUser); activeProfileUser = null">
             💸 송금
@@ -4579,8 +4520,8 @@ onBeforeUnmount(() => {
           <div class="setting-group">
             <strong>🛡️ {{ t('securitySection') }}</strong>
             <div class="setting-toggle-row">
-              <span>🔒 보안 프로토콜 (TLS 1.3 전송 및 AES-256 저장소 암호화)</span>
-              <span class="badge-status-on">활성됨</span>
+              <span>연결 및 저장소 보안</span>
+              <span class="badge-status-on">서버 검증 필요</span>
             </div>
             <div class="setting-toggle-row">
               <span>👀 읽음 확인 표시 (Read Receipts)</span>
@@ -4598,7 +4539,7 @@ onBeforeUnmount(() => {
 
             <!-- Phase 2: E2EE Key Management -->
             <div class="setting-toggle-row">
-              <span>🔐 E2EE Double Ratchet 공개키 지문</span>
+              <span>실험적 암호화 키 관리</span>
               <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="rotateE2EEKeys">키 번들 갱신</button>
             </div>
           </div>
@@ -4645,7 +4586,7 @@ onBeforeUnmount(() => {
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <div>
                 <strong style="color:#315BCD; font-size:13px;">📱 LUNO 모바일 네이티브 앱 (Android)</strong>
-                <p style="font-size:11px; color:#5b6475; margin-top:2px;">실시간 AI 통역 및 E2EE 보안 메신저 APK</p>
+                <p style="font-size:11px; color:#5b6475; margin-top:2px;">Android 앱 다운로드 및 빌드 정보</p>
               </div>
               <a href="./download.html" target="_blank" class="btn-primary" style="text-decoration:none; font-size:12px; padding:6px 12px; display:inline-block;">APK 다운로드</a>
             </div>
@@ -4654,10 +4595,10 @@ onBeforeUnmount(() => {
           <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
             <strong>ℹ️ 버전 및 빌드 정보</strong>
             <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
-              <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '2.0.0' }}</span>
+              <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '—' }}</span>
               <span><b>Git Commit:</b> <code>{{ appVersion.commit || '확인 중…' }}</code></span>
-              <span><b>Build Time:</b> {{ appVersion.build_time || '2026-11-01' }}</span>
-              <span><b>Environment:</b> {{ appVersion.env || 'production' }}</span>
+              <span><b>Build Time:</b> {{ appVersion.build_time || '—' }}</span>
+              <span><b>Environment:</b> {{ appVersion.env || '—' }}</span>
             </div>
           </div>
 

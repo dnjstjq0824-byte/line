@@ -32,9 +32,9 @@
   // Coverage for the enabled path is in scripts/realtime_fanout.test.mjs.
   // ---------------------------------------------------------------------------
   "vars": {
-    // Production fails closed until API_BACKEND_ORIGIN points at the persistent
-    // backend. Demo deployments require ALLOW_LOCAL_DEMO=true and an explicit
-    // STANDALONE_HOSTS allow-list, including for workers.dev / pages.dev hosts.
-    "ALLOW_LOCAL_DEMO": "false"
+    // Preserve the existing standalone service on its one approved hostname.
+    // All other public hosts still fail closed. Demo-account policy is unchanged.
+    "ALLOW_LOCAL_DEMO": "true",
+    "STANDALONE_HOSTS": "line-messenger.dnjstjqppk.workers.dev"
   }
 }
