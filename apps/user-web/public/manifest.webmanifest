@@ -1,0 +1,32 @@
+{
+  "name": "LUNO Global Messenger",
+  "short_name": "LUNO",
+  "description": "LUNO Global Messenger — chat, calls and groups on web, desktop and Android.",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F7FAFF",
+  "theme_color": "#4F7CFF",
+  "categories": ["social", "communication"],
+  "icons": [
+    {
+      "src": "./brand/luno-app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./brand/luno-adaptive-foreground.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "대화", "short_name": "대화", "url": "./?tab=chats" },
+    { "name": "친구", "short_name": "친구", "url": "./?tab=friends" }
+  ]
+}

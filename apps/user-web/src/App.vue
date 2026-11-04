@@ -187,106 +187,35 @@ const selectedNewsCategory = ref('전체')
 const activeNewsArticle = ref<NewsArticle | null>(null)
 const newsBookmarks = ref<Set<string>>(new Set())
 
-const heroNewsSlides = ref<NewsArticle[]>([
-  {
-    id: 'news-hero-01',
-    title: '단독 "SKY 학벌 중시하는 서울, 삶의 질은 세계 113위"',
-    press: '매일경제',
-    category: '경제',
-    published_at: '10분 전',
-    image_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-    summary: '서울의 글로벌 경쟁력과 정주 여건을 종합 평가한 결과, 교육열과 학벌 지표 대비 삶의 질 지수는 113위로 나타났다...',
-    content: '서울의 글로벌 경쟁력과 삶의 질을 다각도로 분석한 글로벌 도시 지수 보고서에 따르면, 한국 수도권의 높은 교육열과 고학력 집중도에도 불구하고 주거비 부담, 근로 시간, 통근 거리 등의 영향으로 삶의 질 순위는 113위에 머문 것으로 조사되었습니다. 전문가들은 지속 가능한 도시 발전을 위해 주거 안정과 문화 공간 확충이 시급하다고 지적했습니다.'
-  },
-  {
-    id: 'news-hero-02',
-    title: '글로벌 AI 메신저 LUNO, 실시간 다국어 동시통역 2.0 전격 출시',
-    press: '디지털타임스',
-    category: 'IT/과학',
-    published_at: '18분 전',
-    image_url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80',
-    summary: '음성·영상 통화 중 0.2초 이내 초저지연 AI 통역 자막을 제공하는 LUNO 2.0 엔진이 글로벌 배포를 시작했다...',
-    content: 'Open Scanner 생태계의 핵심 커뮤니케이션 플랫폼 LUNO가 초저지연 AI 실시간 통역 자막과 Signal급 종단간 암호화(Letter Sealing)를 결합한 신규 업데이트를 발표했습니다.'
-  },
-  {
-    id: 'news-hero-03',
-    title: '미 연준 금리 동결 시사… 아시아 증시 일제히 강세 출발',
-    press: '한국경제',
-    category: '경제',
-    published_at: '32분 전',
-    image_url: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80',
-    summary: '글로벌 인플레이션 둔화 지표가 확인되면서 코스피와 나스닥 선물 지수가 동반 상승세를 기록 중이다...',
-    content: '주요국 물가 상승률이 안정권에 접어들면서 기술주와 반도체 섹터를 중심으로 외국인 매수세가 유입되고 있습니다.'
-  },
-  {
-    id: 'news-hero-04',
-    title: 'K-콘텐츠 글로벌 열풍 지속… 신작 드라마 아시아 12개국 1위',
-    press: '스포츠조선',
-    category: '엔터',
-    published_at: '45분 전',
-    image_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80',
-    summary: '주말 첫 방송을 시작한 한국 드라마가 일본, 태국, 대만 등 아시아 주요 OTT 차트 정상을 석권했다...',
-    content: '탄탄한 각본과 배우들의 열연이 어우러진 신작 드라마가 글로벌 팬들의 호평 속에 기록적인 시청 시간을 달성하고 있습니다.'
-  },
-  {
-    id: 'news-hero-05',
-    title: '차세대 클라우드 엣지 네트워크, 전 세계 응답속도 35ms 이하 달성',
-    press: '전자신문',
-    category: '글로벌',
-    published_at: '1시간 전',
-    image_url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&auto=format&fit=crop&q=80',
-    summary: '전 세계 300개 이상의 엣지 데이터센터를 연결한 메시징 인프라가 지연 없는 실시간 통신 표준을 제시했다...',
-    content: '글로벌 어디서나 끊김 없는 메시지 동기화와 고화질 WebRTC 통화를 보장하는 엣지 네트워크 기술이 상용화되었습니다.'
+const heroNewsSlides = ref<NewsArticle[]>([])
+const newsIsSample = ref(false)
+
+function relTime(iso: string): string {
+  const ms = Date.now() - Date.parse(iso)
+  if (!Number.isFinite(ms)) return iso
+  const min = Math.max(1, Math.round(ms / 60000))
+  if (min < 60) return min + '분 전'
+  if (min < 60 * 24) return Math.round(min / 60) + '시간 전'
+  return Math.round(min / 1440) + '일 전'
+}
+
+// News comes from GET /api/v1/news (explicitly labelled editorial SAMPLE content, never real press).
+async function loadNews() {
+  try {
+    const res = await api<{ hero: NewsArticle[]; popular: NewsArticle[]; sample?: boolean }>('/api/v1/news')
+    const fmt = (a: NewsArticle) => ({ ...a, published_at: relTime(a.published_at) })
+    heroNewsSlides.value = (res.hero || []).map(fmt)
+    popularNewsList.value = (res.popular || []).map(fmt)
+    newsIsSample.value = res.sample !== false
+    activeHeroSlideIndex.value = 0
+  } catch {
+    heroNewsSlides.value = []
+    popularNewsList.value = []
   }
-])
+}
 const heroNews = computed(() => heroNewsSlides.value[activeHeroSlideIndex.value] || heroNewsSlides.value[0])
 
-const popularNewsList = ref<NewsArticle[]>([
-  {
-    id: 'news-pop-01',
-    rank: 1,
-    title: "시청자 콱 물었다...시청률 '12.9%' 인기→종영 20년 만에 다시 부활한 韓 드라마",
-    press: 'TV리포트',
-    category: '엔터',
-    published_at: '25분 전',
-    image_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
-    summary: '20년 만에 리메이크된 명작 드라마가 첫 방송부터 두 자릿수 시청률을 기록하며 화제의 중심에 섰다...',
-    content: '20년 전 안방극장을 뜨겁게 달궜던 명작 드라마가 현대적 감각으로 재해석되어 돌아왔습니다. 첫 방송부터 최고 시청률 12.9%를 돌파하며 OTT 플랫폼과 방송가에서 뜨거운 반응을 이끌어내고 있습니다.'
-  },
-  {
-    id: 'news-pop-02',
-    rank: 2,
-    title: '김혜수, 故 최불암 빈소서 무릎 꿇고 조의... 깊은 애도 표해',
-    press: '스포츠조선',
-    category: '엔터',
-    published_at: '40분 전',
-    image_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80',
-    summary: '배우 김혜수가 빈소를 찾아 고인과의 오랜 인연을 회상하며 깊은 슬픔을 전했다...',
-    content: '한국 문화계의 큰 별이 진 가운데, 동료 및 후배 예술인들의 추모 발길이 이어지고 있습니다. 배우 김혜수는 빈소에서 오랜 시간 자리를 지키며 고인의 숭고한 예술혼을 기렸습니다.'
-  },
-  {
-    id: 'news-pop-03',
-    rank: 3,
-    title: '[단독] 차세대 AI 메신저 LUNO, 글로벌 동시 접속 500만 돌파',
-    press: '전자신문',
-    category: 'IT/과학',
-    published_at: '1시간 전',
-    image_url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=300&auto=format&fit=crop&q=80',
-    summary: 'Open Scanner 생태계의 차세대 메신저 LUNO가 아시아와 북미 시장에서 폭발적인 성장세를 보이고 있다...',
-    content: 'Signal 수준의 강력한 E2EE 보안과 실시간 음성 통역을 결합한 LUNO 메신저가 출시 직후 글로벌 동시 접속자 500만 명을 돌파하며 글로벌 메신저 시장의 새로운 강자로 급부상하고 있습니다.'
-  },
-  {
-    id: 'news-pop-04',
-    rank: 4,
-    title: '한국은행 "연내 디지털 화폐(CBDC) 실거래 테스트 본격화"',
-    press: '한국경제',
-    category: '경제',
-    published_at: '2시간 전',
-    image_url: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=300&auto=format&fit=crop&q=80',
-    summary: '중앙은행 디지털화폐(CBDC) 실증 실험이 일반 시민과 상점을 대상으로 확대 진행된다...',
-    content: '한국은행은 디지털 금융 혁신을 가속화하기 위해 주요 시중은행 및 핀테크 플랫폼과 연계한 CBDC 실거래 테스트를 연내 착수한다고 밝혔습니다.'
-  }
-])
+const popularNewsList = ref<NewsArticle[]>([])
 
 const filteredPopularNews = computed(() => {
   if (selectedNewsCategory.value === '북마크') {
@@ -368,7 +297,7 @@ function addNewsComment(articleId: string) {
 
 const appVersion = ref({
   commit: '',
-  short_commit: '6e92f6b',
+  short_commit: '',
   worker_version: '2.0.0',
   build_time: '',
   env: 'production'
@@ -396,83 +325,36 @@ export interface CallRecord {
   count?: number
 }
 
-const callHistoryList = ref<CallRecord[]>([
-  {
-    id: 'call-01',
-    peer_id: 'peer-k',
-    peer_name: 'K 🙏',
-    peer_avatar_color: '#315BCD',
-    call_type: 'voice',
-    direction: 'incoming',
-    timestamp_text: '화요일',
-    duration_text: '7:41',
-    count: 3
-  },
-  {
-    id: 'call-02',
-    peer_id: 'peer-k',
-    peer_name: 'K 🙏',
-    peer_avatar_color: '#315BCD',
-    call_type: 'voice',
-    direction: 'missed',
-    timestamp_text: '화요일',
-    count: 2
-  },
-  {
-    id: 'call-03',
-    peer_id: 'peer-k',
-    peer_name: 'K 🙏',
-    peer_avatar_color: '#315BCD',
-    call_type: 'voice',
-    direction: 'outgoing',
-    timestamp_text: '10. 24.',
-    duration_text: '9:24'
-  },
-  {
-    id: 'call-04',
-    peer_id: 'peer-k',
-    peer_name: 'K 🙏',
-    peer_avatar_color: '#315BCD',
-    call_type: 'voice',
-    direction: 'missed',
-    timestamp_text: '10. 24.',
-    count: 1
-  },
-  {
-    id: 'call-05',
-    peer_id: 'peer-k',
-    peer_name: 'K 🙏',
-    peer_avatar_color: '#315BCD',
-    call_type: 'voice',
-    direction: 'outgoing',
-    timestamp_text: '10. 23.',
-    duration_text: '1:35',
-    count: 5
-  },
-  {
-    id: 'call-06',
-    peer_id: 'peer-k',
-    peer_name: 'K 🙏',
-    peer_avatar_color: '#315BCD',
-    call_type: 'voice',
-    direction: 'missed',
-    timestamp_text: '10. 14.',
-    count: 1
-  },
-  {
-    id: 'call-07',
-    peer_id: 'peer-tuk',
-    peer_name: 'tuk',
-    peer_avatar_color: '#8b5cf6',
-    call_type: 'voice',
-    direction: 'incoming',
-    timestamp_text: '8. 24.',
-    duration_text: '0:29',
-    count: 2
-  }
-])
+const callHistoryList = ref<CallRecord[]>([])
 
 const selectedCallRecord = ref<CallRecord | null>(null)
+
+function callDateText(iso: string): string {
+  const d = new Date(iso)
+  const diffDays = Math.floor((Date.now() - d.getTime()) / 86400000)
+  if (diffDays < 1) return d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })
+  if (diffDays < 7) return ['일', '월', '화', '수', '목', '금', '토'][d.getDay()] + '요일'
+  return (d.getMonth() + 1) + '. ' + d.getDate() + '.'
+}
+
+// The call list is the server-side call ledger (GET /api/v1/calls), consistent with call_status chat bubbles.
+async function loadCalls() {
+  try {
+    const res = await api<{ calls: any[] }>('/api/v1/calls')
+    callHistoryList.value = (res.calls || []).map((c: any): CallRecord => ({
+      id: c.id,
+      peer_id: c.peer_id || '',
+      peer_name: c.title || '',
+      peer_avatar_color: c.peer_color || '#315BCD',
+      call_type: c.kind === 'video' ? 'video' : 'voice',
+      direction: c.result === 'missed' ? 'missed' : (c.outgoing ? 'outgoing' : 'incoming'),
+      timestamp_text: callDateText(c.started_at),
+      duration_text: c.duration > 0 ? formatDuration(c.duration) : undefined
+    }))
+  } catch {
+    callHistoryList.value = []
+  }
+}
 const conversationError = ref('')
 const isLoadingMessages = ref(false)
 
@@ -558,16 +440,22 @@ function shouldShowDateDivider(msg: any, index: number) {
 }
 
 async function handleSecurityNoticeLogout(msg: any) {
+  const sessionId = msg.metadata?.session_id
+  if (!sessionId) {
+    error.value = '이 알림에는 종료할 로그인 세션 정보가 없습니다 (샘플 알림).'
+    return
+  }
   try {
-    const sessionToken = msg.metadata?.session_token
-    const deviceId = msg.metadata?.device_id
-    await api('/api/v1/auth/sessions/revoke', 'POST', {
-      session_token: sessionToken,
-      device_id: deviceId
-    })
-    note.value = '해당 원격 세션이 서버에서 성공적으로 만료(로그아웃) 처리되었습니다.'
-  } catch {
-    note.value = '원격 세션 종료 처리가 완료되었습니다.'
+    const res = await api<{ status: string; self?: boolean }>('/api/v1/auth/sessions/revoke', 'POST', { session_id: sessionId })
+    if (res.self) {
+      clearLocalSession()
+      return
+    }
+    note.value = '해당 로그인 세션이 서버에서 종료되었습니다.'
+    await loadDevices()
+  } catch (e) {
+    // Never claim success when the server did not revoke anything.
+    error.value = e instanceof Error ? e.message : '세션 종료에 실패했습니다.'
   }
 }
 
@@ -1301,7 +1189,9 @@ async function loadInitialData() {
     loadTimelineStories(),
     loadStoreCatalog(),
     loadOpenChatRooms(),
-    loadDevices()
+    loadDevices(),
+    loadNews(),
+    loadCalls()
   ])
 }
 
@@ -2383,7 +2273,11 @@ async function saveProfileSettings() {
 
 async function revokeDevice(deviceId: string) {
   await wrap(async () => {
-    await api(`/api/v1/devices/${deviceId}`, 'DELETE')
+    const res = await api<{ self?: boolean }>(`/api/v1/devices/${deviceId}`, 'DELETE')
+    if (res.self) {
+      clearLocalSession()
+      return
+    }
     await loadDevices()
     note.value = '기기 세션이 해제되었습니다.'
   })
@@ -2399,6 +2293,10 @@ function switchTheme(theme: 'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight')
 // --- Logout ---
 async function logout() {
   try { await api('/api/v1/auth/logout', 'POST', {}) } catch { error.value = '서버 로그아웃을 확인하지 못했습니다. 기기 관리에서 세션을 폐기하세요.' }
+  clearLocalSession()
+}
+
+function clearLocalSession() {
   localStorage.removeItem('luno.auth_token')
   sessionStorage.removeItem('luno.auth_token')
   token.value = ''
@@ -2968,7 +2866,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="pc-qr-session-id">
                 <small v-if="qrChallengeID">Session: {{ qrChallengeID.slice(0, 8) }}... | </small>
-                <small>LUNO v2.0.0 (commit: <code>{{ appVersion.short_commit || '6e92f6b' }}</code>)</small>
+                <small>LUNO v2.0.0 (commit: <code>{{ appVersion.short_commit || '확인 중…' }}</code>)</small>
               </div>
             </div>
           </div>
@@ -3496,8 +3394,12 @@ onBeforeUnmount(() => {
 
           <!-- News Scroll List -->
           <div class="pc-pane-scroll news-scroll">
+            <div v-if="newsIsSample" class="news-sample-banner" style="margin:8px 12px;padding:8px 12px;border-radius:8px;background:#fff7e0;color:#7a5b00;font-size:12px;">
+              LUNO 에디토리얼 샘플 콘텐츠입니다. 실제 언론 기사가 아닙니다.
+            </div>
             <!-- Hero Featured News Card (Screenshot 5 & 9) -->
             <div
+              v-if="heroNews"
               class="news-hero-card"
               @click="openNewsArticle(heroNews)"
               @mouseenter="isHeroHovered = true"
@@ -4753,7 +4655,7 @@ onBeforeUnmount(() => {
             <strong>ℹ️ 버전 및 빌드 정보</strong>
             <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
               <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '2.0.0' }}</span>
-              <span><b>Git Commit:</b> <code>{{ appVersion.commit || '6e92f6b2253ba9127cbad74874abd92ebd94b509' }}</code></span>
+              <span><b>Git Commit:</b> <code>{{ appVersion.commit || '확인 중…' }}</code></span>
               <span><b>Build Time:</b> {{ appVersion.build_time || '2026-11-01' }}</span>
               <span><b>Environment:</b> {{ appVersion.env || 'production' }}</span>
             </div>
