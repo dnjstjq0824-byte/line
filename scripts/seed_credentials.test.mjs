@@ -24,7 +24,7 @@ async function freshWorker() {
   return mod.default;
 }
 
-const HOST = 'https://line-messenger.dnjstjqppk.workers.dev';
+const HOST = 'https://localhost';
 
 function login(worker, env, email, password) {
   return worker.fetch(new Request(`${HOST}/api/v1/auth/login`, {

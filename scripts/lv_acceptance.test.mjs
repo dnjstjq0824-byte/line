@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-const BASE = 'https://line-messenger.dnjstjqppk.workers.dev';
+const BASE = 'https://localhost';
 const DEMO = '00000000-0000-0000-0000-000000000002';
 const ALICE = '00000000-0000-0000-0000-000000000003';
 

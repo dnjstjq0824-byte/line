@@ -30,8 +30,9 @@ var (
 	greatestRe   = regexp.MustCompile(`(?i)\bGREATEST\s*\(`)
 	leastRe      = regexp.MustCompile(`(?i)\bLEAST\s*\(`)
 	defFuncRe    = regexp.MustCompile(`(?i)\bDEFAULT\s+(gen_random_uuid\(\)|now\(\))`)
-	createTblRe  = regexp.MustCompile(`(?i)\bCREATE\s+TABLE\s+([a-zA-Z0-9_]+)\b`)
-	createIdxRe  = regexp.MustCompile(`(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\s+([a-zA-Z0-9_]+)\b`)
+	createTblRe  = regexp.MustCompile(`(?i)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_]+)\b`)
+	createIdxRe  = regexp.MustCompile(`(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_]+)\b`)
+	addColumnRe  = regexp.MustCompile(`(?i)^ALTER\s+TABLE\s+([a-zA-Z0-9_.]+)\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+([a-zA-Z0-9_]+)\s+(.+)$`)
 	isoTimeRe    = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}`)
 )
 
@@ -165,6 +166,19 @@ func ApplySchemaSQL(ctx context.Context, db *sql.DB, ddl string) error {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue
+		}
+		// SQLite lacks ADD COLUMN IF NOT EXISTS. Check its catalog before
+		// removing the condition, preserving replay of PostgreSQL migrations.
+		if match := addColumnRe.FindStringSubmatch(stmt); match != nil {
+			var count int
+			table := schemaRe.ReplaceAllString(match[1], "${1}__${2}")
+			if err := db.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info($1) WHERE name=$2", table, match[2]).Scan(&count); err != nil {
+				return fmt.Errorf("inspect migration column: %w", err)
+			}
+			if count > 0 {
+				continue
+			}
+			stmt = "ALTER TABLE " + match[1] + " ADD COLUMN " + match[2] + " " + match[3]
 		}
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("executing DDL [%s]: %w", stmt, err)

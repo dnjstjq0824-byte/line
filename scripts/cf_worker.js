@@ -2806,9 +2806,8 @@ const workerCore = {
       }
     }
     const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-    // .workers.dev / .pages.dev are Cloudflare's own preview hostnames and can never be a
-    // customer-facing production domain, so they are the only implicitly approved edge hosts.
-    const isEdgeHost = url.hostname.endsWith('.workers.dev') || url.hostname.endsWith('.pages.dev');
+    // Cloudflare hostnames can serve production traffic. Public standalone hosts
+    // require explicit opt-in just like custom domains.
     // Any further standalone host must be named explicitly. A blanket "allow every host"
     // switch is deliberately not supported: it would serve the in-memory demo backend --
     // including POST /auth/demo, which mints a real session for a seeded account with no
@@ -2816,7 +2815,7 @@ const workerCore = {
     const allowedStandaloneHosts = String(env.STANDALONE_HOSTS || '')
       .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
     const isNamedStandaloneHost = allowedStandaloneHosts.includes(url.hostname.toLowerCase());
-    const localDemo = env.ALLOW_LOCAL_DEMO === 'true' && (isLocal || isEdgeHost || isNamedStandaloneHost);
+    const localDemo = env.ALLOW_LOCAL_DEMO === 'true' && (isLocal || isNamedStandaloneHost);
     if (!localDemo) {
       if (backendRoute) return json({ error: 'persistent backend must be configured' }, 503);
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Assets unavailable', { status: 503 });

@@ -1,9 +1,9 @@
 name: Vue Applications CI
 on:
   push:
-    paths: ['apps/**','package.json','.github/workflows/web.yml']
+    paths: ['apps/**','scripts/**','wrangler.jsonc','package.json','package-lock.json','.github/workflows/web.yml']
   pull_request:
-    paths: ['apps/**','package.json','.github/workflows/web.yml']
+    paths: ['apps/**','scripts/**','wrangler.jsonc','package.json','package-lock.json','.github/workflows/web.yml']
 jobs:
   vue:
     runs-on: ubuntu-latest
@@ -11,5 +11,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - run: npm install
+      - run: npm ci
+      - run: node --test "scripts/*.test.mjs"
       - run: npm run build:apps

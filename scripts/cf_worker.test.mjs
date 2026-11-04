@@ -213,8 +213,13 @@ test('the standalone demo backend is gated on the hostname, whatever the env var
     assert.equal((await demo.json().catch(() => ({}))).access_token, undefined, 'no token on a public host');
   }
 
-  // The approved hosts still work, so the live deployment is unaffected.
-  assert.equal((await hit('line-messenger.dnjstjqppk.workers.dev', { ALLOW_LOCAL_DEMO: 'true' })).status, 200);
+  // Cloudflare hostnames are public production surfaces too.
+  for (const host of ['line-messenger.dnjstjqppk.workers.dev', 'luno.pages.dev']) {
+    const env = { ALLOW_LOCAL_DEMO: 'true', ENABLE_DEMO_ACCOUNTS: 'true' };
+    assert.equal((await hit(host, env)).status, 503);
+    assert.equal((await hit(host, env, 'auth/demo')).status, 503);
+    assert.equal((await hit(host, { ...env, STANDALONE_HOSTS: host })).status, 200);
+  }
   assert.equal((await hit('localhost', { ALLOW_LOCAL_DEMO: 'true' })).status, 200);
   // A custom host is reachable only by being named explicitly.
   assert.equal((await hit('staging.luno.example', { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: 'staging.luno.example' })).status, 200);

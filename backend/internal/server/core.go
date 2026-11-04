@@ -78,6 +78,17 @@ type App struct {
 }
 
 func New(cfg Config) (*App, error) {
+	if len(cfg.Secret) < 32 {
+		return nil, errors.New("JWT_SECRET must be >=32 bytes")
+	}
+	key := cfg.MessageEncryptionKey
+	if key == "" {
+		key = cfg.Secret
+	}
+	mc, err := newMessageCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("message encryption configuration: %w", err)
+	}
 	driverName := "pgx"
 	if strings.HasPrefix(cfg.DSN, "sqlite://") {
 		internaldb.RegisterSQLiteCompat()
@@ -125,11 +136,6 @@ func New(cfg Config) (*App, error) {
 	if instID == "" {
 		instID = "instance"
 	}
-	key := cfg.MessageEncryptionKey
-	if key == "" {
-		key = cfg.Secret
-	}
-	mc, _ := newMessageCipher(key)
 	app := &App{db: db, cfg: cfg, hub: realtime.New(), instanceID: instID, msgCipher: mc}
 	ctx2, cancel := context.WithCancel(context.Background())
 	app.relayCancel = cancel

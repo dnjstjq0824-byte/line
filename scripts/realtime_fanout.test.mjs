@@ -18,7 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
-const BASE = 'https://line-messenger.dnjstjqppk.workers.dev';
+const BASE = 'https://localhost';
 const ALICE_CONVERSATION = '00000000-0000-0000-0000-000000000010';
 
 // --- Cloudflare runtime shims ----------------------------------------------

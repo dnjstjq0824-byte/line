@@ -32,9 +32,9 @@
   // Coverage for the enabled path is in scripts/realtime_fanout.test.mjs.
   // ---------------------------------------------------------------------------
   "vars": {
-    // Serves the in-memory standalone backend. Only takes effect on localhost,
-    // *.workers.dev / *.pages.dev, or a hostname named in STANDALONE_HOSTS.
-    // Set to "false" once a persistent backend is configured behind a custom domain.
-    "ALLOW_LOCAL_DEMO": "true"
+    // Production fails closed until API_BACKEND_ORIGIN points at the persistent
+    // backend. Demo deployments require ALLOW_LOCAL_DEMO=true and an explicit
+    // STANDALONE_HOSTS allow-list, including for workers.dev / pages.dev hosts.
+    "ALLOW_LOCAL_DEMO": "false"
   }
 }

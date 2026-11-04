@@ -5,7 +5,7 @@ import worker from './cf_worker.js';
 function req(path, method = 'GET', body = null, token = null, headers = {}) {
   const h = { 'Content-Type': 'application/json', ...headers };
   if (token) h['Authorization'] = `Bearer ${token}`;
-  return new Request(`https://line-messenger.dnjstjqppk.workers.dev/api/v1/${path}`, {
+  return new Request(`https://localhost/api/v1/${path}`, {
     method,
     headers: h,
     body: body ? JSON.stringify(body) : undefined
