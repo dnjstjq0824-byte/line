@@ -66,15 +66,25 @@ const versionData = {
 };
 
 fs.writeFileSync(path.join(distRoot, 'version.json'), JSON.stringify(versionData, null, 2));
-const workerPath = path.join(__dirname, 'cf_worker.js');
-if (fs.existsSync(workerPath)) {
-  let workerCode = fs.readFileSync(workerPath, 'utf8');
-  workerCode = workerCode.replace(
-    /const BUILD_INFO = \{[\s\S]*?\};/,
-    `const BUILD_INFO = ${JSON.stringify(versionData, null, 2)};`
-  );
-  fs.writeFileSync(workerPath, workerCode, 'utf8');
+
+// The source worker is left untouched; wrangler.jsonc deploys this stamped copy.
+// Stamping the source itself made every deploy produce a commit that only
+// recorded the previous commit's SHA.
+const workerSrc = path.join(__dirname, 'cf_worker.js');
+const workerOutDir = path.join(__dirname, '..', 'dist_worker');
+const workerOut = path.join(workerOutDir, 'cf_worker.js');
+const buildInfoPattern = /const BUILD_INFO = \{[\s\S]*?\};/;
+const workerCode = fs.readFileSync(workerSrc, 'utf8');
+if (!buildInfoPattern.test(workerCode)) {
+  throw new Error('BUILD_INFO block not found in scripts/cf_worker.js; refusing to deploy an unstamped worker');
 }
+fs.rmSync(workerOutDir, { recursive: true, force: true });
+fs.mkdirSync(workerOutDir, { recursive: true });
+fs.writeFileSync(
+  workerOut,
+  workerCode.replace(buildInfoPattern, `const BUILD_INFO = ${JSON.stringify(versionData, null, 2)};`),
+  'utf8'
+);
 
 console.log(`✅ Combined Cloudflare distribution prepared in ./dist_cf (Commit: ${versionData.short_commit})`);
 

@@ -4,6 +4,7 @@ node_modules/
 **/node_modules/
 **/dist/
 dist_cf/
+dist_worker/
 .wrangler/
 **/build/
 .dart_tool/
