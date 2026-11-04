@@ -1,8 +1,21 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Release signing material lives OUTSIDE the repository (android/key.properties is gitignored, or CI env vars).
+// There is deliberately no fallback to the debug key: without material the release APK stays unsigned.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+fun signingValue(key: String, env: String): String? =
+    (keystoreProperties.getProperty(key) ?: System.getenv(env))?.takeIf { it.isNotBlank() }
+val releaseStoreFile = signingValue("storeFile", "LUNO_KEYSTORE_PATH")
 
 android {
     namespace = "com.bookingnetwork.messenger.global_messenger"
@@ -29,11 +42,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = signingValue("storePassword", "LUNO_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "LUNO_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "LUNO_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseStoreFile != null) signingConfigs.getByName("release") else null
         }
     }
 }

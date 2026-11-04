@@ -19,6 +19,13 @@ const lunoSurface = Color(0xFFFFFFFF);
 const lunoLightBlue = Color(0xFFEAF1FF);
 const lunoMistGray = Color(0xFFD9E1EC);
 const lunoSlateGray = Color(0xFF5B6475);
+// Canonical aliases kept in step with apps/user-web/src/styles/luno-design-tokens.css
+const lunoCloudWhite = Color(0xFFF7FAFF);   // --luno-cloud-white
+const lunoPureWhite = Color(0xFFFFFFFF);    // --luno-pure-white
+const lunoElectricBlue = Color(0xFF4F7CFF); // --luno-blue
+const lunoSuccessGreen = Color(0xFF22C55E); // --luno-success
+const lunoWarningAmber = Color(0xFFF59E0B); // --luno-warning
+const lunoErrorRed = Color(0xFFEF4444);     // --luno-error
 
 // LUNO Orbit Crew Official Characters (PO Master Directive v1.0)
 const lunoOrbitCrewStickers = [
@@ -138,7 +145,14 @@ class _HomeState extends State<Home> {
       autoTranslate = false;
 
   String targetTranslateLang = 'ko'; // ko, en, th, ja, zh, es
-  int currentTab = 0; // 0: 홈/친구, 1: 대화, 2: 피드, 3: 라운지, 4: LUNO Pay, 5: 설정
+  // Primary destinations live in the bottom NavigationBar (indices 0.._primaryTabCount-1).
+  // Secondary screens are reached from the AppBar and replace the bar with a back action.
+  // 0: 홈/친구, 1: 대화, 2: 피드(VOOM), 3: 라운지(오픈챗), 4: 뉴스 | 5: 통화, 6: LUNO Pay, 7: 설정
+  static const int _primaryTabCount = 5;
+  static const int _tabCalls = 5;
+  static const int _tabWallet = 6;
+  static const int _tabSettings = 7;
+  int currentTab = 0;
   String error = '',
       notice = '',
       selfId = '',
@@ -150,7 +164,9 @@ class _HomeState extends State<Home> {
       replyToId = '',
       editingMsgId = '';
 
-  int walletBalance = 54000, walletPoints = 1250;
+  // null means "not loaded / unavailable" and renders as a dash. A payments
+  // surface must never substitute a placeholder figure for a real balance.
+  int? walletBalance, walletPoints;
   List<dynamic> chats = [],
       friends = [],
       officialAccounts = [],
@@ -164,7 +180,14 @@ class _HomeState extends State<Home> {
       stories = [],
       openRooms = [],
       bookmarks = [],
-      walletHistory = [];
+      walletHistory = [],
+      newsHero = [],
+      newsPopular = [],
+      callHistory = [];
+
+  // GET /api/v1/news serves LUNO editorial SAMPLE cards, never real press articles.
+  // Treated as sample until the server says otherwise, so the banner fails safe.
+  bool newsIsSample = true;
 
   Map<String, dynamic>? activeCall;
   WebSocketChannel? socket;
@@ -287,8 +310,10 @@ class _HomeState extends State<Home> {
       api.call('/api/v1/voom').catchError((_) => <String, dynamic>{'posts': []}),
       api.call('/api/v1/stories').catchError((_) => <String, dynamic>{'stories': []}),
       api.call('/api/v1/community/rooms').catchError((_) => <String, dynamic>{'rooms': []}),
-      api.call('/api/v1/wallet').catchError((_) => <String, dynamic>{'balance': 54000, 'points': 1250, 'history': []}),
+      api.call('/api/v1/wallet').catchError((_) => <String, dynamic>{'history': []}),
       api.call('/api/v1/bookmarks').catchError((_) => <String, dynamic>{'bookmarks': []}),
+      api.call('/api/v1/news').catchError((_) => <String, dynamic>{'hero': [], 'popular': [], 'sample': true}),
+      api.call('/api/v1/calls').catchError((_) => <String, dynamic>{'calls': []}),
     ]);
     if (mounted) {
       setState(() {
@@ -298,10 +323,14 @@ class _HomeState extends State<Home> {
         feedPosts = resultsList[3]['posts'] ?? [];
         stories = resultsList[4]['stories'] ?? [];
         openRooms = resultsList[5]['rooms'] ?? [];
-        walletBalance = resultsList[6]['balance'] ?? 54000;
-        walletPoints = resultsList[6]['points'] ?? 1250;
+        walletBalance = (resultsList[6]['balance'] as num?)?.toInt();
+        walletPoints = (resultsList[6]['points'] as num?)?.toInt();
         walletHistory = resultsList[6]['history'] ?? [];
         bookmarks = resultsList[7]['bookmarks'] ?? [];
+        newsHero = resultsList[8]['hero'] ?? [];
+        newsPopular = resultsList[8]['popular'] ?? [];
+        newsIsSample = resultsList[8]['sample'] != false;
+        callHistory = resultsList[9]['calls'] ?? [];
       });
     }
   }
@@ -436,11 +465,13 @@ class _HomeState extends State<Home> {
     });
   }
 
-  Future<void> _startCall(String kind) async {
-    if (selectedId.isEmpty) return;
+  Future<void> _startCall(String kind) async => _startCallIn(selectedId, kind);
+
+  Future<void> _startCallIn(String conversationId, String kind) async {
+    if (conversationId.isEmpty) return;
     _do(() async {
       final res = await api.call('/api/v1/calls', method: 'POST', data: {
-        'conversation_id': selectedId,
+        'conversation_id': conversationId,
         'kind': kind,
         'sdp_offer': 'v=0\r\n',
       });
@@ -588,11 +619,17 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _chargeWallet() async {
-    final amount = int.tryParse(payAmountCtrl.text.trim()) ?? 10000;
+    final raw = payAmountCtrl.text.trim();
+    final amount = int.tryParse(raw);
+    if (amount == null || amount <= 0) {
+      setState(() => error = '충전 금액을 숫자로 입력해 주세요.');
+      return;
+    }
     _do(() async {
       await api.call('/api/v1/wallet/charge', method: 'POST', data: {'amount': amount});
       await _reload();
-      setState(() => notice = 'LUNO Pay ₩$amount 충전 완료!');
+      payAmountCtrl.clear();
+      setState(() => notice = 'LUNO Pay ₩${_money(amount)} 충전 완료!');
     });
   }
 
@@ -932,12 +969,14 @@ class _HomeState extends State<Home> {
                 ],
               ),
               const SizedBox(height: 6),
-              Text('₩ $walletBalance', style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
+              Text(walletBalance == null ? '₩ —' : '₩ ${_money(walletBalance!)}',
+                  style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                child: Text('LUNO POINTS: $walletPoints P', style: const TextStyle(color: lunoSky, fontSize: 12, fontWeight: FontWeight.bold)),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                child: Text(walletPoints == null ? 'LUNO POINTS: —' : 'LUNO POINTS: ${_money(walletPoints!)} P',
+                    style: const TextStyle(color: lunoSky, fontSize: 12, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 16),
               Row(children: [
@@ -1009,7 +1048,7 @@ class _HomeState extends State<Home> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('새 메시지 자동 번역', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                 value: autoTranslate,
-                activeColor: lunoDeepBlue,
+                activeThumbColor: lunoDeepBlue,
                 onChanged: (v) => setState(() => autoTranslate = v),
               ),
               const SizedBox(height: 6),
@@ -1075,7 +1114,7 @@ class _HomeState extends State<Home> {
               title: const Text('Letter Sealing (종단간 E2EE)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               subtitle: const Text('Signal X3DH & Double Ratchet 암호화 활성화', style: TextStyle(fontSize: 12, color: lunoSlateGray)),
               value: letterSealing,
-              activeColor: lunoDeepBlue,
+              activeThumbColor: lunoDeepBlue,
               onChanged: (v) => setState(() => letterSealing = v),
             ),
             const Divider(height: 1, color: lunoMistGray),
@@ -1095,177 +1134,313 @@ class _HomeState extends State<Home> {
   // NEWS TAB (Screenshot 5 Reference Implementation)
   // ==========================================================================
   Widget _buildNewsTab() {
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        // Featured Hero News Card
-        Card(
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 2,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 180,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.blueGrey.shade900, Colors.black87],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
+    // Every card is rendered from GET /api/v1/news. Nothing here is hard-coded:
+    // attributing invented stories to real press outlets, or writing them about
+    // named real people, is not something a shipped client may do.
+    if (newsHero.isEmpty && newsPopular.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _reload,
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: const [
+            SizedBox(height: 80),
+            Icon(Icons.newspaper_outlined, size: 48, color: lunoMistGray),
+            SizedBox(height: 12),
+            Text('표시할 뉴스가 없습니다',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold, color: lunoSlateGray)),
+            SizedBox(height: 4),
+            Text('아래로 당겨 새로고침하세요',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: lunoSlateGray)),
+          ],
+        ),
+      );
+    }
+
+    final hero = newsHero.isNotEmpty ? newsHero.first as Map<String, dynamic> : null;
+
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          if (newsIsSample) _buildNewsSampleBanner(),
+          if (hero != null)
+            Card(
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 2,
+              child: InkWell(
+                onTap: () => _showNewsArticle(hero),
+                child: Container(
+                  height: 180,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blueGrey.shade900, Colors.black87],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _newsField(hero, 'title'),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            height: 1.3),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _newsByline(hero),
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
                   ),
                 ),
-                padding: const EdgeInsets.all(16),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '단독 "SKY 학벌 중시하는 서울, 삶의 질은 세계 113위"',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, height: 1.3),
-                    ),
-                    SizedBox(height: 4),
-                    Text('매일경제 · 10분 전', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
-                ),
               ),
+            ),
+          if (newsPopular.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Text('오늘의 인기 기사',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            ),
+            for (var i = 0; i < newsPopular.length; i++) ...[
+              if (i > 0) const Divider(height: 1, color: lunoMistGray),
+              _buildNewsRow(newsPopular[i] as Map<String, dynamic>, i + 1),
             ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Ad Banner (Screenshot 5)
-        Card(
-          elevation: 0,
-          color: lunoCloudWhite,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: lunoMistGray)),
-          child: const ListTile(
-            dense: true,
-            leading: Text('AD', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: lunoSlateGray)),
-            title: Text('타협 없는 모바일 액션 · 몬스터헌터 아웃랜더스', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-            subtitle: Text('사전 예약하기 >', style: TextStyle(fontSize: 11, color: lunoElectricBlue)),
-            trailing: Icon(Icons.videogame_asset, color: lunoElectricBlue),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Text('오늘의 인기 기사', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        ),
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          leading: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(color: lunoMistGray, borderRadius: BorderRadius.circular(8)),
-            alignment: Alignment.center,
-            child: const Text('1', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          title: const Text("시청자 콱 물었다...시청률 '12.9%' 인기 드라마", maxLines: 2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          subtitle: const Text('TV리포트 · 25분 전', style: TextStyle(fontSize: 11, color: lunoSlateGray)),
-        ),
-        const Divider(height: 1, color: lunoMistGray),
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          leading: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(color: lunoMistGray, borderRadius: BorderRadius.circular(8)),
-            alignment: Alignment.center,
-            child: const Text('2', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          title: const Text('김혜수, 故 최불암 빈소서 무릎 꿇고 조의... 깊은 애도', maxLines: 2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          subtitle: const Text('스포츠조선 · 40분 전', style: TextStyle(fontSize: 11, color: lunoSlateGray)),
-        ),
-        const Divider(height: 1, color: lunoMistGray),
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          leading: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(color: lunoMistGray, borderRadius: BorderRadius.circular(8)),
-            alignment: Alignment.center,
-            child: const Text('3', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          title: const Text('[단독] 차세대 AI 메신저 LUNO, 글로벌 500만 돌파', maxLines: 2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          subtitle: const Text('전자신문 · 1시간 전', style: TextStyle(fontSize: 11, color: lunoSlateGray)),
-        ),
-      ],
+          ],
+        ],
+      ),
     );
   }
 
+  Widget _buildNewsSampleBanner() => Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7E0),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'LUNO 에디토리얼 샘플 콘텐츠입니다. 실제 언론 기사가 아닙니다.',
+          style: TextStyle(fontSize: 12, color: Color(0xFF7A5B00)),
+        ),
+      );
+
+  Widget _buildNewsRow(Map<String, dynamic> article, int fallbackRank) {
+    final rank = article['rank'] is int ? article['rank'] as int : fallbackRank;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      onTap: () => _showNewsArticle(article),
+      leading: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(color: lunoMistGray, borderRadius: BorderRadius.circular(8)),
+        alignment: Alignment.center,
+        child: Text('$rank', style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      title: Text(_newsField(article, 'title'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      subtitle: Text(_newsByline(article),
+          style: const TextStyle(fontSize: 11, color: lunoSlateGray)),
+    );
+  }
+
+  void _showNewsArticle(Map<String, dynamic> article) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        builder: (_, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.all(20),
+          children: [
+            if (newsIsSample) _buildNewsSampleBanner(),
+            Text(_newsField(article, 'title'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, height: 1.35)),
+            const SizedBox(height: 8),
+            Text(_newsByline(article),
+                style: const TextStyle(fontSize: 12, color: lunoSlateGray)),
+            const Divider(height: 24),
+            Text(
+              _newsField(article, 'content').isNotEmpty
+                  ? _newsField(article, 'content')
+                  : _newsField(article, 'summary'),
+              style: const TextStyle(fontSize: 14, height: 1.6),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _newsField(Map<String, dynamic> article, String key) =>
+      article[key]?.toString() ?? '';
+
+  String _newsByline(Map<String, dynamic> article) {
+    final press = _newsField(article, 'press');
+    final when = _relTime(article['published_at']);
+    if (press.isEmpty) return when;
+    if (when.isEmpty) return press;
+    return '$press · $when';
+  }
+
+  // Server timestamps are ISO-8601. Anything unparseable is shown verbatim
+  // rather than being turned into a misleading "방금 전".
+  String _relTime(dynamic iso) {
+    final raw = iso?.toString() ?? '';
+    final at = DateTime.tryParse(raw);
+    if (at == null) return raw;
+    final min = DateTime.now().difference(at).inMinutes;
+    if (min < 1) return '방금 전';
+    if (min < 60) return '$min분 전';
+    if (min < 60 * 24) return '${(min / 60).round()}시간 전';
+    return '${(min / 1440).round()}일 전';
+  }
+
   // ==========================================================================
-  // CALLS TAB (Screenshot 3 Reference Implementation)
+  // CALLS TAB
   // ==========================================================================
   Widget _buildCallsTab() {
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Text('통화', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        ),
-        ListTile(
-          leading: const CircleAvatar(backgroundColor: lunoElectricBlue, child: Text('K', style: TextStyle(color: Colors.white))),
-          title: const Row(
-            children: [
-              Text('K 🙏', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              SizedBox(width: 4),
-              Text('(3)', style: TextStyle(fontSize: 13, color: lunoSlateGray)),
+    // Rendered from GET /api/v1/calls, which merges live sessions with the
+    // call_status message ledger, so this list always agrees with the chat bubbles.
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Text('통화', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          if (callHistory.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 64),
+              child: Column(
+                children: [
+                  Icon(Icons.phone_disabled_outlined, size: 48, color: lunoMistGray),
+                  SizedBox(height: 12),
+                  Text('통화 기록이 없습니다',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold, color: lunoSlateGray)),
+                  SizedBox(height: 4),
+                  Text('대화방에서 음성 또는 영상 통화를 시작해 보세요',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: lunoSlateGray)),
+                ],
+              ),
+            )
+          else
+            for (var i = 0; i < callHistory.length; i++) ...[
+              if (i > 0) const Divider(height: 1, color: lunoMistGray),
+              _buildCallRow(callHistory[i] as Map<String, dynamic>),
             ],
-          ),
-          subtitle: const Row(
-            children: [
-              Icon(Icons.call_received, size: 14, color: lunoSlateGray),
-              SizedBox(width: 4),
-              Text('화요일', style: TextStyle(fontSize: 12, color: lunoSlateGray)),
-            ],
-          ),
-          trailing: IconButton(
-            icon: const Icon(Icons.phone, color: lunoSuccessGreen),
-            onPressed: () => _startCall('voice'),
-          ),
-        ),
-        const Divider(height: 1, color: lunoMistGray),
-        ListTile(
-          leading: const CircleAvatar(backgroundColor: lunoElectricBlue, child: Text('K', style: TextStyle(color: Colors.white))),
-          title: const Row(
-            children: [
-              Text('K 🙏', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red)),
-              SizedBox(width: 4),
-              Text('(2)', style: TextStyle(fontSize: 13, color: Colors.red)),
-            ],
-          ),
-          subtitle: const Row(
-            children: [
-              Icon(Icons.call_missed, size: 14, color: Colors.red),
-              SizedBox(width: 4),
-              Text('화요일 · 부재중 전화', style: TextStyle(fontSize: 12, color: Colors.red)),
-            ],
-          ),
-          trailing: IconButton(
-            icon: const Icon(Icons.phone, color: lunoSuccessGreen),
-            onPressed: () => _startCall('voice'),
-          ),
-        ),
-        const Divider(height: 1, color: lunoMistGray),
-        ListTile(
-          leading: const CircleAvatar(backgroundColor: Colors.teal, child: Text('T', style: TextStyle(color: Colors.white))),
-          title: const Text('tuk (2)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          subtitle: const Row(
-            children: [
-              Icon(Icons.call_made, size: 14, color: lunoSlateGray),
-              SizedBox(width: 4),
-              Text('8. 24. · 통화시간 3:12', style: TextStyle(fontSize: 12, color: lunoSlateGray)),
-            ],
-          ),
-          trailing: IconButton(
-            icon: const Icon(Icons.phone, color: lunoSuccessGreen),
-            onPressed: () => _startCall('voice'),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  Widget _buildCallRow(Map<String, dynamic> call) {
+    final title = call['title']?.toString() ?? '알 수 없음';
+    final outgoing = call['outgoing'] == true;
+    final result = call['result']?.toString() ?? '';
+    final kind = call['kind']?.toString() ?? 'voice';
+    final missed = result == 'missed' || result == 'declined';
+    final duration = call['duration'] is num ? (call['duration'] as num).toInt() : 0;
+
+    final IconData directionIcon = missed
+        ? (outgoing ? Icons.call_missed_outgoing : Icons.call_missed)
+        : (outgoing ? Icons.call_made : Icons.call_received);
+    final Color lineColor = missed ? lunoErrorRed : lunoSlateGray;
+
+    final parts = <String>[_relTime(call['started_at'])];
+    if (missed) {
+      parts.add(result == 'declined' ? '거절된 통화' : '부재중 전화');
+    } else if (duration > 0) {
+      parts.add('통화시간 ${_formatDuration(duration)}');
+    }
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: _colorFromHex(call['peer_color']?.toString(), lunoElectricBlue),
+        child: Text(
+          title.isNotEmpty ? title.characters.first : '?',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: missed ? lunoErrorRed : null,
+        ),
+      ),
+      subtitle: Row(
+        children: [
+          Icon(directionIcon, size: 14, color: lineColor),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              parts.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: lineColor),
+            ),
+          ),
+        ],
+      ),
+      trailing: IconButton(
+        tooltip: kind == 'video' ? '영상통화' : '음성통화',
+        icon: Icon(kind == 'video' ? Icons.videocam : Icons.phone, color: lunoSuccessGreen),
+        onPressed: () => _startCallIn(call['conversation_id']?.toString() ?? '', kind),
+      ),
+    );
+  }
+
+  // 1234567 -> "1,234,567"
+  String _money(int value) {
+    final digits = value.abs().toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
+      buf.write(digits[i]);
+    }
+    return (value < 0 ? '-' : '') + buf.toString();
+  }
+
+  String _formatDuration(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    if (m >= 60) {
+      return '${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  // Server colours arrive as #RRGGBB. Anything else falls back rather than throwing.
+  Color _colorFromHex(String? hex, Color fallback) {
+    final value = (hex ?? '').replaceFirst('#', '');
+    if (value.length != 6) return fallback;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
   }
 
   // ==========================================================================
@@ -1332,7 +1507,7 @@ class _HomeState extends State<Home> {
                     color: mine ? lunoDeepBlue : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2)),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2)),
                     ],
                   ),
                   child: InkWell(
@@ -1361,7 +1536,7 @@ class _HomeState extends State<Home> {
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: mine ? Colors.white.withOpacity(0.18) : lunoLightBlue,
+                                color: mine ? Colors.white.withValues(alpha: 0.18) : lunoLightBlue,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: trans['loading'] == true
@@ -1503,8 +1678,32 @@ class _HomeState extends State<Home> {
           const SizedBox(width: 8),
           const Text('Connect Beyond Borders', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         ]),
+        leading: (selfId.isNotEmpty && selectedId.isEmpty && currentTab >= _primaryTabCount)
+            ? IconButton(
+                tooltip: '홈으로',
+                onPressed: () => setState(() => currentTab = 0),
+                icon: const Icon(Icons.arrow_back),
+              )
+            : null,
         actions: [
-          if (selfId.isNotEmpty) IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
+          if (selfId.isNotEmpty && selectedId.isEmpty) ...[
+            IconButton(
+              tooltip: '통화',
+              onPressed: () => setState(() => currentTab = _tabCalls),
+              icon: const Icon(Icons.phone_outlined),
+            ),
+            IconButton(
+              tooltip: 'LUNO Pay',
+              onPressed: () => setState(() => currentTab = _tabWallet),
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+            ),
+            IconButton(
+              tooltip: '설정',
+              onPressed: () => setState(() => currentTab = _tabSettings),
+              icon: const Icon(Icons.settings_outlined),
+            ),
+          ],
+          if (selfId.isNotEmpty) IconButton(tooltip: '로그아웃', onPressed: _logout, icon: const Icon(Icons.logout)),
         ],
       ),
       body: Column(children: [
@@ -1603,27 +1802,30 @@ class _HomeState extends State<Home> {
             child: IndexedStack(
               index: currentTab,
               children: [
-                _buildHomeFriendsTab(),
-                _buildChatsTab(),
-                _buildNewsTab(),
-                _buildCallsTab(),
-                _buildWalletTab(),
-                _buildSettingsTab(),
+                _buildHomeFriendsTab(), // 0 홈/친구
+                _buildChatsTab(),       // 1 대화
+                _buildFeedTab(),        // 2 피드(VOOM)
+                _buildOpenChatTab(),    // 3 라운지(오픈챗)
+                _buildNewsTab(),        // 4 뉴스
+                _buildCallsTab(),       // 5 통화
+                _buildWalletTab(),      // 6 LUNO Pay
+                _buildSettingsTab(),    // 7 설정
               ],
             ),
           ),
         // CHAT CONVERSATION VIEWPORT
         if (selfId.isNotEmpty && selectedId.isNotEmpty) Expanded(child: _buildActiveChatRoom()),
       ]),
-      bottomNavigationBar: (selfId.isNotEmpty && selectedId.isEmpty)
+      bottomNavigationBar: (selfId.isNotEmpty && selectedId.isEmpty && currentTab < _primaryTabCount)
           ? NavigationBar(
-              selectedIndex: currentTab > 3 ? 0 : currentTab,
+              selectedIndex: currentTab,
               onDestinationSelected: (idx) => setState(() => currentTab = idx),
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '홈'),
                 NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: '대화'),
+                NavigationDestination(icon: Icon(Icons.play_circle_outline), selectedIcon: Icon(Icons.play_circle), label: '피드'),
+                NavigationDestination(icon: Icon(Icons.forum_outlined), selectedIcon: Icon(Icons.forum), label: '라운지'),
                 NavigationDestination(icon: Icon(Icons.newspaper_outlined), selectedIcon: Icon(Icons.newspaper), label: '뉴스'),
-                NavigationDestination(icon: Icon(Icons.phone_outlined), selectedIcon: Icon(Icons.phone), label: '통화'),
               ],
             )
           : null,
