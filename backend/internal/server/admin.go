@@ -143,7 +143,7 @@ func (a *App) moderationAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) adminAuditLogs(w http.ResponseWriter, r *http.Request) {
-	rows, e := a.db.QueryContext(r.Context(), "SELECT id,COALESCE(actor_user_id,''),action,COALESCE(target_type,''),COALESCE(target_id,''),created_at FROM ops.audit_logs ORDER BY created_at DESC LIMIT 100")
+	rows, e := a.db.QueryContext(r.Context(), "SELECT id,COALESCE(CAST(actor_user_id AS TEXT),''),action,COALESCE(target_type,''),COALESCE(CAST(target_id AS TEXT),''),created_at FROM ops.audit_logs ORDER BY created_at DESC LIMIT 100")
 	if e != nil {
 		fail(w, 500, "audit logs unavailable")
 		return

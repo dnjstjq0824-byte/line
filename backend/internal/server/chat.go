@@ -228,7 +228,7 @@ func (a *App) messages(w http.ResponseWriter, r *http.Request) {
 		}
 		before = n
 	}
-	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(reply_to,''),COALESCE(metadata,'{}'),created_at,edited_at
+	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(CAST(reply_to AS TEXT),''),COALESCE(metadata,'{}'),created_at,edited_at
  FROM chat.messages WHERE conversation_id=$1 AND sequence<$2 AND deleted_at IS NULL ORDER BY sequence DESC LIMIT $3`, id, before, limit)
 	if e != nil {
 		fail(w, 500, "message fetch failed")
@@ -274,7 +274,7 @@ func (a *App) syncMessages(w http.ResponseWriter, r *http.Request) {
 		after = n
 	}
 	limit := auth.ParsePositiveInt(r.URL.Query().Get("limit"), 100, 500)
-	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(reply_to,''),COALESCE(metadata,'{}'),created_at,edited_at
+	rows, e := a.db.QueryContext(r.Context(), `SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(CAST(reply_to AS TEXT),''),COALESCE(metadata,'{}'),created_at,edited_at
  FROM chat.messages WHERE conversation_id=$1 AND sequence>$2 AND deleted_at IS NULL ORDER BY sequence ASC LIMIT $3`, id, after, limit)
 	if e != nil {
 		fail(w, 500, "message sync failed")
@@ -413,10 +413,11 @@ func (a *App) sendMessage(w http.ResponseWriter, r *http.Request) {
 	var old Message
 	var oldMeta string
 	e = tx.QueryRowContext(r.Context(),
-		`SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(reply_to,''),COALESCE(metadata,'{}'),created_at
+		`SELECT id,conversation_id,sender_id,client_id,sequence,kind,body,COALESCE(CAST(reply_to AS TEXT),''),COALESCE(metadata,'{}'),created_at
 		 FROM chat.messages WHERE conversation_id=$1 AND sender_id=$2 AND client_id=$3`,
 		id, claims(r).Subject, in.ClientID).Scan(&old.ID, &old.ConversationID, &old.SenderID, &old.ClientID, &old.Sequence, &old.Kind, &old.Body, &old.ReplyTo, &oldMeta, &old.CreatedAt)
 	if e == nil {
+		old.Body = a.msgCipher.decrypt(old.Body)
 		if oldMeta != "" && oldMeta != "{}" {
 			_ = json.Unmarshal([]byte(oldMeta), &old.Metadata)
 		}

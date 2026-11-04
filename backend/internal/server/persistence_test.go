@@ -78,6 +78,9 @@ func TestKeepPersistenceAndAuthorization(t *testing.T) {
 	if st != 200 || duplicate["duplicate"] != true {
 		t.Fatalf("retry after restart: %d %v", st, duplicate)
 	}
+	if message, ok := duplicate["message"].(map[string]any); !ok || message["body"] != "persisted content" {
+		t.Fatalf("retry must return the same decrypted message body: %v", duplicate)
+	}
 	_, otherList := outsider.req("GET", "/api/v1/saved-messages", nil)
 	if len(otherList["saved_messages"].([]any)) != 0 {
 		t.Fatal("private Keep leaked")

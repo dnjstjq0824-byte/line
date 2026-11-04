@@ -164,6 +164,9 @@ func TestPostgreSQLMessagePersistence(t *testing.T) {
 		t.Fatalf("resend did not report duplicate=true: %v", second)
 	}
 	secondMsg := second["message"].(map[string]any)
+	if secondMsg["body"] != firstMsg["body"] {
+		t.Fatalf("resend returned a different body: %v vs %v", secondMsg["body"], firstMsg["body"])
+	}
 	if secondMsg["id"] != firstMsg["id"] {
 		t.Fatalf("resend minted a new message: %v vs %v", secondMsg["id"], firstMsg["id"])
 	}

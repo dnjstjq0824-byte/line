@@ -193,7 +193,7 @@ func (a *App) listSupportTickets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, e := a.db.QueryContext(r.Context(),
-		"SELECT id,contact_id,COALESCE(agent_id,''),status,priority,COALESCE(internal_note,''),created_at FROM business.support_tickets WHERE official_account_id=$1 ORDER BY created_at DESC",
+		"SELECT id,contact_id,COALESCE(CAST(agent_id AS TEXT),''),status,priority,COALESCE(internal_note,''),created_at FROM business.support_tickets WHERE official_account_id=$1 ORDER BY created_at DESC",
 		accID)
 	if e != nil {
 		fail(w, 500, "tickets unavailable")

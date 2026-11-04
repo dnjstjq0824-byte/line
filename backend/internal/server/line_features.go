@@ -76,7 +76,7 @@ func (a *App) getWallet(w http.ResponseWriter, r *http.Request) {
 	uid := claims(r).Subject
 	balance, points := a.ensureWallet(r, uid)
 	rows, e := a.db.QueryContext(r.Context(),
-		`SELECT id, kind, title, amount, COALESCE(counterpart_id,''), created_at
+		`SELECT id, kind, title, amount, COALESCE(CAST(counterpart_id AS TEXT),''), created_at
 		 FROM commerce.wallet_transactions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50`, uid)
 	txs := make([]any, 0)
 	if e == nil {

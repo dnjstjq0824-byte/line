@@ -151,7 +151,7 @@ func (a *App) refreshToken(w http.ResponseWriter, r *http.Request) {
 	var sessionID, userID, deviceID string
 	var revoked any
 	e := a.db.QueryRowContext(r.Context(),
-		"SELECT id,user_id,COALESCE(device_id,''),revoked_at FROM identity.sessions WHERE refresh_token_hash=$1 AND expires_at > now()",
+		"SELECT id,user_id,COALESCE(CAST(device_id AS TEXT),''),revoked_at FROM identity.sessions WHERE refresh_token_hash=$1 AND expires_at > now()",
 		sha256hex(in.RefreshToken)).Scan(&sessionID, &userID, &deviceID, &revoked)
 	if e != nil || revoked != nil {
 		fail(w, 401, "invalid or revoked refresh token")
@@ -288,7 +288,7 @@ func (a *App) qrPoll(w http.ResponseWriter, r *http.Request) {
 	var userID, dest, codeHash string
 	var consumed any
 	e := a.db.QueryRowContext(r.Context(),
-		"SELECT COALESCE(user_id,''),destination,code_hash,consumed_at FROM identity.verification_challenges WHERE id=$1 AND purpose='qr_login' AND expires_at > now()",
+		"SELECT COALESCE(CAST(user_id AS TEXT),''),destination,code_hash,consumed_at FROM identity.verification_challenges WHERE id=$1 AND purpose='qr_login' AND expires_at > now()",
 		in.ChallengeID).Scan(&userID, &dest, &codeHash, &consumed)
 	if e != nil || codeHash != sha256hex(in.QRToken) {
 		fail(w, 401, "invalid qr challenge")
