@@ -68,10 +68,10 @@ const MAX_ATTACHMENT_B64 = 2_000_000;
 const MAX_BODY = 20000;
 
 const BUILD_INFO = {
-  "commit": "b587897a337b29219410037acc8c373f834bae19",
-  "short_commit": "b587897",
+  "commit": "66592bb250b179f56ca1336b104a1f3f002c0f61",
+  "short_commit": "66592bb",
   "worker_version": "v2.0.0-remediated",
-  "build_time": "2026-11-04T08:52:13.120Z",
+  "build_time": "2026-11-04T15:51:00.906Z",
   "env": "production",
   "brand": "LUNO",
   "status": "ok"
