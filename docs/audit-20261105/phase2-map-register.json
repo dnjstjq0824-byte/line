@@ -1,0 +1,2863 @@
+{
+  "measuredAt": "2026-11-05T12:29:25.526Z",
+  "count": 57,
+  "maps": [
+    {
+      "name": "users",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 8,
+      "category": "cache",
+      "owner": "account",
+      "recommendedStore": "users",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map plus existing D1 paths (coverage differs by API)",
+      "restartImpact": "Requires rehydration; full path coverage must be tested",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 569,
+          "code": "for (const u of users.values()) {"
+        },
+        {
+          "line": 711,
+          "code": "const alice = users.get('alice@line-test.local');"
+        },
+        {
+          "line": 712,
+          "code": "const bob = users.get('bob@line-test.local');"
+        },
+        {
+          "line": 713,
+          "code": "const demo = users.get('user@line.local');"
+        },
+        {
+          "line": 970,
+          "code": "const alice = users.get('alice@line-test.local');"
+        },
+        {
+          "line": 971,
+          "code": "const bob = users.get('bob@line-test.local');"
+        },
+        {
+          "line": 1079,
+          "code": "let user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId) || null;"
+        },
+        {
+          "line": 1607,
+          "code": "if (h !== me.handle && Array.from(users.values()).some(u => u.handle === h)) return bad('이미 사용 중인 ID입니다', 409);"
+        },
+        {
+          "line": 1686,
+          "code": "target = Array.from(users.values()).find(u => u.handle === h);"
+        },
+        {
+          "line": 1720,
+          "code": "const found = Array.from(users.values()).filter(u => {"
+        },
+        {
+          "line": 2917,
+          "code": "const existing = users.get(row.email.toLowerCase());"
+        },
+        {
+          "line": 3112,
+          "code": "if (users.has(email)) return json({ error: 'account already exists' }, 409);"
+        },
+        {
+          "line": 3142,
+          "code": "const user = users.get(identifier) || Array.from(users.values()).find(u =>"
+        },
+        {
+          "line": 3187,
+          "code": "const user = users.get(account === 'alice' ? 'alice@line-test.local' : 'user@line.local');"
+        },
+        {
+          "line": 3222,
+          "code": "const user = Array.from(users.values()).find(u => u.phone === phone);"
+        },
+        {
+          "line": 3265,
+          "code": "const u = Array.from(users.values()).find(usr => usr.id === c.user_id);"
+        },
+        {
+          "line": 3382,
+          "code": "const f = Array.from(users.values()).find(u => u.id === u2);"
+        },
+        {
+          "line": 3398,
+          "code": "const found = Array.from(users.values())"
+        },
+        {
+          "line": 3846,
+          "code": "return json({ users: Array.from(users.values()).map(u => ({ id: u.id, email: u.email, display_name: u.display_name, role: u.role, state: u.state || 'active' })) });"
+        },
+        {
+          "line": 3852,
+          "code": "const target = Array.from(users.values()).find(u => u.id === uid);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 965,
+          "code": "users.set(s.email.toLowerCase(), s);"
+        },
+        {
+          "line": 1040,
+          "code": "users.set(row.email.toLowerCase(), u);"
+        },
+        {
+          "line": 1235,
+          "code": "users.set(p.email, u);"
+        },
+        {
+          "line": 2933,
+          "code": "users.set(row.email.toLowerCase(), u);"
+        },
+        {
+          "line": 3126,
+          "code": "users.set(email, newUser);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "sessions",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 9,
+      "category": "cache",
+      "owner": "account/device",
+      "recommendedStore": "luno_sessions",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map plus existing D1 paths (coverage differs by API)",
+      "restartImpact": "Requires rehydration; full path coverage must be tested",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 245,
+          "code": "for (const s of sessions.values()) if (s.device_id === sid) return { session_id: sid, user_id: s.user_id };"
+        },
+        {
+          "line": 278,
+          "code": "for (const s of sessions.values()) if (s.user_id === userId) {"
+        },
+        {
+          "line": 1064,
+          "code": "let session = sessions.get(token);"
+        },
+        {
+          "line": 1633,
+          "code": "const sid = sessions.get(token)?.device_id;"
+        },
+        {
+          "line": 1641,
+          "code": "return json({ devices: await listSessionsFor(myId, sessions.get(token)?.device_id) });"
+        },
+        {
+          "line": 1647,
+          "code": "const self = sessions.get(token)?.device_id === m[1];"
+        },
+        {
+          "line": 1658,
+          "code": "await revokeOtherSessions(myId, sessions.get(token)?.device_id, myId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 228,
+          "code": "sessions.set(token, { user_id: user.id, role: user.role, device_id: sessionId, created_at: created, device_name: info.device_name, platform: info.platform, ip: info.ip });"
+        },
+        {
+          "line": 1074,
+          "code": "sessions.set(token, session);"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 254,
+          "code": "for (const [tok, s] of Array.from(sessions)) if (s.device_id === sid) { sessions.delete(tok); revokedTokens.add(tok); }"
+        },
+        {
+          "line": 263,
+          "code": "if (s.user_id === userId && s.device_id !== keepSid) { sessions.delete(tok); revokedTokens.add(tok); }"
+        },
+        {
+          "line": 1070,
+          "code": "sessions.delete(token);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "qrChallenges",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 14,
+      "category": "temporary-auth",
+      "owner": "requesting device",
+      "recommendedStore": "auth_challenges with TTL",
+      "priority": "P1",
+      "lifetime": "Request/connection or bounded TTL; history separately where required",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3246,
+          "code": "const c = qrChallenges.get(body.challenge_id);"
+        },
+        {
+          "line": 3258,
+          "code": "const c = qrChallenges.get(body.challenge_id);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3239,
+          "code": "qrChallenges.set(challId, { token: qrToken, status: 'pending', user_id: null, created_at: Date.now() });"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 3249,
+          "code": "qrChallenges.delete(body.challenge_id);"
+        },
+        {
+          "line": 3261,
+          "code": "qrChallenges.delete(body.challenge_id);"
+        },
+        {
+          "line": 3267,
+          "code": "qrChallenges.delete(body.challenge_id); // Invalidate immediately upon consumption"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "phoneVerificationCodes",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 15,
+      "category": "temporary-auth",
+      "owner": "phone owner",
+      "recommendedStore": "auth_challenges hash + TTL + attempts",
+      "priority": "P1",
+      "lifetime": "Request/connection or bounded TTL; history separately where required",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3216,
+          "code": "const entry = phoneVerificationCodes.get(phone);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3209,
+          "code": "phoneVerificationCodes.set(phone, { code, expires_at: Date.now() + 180000 });"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 3221,
+          "code": "phoneVerificationCodes.delete(phone);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "friendships",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 16,
+      "category": "user-state",
+      "owner": "user pair",
+      "recommendedStore": "friends",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 616,
+          "code": "function isFriend(a, b) { return friendships.has(`${a}:${b}`); }"
+        },
+        {
+          "line": 619,
+          "code": "for (const key of friendships.keys()) {"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 721,
+          "code": "friendships.set(`${demo.id}:${alice.id}`, true);"
+        },
+        {
+          "line": 722,
+          "code": "friendships.set(`${alice.id}:${demo.id}`, true);"
+        },
+        {
+          "line": 723,
+          "code": "friendships.set(`${demo.id}:${bob.id}`, true);"
+        },
+        {
+          "line": 724,
+          "code": "friendships.set(`${bob.id}:${demo.id}`, true);"
+        },
+        {
+          "line": 972,
+          "code": "friendships.set(`${alice.id}:${bob.id}`, true);"
+        },
+        {
+          "line": 973,
+          "code": "friendships.set(`${bob.id}:${alice.id}`, true);"
+        },
+        {
+          "line": 1262,
+          "code": "friendships.set(`${userId}:${p.id}`, true);"
+        },
+        {
+          "line": 1263,
+          "code": "friendships.set(`${p.id}:${userId}`, true);"
+        },
+        {
+          "line": 1692,
+          "code": "friendships.set(`${myId}:${target.id}`, true);"
+        },
+        {
+          "line": 1693,
+          "code": "friendships.set(`${target.id}:${myId}`, true);"
+        },
+        {
+          "line": 1796,
+          "code": "friendships.set(`${myId}:${id}`, true);"
+        },
+        {
+          "line": 1797,
+          "code": "friendships.set(`${id}:${myId}`, true);"
+        },
+        {
+          "line": 2940,
+          "code": "friendships.set(`${f.user_id}:${f.friend_id}`, true);"
+        },
+        {
+          "line": 2941,
+          "code": "friendships.set(`${f.friend_id}:${f.user_id}`, true);"
+        },
+        {
+          "line": 3391,
+          "code": "friendships.set(`${authUser.id}:${targetId}`, true);"
+        },
+        {
+          "line": 3392,
+          "code": "friendships.set(`${targetId}:${authUser.id}`, true);"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 1709,
+          "code": "friendships.delete(`${myId}:${fid}`);"
+        },
+        {
+          "line": 1710,
+          "code": "friendships.delete(`${fid}:${myId}`);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "conversations",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 17,
+      "category": "business",
+      "owner": "conversation members",
+      "recommendedStore": "luno_conversations",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map; new local opt-in D1 path for user direct/group metadata",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 303,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 336,
+          "code": "const cids = Array.from(conversations.values()).filter(c => c.members.includes(userId)).map(c => c.id);"
+        },
+        {
+          "line": 375,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 632,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 656,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 672,
+          "code": "if (conversations.get(cid)?._durable) return await pushPersistent(cid, conversations.get(cid).owner_id, { kind: 'system', body });"
+        },
+        {
+          "line": 811,
+          "code": "const conv = conversations.get('00000000-0000-0000-0000-000000000010');"
+        },
+        {
+          "line": 879,
+          "code": "const conversation = conversations.get(conversationId);"
+        },
+        {
+          "line": 904,
+          "code": "const conversation = conversations.get(conversationId);"
+        },
+        {
+          "line": 1108,
+          "code": "for (const c of conversations.values()) {"
+        },
+        {
+          "line": 1121,
+          "code": "if (!durableConversationsEnabled()) return conversations.get(cid);"
+        },
+        {
+          "line": 1123,
+          "code": "if (!row) { if (conversations.get(cid)?._durable) conversations.delete(cid); return conversations.get(cid); }"
+        },
+        {
+          "line": 1126,
+          "code": "const previous = conversations.get(cid);"
+        },
+        {
+          "line": 1135,
+          "code": "for (const conv of conversations.values()) if (conv._durable && conv.members.includes(userId) && !ids.has(conv.id)) conv.members = conv.members.filter(id => id !== userId);"
+        },
+        {
+          "line": 1268,
+          "code": "if (!conversations.has(keepCid)) {"
+        },
+        {
+          "line": 1285,
+          "code": "if (!conversations.has(secCid)) {"
+        },
+        {
+          "line": 1334,
+          "code": "if (!conversations.has(kCid)) {"
+        },
+        {
+          "line": 1358,
+          "code": "if (!conversations.has(dodoCid)) {"
+        },
+        {
+          "line": 1376,
+          "code": "if (!conversations.has(careCid)) {"
+        },
+        {
+          "line": 1392,
+          "code": "if (!conversations.has(nunsineeCid)) {"
+        },
+        {
+          "line": 1409,
+          "code": "if (!conversations.has(spasdreamCid)) {"
+        },
+        {
+          "line": 1426,
+          "code": "if (!conversations.has(tongggCid)) {"
+        },
+        {
+          "line": 1443,
+          "code": "if (!conversations.has(bbiwCid)) {"
+        },
+        {
+          "line": 1460,
+          "code": "if (!conversations.has(hcCid)) {"
+        },
+        {
+          "line": 1477,
+          "code": "if (!conversations.has(breezyCid)) {"
+        },
+        {
+          "line": 1494,
+          "code": "if (!conversations.has(grpCid)) {"
+        },
+        {
+          "line": 1513,
+          "code": "if (!conversations.has(daechulCid)) {"
+        },
+        {
+          "line": 1530,
+          "code": "if (!conversations.has(tukCid)) {"
+        },
+        {
+          "line": 1547,
+          "code": "if (!conversations.has(woralakCid)) {"
+        },
+        {
+          "line": 1763,
+          "code": "for (const conv of conversations.values()) {"
+        },
+        {
+          "line": 1778,
+          "code": "const list = Array.from(conversations.values()).filter(c => c.members.includes(myId))"
+        },
+        {
+          "line": 1822,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 1858,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 1876,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 1892,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2031,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 2049,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2058,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2077,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 2084,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 2096,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 2108,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2125,
+          "code": "if (!poll || !conversations.get(poll.conversation_id)?.members.includes(myId)) return bad('투표를 찾을 수 없습니다', 404);"
+        },
+        {
+          "line": 2140,
+          "code": "if (!poll || !conversations.get(poll.conversation_id)?.members.includes(myId)) return bad('투표를 찾을 수 없습니다', 404);"
+        },
+        {
+          "line": 2148,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2163,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 2174,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2193,
+          "code": "const conv = conversations.get(resolveConversationId(m[1], myId));"
+        },
+        {
+          "line": 2204,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2223,
+          "code": "const conv = conversations.get(b.conversation_id);"
+        },
+        {
+          "line": 2235,
+          "code": "if (!att || !conversations.get(att.conversation_id)?.members.includes(myId)) return bad('파일을 찾을 수 없습니다', 404);"
+        },
+        {
+          "line": 2255,
+          "code": "const conv = conversations.get(b.conversation_id);"
+        },
+        {
+          "line": 2286,
+          "code": "const conv = conversations.get(c.conversation_id);"
+        },
+        {
+          "line": 2293,
+          "code": "for (const conv of conversations.values()) {"
+        },
+        {
+          "line": 2555,
+          "code": "const mine = Array.from(conversations.values()).filter(c => c.members.includes(myId));"
+        },
+        {
+          "line": 2649,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 2838,
+          "code": "const mine = Array.from(conversations.values()).filter(c => c.members.includes(myId));"
+        },
+        {
+          "line": 3339,
+          "code": "const conversation = conversations.get(resolvedCid);"
+        },
+        {
+          "line": 3347,
+          "code": "if (!call || !conversations.get(call.conversation_id)?.members.includes(authUser.id)) {"
+        },
+        {
+          "line": 3407,
+          "code": "const list = Array.from(conversations.values())"
+        },
+        {
+          "line": 3442,
+          "code": "const conv = conversations.get(cid);"
+        },
+        {
+          "line": 3503,
+          "code": "return json({ messages: mlist, last_sequence: (conversations.get(cid) || {}).last_sequence || 0 });"
+        },
+        {
+          "line": 3577,
+          "code": "if (!poll || !conversations.get(poll.conversation_id)?.members.includes(authUser.id)) {"
+        },
+        {
+          "line": 3632,
+          "code": "if (!conversations.get(body.conversation_id)?.members.includes(authUser.id)) {"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 977,
+          "code": "conversations.set(convId, {"
+        },
+        {
+          "line": 1115,
+          "code": "conversations.set(c.id, c);"
+        },
+        {
+          "line": 1128,
+          "code": "conversations.set(cid, conv);"
+        },
+        {
+          "line": 1269,
+          "code": "conversations.set(keepCid, {"
+        },
+        {
+          "line": 1286,
+          "code": "conversations.set(secCid, {"
+        },
+        {
+          "line": 1335,
+          "code": "conversations.set(kCid, {"
+        },
+        {
+          "line": 1359,
+          "code": "conversations.set(dodoCid, {"
+        },
+        {
+          "line": 1377,
+          "code": "conversations.set(careCid, {"
+        },
+        {
+          "line": 1393,
+          "code": "conversations.set(nunsineeCid, {"
+        },
+        {
+          "line": 1410,
+          "code": "conversations.set(spasdreamCid, {"
+        },
+        {
+          "line": 1427,
+          "code": "conversations.set(tongggCid, {"
+        },
+        {
+          "line": 1444,
+          "code": "conversations.set(bbiwCid, {"
+        },
+        {
+          "line": 1461,
+          "code": "conversations.set(hcCid, {"
+        },
+        {
+          "line": 1478,
+          "code": "conversations.set(breezyCid, {"
+        },
+        {
+          "line": 1495,
+          "code": "conversations.set(grpCid, {"
+        },
+        {
+          "line": 1514,
+          "code": "conversations.set(daechulCid, {"
+        },
+        {
+          "line": 1531,
+          "code": "conversations.set(tukCid, {"
+        },
+        {
+          "line": 1548,
+          "code": "conversations.set(woralakCid, {"
+        },
+        {
+          "line": 3431,
+          "code": "conversations.set(cid, newConv);"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 1123,
+          "code": "if (!row) { if (conversations.get(cid)?._durable) conversations.delete(cid); return conversations.get(cid); }"
+        },
+        {
+          "line": 1124,
+          "code": "if (row.deleted_at) { conversations.delete(cid); return null; }"
+        },
+        {
+          "line": 2870,
+          "code": "conversations.delete(conv.id);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "messages",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 18,
+      "category": "cache",
+      "owner": "conversation members",
+      "recommendedStore": "luno_messages",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map plus existing D1 paths (coverage differs by API)",
+      "restartImpact": "Requires rehydration; full path coverage must be tested",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 304,
+          "code": "const keep = (messages.get(cid) || []).filter(m => !m.persisted);"
+        },
+        {
+          "line": 374,
+          "code": "messages.set(cid, (messages.get(cid) || []).filter(m => m.id !== msg.id));"
+        },
+        {
+          "line": 394,
+          "code": "const real = (messages.get(cid) || []).filter(m => m.kind === 'security_notice' && m.metadata && m.metadata.session_id);"
+        },
+        {
+          "line": 397,
+          "code": "messages.set(cid, (messages.get(cid) || []).filter(m => !drop.has(m.id)));"
+        },
+        {
+          "line": 641,
+          "code": "const orig = (messages.get(cid) || []).find(m => m.id === msg.reply_to);"
+        },
+        {
+          "line": 648,
+          "code": "return (messages.get(cid) || []).filter(m => m.sequence > cursor && m.sender_id !== userId && !m.unsent && m.kind !== 'system').length;"
+        },
+        {
+          "line": 652,
+          "code": "return (messages.get(cid) || []).some(m => m.sequence > cursor && m.sender_id !== userId && !m.unsent &&"
+        },
+        {
+          "line": 664,
+          "code": "const list = messages.get(cid) || [];"
+        },
+        {
+          "line": 676,
+          "code": "const list = messages.get(conv.id) || [];"
+        },
+        {
+          "line": 1846,
+          "code": "(messages.get(conv.id) || []).forEach(x => hs.add(x.id));"
+        },
+        {
+          "line": 1899,
+          "code": "let list = (messages.get(cid) || []).filter(x => !(hs && hs.has(x.id)));"
+        },
+        {
+          "line": 1913,
+          "code": "const dup = (messages.get(cid) || []).find(x => x.client_id === b.client_id && x.sender_id === myId);"
+        },
+        {
+          "line": 1965,
+          "code": "if (!(messages.get(cid) || []).some(x => x.id === b.reply_to)) return bad('답장할 메시지를 찾을 수 없습니다', 404);"
+        },
+        {
+          "line": 1981,
+          "code": "const list = messages.get(cid) || [];"
+        },
+        {
+          "line": 2016,
+          "code": "if (!(messages.get(cid) || []).some(x => x.id === mid && !x.unsent)) return bad('메시지를 찾을 수 없습니다', 404);"
+        },
+        {
+          "line": 2062,
+          "code": "const src = (messages.get(cid) || []).find(y => y.id === x.message_id);"
+        },
+        {
+          "line": 2068,
+          "code": "const src = (messages.get(cid) || []).find(y => y.id === b.message_id && !y.unsent);"
+        },
+        {
+          "line": 2088,
+          "code": "const list = (messages.get(m[1]) || []).filter(x => !x.unsent && !(hs && hs.has(x.id)));"
+        },
+        {
+          "line": 2101,
+          "code": "const out = (messages.get(m[1]) || []).filter(x => !x.unsent && x.kind !== 'sticker' && !(hs && hs.has(x.id)) && String(x.body).toLowerCase().includes(q));"
+        },
+        {
+          "line": 2297,
+          "code": "for (const msg of messages.get(conv.id) || []) {"
+        },
+        {
+          "line": 2560,
+          "code": "for (const x of messages.get(c.id) || []) {"
+        },
+        {
+          "line": 2585,
+          "code": "messages: Array.from(messages.values()).reduce((n, l) => n + l.length, 0),"
+        },
+        {
+          "line": 2659,
+          "code": "delta = (messages.get(cid) || []).filter(x => x.sequence > since).sort((a, b) => a.sequence - b.sequence);"
+        },
+        {
+          "line": 2841,
+          "code": "for (const m of messages.get(c.id) || []) {"
+        },
+        {
+          "line": 3459,
+          "code": "const mlist = messages.get(cid) || [];"
+        },
+        {
+          "line": 3476,
+          "code": "const mlist = messages.get(cid) || [];"
+        },
+        {
+          "line": 3502,
+          "code": "const mlist = (messages.get(cid) || []).filter(m => m.sequence > after);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 306,
+          "code": "messages.set(cid, list);"
+        },
+        {
+          "line": 374,
+          "code": "messages.set(cid, (messages.get(cid) || []).filter(m => m.id !== msg.id));"
+        },
+        {
+          "line": 397,
+          "code": "messages.set(cid, (messages.get(cid) || []).filter(m => !drop.has(m.id)));"
+        },
+        {
+          "line": 666,
+          "code": "messages.set(cid, list);"
+        },
+        {
+          "line": 985,
+          "code": "messages.set(convId, ["
+        },
+        {
+          "line": 1116,
+          "code": "messages.set(c.id, []);"
+        },
+        {
+          "line": 1277,
+          "code": "messages.set(keepCid, ["
+        },
+        {
+          "line": 1296,
+          "code": "messages.set(secCid, ["
+        },
+        {
+          "line": 1343,
+          "code": "messages.set(kCid, ["
+        },
+        {
+          "line": 1368,
+          "code": "messages.set(dodoCid, ["
+        },
+        {
+          "line": 1385,
+          "code": "messages.set(careCid, ["
+        },
+        {
+          "line": 1401,
+          "code": "messages.set(nunsineeCid, ["
+        },
+        {
+          "line": 1418,
+          "code": "messages.set(spasdreamCid, ["
+        },
+        {
+          "line": 1435,
+          "code": "messages.set(tongggCid, ["
+        },
+        {
+          "line": 1452,
+          "code": "messages.set(bbiwCid, ["
+        },
+        {
+          "line": 1469,
+          "code": "messages.set(hcCid, ["
+        },
+        {
+          "line": 1486,
+          "code": "messages.set(breezyCid, ["
+        },
+        {
+          "line": 1504,
+          "code": "messages.set(grpCid, ["
+        },
+        {
+          "line": 1522,
+          "code": "messages.set(daechulCid, ["
+        },
+        {
+          "line": 1539,
+          "code": "messages.set(tukCid, ["
+        },
+        {
+          "line": 1556,
+          "code": "messages.set(woralakCid, ["
+        },
+        {
+          "line": 3432,
+          "code": "messages.set(cid, []);"
+        },
+        {
+          "line": 3461,
+          "code": "messages.set(cid, mlist);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "callSessions",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 19,
+      "category": "temporary-connection",
+      "owner": "call participants",
+      "recommendedStore": "durable call state + call history",
+      "priority": "P1",
+      "lifetime": "Request/connection or bounded TTL; history separately where required",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": false,
+      "readReferences": [
+        {
+          "line": 878,
+          "code": "const conversationId = payload.conversation_id || callSessions.get(payload.call_id)?.conversation_id;"
+        },
+        {
+          "line": 903,
+          "code": "const conversationId = payload.conversation_id || callSessions.get(payload.call_id)?.conversation_id;"
+        },
+        {
+          "line": 2285,
+          "code": "for (const c of callSessions.values()) {"
+        },
+        {
+          "line": 2319,
+          "code": "const call = callSessions.get(m[1]);"
+        },
+        {
+          "line": 3346,
+          "code": "const call = callSessions.get(callPath[1]);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2259,
+          "code": "callSessions.set(call.id, call);"
+        },
+        {
+          "line": 3636,
+          "code": "callSessions.set(callId, { id: callId, conversation_id: body.conversation_id, kind: body.kind || 'video', state: 'ringing' });"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "storeOrders",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 20,
+      "category": "business",
+      "owner": "buyer",
+      "recommendedStore": "orders + ledger (provider gated)",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [
+        {
+          "line": 2483,
+          "code": "storeOrders.set(orderId, { id: orderId, buyer: myId, amount: item.price_minor });"
+        },
+        {
+          "line": 3692,
+          "code": "storeOrders.set(orderId, { id: orderId, buyer: authUser.id, amount: body.price_minor || 1000 });"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "pinnedMessages",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 21,
+      "category": "user-state",
+      "owner": "conversation",
+      "recommendedStore": "message_pins",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2002,
+          "code": "const pins = pinnedMessages.get(cid);"
+        },
+        {
+          "line": 2060,
+          "code": "const pins = pinnedMessages.get(cid) || [];"
+        },
+        {
+          "line": 2079,
+          "code": "pinnedMessages.set(m[1], (pinnedMessages.get(m[1]) || []).filter(x => x.message_id !== m[2]));"
+        },
+        {
+          "line": 3547,
+          "code": "const pinList = pinnedMessages.get(cid) || [];"
+        },
+        {
+          "line": 3553,
+          "code": "return json({ pins: pinnedMessages.get(cid) || [] });"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2003,
+          "code": "if (pins) pinnedMessages.set(cid, pins.filter(x => x.message_id !== msg.id));"
+        },
+        {
+          "line": 2071,
+          "code": "pinnedMessages.set(cid, pins);"
+        },
+        {
+          "line": 2079,
+          "code": "pinnedMessages.set(m[1], (pinnedMessages.get(m[1]) || []).filter(x => x.message_id !== m[2]));"
+        },
+        {
+          "line": 3549,
+          "code": "pinnedMessages.set(cid, pinList);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "polls",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 22,
+      "category": "business",
+      "owner": "conversation",
+      "recommendedStore": "polls",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2110,
+          "code": "if (method === 'GET') return json({ polls: Array.from(polls.values()).filter(x => x.conversation_id === cid).map(x => pollView(x, myId)) });"
+        },
+        {
+          "line": 2124,
+          "code": "const poll = polls.get(m[1]);"
+        },
+        {
+          "line": 2139,
+          "code": "const poll = polls.get(m[1]);"
+        },
+        {
+          "line": 3576,
+          "code": "const poll = polls.get(pollVoteMatch[1]);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2117,
+          "code": "polls.set(poll.id, poll);"
+        },
+        {
+          "line": 3570,
+          "code": "polls.set(pollId, poll);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "pollVotes",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 23,
+      "category": "user-state",
+      "owner": "voter",
+      "recommendedStore": "poll_votes",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "albums",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 24,
+      "category": "business",
+      "owner": "conversation",
+      "recommendedStore": "albums + album_items",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2206,
+          "code": "const list = albums.get(cid) || [];"
+        },
+        {
+          "line": 3592,
+          "code": "const alist = albums.get(cid) || [];"
+        },
+        {
+          "line": 3599,
+          "code": "return json({ albums: albums.get(cid) || [] });"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2215,
+          "code": "albums.set(cid, list);"
+        },
+        {
+          "line": 3595,
+          "code": "albums.set(cid, alist);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "savedMessages",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 25,
+      "category": "user-state",
+      "owner": "account",
+      "recommendedStore": "saved_messages",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3608,
+          "code": "const slist = savedMessages.get(authUser.id) || [];"
+        },
+        {
+          "line": 3616,
+          "code": "return json({ saved_messages: savedMessages.get(authUser.id) || [] });"
+        },
+        {
+          "line": 3622,
+          "code": "let slist = savedMessages.get(authUser.id) || [];"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3611,
+          "code": "savedMessages.set(authUser.id, slist);"
+        },
+        {
+          "line": 3624,
+          "code": "savedMessages.set(authUser.id, slist);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "communityRooms",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 26,
+      "category": "business",
+      "owner": "room owner",
+      "recommendedStore": "community_rooms",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 881,
+          "code": "if (payload.room_id && communityRooms.get(payload.room_id)?.visibility === 'public') {"
+        },
+        {
+          "line": 905,
+          "code": "const publicRoom = payload.room_id && communityRooms.get(payload.room_id)?.visibility === 'public';"
+        },
+        {
+          "line": 2492,
+          "code": "const rooms = Array.from(communityRooms.values()).filter(r => !q || r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q))"
+        },
+        {
+          "line": 2508,
+          "code": "const room = communityRooms.get(m[1]);"
+        },
+        {
+          "line": 2521,
+          "code": "const room = communityRooms.get(m[1]);"
+        },
+        {
+          "line": 3699,
+          "code": "return json({ rooms: Array.from(communityRooms.values()) });"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 999,
+          "code": "communityRooms.set('room-1', {"
+        },
+        {
+          "line": 2501,
+          "code": "communityRooms.set(room.id, room);"
+        },
+        {
+          "line": 3705,
+          "code": "communityRooms.set(rid, room);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "communityPosts",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 27,
+      "category": "business",
+      "owner": "author/room",
+      "recommendedStore": "community_posts",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2525,
+          "code": "if (method === 'GET') return json({ posts: (communityPosts.get(room.id) || []).slice(0, 200).map(view), joined: members.has(myId), nickname: members.get(myId) || '' });"
+        },
+        {
+          "line": 2532,
+          "code": "const list = communityPosts.get(room.id) || [];"
+        },
+        {
+          "line": 2542,
+          "code": "const post = (communityPosts.get(m[1]) || []).find(x => x.id === m[2]);"
+        },
+        {
+          "line": 3714,
+          "code": "return json({ posts: communityPosts.get(rid) || [] });"
+        },
+        {
+          "line": 3720,
+          "code": "const plist = communityPosts.get(rid) || [];"
+        },
+        {
+          "line": 3730,
+          "code": "const plist = communityPosts.get(rid) || [];"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 1006,
+          "code": "communityPosts.set('room-1', ["
+        },
+        {
+          "line": 2502,
+          "code": "communityPosts.set(room.id, []);"
+        },
+        {
+          "line": 2534,
+          "code": "communityPosts.set(room.id, list);"
+        },
+        {
+          "line": 3706,
+          "code": "communityPosts.set(rid, []);"
+        },
+        {
+          "line": 3722,
+          "code": "communityPosts.set(rid, plist);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "partnerOrgs",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 28,
+      "category": "business",
+      "owner": "organization",
+      "recommendedStore": "organizations",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3284,
+          "code": "const organization = account && partnerOrgs.get(account.org_id);"
+        },
+        {
+          "line": 3751,
+          "code": "return json({ organizations: Array.from(partnerOrgs.values()).filter(org => authUser.role === 'admin' || org.owner_id === authUser.id) });"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3746,
+          "code": "partnerOrgs.set(orgId, org);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "partnerAccounts",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 29,
+      "category": "business",
+      "owner": "organization",
+      "recommendedStore": "official_accounts",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3283,
+          "code": "const account = partnerAccounts.get(partnerAccountRoute[1]);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3748,
+          "code": "partnerAccounts.set(accId, { id: accId, org_id: orgId, name: `${org.name} Official`, status: 'active' });"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "partnerTickets",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 30,
+      "category": "business",
+      "owner": "organization/customer",
+      "recommendedStore": "crm_tickets",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3760,
+          "code": "const tlist = partnerTickets.get(aid) || [];"
+        },
+        {
+          "line": 3765,
+          "code": "return json({ tickets: partnerTickets.get(aid) || [] });"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3762,
+          "code": "partnerTickets.set(aid, tlist);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "partnerCampaigns",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 31,
+      "category": "business",
+      "owner": "organization",
+      "recommendedStore": "partner_campaigns",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "oaBotRules",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 32,
+      "category": "operational-config",
+      "owner": "official account",
+      "recommendedStore": "bot_rules",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 697,
+          "code": "const rules = (typeof oaBotRules !== 'undefined' && oaBotRules.get(account.id)) || [];"
+        },
+        {
+          "line": 2793,
+          "code": "return json({ rules: oaBotRules.get(aid) || [] });"
+        },
+        {
+          "line": 2801,
+          "code": "const rules = oaBotRules.get(aid) || [];"
+        },
+        {
+          "line": 2810,
+          "code": "let rules = oaBotRules.get(aid) || [];"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 774,
+          "code": "oaBotRules.set('oa-notice', ["
+        },
+        {
+          "line": 782,
+          "code": "oaBotRules.set('oa-weather', ["
+        },
+        {
+          "line": 788,
+          "code": "oaBotRules.set('oa-deals', ["
+        },
+        {
+          "line": 2804,
+          "code": "oaBotRules.set(aid, rules);"
+        },
+        {
+          "line": 2812,
+          "code": "oaBotRules.set(aid, rules);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "devOrgs",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 33,
+      "category": "business",
+      "owner": "organization",
+      "recommendedStore": "organizations + memberships",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "devApps",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 34,
+      "category": "business",
+      "owner": "owner/organization",
+      "recommendedStore": "developer_apps",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3788,
+          "code": "return json({ apps: Array.from(devApps.values()).filter(app => authUser.role === 'admin' || app.owner_id === authUser.id).map(({ client_secret, client_secret_hash, ...visible }) => visible) });"
+        },
+        {
+          "line": 3792,
+          "code": "const app = devApps.get(devWebMatch[1]);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3784,
+          "code": "devApps.set(app.id, app);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "devWebhooks",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 35,
+      "category": "operational-config",
+      "owner": "app owner",
+      "recommendedStore": "webhook_configs + delivery_outbox",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "devMiniApps",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 36,
+      "category": "business",
+      "owner": "app owner",
+      "recommendedStore": "developer_miniapps",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "creatorProfiles",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 37,
+      "category": "business",
+      "owner": "creator",
+      "recommendedStore": "creator_profiles",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "creatorPacks",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 38,
+      "category": "business",
+      "owner": "creator",
+      "recommendedStore": "creator_packs",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3809,
+          "code": "return json({ packs: Array.from(creatorPacks.values()) });"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3806,
+          "code": "creatorPacks.set(pack.id, pack);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "creatorItems",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 39,
+      "category": "business",
+      "owner": "creator/pack",
+      "recommendedStore": "creator_items",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "adsAdvertisers",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 40,
+      "category": "business",
+      "owner": "advertiser",
+      "recommendedStore": "advertisers",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "adsCampaigns",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 41,
+      "category": "business",
+      "owner": "advertiser",
+      "recommendedStore": "ad_campaigns",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 3826,
+          "code": "return json({ campaigns: Array.from(adsCampaigns.values()) });"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3823,
+          "code": "adsCampaigns.set(camp.id, camp);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "adsGroups",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 42,
+      "category": "business",
+      "owner": "advertiser/campaign",
+      "recommendedStore": "ad_groups",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "activeSockets",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 44,
+      "category": "temporary-connection",
+      "owner": "device/user",
+      "recommendedStore": "USER_HUB runtime, not SQL socket objects",
+      "priority": "P0",
+      "lifetime": "Request/connection or bounded TTL; history separately where required",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": false,
+      "readReferences": [],
+      "writeReferences": [
+        {
+          "line": 3088,
+          "code": "activeSockets.set(server, grant.userId);"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 895,
+          "code": "activeSockets.delete(ws);"
+        },
+        {
+          "line": 912,
+          "code": "activeSockets.delete(ws);"
+        },
+        {
+          "line": 1093,
+          "code": "try { ws.send(msg); } catch { activeSockets.delete(ws); }"
+        },
+        {
+          "line": 3098,
+          "code": "activeSockets.delete(server);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "wsTickets",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 45,
+      "category": "cache",
+      "owner": "session/device",
+      "recommendedStore": "luno_ws_tickets (one-use + TTL)",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map plus existing D1 paths (coverage differs by API)",
+      "restartImpact": "Requires rehydration; full path coverage must be tested",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 206,
+          "code": "const local = wsTickets.get(ticket);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 3326,
+          "code": "wsTickets.set(ticket, { userId: authUser.id, expiresAt: ticketExpiresAt });"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 196,
+          "code": "wsTickets.delete(ticket);"
+        },
+        {
+          "line": 208,
+          "code": "wsTickets.delete(ticket);"
+        },
+        {
+          "line": 3322,
+          "code": "if (grant.expiresAt <= Date.now()) wsTickets.delete(key);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "usersById",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 48,
+      "category": "cache",
+      "owner": "account",
+      "recommendedStore": "users",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map plus existing D1 paths (coverage differs by API)",
+      "restartImpact": "Requires rehydration; full path coverage must be tested",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 588,
+          "code": "return publicUser(usersById.get(id));"
+        },
+        {
+          "line": 1079,
+          "code": "let user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId) || null;"
+        },
+        {
+          "line": 1228,
+          "code": "if (!usersById.has(p.id)) {"
+        },
+        {
+          "line": 1673,
+          "code": "const u = usersById.get(id);"
+        },
+        {
+          "line": 1683,
+          "code": "if (b.friend_id || b.target_user_id) target = usersById.get(b.friend_id || b.target_user_id);"
+        },
+        {
+          "line": 1728,
+          "code": "const u = usersById.get(m[1]);"
+        },
+        {
+          "line": 1792,
+          "code": "const u = isOA ? officialAccounts.get(id) : (usersById.get(id) || await loadUserFromD1(id));"
+        },
+        {
+          "line": 1807,
+          "code": "const targetUser = !isOA ? usersById.get(ids[0]) : null;"
+        },
+        {
+          "line": 1864,
+          "code": "const u = usersById.get(id);"
+        },
+        {
+          "line": 1881,
+          "code": "const target = usersById.get(m[2]);"
+        },
+        {
+          "line": 1939,
+          "code": "const u = usersById.get(meta.user_id);"
+        },
+        {
+          "line": 2283,
+          "code": "const peerColor = id => usersById.get(id)?.avatar_color || officialAccounts.get(id)?.color || '#06c755';"
+        },
+        {
+          "line": 2565,
+          "code": "const friendsFound = friendIds(myId).map(id => usersById.get(id)).filter(u => u && (u.display_name.toLowerCase().includes(q) || u.handle === q)).map(publicUser);"
+        },
+        {
+          "line": 2573,
+          "code": "if (!usersById.has(b.subject_user_id) || category.length < 3) return bad('신고 정보가 올바르지 않습니다');"
+        },
+        {
+          "line": 2603,
+          "code": "const target = usersById.get(uidTarget);"
+        },
+        {
+          "line": 2849,
+          "code": "friends: friendIds(myId).map(id => publicUser(usersById.get(id))),"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 719,
+          "code": "usersById.set(u.id, u);"
+        },
+        {
+          "line": 966,
+          "code": "usersById.set(s.id, s);"
+        },
+        {
+          "line": 1041,
+          "code": "usersById.set(u.id, u);"
+        },
+        {
+          "line": 1236,
+          "code": "usersById.set(p.id, u);"
+        },
+        {
+          "line": 2934,
+          "code": "usersById.set(u.id, u);"
+        },
+        {
+          "line": 3127,
+          "code": "usersById.set(newUser.id, newUser);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "userPrefs",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 49,
+      "category": "user-state",
+      "owner": "account",
+      "recommendedStore": "user_preferences",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 591,
+          "code": "if (!userPrefs.has(userId)) userPrefs.set(userId, { ...DEFAULT_PREFS });"
+        },
+        {
+          "line": 592,
+          "code": "return userPrefs.get(userId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 591,
+          "code": "if (!userPrefs.has(userId)) userPrefs.set(userId, { ...DEFAULT_PREFS });"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "friendMeta",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 50,
+      "category": "user-state",
+      "owner": "account/friend",
+      "recommendedStore": "friend_preferences",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 608,
+          "code": "if (!friendMeta.has(k)) friendMeta.set(k, { favorite: false, hidden: false, blocked: false, nickname: '' });"
+        },
+        {
+          "line": 609,
+          "code": "return friendMeta.get(k);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 608,
+          "code": "if (!friendMeta.has(k)) friendMeta.set(k, { favorite: false, hidden: false, blocked: false, nickname: '' });"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 1711,
+          "code": "friendMeta.delete(`${myId}:${fid}`);"
+        },
+        {
+          "line": 1712,
+          "code": "friendMeta.delete(`${fid}:${myId}`);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "chatMeta",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 51,
+      "category": "user-state",
+      "owner": "account/conversation",
+      "recommendedStore": "conversation_preferences",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 613,
+          "code": "if (!chatMeta.has(k)) chatMeta.set(k, { pinned: false, muted: false, hidden: false });"
+        },
+        {
+          "line": 614,
+          "code": "return chatMeta.get(k);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 613,
+          "code": "if (!chatMeta.has(k)) chatMeta.set(k, { pinned: false, muted: false, hidden: false });"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "readCursors",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 52,
+      "category": "cache",
+      "owner": "account/conversation",
+      "recommendedStore": "luno_read_cursors",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map plus existing D1 paths (coverage differs by API)",
+      "restartImpact": "Requires rehydration; full path coverage must be tested",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 328,
+          "code": "if (r.sequence > (readCursors.get(key) || 0)) readCursors.set(key, r.sequence);"
+        },
+        {
+          "line": 634,
+          "code": ".map(m => readCursors.get(`${cid}:${m}`) || 0);"
+        },
+        {
+          "line": 647,
+          "code": "const cursor = readCursors.get(`${cid}:${userId}`) || 0;"
+        },
+        {
+          "line": 651,
+          "code": "const cursor = readCursors.get(`${cid}:${userId}`) || 0;"
+        },
+        {
+          "line": 667,
+          "code": "if (!officialAccounts.has(senderId)) readCursors.set(`${cid}:${senderId}`, msg.sequence);"
+        },
+        {
+          "line": 1766,
+          "code": "if (seq > (readCursors.get(`${conv.id}:${myId}`) || 0)) readCursors.set(`${conv.id}:${myId}`, seq);"
+        },
+        {
+          "line": 2037,
+          "code": "const next = Math.max(readCursors.get(key) || 0, Math.min(seq, conv.last_sequence || 0));"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 328,
+          "code": "if (r.sequence > (readCursors.get(key) || 0)) readCursors.set(key, r.sequence);"
+        },
+        {
+          "line": 667,
+          "code": "if (!officialAccounts.has(senderId)) readCursors.set(`${cid}:${senderId}`, msg.sequence);"
+        },
+        {
+          "line": 813,
+          "code": "readCursors.set(`${conv.id}:${alice.id}`, 1);"
+        },
+        {
+          "line": 1371,
+          "code": "readCursors.set(`${dodoCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1404,
+          "code": "readCursors.set(`${nunsineeCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1421,
+          "code": "readCursors.set(`${spasdreamCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1438,
+          "code": "readCursors.set(`${tongggCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1455,
+          "code": "readCursors.set(`${bbiwCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1472,
+          "code": "readCursors.set(`${hcCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1489,
+          "code": "readCursors.set(`${breezyCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1508,
+          "code": "readCursors.set(`${grpCid}:${userId}`, 2);"
+        },
+        {
+          "line": 1525,
+          "code": "readCursors.set(`${daechulCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1542,
+          "code": "readCursors.set(`${tukCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1559,
+          "code": "readCursors.set(`${woralakCid}:${userId}`, 1);"
+        },
+        {
+          "line": 1766,
+          "code": "if (seq > (readCursors.get(`${conv.id}:${myId}`) || 0)) readCursors.set(`${conv.id}:${myId}`, seq);"
+        },
+        {
+          "line": 2038,
+          "code": "readCursors.set(key, next);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "hiddenMsgs",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 53,
+      "category": "user-state",
+      "owner": "account/message",
+      "recommendedStore": "hidden_messages",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 677,
+          "code": "const last = list.filter(m => !(hiddenMsgs.get(viewerId)?.has(m.id))).at(-1);"
+        },
+        {
+          "line": 1845,
+          "code": "const hs = hiddenMsgs.get(myId) || new Set();"
+        },
+        {
+          "line": 1898,
+          "code": "const hs = hiddenMsgs.get(myId);"
+        },
+        {
+          "line": 2009,
+          "code": "const hs = hiddenMsgs.get(myId) || new Set();"
+        },
+        {
+          "line": 2087,
+          "code": "const hs = hiddenMsgs.get(myId);"
+        },
+        {
+          "line": 2100,
+          "code": "const hs = hiddenMsgs.get(myId);"
+        },
+        {
+          "line": 2556,
+          "code": "const hs = hiddenMsgs.get(myId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 1847,
+          "code": "hiddenMsgs.set(myId, hs);"
+        },
+        {
+          "line": 2011,
+          "code": "hiddenMsgs.set(myId, hs);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "reactionStore",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 54,
+      "category": "user-state",
+      "owner": "account/message",
+      "recommendedStore": "message_reactions",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 626,
+          "code": "const r = reactionStore.get(mid);"
+        },
+        {
+          "line": 637,
+          "code": "const r = reactionStore.get(msg.id);"
+        },
+        {
+          "line": 2019,
+          "code": "if (!reactionStore.has(mid)) reactionStore.set(mid, new Map());"
+        },
+        {
+          "line": 2020,
+          "code": "const rm = reactionStore.get(mid);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2019,
+          "code": "if (!reactionStore.has(mid)) reactionStore.set(mid, new Map());"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "noteStore",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 55,
+      "category": "business",
+      "owner": "author/conversation",
+      "recommendedStore": "conversation_notes",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2150,
+          "code": "const list = noteStore.get(cid) || [];"
+        },
+        {
+          "line": 2165,
+          "code": "const list = noteStore.get(m[1]) || [];"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 809,
+          "code": "noteStore.set('00000000-0000-0000-0000-000000000010', []);"
+        },
+        {
+          "line": 2158,
+          "code": "noteStore.set(cid, list);"
+        },
+        {
+          "line": 2169,
+          "code": "noteStore.set(m[1], list.filter(n => n.id !== m[2]));"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "eventStore",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 56,
+      "category": "business",
+      "owner": "organizer/conversation",
+      "recommendedStore": "conversation_events + responses",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2176,
+          "code": "const list = eventStore.get(cid) || [];"
+        },
+        {
+          "line": 2195,
+          "code": "const ev = (eventStore.get(m[1]) || []).find(e => e.id === m[2]);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 810,
+          "code": "eventStore.set('00000000-0000-0000-0000-000000000010', []);"
+        },
+        {
+          "line": 2187,
+          "code": "eventStore.set(cid, list);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "wallets",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 60,
+      "category": "business",
+      "owner": "account",
+      "recommendedStore": "wallets + immutable ledger (provider gated)",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 595,
+          "code": "if (!wallets.has(userId)) wallets.set(userId, { balance: 50000, tx: [] });"
+        },
+        {
+          "line": 596,
+          "code": "return wallets.get(userId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 595,
+          "code": "if (!wallets.has(userId)) wallets.set(userId, { balance: 50000, tx: [] });"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "ownedPacks",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 61,
+      "category": "business",
+      "owner": "account",
+      "recommendedStore": "pack_entitlements",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 599,
+          "code": "if (!ownedPacks.has(userId)) ownedPacks.set(userId, new Set(['basic']));"
+        },
+        {
+          "line": 600,
+          "code": "return ownedPacks.get(userId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 599,
+          "code": "if (!ownedPacks.has(userId)) ownedPacks.set(userId, new Set(['basic']));"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "ownedThemes",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 62,
+      "category": "user-state",
+      "owner": "account",
+      "recommendedStore": "theme_entitlements",
+      "priority": "P2",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 603,
+          "code": "if (!ownedThemes.has(userId)) ownedThemes.set(userId, new Set(THEME_CATALOG.filter(t => t.price_minor === 0).map(t => t.id)));"
+        },
+        {
+          "line": 604,
+          "code": "return ownedThemes.get(userId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 603,
+          "code": "if (!ownedThemes.has(userId)) ownedThemes.set(userId, new Set(THEME_CATALOG.filter(t => t.price_minor === 0).map(t => t.id)));"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "officialAccounts",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 63,
+      "category": "operational-config",
+      "owner": "organization/operator",
+      "recommendedStore": "official_accounts",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 387,
+          "code": "if (!user || !user.id || officialAccounts.has(user.id)) return;"
+        },
+        {
+          "line": 578,
+          "code": "const o = officialAccounts.get(u);"
+        },
+        {
+          "line": 587,
+          "code": "if (officialAccounts.has(id)) return publicUser(id);"
+        },
+        {
+          "line": 633,
+          "code": "const cursorSeqs = (conv ? conv.members : []).filter(m => m !== msg.sender_id && !officialAccounts.has(m))"
+        },
+        {
+          "line": 667,
+          "code": "if (!officialAccounts.has(senderId)) readCursors.set(`${cid}:${senderId}`, msg.sequence);"
+        },
+        {
+          "line": 1139,
+          "code": "if (!durableConversationsEnabled() || fields.members.some(id => officialAccounts.has(id))) return createConversation(fields);"
+        },
+        {
+          "line": 1736,
+          "code": "return json({ accounts: Array.from(officialAccounts.values()).map(o => ({ id: o.id, name: o.name, handle: o.handle, description: o.description, color: o.color, followed: mine.has(o.id) })) });"
+        },
+        {
+          "line": 1739,
+          "code": "const acct = officialAccounts.get(m[1]);"
+        },
+        {
+          "line": 1791,
+          "code": "const isOA = officialAccounts.has(id);"
+        },
+        {
+          "line": 1792,
+          "code": "const u = isOA ? officialAccounts.get(id) : (usersById.get(id) || await loadUserFromD1(id));"
+        },
+        {
+          "line": 1805,
+          "code": "const isOA = officialAccounts.has(ids[0]);"
+        },
+        {
+          "line": 1806,
+          "code": "const oa = isOA ? officialAccounts.get(ids[0]) : null;"
+        },
+        {
+          "line": 1971,
+          "code": "const acct = officialAccounts.get(conv.members.find(x => officialAccounts.has(x)));"
+        },
+        {
+          "line": 2051,
+          "code": "const oaId = conv.members.find(x => officialAccounts.has(x) || richMenus.has(x));"
+        },
+        {
+          "line": 2283,
+          "code": "const peerColor = id => usersById.get(id)?.avatar_color || officialAccounts.get(id)?.color || '#06c755';"
+        },
+        {
+          "line": 2567,
+          "code": "const oaFound = Array.from(officialAccounts.values()).filter(o => o.name.toLowerCase().includes(q) || o.handle.includes(q));"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 667,
+          "code": "if (!officialAccounts.has(senderId)) readCursors.set(`${cid}:${senderId}`, msg.sequence);"
+        },
+        {
+          "line": 731,
+          "code": "]) officialAccounts.set(id, { id, name, handle, description, color });"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "followedOfficial",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 64,
+      "category": "user-state",
+      "owner": "account/OA",
+      "recommendedStore": "official_subscriptions",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 1735,
+          "code": "const mine = followedOfficial.get(myId) || new Map();"
+        },
+        {
+          "line": 1741,
+          "code": "if (!followedOfficial.has(myId)) followedOfficial.set(myId, new Map());"
+        },
+        {
+          "line": 1742,
+          "code": "const mine = followedOfficial.get(myId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 1741,
+          "code": "if (!followedOfficial.has(myId)) followedOfficial.set(myId, new Map());"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "roomMembers",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 65,
+      "category": "business",
+      "owner": "room/user",
+      "recommendedStore": "community_memberships",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 882,
+          "code": "return Array.from((roomMembers.get(payload.room_id) || new Map()).keys());"
+        },
+        {
+          "line": 2493,
+          "code": ".map(r => ({ ...r, member_count: (roomMembers.get(r.id) || new Map()).size, joined: (roomMembers.get(r.id) || new Map()).has(myId) }));"
+        },
+        {
+          "line": 2510,
+          "code": "if (!roomMembers.has(room.id)) roomMembers.set(room.id, new Map());"
+        },
+        {
+          "line": 2511,
+          "code": "const members = roomMembers.get(room.id);"
+        },
+        {
+          "line": 2523,
+          "code": "const members = roomMembers.get(room.id) || new Map();"
+        },
+        {
+          "line": 2540,
+          "code": "const members = roomMembers.get(m[1]) || new Map();"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2503,
+          "code": "roomMembers.set(room.id, new Map([[myId, clip(b.nickname || me.display_name, 20) || me.display_name]]));"
+        },
+        {
+          "line": 2510,
+          "code": "if (!roomMembers.has(room.id)) roomMembers.set(room.id, new Map());"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "attachmentStore",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 66,
+      "category": "cache",
+      "owner": "conversation/owner",
+      "recommendedStore": "luno_attachments (storage review pending)",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map plus existing D1 paths (coverage differs by API)",
+      "restartImpact": "Requires rehydration; full path coverage must be tested",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 413,
+          "code": "const hit = attachmentStore.get(id);"
+        },
+        {
+          "line": 2212,
+          "code": "const ids = (Array.isArray(b.attachment_ids) ? b.attachment_ids : []).filter(id => attachmentStore.get(id)?.conversation_id === cid && attachmentStore.get(id).mime.startsWith('image/')).slice(0, 100);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 421,
+          "code": "attachmentStore.set(att.id, att);"
+        },
+        {
+          "line": 2230,
+          "code": "attachmentStore.set(att.id, att);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "byConv",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 342,
+      "category": "temporary-calculation",
+      "owner": "request-local",
+      "recommendedStore": "none",
+      "priority": "P3",
+      "lifetime": "Request/connection or bounded TTL; history separately where required",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "None; recomputed per request",
+      "multiIsolateImpact": "Request-local, no sharing needed",
+      "durableRequired": false,
+      "readReferences": [
+        {
+          "line": 343,
+          "code": "for (const r of results || []) { if (!byConv.has(r.conversation_id)) byConv.set(r.conversation_id, []); byConv.get(r.conversation_id).push(r); }"
+        },
+        {
+          "line": 344,
+          "code": "for (const cid of cids) applyRows(cid, byConv.get(cid) || []);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 343,
+          "code": "for (const r of results || []) { if (!byConv.has(r.conversation_id)) byConv.set(r.conversation_id, []); byConv.get(r.conversation_id).push(r); }"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "pushTokens",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 1191,
+      "category": "operational-config",
+      "owner": "device/account",
+      "recommendedStore": "push_devices + durable delivery outbox",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2626,
+          "code": "const list = pushTokens.get(myId) || [];"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2636,
+          "code": "pushTokens.set(myId, list);"
+        }
+      ],
+      "deleteReferences": [
+        {
+          "line": 2640,
+          "code": "pushTokens.delete(myId);"
+        }
+      ],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "deviceKeys",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 1192,
+      "category": "business",
+      "owner": "device/account",
+      "recommendedStore": "device_public_keys (no raw private keys)",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [
+        {
+          "line": 2688,
+          "code": "deviceKeys.set(m[1], bundle);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "userKeys",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 1193,
+      "category": "cache",
+      "owner": "account/device",
+      "recommendedStore": "device_public_keys",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2695,
+          "code": "const bundle = userKeys.get(targetId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2689,
+          "code": "userKeys.set(myId, bundle);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "groupCallRooms",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 1194,
+      "category": "temporary-connection",
+      "owner": "room participants",
+      "recommendedStore": "durable signaling/presence + history",
+      "priority": "P1",
+      "lifetime": "Request/connection or bounded TTL; history separately where required",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": false,
+      "readReferences": [
+        {
+          "line": 2722,
+          "code": "if (!groupCallRooms.has(roomId)) groupCallRooms.set(roomId, new Set());"
+        },
+        {
+          "line": 2723,
+          "code": "const room = groupCallRooms.get(roomId);"
+        },
+        {
+          "line": 2738,
+          "code": "if (roomId && groupCallRooms.has(roomId)) {"
+        },
+        {
+          "line": 2739,
+          "code": "const room = groupCallRooms.get(roomId);"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 2722,
+          "code": "if (!groupCallRooms.has(roomId)) groupCallRooms.set(roomId, new Set());"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "richMenus",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 1195,
+      "category": "operational-config",
+      "owner": "official account",
+      "recommendedStore": "rich_menu_versions + publication events",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [
+        {
+          "line": 2051,
+          "code": "const oaId = conv.members.find(x => officialAccounts.has(x) || richMenus.has(x));"
+        },
+        {
+          "line": 2053,
+          "code": "const menu = richMenus.get(oaId) || null;"
+        },
+        {
+          "line": 2759,
+          "code": "const menu = richMenus.get(aid) || {"
+        }
+      ],
+      "writeReferences": [
+        {
+          "line": 734,
+          "code": "richMenus.set('oa-notice', {"
+        },
+        {
+          "line": 749,
+          "code": "richMenus.set('oa-weather', {"
+        },
+        {
+          "line": 761,
+          "code": "richMenus.set('oa-deals', {"
+        },
+        {
+          "line": 2786,
+          "code": "richMenus.set(aid, menu);"
+        }
+      ],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "creatorSettlements",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 1196,
+      "category": "business",
+      "owner": "creator",
+      "recommendedStore": "settlement ledger (provider gated)",
+      "priority": "P1",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    },
+    {
+      "name": "loginFailures",
+      "source": "scripts/cf_worker.js",
+      "declarationLine": 2963,
+      "category": "security-state",
+      "owner": "identity/IP",
+      "recommendedStore": "shared rate-limit store with TTL",
+      "priority": "P0",
+      "lifetime": "Account/business retention policy; exact retention not yet approved",
+      "currentStorage": "Map or source seed; durable implementation not verified",
+      "restartImpact": "Map contents lost; database conversion needed unless explicitly ephemeral",
+      "multiIsolateImpact": "Map not shared; authoritative store/ownership must be consulted",
+      "durableRequired": true,
+      "readReferences": [],
+      "writeReferences": [],
+      "deleteReferences": [],
+      "apiMappingStatus": "PARTIAL: exact source references collected; helper-to-route call graph and deletion/retention semantics require independent review"
+    }
+  ],
+  "caveat": "57 named Map declarations are classified; nested anonymous Maps, Sets, arrays and external queues require separate review. Source references do not prove every API caller was audited."
+}

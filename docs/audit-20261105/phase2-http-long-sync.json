@@ -1,0 +1,14 @@
+{
+  "measuredAt": "2026-11-05T12:38:20.806Z",
+  "scope": "Local workerd + isolated D1 only; operator DB role grants local only; no production writes",
+  "cases": [
+    {
+      "id": "P2-503-SYNC",
+      "purpose": "Existing 500-item delta paging with persisted conversation metadata",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "503 unique contiguous messages recovered in two pages after restart",
+      "verdict": "PASS"
+    }
+  ]
+}

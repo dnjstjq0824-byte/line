@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-11-05T12:19:45.212Z",
+  "environment": "http://127.0.0.1:8798",
+  "productionMutations": 0,
+  "cases": [
+    {
+      "id": "P0-APP-HTTP-OWNERSHIP",
+      "prerequisites": [
+        "Two newly registered isolated accounts",
+        "Actual local Worker/D1"
+      ],
+      "steps": [
+        "Create owner app",
+        "List as owner and as outsider",
+        "Attempt webhook configuration as outsider and owner"
+      ],
+      "expected": "Only owner sees app, no list exposes credentials, outsider 403, unimplemented persistence 503",
+      "actual": "Expected checks passed",
+      "verdict": "PASS"
+    }
+  ],
+  "caveat": "App records remain isolate-local; this proves the current ownership boundary, not durable app registration or provider delivery."
+}

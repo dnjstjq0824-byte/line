@@ -21,6 +21,8 @@ export const SUPPORTED_LOCALES: LocaleMeta[] = [
 
 export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
   ko: {
+    profile_visibility_preparing: '프로필 공개 범위 설정은 준비 중입니다.',
+    profile_photo_change: '사진 변경', profile_photo_remove: '사진 삭제', profile_photo_hint: 'JPG · PNG · WebP, 최대 10MB. 사진은 512px로 최적화하여 저장합니다.', profile_photo_invalid: '10MB 이하의 JPG, PNG 또는 WebP 사진을 선택해 주세요.',
     brandName: 'Open Messenger',
     brandSlogan: 'Open Scanner Ecosystem',
     brandSub: '차세대 글로벌 통합 커뮤니케이션 플랫폼',
@@ -92,6 +94,8 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     securitySection: '개인정보 및 세션 보안'
   },
   en: {
+    profile_visibility_preparing: 'Profile visibility controls are being prepared.',
+    profile_photo_change: 'Change photo', profile_photo_remove: 'Remove photo', profile_photo_hint: 'JPG · PNG · WebP, up to 10 MB. Optimized to 512px for storage.', profile_photo_invalid: 'Choose a JPG, PNG or WebP photo under 10 MB.',
     brandName: 'LUNO',
     brandSlogan: 'Connect Beyond Borders',
     brandSub: 'Global Messenger & Real-Time AI Translation Platform',
@@ -150,6 +154,8 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     securitySection: 'Privacy & Device Security'
   },
   th: {
+    profile_visibility_preparing: 'การตั้งค่าการมองเห็นโปรไฟล์อยู่ระหว่างเตรียมการ',
+    profile_photo_change: 'เปลี่ยนรูป', profile_photo_remove: 'ลบรูป', profile_photo_hint: 'JPG · PNG · WebP ไม่เกิน 10 MB ปรับขนาดเป็น 512px ก่อนบันทึก', profile_photo_invalid: 'เลือกรูป JPG, PNG หรือ WebP ขนาดไม่เกิน 10 MB',
     brandName: 'LUNO',
     brandSlogan: 'Connect Beyond Borders',
     brandSub: 'เมสเซนเจอร์ระดับโลกและแพลตฟอร์มแปลภาษา AI แบบเรียลไทม์',
@@ -208,6 +214,8 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     securitySection: 'ความเป็นส่วนตัวและความปลอดภัย'
   },
   ja: {
+    profile_visibility_preparing: 'プロフィールの公開範囲設定は準備中です。',
+    profile_photo_change: '写真を変更', profile_photo_remove: '写真を削除', profile_photo_hint: 'JPG・PNG・WebP、10MBまで。512pxに最適化して保存します。', profile_photo_invalid: '10MB以下のJPG、PNG、WebPを選択してください。',
     brandName: 'LUNO',
     brandSlogan: 'Connect Beyond Borders',
     brandSub: 'グローバルメッセンジャー＆リアルタイムAI通訳プラットフォーム',

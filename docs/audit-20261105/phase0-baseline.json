@@ -1,0 +1,144 @@
+{
+  "measuredAt": "2026-11-05T12:13:38.314Z",
+  "scope": "Read-only production HTTP and local source inspection; no production authentication or data/schema/deployment changes",
+  "gitHead": "20aa56308dbcf6bb7bba1d9f0ddd828de826a302",
+  "worktree": [
+    "M apps/user-web/src/App.vue",
+    " M apps/user-web/src/luno-i18n.ts",
+    " M docs/audit-20261105/production-smoke.json",
+    " M docs/audit-20261105/security-stage.json",
+    " M scripts/audit_stage_smoke.mjs",
+    " M scripts/cf_worker.js",
+    "?? docs/audit-20261105/MESSENGER_REMAINING_WORK.md",
+    "?? docs/audit-20261105/PROFILE_PHOTO.md",
+    "?? docs/audit-20261105/PROGRESS.md",
+    "?? docs/audit-20261105/phase1-node-tests.txt",
+    "?? docs/audit-20261105/profile-photo-qa.json",
+    "?? scripts/audit_phase0_baseline.mjs",
+    "?? scripts/explicit_roles.test.mjs",
+    "?? scripts/migrations/"
+  ],
+  "localWorkerSha256": "2d353ea028f34500dd8e177548b2faf1d7569f835e61c8b9edebba4755aba03c",
+  "probes": [
+    {
+      "path": "/api/v1/version",
+      "status": 200,
+      "details": {
+        "commit": "20aa56308dbcf6bb7bba1d9f0ddd828de826a302",
+        "short_commit": "20aa563",
+        "worker_version": "v2.0.0-remediated",
+        "build_time": "2026-11-05T11:56:03.298Z",
+        "env": "production",
+        "brand": "LUNO",
+        "status": "ok",
+        "source_dirty": true,
+        "worker_source_sha256": "dc37bb37b40a6870d1590d868876a054ff98ec75998c90f13b1ff0bf885a8662"
+      }
+    },
+    {
+      "path": "/readyz",
+      "status": 200,
+      "details": {
+        "status": "ready",
+        "brand": "LUNO",
+        "runtime": "cloudflare-worker",
+        "checks": {
+          "database": "healthy",
+          "schema": "ready"
+        }
+      }
+    },
+    {
+      "path": "/",
+      "status": 200
+    },
+    {
+      "path": "/admin/",
+      "status": 200
+    },
+    {
+      "path": "/partner/",
+      "status": 200
+    },
+    {
+      "path": "/developer/",
+      "status": 200
+    },
+    {
+      "path": "/creator/",
+      "status": 200
+    },
+    {
+      "path": "/ads/",
+      "status": 200
+    }
+  ],
+  "localStateMaps": [
+    "users",
+    "sessions",
+    "qrChallenges",
+    "phoneVerificationCodes",
+    "friendships",
+    "conversations",
+    "messages",
+    "callSessions",
+    "storeOrders",
+    "pinnedMessages",
+    "polls",
+    "pollVotes",
+    "albums",
+    "savedMessages",
+    "communityRooms",
+    "communityPosts",
+    "partnerOrgs",
+    "partnerAccounts",
+    "partnerTickets",
+    "partnerCampaigns",
+    "oaBotRules",
+    "devOrgs",
+    "devApps",
+    "devWebhooks",
+    "devMiniApps",
+    "creatorProfiles",
+    "creatorPacks",
+    "creatorItems",
+    "adsAdvertisers",
+    "adsCampaigns",
+    "adsGroups",
+    "activeSockets",
+    "wsTickets",
+    "usersById",
+    "userPrefs",
+    "friendMeta",
+    "chatMeta",
+    "readCursors",
+    "hiddenMsgs",
+    "reactionStore",
+    "noteStore",
+    "eventStore",
+    "wallets",
+    "ownedPacks",
+    "ownedThemes",
+    "officialAccounts",
+    "followedOfficial",
+    "roomMembers",
+    "attachmentStore",
+    "byConv",
+    "pushTokens",
+    "deviceKeys",
+    "userKeys",
+    "groupCallRooms",
+    "richMenus",
+    "creatorSettlements",
+    "loginFailures"
+  ],
+  "runtimeSchemaTables": [
+    "luno_sessions",
+    "luno_messages",
+    "luno_read_cursors",
+    "luno_audit",
+    "luno_ws_tickets",
+    "luno_attachments"
+  ],
+  "note": "This is not a full authorized workflow audit. Production role accounts, live provider/device workflows and full schema constraints are not assessed by these probes."
+}

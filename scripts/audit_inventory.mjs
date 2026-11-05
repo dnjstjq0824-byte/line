@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parse as parseSfc } from '@vue/compiler-sfc';
 import { parse as parseDom } from '@vue/compiler-dom';
-const root = process.cwd(), output = path.join(root, 'docs/audit-20261105');
+const root = process.cwd(), output = path.resolve(process.argv[2] || path.join(root, 'docs/audit-20261105'));
 fs.mkdirSync(output, { recursive: true });
 const entries = [], routes = [], controls = [], surfaces = [], mobile = [], desktop = [];
 const line = (source, index) => source.slice(0, index).split('\n').length;
@@ -75,5 +75,5 @@ summary.flutterBuildMethods = mobile.filter(item => item.kind === 'flutter-build
 summary.workerLiteralPaths = routes.filter(item => item.kind === 'worker-route-literal').length;
 summary.sourceDirty = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim().length > 0;
 fs.writeFileSync(path.join(output, 'inventory.json'), JSON.stringify({ summary, entries, surfaces, routes, controls, mobile, desktop }, null, 2));
-fs.writeFileSync(path.join(output, 'qa-registry.json'), JSON.stringify({ summary, cases }, null, 2));
+if (!process.argv.includes('--inventory-only')) fs.writeFileSync(path.join(output, 'qa-registry.json'), JSON.stringify({ summary, cases }, null, 2));
 console.log(JSON.stringify(summary, null, 2));

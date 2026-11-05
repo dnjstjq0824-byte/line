@@ -1,0 +1,38 @@
+{
+  "measuredAt": "2026-11-05T12:34:20.353Z",
+  "scope": "Local workerd + isolated D1 only; operator DB role grants local only; no production writes",
+  "cases": [
+    {
+      "id": "P2-ROLES",
+      "purpose": "Explicit local role assignments",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "All 12 authenticated accounts report expected DB roles; no auth bypass",
+      "verdict": "PASS"
+    },
+    {
+      "id": "P2-CONVERSATIONS",
+      "purpose": "Create durable chats, transfer owner and kick member",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "Direct deduplicates; group metadata changed; kicked member denied",
+      "verdict": "PASS"
+    },
+    {
+      "id": "P1-CREATOR-ADS-HTTP",
+      "purpose": "Two real accounts per console: own edit, cross-owner denial, admin denial",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "Expected HTTP and list assertions passed",
+      "verdict": "PASS"
+    },
+    {
+      "id": "P2-LOGOUT",
+      "purpose": "Logout and relogin around durable chat",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "Old session 401, fresh authenticated session obtained",
+      "verdict": "PASS"
+    }
+  ]
+}

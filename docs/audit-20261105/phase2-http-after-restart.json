@@ -1,0 +1,22 @@
+{
+  "measuredAt": "2026-11-05T12:35:07.376Z",
+  "scope": "Local workerd + isolated D1 only; operator DB role grants local only; no production writes",
+  "cases": [
+    {
+      "id": "P2-REAL-RESTART",
+      "purpose": "Restore chat/member/message/creator/ad state after actual workerd process restart",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "All persisted IDs, title, owner, kicked-member denial and drafts retained",
+      "verdict": "PASS"
+    },
+    {
+      "id": "P2-SYNC",
+      "purpose": "Existing delta pipeline with durable metadata",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "Original durable message recovered after restart",
+      "verdict": "PASS"
+    }
+  ]
+}

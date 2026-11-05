@@ -1,0 +1,24 @@
+{
+  "measuredAt": "2026-11-05T12:15:58.857Z",
+  "environment": "http://127.0.0.1:8798",
+  "productionMutations": 0,
+  "cases": [
+    {
+      "id": "P0-ROLE-HTTP-RESTART",
+      "prerequisites": [
+        "New local D1 only",
+        "Worker process stopped and restarted between setup and assertion"
+      ],
+      "steps": [
+        "Register ordinary account containing admin in email",
+        "Verify denial",
+        "Restart local Worker",
+        "Reuse session and read profile",
+        "Call account management route"
+      ],
+      "expected": "Persisted session remains user, management 403",
+      "actual": "user and 403",
+      "verdict": "PASS"
+    }
+  ]
+}

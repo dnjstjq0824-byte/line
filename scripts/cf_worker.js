@@ -220,6 +220,7 @@ async function persistAudit(actor, action, target, detail) {
 
 // ---------- Sessions ----------
 async function createSession(user, request) {
+  if (dbOf()) user.role = await storedUserRole(user.id);
   const token = `cf-token-${user.id}.${crypto.randomUUID()}`;
   const sessionId = crypto.randomUUID();
   const created = now();
@@ -328,6 +329,7 @@ async function hydrateCursors(userId) {
   }
 }
 async function hydrateUserConversations(userId) {
+  await hydrateDurableConversations(userId);
   const db = dbOf();
   if (!db) return;
   await ensureSchema();
@@ -666,7 +668,8 @@ function pushMessage(cid, senderId, fields, deferBroadcast = false) {
   if (!deferBroadcast) broadcast({ type: 'message.created', conversation_id: cid, message: msg });
   return msg;
 }
-function systemMessage(cid, body) {
+async function systemMessage(cid, body) {
+  if (conversations.get(cid)?._durable) return await pushPersistent(cid, conversations.get(cid).owner_id, { kind: 'system', body });
   return pushMessage(cid, 'system', { kind: 'system', body });
 }
 function chatSummary(conv, viewerId) {
@@ -1031,12 +1034,27 @@ async function loadUserFromD1(id) {
   const u = {
     id: row.id, email: row.email,
     password: hashed ? undefined : row.password_hash, pw_hash: hashed ? hashed.hash : undefined, pw_salt: hashed ? hashed.salt : undefined,
-    display_name: row.display_name || row.email.split('@')[0], role: row.email.includes('admin') ? 'admin' : 'user',
-    bio: row.bio || '', status_message: row.status_message || '', created_at: row.created_at
+    display_name: row.display_name || row.email.split('@')[0], role: await storedUserRole(row.id),
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', created_at: row.created_at
   };
   users.set(row.email.toLowerCase(), u);
   usersById.set(u.id, u);
   return u;
+}
+// Privilege assignments are provisioned separately by an authorized operator.
+// Email, demo seed data and the role copied into an old session are not grants.
+async function storedUserRole(userId) {
+  const db = dbOf();
+  if (!db) return 'user';
+  try {
+    const assignment = await db.prepare('SELECT role FROM luno_user_roles WHERE user_id = ?').bind(userId).first();
+    return ['user', 'admin', 'partner', 'developer', 'creator', 'ads'].includes(assignment?.role) ? assignment.role : 'user';
+  } catch (error) {
+    // Legacy databases have no grants: fail closed until the approved migration
+    // and explicit administrator provisioning have been completed.
+    if (/no such table.*luno_user_roles/i.test(String(error?.message))) return 'user';
+    throw error;
+  }
 }
 async function getAuthUser(request) {
   const auth = request.headers.get('Authorization') || '';
@@ -1061,6 +1079,7 @@ async function getAuthUser(request) {
   let user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId) || null;
   if (!user) user = await loadUserFromD1(userId);
   if (!user || user.state === 'suspended' || user.state === 'deleted') return null;
+  if (db) user.role = await storedUserRole(userId);
   AUTH_CTX.set(request, { token, session_id: session.device_id });
   return user;
 }
@@ -1096,6 +1115,74 @@ function createConversation(fields) {
   conversations.set(c.id, c);
   messages.set(c.id, []);
   return c;
+}
+function durableConversationsEnabled() { return CURRENT_ENV?.DURABLE_CONVERSATIONS === 'true' && !!dbOf(); }
+function ownedResourcesDurable() { return CURRENT_ENV?.DURABLE_BUSINESS === 'true' && !!dbOf(); }
+function ownedMap(kind) { return kind === 'creator_pack' ? creatorPacks : adsCampaigns; }
+async function ownedList(kind, user) {
+  if (ownedResourcesDurable()) {
+    const sql = user.role === 'admin' ? 'SELECT * FROM luno_owned_resources WHERE kind=?' : 'SELECT * FROM luno_owned_resources WHERE kind=? AND owner_id=?';
+    const statement = dbOf().prepare(sql);
+    const { results } = await (user.role === 'admin' ? statement.bind(kind) : statement.bind(kind, user.id)).all();
+    return (results || []).map(row => ({ ...JSON.parse(row.payload), id: row.id, owner_id: row.owner_id }));
+  }
+  return Array.from(ownedMap(kind).values()).filter(value => user.role === 'admin' || value.owner_id === user.id);
+}
+async function ownedRead(kind, id) {
+  if (!ownedResourcesDurable()) return ownedMap(kind).get(id);
+  const row = await dbOf().prepare('SELECT * FROM luno_owned_resources WHERE kind=? AND id=?').bind(kind, id).first();
+  return row ? { ...JSON.parse(row.payload), id: row.id, owner_id: row.owner_id } : null;
+}
+async function ownedSave(kind, value, create = false) {
+  if (ownedResourcesDurable()) {
+    if (create) await dbOf().prepare('INSERT INTO luno_owned_resources (kind,id,owner_id,payload,created_at,updated_at) VALUES (?,?,?,?,?,?)').bind(kind, value.id, value.owner_id, JSON.stringify(value), now(), now()).run();
+    else await dbOf().prepare('UPDATE luno_owned_resources SET payload=?,updated_at=? WHERE kind=? AND id=? AND owner_id=?').bind(JSON.stringify(value), now(), kind, value.id, value.owner_id).run();
+  } else ownedMap(kind).set(value.id, value);
+  return value;
+}
+async function hydrateDurableConversation(cid) {
+  if (!durableConversationsEnabled()) return conversations.get(cid);
+  const row = await dbOf().prepare('SELECT * FROM luno_conversations WHERE id = ?').bind(cid).first();
+  if (!row) { if (conversations.get(cid)?._durable) conversations.delete(cid); return conversations.get(cid); }
+  if (row.deleted_at) { conversations.delete(cid); return null; }
+  const { results } = await dbOf().prepare('SELECT user_id, role FROM luno_conversation_members WHERE conversation_id = ? ORDER BY joined_at, user_id').bind(cid).all();
+  const previous = conversations.get(cid);
+  const conv = { ...previous, id: row.id, kind: row.kind, title: row.title, notice: row.notice, avatar_url: row.avatar_url, owner_id: row.owner_id, members: (results || []).map(member => member.user_id), revision: row.revision, created_at: row.created_at, updated_at: row.updated_at, last_sequence: previous?.last_sequence || 0, _durable: true };
+  conversations.set(cid, conv);
+  return conv;
+}
+async function hydrateDurableConversations(userId) {
+  if (!durableConversationsEnabled()) return;
+  const { results } = await dbOf().prepare('SELECT conversation_id FROM luno_conversation_members WHERE user_id = ?').bind(userId).all();
+  const ids = new Set((results || []).map(row => row.conversation_id));
+  for (const conv of conversations.values()) if (conv._durable && conv.members.includes(userId) && !ids.has(conv.id)) conv.members = conv.members.filter(id => id !== userId);
+  for (const cid of ids) await hydrateDurableConversation(cid);
+}
+async function createDurableConversation(fields) {
+  if (!durableConversationsEnabled() || fields.members.some(id => officialAccounts.has(id))) return createConversation(fields);
+  const db = dbOf(), at = now();
+  const key = fields.kind === 'direct' ? [...fields.members].sort().join(':') : null;
+  const cid = key ? `dm-${await sha256Hex(key)}` : uid();
+  const owner = fields.owner_id || fields.members[0];
+  await db.batch([
+    db.prepare('INSERT OR IGNORE INTO luno_conversations (id,kind,title,owner_id,direct_key,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').bind(cid, fields.kind, fields.title || '', owner, key, at, at),
+    ...fields.members.map(id => db.prepare('INSERT OR IGNORE INTO luno_conversation_members (conversation_id,user_id,role,joined_at) VALUES (?,?,?,?)').bind(cid, id, id === owner ? 'owner' : 'member', at))
+  ]);
+  return await hydrateDurableConversation(cid);
+}
+async function persistDurableConversation(conv) {
+  if (!conv?._durable || !durableConversationsEnabled()) return;
+  const db = dbOf(), mutation = uid(), at = now();
+  const statements = [db.prepare('UPDATE luno_conversations SET title=?,notice=?,avatar_url=?,owner_id=?,revision=revision+1,mutation_token=?,deleted_at=?,updated_at=? WHERE id=? AND revision=? AND deleted_at IS NULL').bind(conv.title || '', conv.notice || '', conv.avatar_url || '', conv.owner_id, mutation, conv.members.length ? null : at, at, conv.id, conv.revision),
+    db.prepare('DELETE FROM luno_conversation_members WHERE conversation_id=? AND EXISTS (SELECT 1 FROM luno_conversations WHERE id=? AND mutation_token=?)').bind(conv.id, conv.id, mutation),
+    ...conv.members.map(id => db.prepare('INSERT INTO luno_conversation_members (conversation_id,user_id,role,joined_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM luno_conversations WHERE id=? AND mutation_token=?)').bind(conv.id, id, id === conv.owner_id ? 'owner' : 'member', at, conv.id, mutation))];
+  try {
+    const result = await db.batch(statements);
+    if (!result[0]?.meta?.changes) {
+      const error = new Error('Conversation changed; reload and retry'); error.code = 'CONVERSATION_CONFLICT'; throw error;
+    }
+    conv.revision += 1;
+  } catch (error) { await hydrateDurableConversation(conv.id); throw error; }
 }
 function addAudit(actor, action, target) {
   auditLogs.unshift({ id: auditLogs.length + 1, actor_user_id: actor, action, target_id: target, created_at: now() });
@@ -1504,9 +1591,24 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Profile & settings ----------
   if (p === 'me') {
+    if (dbOf()) {
+      const row = await dbOf().prepare('SELECT * FROM users WHERE id = ?').bind(myId).first();
+      if (row) me.avatar_url = row.avatar_url || '';
+    }
     if (method === 'GET') return json({ ...publicUser(me), email: me.email, role: me.role });
     if (method === 'PATCH') {
       const b = await readJson(request);
+      if (b.avatar_url !== undefined) {
+        if (typeof b.avatar_url !== 'string' || b.avatar_url.length > 350000) return json({ error: 'Profile photo must be smaller than 256 KB', code: 'INVALID_AVATAR' }, 400);
+        if (b.avatar_url !== '') {
+          const match = b.avatar_url.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+          if (!match) return json({ error: 'Only JPEG, PNG and WebP photos are supported', code: 'INVALID_AVATAR' }, 400);
+          let raw;
+          try { raw = atob(match[2]); } catch { return json({ error: 'Invalid photo encoding' }, 400); }
+          const valid = match[1] === 'jpeg' ? raw.startsWith('\xff\xd8\xff') : match[1] === 'png' ? raw.startsWith('\x89PNG\r\n\x1a\n') : raw.startsWith('RIFF') && raw.slice(8, 12) === 'WEBP';
+          if (!valid || raw.length > 262144) return json({ error: 'Invalid or oversized profile photo', code: 'INVALID_AVATAR' }, 400);
+        }
+      }
       if (b.display_name !== undefined) {
         const v = clip(b.display_name, 40);
         if (!v) return bad('이름을 입력하세요');
@@ -1528,6 +1630,8 @@ async function extended(p, request, url, me, token) {
         if (h !== me.handle && Array.from(users.values()).some(u => u.handle === h)) return bad('이미 사용 중인 ID입니다', 409);
         me.handle = h;
       }
+      if (dbOf()) await dbOf().prepare("UPDATE users SET display_name = ?, bio = ?, status_message = ?, avatar_url = ?, updated_at = ? WHERE id = ?").bind(me.display_name, me.bio || '', me.status_message || '', b.avatar_url === undefined ? (me.avatar_url || '') : b.avatar_url, now(), myId).run();
+      if (b.avatar_url !== undefined) me.avatar_url = b.avatar_url;
       return json({ ...publicUser(me), email: me.email, role: me.role });
     }
   }
@@ -1708,7 +1812,7 @@ async function extended(p, request, url, me, token) {
       if (!ids.length || ids.length > 499) return bad('대화 상대를 선택하세요');
       for (const id of ids) {
         const isOA = officialAccounts.has(id);
-        const u = isOA ? officialAccounts.get(id) : usersById.get(id);
+        const u = isOA ? officialAccounts.get(id) : (usersById.get(id) || await loadUserFromD1(id));
         if (!u || u.state === 'suspended') return bad('존재하지 않는 사용자가 포함되어 있습니다', 404);
         if (fMeta(myId, id).blocked) return bad('차단한 사용자와는 대화할 수 없습니다', 403);
         if (!isOA && !isFriend(myId, id)) {
@@ -1718,20 +1822,21 @@ async function extended(p, request, url, me, token) {
       }
       if (kind === 'direct') {
         if (ids.length !== 1) return bad('1:1 대화는 상대가 한 명이어야 합니다');
+        await hydrateDurableConversations(myId);
         const existing = findDirect(myId, ids[0]);
         if (existing) { cMeta(existing.id, myId).hidden = false; return json(chatSummary(existing, myId)); }
         const isOA = officialAccounts.has(ids[0]);
         const oa = isOA ? officialAccounts.get(ids[0]) : null;
         const targetUser = !isOA ? usersById.get(ids[0]) : null;
         const convTitle = (b.title || (oa ? oa.name : targetUser ? targetUser.display_name : '')).trim();
-        const c = createConversation({ kind: 'direct', title: convTitle, members: [myId, ids[0]] });
+        const c = await createDurableConversation({ kind: 'direct', title: convTitle, members: [myId, ids[0]] });
         sendTo(c.members, { type: 'conversation.updated', conversation_id: c.id });
         return json(chatSummary(c, myId), 201);
       }
       const title = clip(b.title, 50);
       if (!title) return bad('그룹 이름을 입력하세요');
-      const c = createConversation({ kind: 'group', title, members: [myId, ...ids], owner_id: myId });
-      systemMessage(c.id, `${me.display_name}님이 그룹을 만들었습니다.`);
+      const c = await createDurableConversation({ kind: 'group', title, members: [myId, ...ids], owner_id: myId });
+      await systemMessage(c.id, `${me.display_name}님이 그룹을 만들었습니다.`);
       sendTo(c.members, { type: 'conversation.updated', conversation_id: c.id });
       return json(chatSummary(c, myId), 201);
     }
@@ -1749,6 +1854,11 @@ async function extended(p, request, url, me, token) {
         conv.title = t;
       }
       if (b.notice !== undefined) conv.notice = clip(b.notice, 500);
+      if (b.owner_id !== undefined) {
+        if (conv.kind !== 'group' || conv.owner_id !== myId || !conv.members.includes(b.owner_id)) return json({ error: 'ownership transfer forbidden' }, 403);
+        conv.owner_id = b.owner_id;
+      }
+      await persistDurableConversation(conv);
       sendTo(conv.members, { type: 'conversation.updated', conversation_id: conv.id });
       return json(chatSummary(conv, myId));
     }
@@ -1780,7 +1890,8 @@ async function extended(p, request, url, me, token) {
       added.push(u.display_name);
     }
     if (!added.length) return bad('초대할 수 있는 친구가 없습니다');
-    systemMessage(conv.id, `${me.display_name}님이 ${added.join(', ')}님을 초대했습니다.`);
+    await persistDurableConversation(conv);
+    await systemMessage(conv.id, `${me.display_name}님이 ${added.join(', ')}님을 초대했습니다.`);
     sendTo(conv.members, { type: 'conversation.updated', conversation_id: conv.id });
     return json(chatSummary(conv, myId), 201);
   }
@@ -1792,7 +1903,8 @@ async function extended(p, request, url, me, token) {
     if (!conv.members.includes(m[2])) return bad('멤버가 아닙니다', 404);
     const target = usersById.get(m[2]);
     conv.members = conv.members.filter(x => x !== m[2]);
-    systemMessage(conv.id, `${target ? target.display_name : '멤버'}님이 내보내졌습니다.`);
+    await persistDurableConversation(conv);
+    await systemMessage(conv.id, `${target ? target.display_name : '멤버'}님이 내보내졌습니다.`);
     sendTo([...conv.members, m[2]], { type: 'conversation.updated', conversation_id: conv.id });
     return json({ status: 'kicked' });
   }
@@ -2560,14 +2672,24 @@ async function extended(p, request, url, me, token) {
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
     const since = intIn(url.searchParams.get('since_sequence') || 0, 0, 1e9) || 0;
-    const allMsgs = messages.get(cid) || [];
-    const delta = allMsgs.filter(x => x.sequence > since);
+    const db = dbOf();
+    let delta;
+    if (db) {
+      await ensureSchema();
+      const { results } = await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence > ? ORDER BY sequence ASC LIMIT 501').bind(cid, since).all();
+      delta = (results || []).map(rowToMessage);
+    } else {
+      delta = (messages.get(cid) || []).filter(x => x.sequence > since).sort((a, b) => a.sequence - b.sequence);
+    }
+    const hasMore = delta.length > 500;
+    delta = delta.slice(0, 500);
     return json({
       conversation_id: cid,
       since_sequence: since,
-      latest_sequence: allMsgs.length ? allMsgs[allMsgs.length - 1].sequence : 0,
+      // Cursor is the last returned item, so paging cannot skip unseen messages.
+      latest_sequence: delta.length ? delta[delta.length - 1].sequence : since,
       delta_messages: delta.map(x => decorateMessage(x, myId, cid)),
-      has_more: false
+      has_more: hasMore
     });
   }
 
@@ -2767,11 +2889,13 @@ async function leaveConversation(conv, myId, me) {
   conv.members = conv.members.filter(x => x !== myId);
   cMeta(conv.id, myId).hidden = true;
   if (!conv.members.length) {
+    await persistDurableConversation(conv);
     conversations.delete(conv.id);
     return json({ status: 'left' });
   }
   if (conv.owner_id === myId) conv.owner_id = conv.members[0];
-  systemMessage(conv.id, `${me.display_name}님이 나갔습니다.`);
+  await persistDurableConversation(conv);
+  await systemMessage(conv.id, `${me.display_name}님이 나갔습니다.`);
   sendTo([...conv.members, myId], { type: 'conversation.updated', conversation_id: conv.id });
   return json({ status: 'left' });
 }
@@ -2823,9 +2947,10 @@ async function syncFromD1(db) {
           pw_hash: hashed ? hashed.hash : row.password_hash,
           pw_salt: hashed ? hashed.salt : existing?.pw_salt,
           display_name: dName,
-          role: row.email.includes('admin') ? 'admin' : 'user',
+          role: await storedUserRole(row.id),
           bio: (row.bio && !row.bio.includes('LINE')) ? row.bio : 'LUNO Global Messenger User',
           status_message: row.status_message || '',
+          avatar_url: row.avatar_url || '',
           created_at: row.created_at
         };
         users.set(row.email.toLowerCase(), u);
@@ -3233,6 +3358,7 @@ const workerCore = {
       if (conversationPath && conversationPath[1] !== 'read-all') {
         ensureDefaultConversationsForUser(authUser.id);
         const resolvedCid = resolveConversationId(conversationPath[1], authUser.id);
+        await hydrateDurableConversation(resolvedCid);
         const conversation = conversations.get(resolvedCid);
         if (!conversation || !conversation.members.includes(authUser.id)) {
           return json({ error: 'conversation not found' }, 404);
@@ -3676,16 +3802,20 @@ const workerCore = {
       if (p === 'developer/apps') {
         if (request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
-          const app = { id: crypto.randomUUID(), name: body.name || 'Bot App', client_id: `cli_${crypto.randomUUID().slice(0, 8)}`, client_secret: crypto.randomUUID() };
+          const secret = crypto.randomUUID();
+          const app = { id: crypto.randomUUID(), owner_id: authUser.id, name: body.name || 'Bot App', client_id: `cli_${crypto.randomUUID().slice(0, 8)}`, client_secret_hash: await sha256Hex(secret) };
           devApps.set(app.id, app);
-          return json(app, 201);
+          const { client_secret_hash, ...visible } = app;
+          return json({ ...visible, client_secret: secret }, 201);
         }
-        return json({ apps: Array.from(devApps.values()) });
+        return json({ apps: Array.from(devApps.values()).filter(app => authUser.role === 'admin' || app.owner_id === authUser.id).map(({ client_secret, client_secret_hash, ...visible }) => visible) });
       }
       const devWebMatch = p.match(/^developer\/apps\/([a-zA-Z0-9_-]+)\/webhooks$/);
       if (devWebMatch && request.method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        return json({ id: crypto.randomUUID(), endpoint: body.endpoint_url, active: true }, 201);
+        const app = devApps.get(devWebMatch[1]);
+        if (!app) return json({ error: 'app not found' }, 404);
+        if (app.owner_id !== authUser.id) return json({ error: 'app forbidden' }, 403);
+        return json({ error: 'Durable webhook configuration storage is not implemented', code: 'WEBHOOK_STORAGE_NOT_CONFIGURED' }, 503);
       }
 
       // 13. Creator Console
@@ -3695,11 +3825,11 @@ const workerCore = {
       if (p === 'creator/packs') {
         if (request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
-          const pack = { id: crypto.randomUUID(), title: body.title || 'Stickers', price_minor: body.price_minor || 2500 };
-          creatorPacks.set(pack.id, pack);
+          const pack = { id: crypto.randomUUID(), owner_id: authUser.id, title: clip(body.title || 'Stickers', 100), price_minor: Number.isSafeInteger(body.price_minor) && body.price_minor >= 0 ? body.price_minor : 0, status: 'draft' };
+          await ownedSave('creator_pack', pack, true);
           return json(pack, 201);
         }
-        return json({ packs: Array.from(creatorPacks.values()) });
+        return json({ packs: await ownedList('creator_pack', authUser) });
       }
       if (p === 'creator/settlements') {
         return json({ settlements: [{ id: 'stl-1', total_sales: 125000, revenue_share: 87500, currency: 'KRW', status: 'settled' }] });
@@ -3712,11 +3842,27 @@ const workerCore = {
       if (p === 'ads/campaigns') {
         if (request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
-          const camp = { id: crypto.randomUUID(), name: body.name || 'Ad Campaign', daily_budget_minor: 50000 };
-          adsCampaigns.set(camp.id, camp);
+          const camp = { id: crypto.randomUUID(), owner_id: authUser.id, name: clip(body.name || 'Ad Campaign', 100), daily_budget_minor: Number.isSafeInteger(body.daily_budget_minor) && body.daily_budget_minor >= 0 ? body.daily_budget_minor : 0, status: 'draft' };
+          await ownedSave('ad_campaign', camp, true);
           return json(camp, 201);
         }
-        return json({ campaigns: Array.from(adsCampaigns.values()) });
+        return json({ campaigns: await ownedList('ad_campaign', authUser) });
+      }
+      const ownedPath = p.match(/^(creator\/packs|ads\/campaigns)\/([\w-]+)$/);
+      if (ownedPath) {
+        const kind = ownedPath[1] === 'creator/packs' ? 'creator_pack' : 'ad_campaign';
+        const value = await ownedRead(kind, ownedPath[2]);
+        if (!value) return json({ error: 'resource not found' }, 404);
+        if (value.owner_id !== authUser.id && !(authUser.role === 'admin' && request.method === 'GET')) return json({ error: 'resource forbidden' }, 403);
+        if (request.method === 'GET') return json(value);
+        if (request.method === 'PATCH') {
+          const body = await readJson(request);
+          const field = kind === 'creator_pack' ? 'title' : 'name';
+          const name = clip(body[field], 100);
+          if (!name) return json({ error: `${field} required` }, 400);
+          return json(await ownedSave(kind, { ...value, [field]: name }));
+        }
+        return json({ error: 'method not implemented' }, 405);
       }
 
       // 15. Admin & Security
@@ -3867,6 +4013,7 @@ export default {
     try {
       return await workerCore.fetch(request, env, ctx);
     } catch (err) {
+      if (err?.code === 'CONVERSATION_CONFLICT') return json({ error: err.message, code: err.code }, 409);
       console.error('[LUNO internal error]', err && err.stack ? err.stack : err);
       return json({ error: 'internal_error' }, 500);
     }

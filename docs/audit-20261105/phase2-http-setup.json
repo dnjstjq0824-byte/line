@@ -1,0 +1,14 @@
+{
+  "measuredAt": "2026-11-05T12:33:53.204Z",
+  "scope": "Local workerd + isolated D1 only; operator DB role grants local only; no production writes",
+  "cases": [
+    {
+      "id": "P2-ACCOUNTS",
+      "purpose": "Create independent authenticated local accounts",
+      "environment": "http://127.0.0.1:18879",
+      "expected": "Documented assertions pass",
+      "actual": "12 accounts registered and logged in; grants prepared for local operator only",
+      "verdict": "PASS"
+    }
+  ]
+}

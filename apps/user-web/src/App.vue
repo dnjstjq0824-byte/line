@@ -602,6 +602,44 @@ const editProfileHandle = ref('')
 const profileSaving = ref(false)
 const profileSaveError = ref('')
 const profileSaved = ref(false)
+const photoInput = ref<HTMLInputElement | null>(null)
+const photoSaving = ref(false)
+const photoError = ref('')
+async function changeProfilePhoto(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  photoError.value = ''
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) { photoError.value = t('profile_photo_invalid'); return }
+  photoSaving.value = true
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error(t('profile_photo_invalid'))
+      context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      await persistProfilePhoto(canvas.toDataURL('image/jpeg', 0.85))
+    } finally { bitmap.close() }
+  } catch (error) { photoError.value = error instanceof Error ? error.message : t('profile_save_error') }
+  finally { photoSaving.value = false }
+}
+async function persistProfilePhoto(avatar_url: string) {
+  const updated = await api<User>('/api/v1/me', 'PATCH', { avatar_url })
+  currentUser.value = updated
+  if (activeProfileUser.value?.id === updated.id) activeProfileUser.value = updated
+}
+async function removeProfilePhoto() {
+  photoSaving.value = true; photoError.value = ''
+  try { await persistProfilePhoto('') }
+  catch (error) { photoError.value = error instanceof Error ? error.message : t('profile_save_error') }
+  finally { photoSaving.value = false }
+}
 const profileDirty = computed(() => editProfileName.value.trim() !== (currentUser.value?.display_name || '') || editProfileHandle.value.trim() !== (currentUser.value?.handle || '') || editProfileBio.value.trim() !== (currentUser.value?.status_message || currentUser.value?.bio || ''))
 const isRecordingVoice = ref(false)
 let mediaRecorderInstance: MediaRecorder | null = null
@@ -2998,12 +3036,11 @@ onBeforeUnmount(() => {
       <nav class="pc-rail">
         <div class="pc-rail-top">
           <!-- 1. My Profile Avatar with Online Dot -->
-          <div class="pc-user-avatar-trigger" title="내 프로필" @click="showUserMenu = !showUserMenu">
-            <div class="pc-avatar circle-36" :style="{ background: currentUser.avatar_color || 'var(--om-primary, #2563EB)' }">
-              {{ currentUser.display_name.slice(0, 1) }}
+          <button type="button" class="pc-user-avatar-trigger" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
+            <div class="pc-avatar circle-36" :style="{ background: currentUser.avatar_color || 'var(--om-primary, #2563EB)' }"><img v-if="currentUser.avatar_url" :src="currentUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser.display_name.slice(0, 1) }}</span>
             </div>
             <span v-if="realtimeState === 'connected'" class="pc-dot-online" :title="t('connection_connected')"></span>
-          </div>
+          </button>
 
           <!-- User Menu Dropdown -->
           <div v-if="showUserMenu" class="pc-dropdown-menu user-menu" @click="showUserMenu = false">
@@ -3247,8 +3284,7 @@ onBeforeUnmount(() => {
             <!-- My Profile Card with Keep & Album Buttons (Screenshot 4 & 5) -->
             <div class="pc-my-profile-card">
               <div class="my-profile-top-row" @click="activeProfileUser = currentUser">
-                <div class="pc-avatar circle-46" :style="{ background: currentUser.avatar_color || 'var(--om-primary, #4F7CFF)' }">
-                  {{ currentUser.display_name.slice(0, 1) }}
+                <div class="pc-avatar circle-46" :style="{ background: currentUser.avatar_color || 'var(--om-primary, #4F7CFF)' }"><img v-if="currentUser.avatar_url" :src="currentUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser.display_name.slice(0, 1) }}</span>
                 </div>
                 <div class="my-profile-meta">
                   <div class="my-name-text">{{ currentUser.display_name }}</div>
@@ -4340,6 +4376,7 @@ onBeforeUnmount(() => {
           </div>
           <span class="nav-label">통화</span>
         </button>
+        <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><img v-if="currentUser.avatar_url" :src="currentUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser.display_name.slice(0, 1) }}</span></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
       </nav>
     </main>
 
@@ -4487,6 +4524,13 @@ onBeforeUnmount(() => {
         <div class="profile-avatar-center">
           <div class="avatar-circle xl"><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ activeProfileUser.display_name.slice(0, 1) }}</span></div>
         </div>
+        <div v-if="activeProfileUser.id === currentUser?.id" class="profile-photo-controls" :aria-busy="photoSaving">
+          <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden @change="changeProfilePhoto" />
+          <button class="btn-secondary" :disabled="photoSaving" @click="photoInput?.click()">{{ photoSaving ? t('profile_saving') : t('profile_photo_change') }}</button>
+          <button v-if="currentUser.avatar_url" class="btn-secondary" :disabled="photoSaving" @click="removeProfilePhoto">{{ t('profile_photo_remove') }}</button>
+          <small>{{ t('profile_photo_hint') }}</small>
+          <p v-if="photoError" role="alert" class="ln-profile-error">{{ photoError }}</p>
+        </div>
         <div class="profile-body-center">
           <h2>{{ activeProfileUser.display_name }}</h2>
           <div v-if="activeProfileUser.handle" class="user-handle">@{{ activeProfileUser.handle }}</div>
@@ -4496,7 +4540,7 @@ onBeforeUnmount(() => {
         <div v-if="activeProfileUser.id === currentUser?.id" class="profile-actions-footer">
           <button class="btn-profile-action" @click="showSettingsModal = true; activeProfileUser = null">{{ t('profileEdit') }}</button>
           <button class="btn-profile-action" @click="showPasswordModal = true; activeProfileUser = null">{{ t('profile_account') }}</button>
-          <p class="ln-profile-preparing">{{ t('profile_privacy') }}</p>
+          <p class="ln-profile-preparing">{{ t('profile_visibility_preparing') }}</p>
         </div>
         <div v-else class="profile-actions-footer">
           <button class="btn-profile-action" @click="startDirectChat(activeProfileUser); activeProfileUser = null">
@@ -4745,7 +4789,7 @@ onBeforeUnmount(() => {
               <label for="profile-handle">LUNO ID<input id="profile-handle" v-model="editProfileHandle" autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="profileSaving" /></label>
               <label for="profile-bio" class="ln-profile-bio">{{ t('profile_bio_label') }}<textarea id="profile-bio" v-model="editProfileBio" rows="3" :disabled="profileSaving" /></label>
             </div>
-            <p class="ln-profile-hint">{{ t('profile_privacy') }}</p>
+            <p class="ln-profile-hint">{{ t('profile_visibility_preparing') }}</p>
             <p v-if="profileSaveError" class="ln-profile-error" role="alert">{{ profileSaveError }}</p>
             <div class="ln-profile-save"><span role="status">{{ profileSaved ? t('profile_saved') : '' }}</span><button type="submit" class="btn-primary" :disabled="profileSaving || !profileDirty || !editProfileName.trim()">{{ profileSaving ? t('profile_saving') : t('profile_save') }}</button></div>
           </form>
@@ -8271,4 +8315,12 @@ onBeforeUnmount(() => {
   margin-left: 3px;
   opacity: 0.7;
 }
+</style>
+
+<style scoped>
+.profile-photo-controls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:16px 20px 0}.profile-photo-controls small,.profile-photo-controls p{flex-basis:100%;text-align:center}.pc-user-avatar-trigger{border:0;background:transparent;padding:0;color:inherit}.ln-profile-photo{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+</style>
+
+<style scoped>
+.mobile-profile-avatar{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#315bcd;color:white;font-size:12px}.profile-modal-card{max-height:calc(100dvh - 32px);overflow-y:auto;max-width:calc(100vw - 32px)}
 </style>

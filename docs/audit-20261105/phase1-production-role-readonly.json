@@ -1,0 +1,16 @@
+{
+  "measuredAt": "2026-11-05T12:29:26.026Z",
+  "method": "Retained local deployment artifact, BUILD_INFO restored to source placeholder, SHA compared with production self-reported source SHA",
+  "artifact": "dist_worker/cf_worker.js",
+  "sha256": "dc37bb37b40a6870d1590d868876a054ff98ec75998c90f13b1ff0bf885a8662",
+  "productionReportedSha": "dc37bb37b40a6870d1590d868876a054ff98ec75998c90f13b1ff0bf885a8662",
+  "hashMatches": true,
+  "emailRoleInferencePresent": true,
+  "cachePreferredBeforeReload": true,
+  "explicitRoleRefreshPresent": false,
+  "remoteScriptDownloaded": false,
+  "productionAccountMutations": 0,
+  "productionExploitExecuted": false,
+  "verdict": "PARTIAL",
+  "caveat": "Hash correlation with retained artifact is not an independent Cloudflare script download or dynamic production exploit. Live revocation/cached-session abuse is NOT_RUN."
+}
