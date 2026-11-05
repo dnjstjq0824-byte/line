@@ -1,0 +1,1938 @@
+{
+  "measuredAt": "2026-11-05T05:59:52.740Z",
+  "scope": "Unauthenticated entry rendering and overflow only; no authenticated workflows or full visual/accessibility certification",
+  "cases": [
+    {
+      "id": "ENTRY-user-320-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 320px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-light-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-320-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 320px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-dark-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-375-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 375px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-light-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-375-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 375px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-dark-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-390-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 390px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-light-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-390-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 390px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-dark-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-768-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 768px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-light-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-768-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 768px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-dark-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-1024-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 1024px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-light-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-1024-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 1024px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-dark-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-1440-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 1440px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-light-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-1440-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 1440px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-dark-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-1920-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 1920px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-light-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-user-1920-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open user entry",
+        "Set 1920px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-user-dark-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-320-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 320px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-light-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-320-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 320px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-dark-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-375-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 375px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-light-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-375-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 375px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-dark-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-390-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 390px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-light-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-390-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 390px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-dark-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-768-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 768px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-light-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-768-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 768px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-dark-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-1024-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 1024px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-light-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-1024-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 1024px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-dark-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-1440-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 1440px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-light-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-1440-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 1440px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-dark-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-1920-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 1920px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-light-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-admin-1920-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open admin entry",
+        "Set 1920px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-admin-dark-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-320-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 320px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-light-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-320-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 320px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-dark-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-375-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 375px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-light-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-375-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 375px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-dark-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-390-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 390px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-light-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-390-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 390px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-dark-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-768-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 768px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-light-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-768-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 768px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-dark-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-1024-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 1024px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-light-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-1024-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 1024px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-dark-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-1440-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 1440px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-light-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-1440-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 1440px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-dark-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-1920-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 1920px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-light-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-partner-1920-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open partner entry",
+        "Set 1920px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-partner-dark-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-320-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 320px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-light-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-320-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 320px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-dark-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-375-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 375px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-light-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-375-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 375px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-dark-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-390-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 390px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-light-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-390-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 390px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-dark-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-768-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 768px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-light-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-768-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 768px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-dark-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-1024-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 1024px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-light-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-1024-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 1024px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-dark-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-1440-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 1440px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-light-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-1440-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 1440px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-dark-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-1920-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 1920px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-light-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-developer-1920-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open developer entry",
+        "Set 1920px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-developer-dark-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-320-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 320px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-light-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-320-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 320px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-dark-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-375-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 375px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-light-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-375-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 375px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-dark-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-390-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 390px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-light-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-390-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 390px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-dark-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-768-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 768px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-light-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-768-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 768px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-dark-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-1024-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 1024px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-light-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-1024-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 1024px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-dark-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-1440-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 1440px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-light-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-1440-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 1440px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-dark-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-1920-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 1920px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-light-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-creator-1920-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open creator entry",
+        "Set 1920px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-creator-dark-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-320-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 320px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-light-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-320-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 320px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 320,
+        "pageWidth": 320,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-dark-320.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-375-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 375px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-light-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-375-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 375px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 375,
+        "pageWidth": 375,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-dark-375.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-390-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 390px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-light-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-390-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 390px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 390,
+        "pageWidth": 390,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-dark-390.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-768-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 768px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-light-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-768-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 768px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 768,
+        "pageWidth": 768,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-dark-768.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-1024-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 1024px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-light-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-1024-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 1024px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1024,
+        "pageWidth": 1024,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-dark-1024.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-1440-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 1440px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-light-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-1440-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 1440px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1440,
+        "pageWidth": 1440,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-dark-1440.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-1920-light",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 1920px/light",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-light-1920.png"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "id": "ENTRY-ads-1920-dark",
+      "purpose": "Render the unauthenticated entry and detect horizontal page overflow",
+      "prerequisites": [
+        "Real built app served locally",
+        "No authenticated session"
+      ],
+      "steps": [
+        "Open ads entry",
+        "Set 1920px/dark",
+        "Measure document width and capture actual page"
+      ],
+      "expected": "Password input visible and page width no greater than viewport",
+      "actual": {
+        "viewport": 1920,
+        "pageWidth": 1920,
+        "passwordInputs": 1
+      },
+      "evidence": [
+        ".vscode/audit-20261105/before-ads-dark-1920.png"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

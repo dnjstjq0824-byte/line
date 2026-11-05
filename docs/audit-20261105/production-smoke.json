@@ -1,0 +1,227 @@
+{
+  "measuredAt": "2026-11-05T06:27:55.409Z",
+  "scope": "Public entry/readiness/source identity; optional non-admin management GET denial. Only authentication-session lifecycle writes; no business-data or schema mutation.",
+  "cases": [
+    {
+      "id": "PROD-SMOKE-1",
+      "purpose": "GET /api/v1/version",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-2",
+      "purpose": "GET /readyz",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-3",
+      "purpose": "GET /",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-4",
+      "purpose": "GET /admin/",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-5",
+      "purpose": "GET /partner/",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-6",
+      "purpose": "GET /developer/",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-7",
+      "purpose": "GET /creator/",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-8",
+      "purpose": "GET /ads/",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-9",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/bot-rules",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 401,
+      "actual": 401,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-10",
+      "purpose": "POST /api/v1/auth/login",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-11",
+      "purpose": "GET /api/v1/me",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-12",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/bot-rules",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 403,
+      "actual": 403,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-13",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/rich-menus",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 403,
+      "actual": 403,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-14",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/tickets",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 403,
+      "actual": 403,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-15",
+      "purpose": "GET /api/v1/creator/settlements",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 503,
+      "actual": 503,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-16",
+      "purpose": "GET /api/v1/users/never-registered/keys",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 404,
+      "actual": 404,
+      "verdict": "PASS"
+    },
+    {
+      "id": "PROD-SMOKE-17",
+      "purpose": "POST /api/v1/auth/logout",
+      "prerequisites": [
+        "Approved production smoke; no business-data mutation"
+      ],
+      "steps": [
+        "Send the documented request and verify status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    }
+  ]
+}

@@ -62,13 +62,16 @@ test('Track 4: Official Account Rich Menu & Chatbot CRM engine', async () => {
   assert.ok(latestReply.body.includes('[LUNO 공지]'), 'Bot reply should match configured keyword rule');
 
   // 6. Test Partner Bot Rules CRUD
-  const rulesListRes = await api('/api/v1/partner/accounts/oa-notice/bot-rules', token);
+  const adminLogin = await api('/api/v1/auth/login', null, 'POST', { email: 'admin@line.local', password: 'LunoAdmin#RotatedEdge$99xK' });
+  const adminToken = (await adminLogin.json()).access_token;
+  assert.equal((await api('/api/v1/partner/accounts/oa-notice/bot-rules', token)).status, 403);
+  const rulesListRes = await api('/api/v1/partner/accounts/oa-notice/bot-rules', adminToken);
   assert.equal(rulesListRes.status, 200);
   const { rules } = await rulesListRes.json();
   assert.ok(rules.length >= 5, 'Should return default seeded rules');
 
   // Add new custom bot rule
-  const addRuleRes = await api('/api/v1/partner/accounts/oa-notice/bot-rules', token, 'POST', {
+  const addRuleRes = await api('/api/v1/partner/accounts/oa-notice/bot-rules', adminToken, 'POST', {
     keyword: '배송조회',
     reply: '배송 현황: 주문번호를 입력하시면 실시간 배송 조회가 가능합니다.'
   });

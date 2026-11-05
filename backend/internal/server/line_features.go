@@ -784,11 +784,19 @@ func (a *App) searchConversationMessages(w http.ResponseWriter, r *http.Request)
 		send(w, 200, map[string]any{"results": []any{}})
 		return
 	}
+	if len(q) > 100 {
+		fail(w, 400, "query must be at most 100 bytes")
+		return
+	}
 	rows, e := a.db.QueryContext(r.Context(),
 		`SELECT id, sender_id, sequence, kind, body, created_at
 		 FROM chat.messages
-		 WHERE conversation_id=$1 AND deleted_at IS NULL AND lower(body) LIKE $2
-		 ORDER BY sequence DESC LIMIT 50`, convID, "%"+strings.ToLower(q)+"%")
+		 WHERE conversation_id=$1 AND deleted_at IS NULL
+		 ORDER BY sequence DESC`, convID)
+	if e != nil {
+		fail(w, 500, "message search unavailable")
+		return
+	}
 	out := make([]any, 0)
 	if e == nil {
 		defer rows.Close()
@@ -797,6 +805,10 @@ func (a *App) searchConversationMessages(w http.ResponseWriter, r *http.Request)
 			var seq int64
 			var at any
 			if rows.Scan(&id, &sender, &seq, &kind, &body, &at) == nil {
+				body = a.msgCipher.decrypt(body)
+				if !strings.Contains(strings.ToLower(body), strings.ToLower(q)) {
+					continue
+				}
 				out = append(out, map[string]any{
 					"id":         id,
 					"sender_id":  sender,
@@ -805,7 +817,14 @@ func (a *App) searchConversationMessages(w http.ResponseWriter, r *http.Request)
 					"body":       body,
 					"created_at": at,
 				})
+				if len(out) == 50 {
+					break
+				}
 			}
+		}
+		if rows.Err() != nil {
+			fail(w, 500, "message search unavailable")
+			return
 		}
 	}
 	send(w, 200, map[string]any{"results": out})

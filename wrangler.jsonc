@@ -18,20 +18,14 @@
     }
   ],
   // ---------------------------------------------------------------------------
-  // Durable Objects are DELIBERATELY NOT ENABLED: they need the Workers paid plan.
-  //
-  // scripts/cf_worker.js exports a ready UserSocketHub class and calls into it
-  // through hubFanOut(). With no USER_HUB binding every one of those calls is a
-  // no-op, so the worker runs exactly as it did before: WebSocket delivery is
-  // per-isolate. A recipient served by a different isolate does NOT get a live
-  // push and sees the message on their next fetch instead. Messages themselves are
-  // never lost -- they are committed to D1 and re-hydrated on read.
-  //
-  // To turn it on after upgrading the plan, restore:
-  //   "durable_objects": { "bindings": [{ "name": "USER_HUB", "class_name": "UserSocketHub" }] },
-  //   "migrations": [{ "tag": "v1-user-socket-hub", "new_sqlite_classes": ["UserSocketHub"] }],
-  // Coverage for the enabled path is in scripts/realtime_fanout.test.mjs.
+  // SQLite-backed Durable Objects are supported on Workers Free as well as Paid.
+  // https://developers.cloudflare.com/durable-objects/platform/limits/
+  // This adds a namespace; it does not migrate or delete existing D1 messages.
+  // Rollback: redeploy the prior worker/bindings, retaining this namespace and
+  // migration history. Do not use a deleted_classes migration as a rollback.
   // ---------------------------------------------------------------------------
+  "durable_objects": { "bindings": [{ "name": "USER_HUB", "class_name": "UserSocketHub" }] },
+  "migrations": [{ "tag": "v1-user-socket-hub", "new_sqlite_classes": ["UserSocketHub"] }],
   "vars": {
     // Preserve the existing standalone service on its one approved hostname.
     // All other public hosts still fail closed. Demo-account policy is unchanged.

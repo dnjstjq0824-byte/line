@@ -2553,14 +2553,7 @@ async function extended(p, request, url, me, token) {
     }
   }
   if (p === 'push-tokens/test' && method === 'POST') {
-    const userTokens = pushTokens.get(myId) || [];
-    return json({
-      ok: true,
-      dispatched: true,
-      recipient_id: myId,
-      active_tokens_count: userTokens.length,
-      payload: { title: 'LUNO', body: '테스트 푸시 알림이 발송되었습니다.', sound: 'default' }
-    });
+    return json({ error: 'Push delivery requires a configured provider-backed API', code: 'PUSH_NOT_CONFIGURED' }, 503);
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/sync$/)) && method === 'GET') {
     const cid = resolveConversationId(m[1], myId);
@@ -2602,13 +2595,7 @@ async function extended(p, request, url, me, token) {
     const targetId = m[1];
     const bundle = userKeys.get(targetId);
     if (!bundle) {
-      return json({
-        user_id: targetId,
-        identity_key: `luno_ed25519_id_${targetId.slice(0, 8)}`,
-        signed_prekey: `luno_curve25519_spk_${targetId.slice(0, 8)}`,
-        prekey_sig: `sig_${targetId.slice(0, 8)}`,
-        one_time_prekey: `otk_${uid().slice(0, 12)}`
-      });
+      return json({ error: 'No registered key bundle', code: 'KEY_BUNDLE_NOT_FOUND' }, 404);
     }
     const otk = bundle.one_time_prekeys.length ? bundle.one_time_prekeys.shift() : null;
     return json({
@@ -2661,20 +2648,7 @@ async function extended(p, request, url, me, token) {
   // PHASE 3: Voice STT & Message Unsend Recall
   // ==========================================
   if (p === 'ai/stt' && method === 'POST') {
-    const b = await readJson(request);
-    const sampleTexts = [
-      '안녕하세요! 오늘 회의 일정 공유 부탁드립니다.',
-      'LUNO 메신저 실시간 음성 인식이 정상 작동하고 있습니다.',
-      '도착하면 연락 주세요! 좋은 하루 되세요.'
-    ];
-    const text = sampleTexts[Math.floor(Math.random() * sampleTexts.length)];
-    return json({
-      ok: true,
-      transcript: `[LUNO AI 음성변환] ${b.mock_text || text}`,
-      confidence: 0.985,
-      engine: 'luno-whisper-edge-v1',
-      duration_sec: Number(b.duration || 3.5)
-    });
+    return json({ error: 'Speech transcription requires a configured provider-backed API', code: 'STT_NOT_CONFIGURED' }, 503);
   }
 
   // ==========================================
@@ -2740,44 +2714,22 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'deleted', rule_id: ruleId });
   }
   if ((m = p.match(/^developer\/apps\/([\w-]+)\/webhooks\/test$/)) && method === 'POST') {
-    return json({
-      ok: true,
-      delivered: true,
-      status_code: 200,
-      response_time_ms: 45,
-      signature: 'sha256=' + uid().replace(/-/g, '')
-    });
+    return json({ error: 'Webhook delivery requires a configured delivery backend', code: 'WEBHOOK_DELIVERY_NOT_CONFIGURED' }, 503);
   }
 
   // ==========================================
   // PHASE 5: Payments, Settlements & Commerce
   // ==========================================
   if (p === 'checkout' && method === 'POST') {
-    const b = await readJson(request);
-    const amount = intIn(b.amount, 100, 1000000) || 5000;
-    const orderId = uid();
-    return json({
-      order_id: orderId,
-      amount,
-      currency: b.currency || 'KRW',
-      checkout_url: `https://line-messenger.dnjstjqppk.workers.dev/checkout?session=${orderId}`,
-      status: 'succeeded'
-    }, 201);
+    return json({ error: 'Verified payment provider integration is required', code: 'PAYMENTS_NOT_CONFIGURED' }, 503);
   }
   if (p === 'creator/settlements') {
     if (method === 'GET') {
-      const s = creatorSettlements.get(myId) || { balance: 148500, pending: 32000, history: [] };
-      return json(s);
+      return json({ error: 'Settlement ledger is not connected', code: 'SETTLEMENTS_NOT_CONFIGURED' }, 503);
     }
   }
   if (p === 'creator/settlements/request' && method === 'POST') {
-    const b = await readJson(request);
-    const s = creatorSettlements.get(myId) || { balance: 148500, pending: 32000, history: [] };
-    const reqAmount = Math.min(s.balance, intIn(b.amount, 10000, 1000000) || s.balance);
-    s.balance -= reqAmount;
-    s.history.unshift({ id: uid(), amount: reqAmount, status: 'processed', requested_at: now() });
-    creatorSettlements.set(myId, s);
-    return json({ status: 'requested', payout_amount: reqAmount, remaining_balance: s.balance }, 201);
+    return json({ error: 'Verified payout provider integration is required', code: 'SETTLEMENTS_NOT_CONFIGURED' }, 503);
   }
 
   // ==========================================
@@ -2963,7 +2915,9 @@ const workerCore = {
       try {
         const result = await env.DB.prepare('SELECT 1 AS ready').first();
         if (!result || result.ready !== 1) throw new Error('Database probe did not return ready');
-        return json({ status: 'ready', brand: 'LUNO', runtime: 'cloudflare-worker', checks: { database: 'healthy' } });
+        const schema = await env.DB.prepare("SELECT COUNT(*) AS ready_tables FROM sqlite_master WHERE type='table' AND name IN ('users','wallets','luno_sessions','luno_messages','luno_read_cursors','luno_attachments','luno_ws_tickets','luno_audit')").first();
+        if (!schema || schema.ready_tables !== 8) return json({ status: 'not_ready', checks: { database: 'healthy', schema: 'missing_required_tables' } }, 503);
+        return json({ status: 'ready', brand: 'LUNO', runtime: 'cloudflare-worker', checks: { database: 'healthy', schema: 'ready' } });
       } catch {
         return json({ status: 'not_ready', checks: { database: 'unavailable' } }, 503);
       }
@@ -3218,6 +3172,15 @@ const workerCore = {
       const authUser = await getAuthUser(request);
       if (!authUser) {
         return json({ error: 'unauthorized' }, 401);
+      }
+
+      // Management APIs must not inherit the permissions of a customer who
+      // can merely open an official-account conversation.
+      const partnerAccountRoute = p.match(/^partner\/accounts\/([\w-]+)(?:\/|$)/);
+      if (partnerAccountRoute && authUser.role !== 'admin') {
+        const account = partnerAccounts.get(partnerAccountRoute[1]);
+        const organization = account && partnerOrgs.get(account.org_id);
+        if (!organization || organization.owner_id !== authUser.id) return json({ error: 'account forbidden' }, 403);
       }
 
       if (p === 'auth/sessions/revoke' && request.method === 'POST') {
@@ -3676,13 +3639,13 @@ const workerCore = {
         if (request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const orgId = crypto.randomUUID();
-          const org = { id: orgId, name: body.name || 'Partner Org', country: body.country || 'KR' };
+          const org = { id: orgId, name: body.name || 'Partner Org', country: body.country || 'KR', owner_id: authUser.id, my_role: 'owner' };
           partnerOrgs.set(orgId, org);
           const accId = crypto.randomUUID();
           partnerAccounts.set(accId, { id: accId, org_id: orgId, name: `${org.name} Official`, status: 'active' });
           return json(org, 201);
         }
-        return json({ organizations: Array.from(partnerOrgs.values()) });
+        return json({ organizations: Array.from(partnerOrgs.values()).filter(org => authUser.role === 'admin' || org.owner_id === authUser.id) });
       }
       const partnerTickMatch = p.match(/^partner\/accounts\/([a-zA-Z0-9_-]+)\/tickets$/);
       if (partnerTickMatch) {

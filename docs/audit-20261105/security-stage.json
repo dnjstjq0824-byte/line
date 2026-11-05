@@ -1,0 +1,273 @@
+{
+  "measuredAt": "2026-11-05T06:25:48.408Z",
+  "base": "http://127.0.0.1:8797",
+  "scope": "Isolated local Worker/D1 ownership boundaries; no production mutation",
+  "cases": [
+    {
+      "id": "SEC-STAGE-1",
+      "purpose": "GET /readyz returns 200",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-2",
+      "purpose": "POST /api/v1/auth/register returns 201",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 201,
+      "actual": 201,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-3",
+      "purpose": "POST /api/v1/auth/login returns 200",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-4",
+      "purpose": "POST /api/v1/auth/register returns 201",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 201,
+      "actual": 201,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-5",
+      "purpose": "POST /api/v1/auth/login returns 200",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-6",
+      "purpose": "POST /api/v1/partner/organizations returns 201",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 201,
+      "actual": 201,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-7",
+      "purpose": "GET /api/v1/partner/organizations returns 200",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-8",
+      "purpose": "GET /api/v1/partner/organizations returns 200",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 200,
+      "actual": 200,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-9",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/bot-rules returns 403",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 403,
+      "actual": 403,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-10",
+      "purpose": "POST /api/v1/partner/accounts/oa-notice/bot-rules returns 403",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 403,
+      "actual": 403,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-11",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/rich-menus returns 403",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 403,
+      "actual": 403,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-12",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/tickets returns 403",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 403,
+      "actual": 403,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-13",
+      "purpose": "GET /api/v1/partner/accounts/oa-notice/bot-rules returns 401",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 401,
+      "actual": 401,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-14",
+      "purpose": "POST /api/v1/push-tokens/test returns 503",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 503,
+      "actual": 503,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-15",
+      "purpose": "POST /api/v1/ai/stt returns 503",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 503,
+      "actual": 503,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-16",
+      "purpose": "POST /api/v1/checkout returns 503",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 503,
+      "actual": 503,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-17",
+      "purpose": "POST /api/v1/creator/settlements/request returns 503",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 503,
+      "actual": 503,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-18",
+      "purpose": "POST /api/v1/developer/apps/unknown/webhooks/test returns 503",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 503,
+      "actual": 503,
+      "verdict": "PASS"
+    },
+    {
+      "id": "SEC-STAGE-19",
+      "purpose": "GET /api/v1/users/never-registered/keys returns 404",
+      "prerequisites": [
+        "Dedicated local Worker and local D1 only"
+      ],
+      "steps": [
+        "Send real HTTP request with the current isolated account",
+        "Check the returned status"
+      ],
+      "expected": 404,
+      "actual": 404,
+      "verdict": "PASS"
+    }
+  ]
+}

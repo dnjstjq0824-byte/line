@@ -1,6 +1,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { createHash } = require('node:crypto');
 
 console.log('Building all Vue workspaces for Cloudflare deployment...');
 execSync('npm run build:apps', { stdio: 'inherit' });
@@ -64,6 +65,10 @@ const versionData = {
   brand: 'LUNO',
   status: 'ok'
 };
+// A local hotfix may be authorized while Git writes are on hold. Never present
+// its old HEAD as though it uniquely identified the deployed worker source.
+versionData.source_dirty = execSync('git status --porcelain', { encoding: 'utf8' }).trim().length > 0;
+versionData.worker_source_sha256 = createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'cf_worker.js'))).digest('hex');
 
 fs.writeFileSync(path.join(distRoot, 'version.json'), JSON.stringify(versionData, null, 2));
 

@@ -39,9 +39,10 @@ test('LUNO Phase 1: Push Tokens & Offline Delta Sync', async () => {
 
   // 2. Test push delivery
   const pushTestRes = await api('push-tokens/test', token, 'POST');
-  assert.equal(pushTestRes.status, 200);
+  assert.equal(pushTestRes.status, 503);
   const pushData = await pushTestRes.json();
-  assert.equal(pushData.dispatched, true);
+  assert.equal(pushData.code, 'PUSH_NOT_CONFIGURED');
+  assert.equal(pushData.dispatched, undefined);
 
   // 3. Delta Sync
   const chatsRes = await api('conversations', token);
@@ -56,7 +57,7 @@ test('LUNO Phase 1: Push Tokens & Offline Delta Sync', async () => {
   }
 });
 
-test('LUNO Phase 2: E2EE Key Bundles & WebRTC SFU', async () => {
+test('key-bundle storage and group signaling metadata (no cryptographic or media proof)', async () => {
   const token = await login('user@line.local', 'LunoUser#Rotated$72mP');
   const meRes = await api('me', token);
   const me = await meRes.json();
@@ -89,16 +90,16 @@ test('LUNO Phase 2: E2EE Key Bundles & WebRTC SFU', async () => {
   assert.equal(leaveRes.status, 200);
 });
 
-test('LUNO Phase 3: AI Voice STT Transcription', async () => {
+test('speech transcription fails closed without a configured provider', async () => {
   const token = await login('user@line.local', 'LunoUser#Rotated$72mP');
   const sttRes = await api('ai/stt', token, 'POST', {
     mock_text: '오늘 회의 준비 완료되었습니다.',
     duration: 4.5
   });
-  assert.equal(sttRes.status, 200);
+  assert.equal(sttRes.status, 503);
   const sttData = await sttRes.json();
-  assert.ok(sttData.transcript.includes('오늘 회의 준비 완료되었습니다.'));
-  assert.equal(sttData.confidence, 0.985);
+  assert.equal(sttData.code, 'STT_NOT_CONFIGURED');
+  assert.equal(sttData.transcript, undefined);
 });
 
 test('LUNO Phase 4: B2B Official Accounts & Webhooks', async () => {
@@ -112,10 +113,10 @@ test('LUNO Phase 4: B2B Official Accounts & Webhooks', async () => {
 
   // 2. Developer Webhook Test
   const webhookTest = await api('developer/apps/app_101/webhooks/test', token, 'POST');
-  assert.equal(webhookTest.status, 200);
+  assert.equal(webhookTest.status, 503);
   const whData = await webhookTest.json();
-  assert.equal(whData.delivered, true);
-  assert.ok(whData.signature.startsWith('sha256='));
+  assert.equal(whData.code, 'WEBHOOK_DELIVERY_NOT_CONFIGURED');
+  assert.equal(whData.delivered, undefined);
 });
 
 test('LUNO Phase 5: Payments, Settlements & Commerce', async () => {
@@ -123,16 +124,17 @@ test('LUNO Phase 5: Payments, Settlements & Commerce', async () => {
 
   // 1. Checkout session
   const checkoutRes = await api('checkout', token, 'POST', { amount: 15000, currency: 'KRW' });
-  assert.equal(checkoutRes.status, 201);
+  assert.equal(checkoutRes.status, 503);
   const checkoutData = await checkoutRes.json();
-  assert.equal(checkoutData.status, 'succeeded');
-  assert.ok(checkoutData.checkout_url);
+  assert.equal(checkoutData.code, 'PAYMENTS_NOT_CONFIGURED');
+  assert.equal(checkoutData.status, undefined);
 
   // 2. Creator settlements
   const settRes = await api('creator/settlements', token);
-  assert.equal(settRes.status, 200);
+  assert.equal(settRes.status, 503);
   const settData = await settRes.json();
-  assert.ok(typeof settData.balance === 'number');
+  assert.equal(settData.code, 'SETTLEMENTS_NOT_CONFIGURED');
+  assert.equal(settData.balance, undefined);
 });
 
 test('LUNO Phase 6: Compliance & GDPR Data Portability', async () => {

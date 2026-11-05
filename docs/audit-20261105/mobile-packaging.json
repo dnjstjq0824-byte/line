@@ -1,0 +1,18 @@
+{
+  "measuredAt": "2026-11-05T06:25:53.521Z",
+  "file": "mobile/flutter_app/build/app/outputs/bundle/release/app-release.aab",
+  "bytes": 51318843,
+  "sha256": "5b2fe2bf13b1b81efb200c0867d85311d0f2915ca6b39f3067ba806d491e4f03",
+  "jarVerified": true,
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86_64"
+  ],
+  "minSdk": 24,
+  "targetSdk": 36,
+  "certificateSha256": "6D:CD:CD:38:DB:6A:48:5C:E9:99:FE:EC:9D:B5:8F:E5:CD:C7:80:63:16:AA:63:6A:56:90:8B:FD:F0:BA:64:F0",
+  "deviceInstall": "BLOCKED: no connected ADB device",
+  "storeSubmission": "NOT_RUN: requires separate authorization",
+  "ios": "Source structure restored; Xcode build/signing/real-device execution BLOCKED on Windows"
+}

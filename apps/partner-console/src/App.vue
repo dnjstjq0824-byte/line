@@ -28,6 +28,15 @@ const orgs = ref<Org[]>([]), accounts = ref<Account[]>([])
 const tickets = ref<Ticket[]>([])
 
 const activeTab = ref<'tickets' | 'campaigns' | 'richmenu' | 'botrules'>('richmenu')
+const accountLoading = ref(false)
+const accountReady = ref(false)
+let accountLoadVersion = 0
+function resetAccountEditor() {
+  tickets.value = []; botRules.value = []; simOutput.value = ''
+  richMenuTitle.value = ''; richMenuLayout.value = 'grid_2x3'; selectedTileIndex.value = 0
+  richMenuTiles.value = Array.from({ length: 6 }, (_, index) => ({ id: `t${index + 1}`, label: '', icon: '', action: { type: 'message', text: '' } }))
+  accountReady.value = false
+}
 
 // Tickets & Campaigns state
 const newTicketContactID = ref(''), newTicketNote = ref(''), newTicketPrio = ref('normal')
@@ -86,7 +95,9 @@ async function selectOrg(id: string) {
   await run(async () => {
     selectedOrg.value = id
     selectedAccount.value = ''
+    accountLoadVersion++; accounts.value = []; resetAccountEditor()
     const x = await request<{ accounts: Account[] }>(`/api/v1/partner/organizations/${id}/accounts`, token.value)
+    if (selectedOrg.value !== id) return
     accounts.value = x.accounts || []
     if (accounts.value.length > 0) {
       await selectAccount(accounts.value[0].id)
@@ -105,18 +116,29 @@ async function createAccount() {
 
 async function selectAccount(id: string) {
   selectedAccount.value = id
-  await Promise.all([loadTickets(), loadRichMenu(), loadBotRules()])
+  resetAccountEditor()
+  const version = ++accountLoadVersion
+  accountLoading.value = true; error.value = ''
+  try {
+    await Promise.all([loadTickets(), loadRichMenu(), loadBotRules()])
+    if (version === accountLoadVersion) accountReady.value = true
+  } catch (failure) {
+    if (version === accountLoadVersion) error.value = (failure as Error).message
+  } finally { if (version === accountLoadVersion) accountLoading.value = false }
 }
 
 async function loadTickets() {
   if (!selectedAccount.value) return
-  const x = await request<{ tickets: Ticket[] }>(`/api/v1/partner/accounts/${selectedAccount.value}/tickets`, token.value).catch(() => ({ tickets: [] }))
-  tickets.value = x.tickets || []
+  const id = selectedAccount.value, version = accountLoadVersion
+  const x = await request<{ tickets: Ticket[] }>(`/api/v1/partner/accounts/${id}/tickets`, token.value)
+  if (version === accountLoadVersion && id === selectedAccount.value) tickets.value = x.tickets || []
 }
 
 async function loadRichMenu() {
   if (!selectedAccount.value) return
-  const x = await request<{ rich_menu?: any }>(`/api/v1/partner/accounts/${selectedAccount.value}/rich-menus`, token.value).catch(() => ({ rich_menu: null }))
+  const id = selectedAccount.value, version = accountLoadVersion
+  const x = await request<{ rich_menu?: any }>(`/api/v1/partner/accounts/${id}/rich-menus`, token.value)
+  if (version !== accountLoadVersion || id !== selectedAccount.value) return
   if (x && x.rich_menu) {
     richMenuTitle.value = x.rich_menu.title || richMenuTitle.value
     richMenuLayout.value = x.rich_menu.layout || richMenuLayout.value
@@ -128,6 +150,7 @@ async function loadRichMenu() {
 
 async function saveRichMenu() {
   await run(async () => {
+    if (!accountReady.value || accountLoading.value) throw new Error('선택한 계정의 설정을 먼저 불러오세요.')
     const tilesToSave = richMenuLayout.value === 'grid_1x3' ? richMenuTiles.value.slice(0, 3) : richMenuTiles.value
     await request(`/api/v1/partner/accounts/${selectedAccount.value}/rich-menus`, token.value, 'POST', {
       title: richMenuTitle.value.trim(),
@@ -135,7 +158,7 @@ async function saveRichMenu() {
       tiles: tilesToSave,
       enabled: true,
     })
-    note.value = 'Rich Menu가 성공적으로 저장 및 배포되었습니다.'
+    note.value = 'Rich Menu 설정을 저장했습니다.'
   })
 }
 
@@ -158,8 +181,9 @@ function switchLayout(layout: 'grid_2x3' | 'grid_1x3') {
 
 async function loadBotRules() {
   if (!selectedAccount.value) return
-  const x = await request<{ rules?: BotRule[] }>(`/api/v1/partner/accounts/${selectedAccount.value}/bot-rules`, token.value).catch(() => ({ rules: [] }))
-  botRules.value = x.rules || []
+  const id = selectedAccount.value, version = accountLoadVersion
+  const x = await request<{ rules?: BotRule[] }>(`/api/v1/partner/accounts/${id}/bot-rules`, token.value)
+  if (version === accountLoadVersion && id === selectedAccount.value) botRules.value = x.rules || []
 }
 
 async function createBotRule() {
@@ -309,7 +333,7 @@ async function createCoupon() {
         <div v-if="activeTab === 'richmenu'" class="tool-content">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <h3>인터랙티브 Rich Menu 디자이너</h3>
-            <button @click="saveRichMenu" style="background:#06c755;font-weight:700">💾 Rich Menu 저장 및 활성화</button>
+            <button @click="saveRichMenu" :disabled="accountLoading || !accountReady" style="background:#06c755;font-weight:700">💾 Rich Menu 저장 및 활성화</button>
           </div>
           <p class="muted">사용자가 공식 계정 대화방을 열었을 때 하단에 고정 표시되는 인터랙티브 타일 메뉴입니다.</p>
 
