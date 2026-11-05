@@ -528,6 +528,36 @@ const searchKeyword = ref('')
 const foundUsers = ref<User[]>([])
 const draftMessage = ref('')
 const replyToMessage = ref<Message | null>(null)
+// --- Official Account Rich Menu ---
+const activeRichMenu = ref<{ id: string; title: string; layout?: 'grid_2x3' | 'grid_1x3'; tiles: Array<{ id: string; label: string; icon: string; action: { type: string; text?: string; uri?: string; data?: string } }> } | null>(null)
+const showRichMenu = ref(true)
+
+async function loadConversationRichMenu(cid: string) {
+  activeRichMenu.value = null
+  if (!cid) return
+  try {
+    const res = await api<{ rich_menu: any }>(`/api/v1/conversations/${cid}/rich-menu`)
+    if (res && res.rich_menu) {
+      activeRichMenu.value = res.rich_menu
+      showRichMenu.value = true
+    }
+  } catch {
+    activeRichMenu.value = null
+  }
+}
+
+function onRichMenuTileClick(tile: any) {
+  if (!tile || !tile.action) return
+  if (tile.action.type === 'message') {
+    draftMessage.value = tile.action.text || tile.label
+    void sendMessage()
+  } else if (tile.action.type === 'uri') {
+    if (tile.action.uri) window.open(tile.action.uri, '_blank')
+  } else if (tile.action.type === 'postback') {
+    draftMessage.value = `[포스트백] ${tile.action.data || tile.label}`
+    void sendMessage()
+  }
+}
 const conversationDrafts = new Map<string, { body: string; reply: Message | null }>()
 const sendingConversations = ref(new Set<string>())
 const pendingSends = new Map<string, AbortController>()
