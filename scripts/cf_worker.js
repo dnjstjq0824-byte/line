@@ -2823,6 +2823,21 @@ const workerCore = {
       if (backendRoute) return json({ error: 'persistent backend must be configured' }, 503);
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Assets unavailable', { status: 503 });
     }
+    // Liveness does not imply that persistence is ready. These checks must not
+    // boot the demo service or run schema/seed writes just to answer a probe.
+    if (url.pathname === '/healthz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
+      return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
+    }
+    if (url.pathname === '/readyz') {
+      if (!env.DB) return json({ status: 'not_ready', checks: { database: 'not_configured' } }, 503);
+      try {
+        const result = await env.DB.prepare('SELECT 1 AS ready').first();
+        if (!result || result.ready !== 1) throw new Error('Database probe did not return ready');
+        return json({ status: 'ready', brand: 'LUNO', runtime: 'cloudflare-worker', checks: { database: 'healthy' } });
+      } catch {
+        return json({ status: 'not_ready', checks: { database: 'unavailable' } }, 503);
+      }
+    }
     await boot(env);
 
     // Handle CORS preflight
@@ -2838,9 +2853,6 @@ const workerCore = {
     }
 
     // Health / Readyz / Metrics / Version
-    if (url.pathname === '/healthz' || url.pathname === '/readyz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
-      return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
-    }
     if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
       return json(BUILD_INFO);
     }

@@ -47,7 +47,8 @@ export async function decryptMessage(b64: string, sharedKey: CryptoKey): Promise
   } catch { return '[decryption failed]' }
 }
 
-export async function queueOfflineMessage(msg: { conversation_id: string; client_id: string; kind: string; body: string }) {
+export type PendingMessage = { owner_id: string; conversation_id: string; client_id: string; kind: string; body: string; reply_to?: string }
+export async function queueOfflineMessage(msg: PendingMessage) {
   const db = await openOfflineDB()
   const tx = db.transaction('pending_messages', 'readwrite')
   tx.objectStore('pending_messages').add({ ...msg, queued_at: Date.now() })
@@ -55,12 +56,20 @@ export async function queueOfflineMessage(msg: { conversation_id: string; client
   db.close()
 }
 
-export async function flushOfflineQueue(sendFn: (msg: any) => Promise<void>) {
+let queueFlush: Promise<void> | null = null
+export async function flushOfflineQueue(ownerId: string, sendFn: (msg: PendingMessage) => Promise<void>) {
+  if (queueFlush) { await queueFlush; return flushOfflineQueue(ownerId, sendFn) }
+  queueFlush = flushOwnedQueue(ownerId, sendFn)
+  try { await queueFlush } finally { queueFlush = null }
+}
+async function flushOwnedQueue(ownerId: string, sendFn: (msg: PendingMessage) => Promise<void>) {
   const db = await openOfflineDB()
   const tx = db.transaction('pending_messages', 'readonly')
   const req = tx.objectStore('pending_messages').getAll()
   const items = await new Promise<any[]>((r, j) => { req.onsuccess = () => r(req.result); req.onerror = () => j(req.error) })
   for (const item of items) {
+    // Legacy records have no provable owner and must never be sent by another account.
+    if (!ownerId || item.owner_id !== ownerId) continue
     try { await sendFn(item); const dt = db.transaction('pending_messages', 'readwrite'); dt.objectStore('pending_messages').delete(item.id); await new Promise<void>((r, j) => { dt.oncomplete = () => r(); dt.onerror = () => j(dt.error) }) } catch { break }
   }
   db.close()

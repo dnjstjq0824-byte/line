@@ -32,9 +32,15 @@ func (a *App) systemHealth(w http.ResponseWriter, r *http.Request) {
 
 	// Outbox check
 	var pendingCount int
-	a.db.QueryRowContext(r.Context(), "SELECT count(*) FROM realtime.delivery_outbox WHERE published_at IS NULL").Scan(&pendingCount)
-	checks["outbox"] = map[string]any{
-		"pending": pendingCount,
+	// The relay records delivery per instance, not in the legacy published_at column.
+	err := a.db.QueryRowContext(r.Context(), `SELECT count(*) FROM realtime.delivery_outbox o
+		LEFT JOIN realtime.outbox_deliveries d ON d.outbox_id=o.id AND d.instance_id=$1
+		WHERE d.id IS NULL`, a.instanceID).Scan(&pendingCount)
+	if err != nil {
+		status = "degraded"
+		checks["outbox"] = map[string]any{"status": "unhealthy", "pending": nil}
+	} else {
+		checks["outbox"] = map[string]any{"status": "healthy", "pending": pendingCount}
 	}
 
 	send(w, 200, map[string]any{

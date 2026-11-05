@@ -3,10 +3,11 @@ import lunoLogo from '../../shared/brand/luno-logo-horizontal.svg'
 import lunoMark from '../../shared/brand/luno-logo-appicon.svg'
 import { handoffText } from '../../shared/handoff-i18n'
 import LineIcon from './components/LineIcon.vue'
+import MessageAttachment from './components/MessageAttachment.vue'
 import LineContextMenu, { type ContextMenuItem } from './components/LineContextMenu.vue'
 import { LINE_STICKERS, type LineSticker } from './line-stickers'
 import { playSendSound, playReceiveSound } from './sound-effects'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   SUPPORTED_LOCALES,
   UI_DICTIONARY,
@@ -18,6 +19,7 @@ import {
 import {
   API_URL,
   request,
+  ApiError,
   newClientID,
   wsURL,
   type Chat,
@@ -28,10 +30,6 @@ import {
 import {
   startWebRTCCall,
   endWebRTCCall,
-  generateE2EEKeyPair,
-  deriveSharedSecret,
-  encryptMessage,
-  decryptMessage,
   queueOfflineMessage,
   flushOfflineQueue
 } from './messenger-utils'
@@ -521,12 +519,23 @@ const chats = ref<Chat[]>([])
 const selectedChatId = ref('')
 const selectedChat = computed(() => chats.value.find(c => c.id === selectedChatId.value) || null)
 const messages = ref<Message[]>([])
+const hasEarlierMessages = ref(false)
+const earlierMessagesLoading = ref(false)
+const earlierMessagesError = ref('')
 const friends = ref<User[]>([])
 const officialAccounts = ref<Array<{ id: string; name: string; handle: string; description: string; color: string; followed: boolean }>>([])
 const searchKeyword = ref('')
 const foundUsers = ref<User[]>([])
 const draftMessage = ref('')
 const replyToMessage = ref<Message | null>(null)
+const conversationDrafts = new Map<string, { body: string; reply: Message | null }>()
+const sendingConversations = ref(new Set<string>())
+const pendingSends = new Map<string, AbortController>()
+watch(selectedChatId, (next, previous) => {
+  if (previous) conversationDrafts.set(previous, { body: draftMessage.value, reply: replyToMessage.value })
+  draftMessage.value = conversationDrafts.get(next)?.body || ''
+  replyToMessage.value = conversationDrafts.get(next)?.reply || null
+}, { flush: 'sync' })
 const attachmentInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const activeDrawer = ref<'none' | 'notes' | 'albums' | 'events' | 'media'>('none')
@@ -546,7 +555,6 @@ const newAlbumTitle = ref('')
 const editingMessageId = ref('')
 const editingMessageBody = ref('')
 const letterSealingEnabled = ref(true)
-const e2eePublicKeyJwk = ref('')
 const openChatRooms = ref<Array<{ id: string; name: string; description: string; visibility: string }>>([])
 const selectedOpenChatRoom = ref<{ id: string; name: string; description: string } | null>(null)
 const openChatPosts = ref<Array<{ id: string; author_id: string; body: string; created_at: string }>>([])
@@ -561,6 +569,10 @@ const devicesList = ref<Array<{ id: string; name: string; platform: string; trus
 const editProfileName = ref('')
 const editProfileBio = ref('')
 const editProfileHandle = ref('')
+const profileSaving = ref(false)
+const profileSaveError = ref('')
+const profileSaved = ref(false)
+const profileDirty = computed(() => editProfileName.value.trim() !== (currentUser.value?.display_name || '') || editProfileHandle.value.trim() !== (currentUser.value?.handle || '') || editProfileBio.value.trim() !== (currentUser.value?.status_message || currentUser.value?.bio || ''))
 const isRecordingVoice = ref(false)
 let mediaRecorderInstance: MediaRecorder | null = null
 let recordedChunks: BlobPart[] = []
@@ -847,6 +859,11 @@ const selectedFriendsForGroup = ref<string[]>([])
 const showAddFriendModal = ref(false)
 const addFriendHandleInput = ref('')
 const showSettingsModal = ref(false)
+const showContactPicker = ref(false)
+watch(showSettingsModal, () => {
+  profileSaved.value = false
+  profileSaveError.value = ''
+})
 const showPollCreateModal = ref(false)
 const newPollQuestion = ref('')
 const newPollOption1 = ref('')
@@ -865,6 +882,28 @@ const approveTokenInput = ref('')
 
 // --- Realtime WebSocket ---
 let socket: WebSocket | null = null
+const realtimeState = ref<'connecting' | 'connected' | 'reconnecting' | 'offline'>('connecting')
+let realtimeGeneration = 0
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempts = 0
+let messageSyncTimer: ReturnType<typeof setInterval> | null = null
+let messageSyncInFlight: Promise<void> | null = null
+function stopRealtime() {
+  realtimeGeneration++
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  socket?.close()
+  socket = null
+}
+function scheduleReconnect(generation: number) {
+  if (generation !== realtimeGeneration || !token.value || reconnectTimer) return
+  realtimeState.value = navigator.onLine ? 'reconnecting' : 'offline'
+  if (!navigator.onLine) return
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    void connectRealtime()
+  }, Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempts++, 5)))
+}
 
 // --- Helper Functions ---
 const api = <T,>(path: string, method = 'GET', body?: unknown) => request<T>(path, token.value || null, method, body)
@@ -969,45 +1008,17 @@ async function authAction() {
       device_name: 'LINE Web Desktop Client',
       platform: 'web'
     })
-    token.value = data.access_token
-    currentDeviceId = data.device_id || ''
-    if (autoLoginCheck.value) {
-      localStorage.setItem('luno.auth_token', token.value)
-    } else {
-      sessionStorage.setItem('luno.auth_token', token.value)
-    }
+    persistWebSession(data)
     currentUser.value = await api<User>('/api/v1/me')
     editProfileName.value = currentUser.value.display_name || ''
     editProfileBio.value = currentUser.value.status_message || currentUser.value.bio || ''
     editProfileHandle.value = currentUser.value.handle || ''
     password.value = ''
-    await initLetterSealing()
     await loadInitialData()
     await connectRealtime()
   })
 }
 
-async function initLetterSealing() {
-  try {
-    const kp = await generateE2EEKeyPair()
-    const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey)
-    const publicKeyJwk = JSON.stringify(pubJwk)
-    e2eePublicKeyJwk.value = publicKeyJwk
-    if (currentDeviceId) {
-      await api(`/api/v1/devices/${currentDeviceId}/keys`, 'PUT', {
-        identity_public_key_b64: btoa(publicKeyJwk),
-        signed_prekey_b64: btoa(publicKeyJwk),
-        signed_prekey_signature_b64: btoa('sig-' + currentDeviceId),
-        one_time_prekeys_b64: [btoa(publicKeyJwk)]
-      }).catch(() => {})
-    }
-    if (false as boolean) {
-      const s = await deriveSharedSecret(kp.privateKey, kp.publicKey)
-      const enc = await encryptMessage('', s)
-      await decryptMessage(enc, s)
-    }
-  } catch {}
-}
 
 function startQrCountdown() {
   if (qrCountdownInterval) clearInterval(qrCountdownInterval)
@@ -1047,12 +1058,10 @@ async function startQrLoginChallenge() {
           if (qrPollInterval) clearInterval(qrPollInterval)
           qrPollInterval = null
           if (qrCountdownInterval) clearInterval(qrCountdownInterval)
-          token.value = p.access_token
-          currentDeviceId = p.device_id || ''
+          persistWebSession(p)
           currentUser.value = await api<User>('/api/v1/me')
           qrChallengeID.value = ''
           qrToken.value = ''
-          await initLetterSealing()
           await loadInitialData()
           await connectRealtime()
         }
@@ -1098,14 +1107,12 @@ async function verifyPhoneLogin() {
       code: phoneCodeInput.value.trim(),
       device_name: 'Open Messenger Desktop PC'
     })
-    token.value = res.access_token
-    currentDeviceId = res.device_id || ''
+    persistWebSession(res)
     currentUser.value = res.user || await api<User>('/api/v1/me')
     editProfileName.value = currentUser.value?.display_name || ''
     editProfileBio.value = currentUser.value?.bio || currentUser.value?.status_message || ''
     editProfileHandle.value = currentUser.value?.handle || ''
     if (phoneTimerInterval) clearInterval(phoneTimerInterval)
-    await initLetterSealing()
     await loadInitialData()
     await connectRealtime()
   })
@@ -1167,19 +1174,12 @@ async function quickDemoLogin(account: 'user' | 'alice') {
     const data = await request<LoginResult>('/api/v1/auth/demo', null, 'POST', {
       account
     })
-    token.value = data.access_token
-    currentDeviceId = data.device_id || ''
-    if (autoLoginCheck.value) {
-      localStorage.setItem('luno.auth_token', token.value)
-    } else {
-      sessionStorage.setItem('luno.auth_token', token.value)
-    }
+    persistWebSession(data)
     currentUser.value = await api<User>('/api/v1/me')
     editProfileName.value = currentUser.value.display_name || ''
     editProfileBio.value = currentUser.value.status_message || currentUser.value.bio || ''
     editProfileHandle.value = currentUser.value.handle || ''
     password.value = ''
-    await initLetterSealing()
     await loadInitialData()
     await connectRealtime()
   })
@@ -1203,30 +1203,40 @@ async function loadInitialData() {
 
 // --- Realtime WebSocket Connection ---
 async function connectRealtime() {
-  if (socket) {
-    socket.close()
-    socket = null
-  }
+  stopRealtime()
+  if (!token.value) return
+  const generation = realtimeGeneration
+  const sessionToken = token.value
+  realtimeState.value = navigator.onLine ? 'connecting' : 'offline'
+  if (!navigator.onLine) return
   try {
     const { ticket } = await api<{ ticket: string }>('/api/v1/ws-ticket', 'POST')
-    socket = new WebSocket(wsURL(ticket))
-    socket.onopen = () => {
-      void flushOfflineQueue(async (msg) => {
-        await api(`/api/v1/conversations/${msg.conversation_id}/messages`, 'POST', {
-          client_id: msg.client_id,
-          kind: msg.kind,
-          body: msg.body
-        })
-      })
+    if (generation !== realtimeGeneration || sessionToken !== token.value) return
+    const connection = new WebSocket(wsURL(ticket))
+    socket = connection
+    connection.onclose = () => scheduleReconnect(generation)
+    connection.onerror = () => connection.close()
+    connection.onopen = () => {
+      if (generation !== realtimeGeneration) return
+      realtimeState.value = 'connected'
+      reconnectAttempts = 0
+      void processOfflineQueue()
     }
-    socket.onmessage = (event) => {
+    connection.onmessage = (event) => {
+      if (generation !== realtimeGeneration) return
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'message.created') {
           const msg = data.message as Message
           if (msg.conversation_id === selectedChatId.value && !messages.value.some(m => m.id === msg.id)) {
+            const canvas = messagesCanvasRef.value
+            const followLatest = !canvas || canvas.scrollHeight - canvas.scrollTop - canvas.clientHeight < 100
             messages.value.push(msg)
             if (currentUser.value && msg.sender_id !== currentUser.value.id) {
+              if (document.visibilityState === 'visible') {
+                void api(`/api/v1/conversations/${msg.conversation_id}/read`, 'POST', { sequence: msg.sequence }).catch(() => {})
+              }
+              if (followLatest) scrollToBottom()
               playReceiveSound()
               if (autoTranslateEnabled.value && msg.kind === 'text') {
                 void handleTranslateMessage(msg)
@@ -1254,7 +1264,7 @@ async function connectRealtime() {
           void loadChats()
           if (data.conversation_id === selectedChatId.value) {
             messages.value.forEach(m => {
-              if (m.sequence <= (data.sequence || 999999)) m.read_count = Math.max(m.read_count || 0, 1)
+              if (data.user_id !== currentUser.value?.id && m.sequence <= (data.sequence || 0)) m.read_count = Math.max(m.read_count || 0, 1)
             })
           }
         } else if (data.type === 'call.ringing') {
@@ -1277,16 +1287,23 @@ async function connectRealtime() {
         // ignore malformed ws message
       }
     }
-  } catch {
-    // ticket error fallback
+  } catch (err) {
+    if (generation !== realtimeGeneration) return
+    if (err instanceof ApiError && err.status === 401) {
+      clearLocalSession()
+      error.value = t('session_expired')
+      return
+    }
+    scheduleReconnect(generation)
   }
 }
 
 // --- Data Fetchers ---
 async function loadChats() {
+  const sessionToken = token.value
   try {
     const res = await api<{ conversations: Chat[] }>('/api/v1/conversations')
-    chats.value = res.conversations || []
+    if (sessionToken === token.value) chats.value = res.conversations || []
   } catch {}
 }
 
@@ -1362,7 +1379,10 @@ async function selectChat(convId: string) {
   activeNav.value = 'chats'
   selectedChatId.value = convId
   selectedFriendProfile.value = null
-  replyToMessage.value = null
+  messages.value = []
+  hasEarlierMessages.value = false
+  earlierMessagesLoading.value = false
+  earlierMessagesError.value = ''
   activeDrawer.value = 'none'
   error.value = ''
   conversationError.value = ''
@@ -1374,7 +1394,10 @@ async function selectChat(convId: string) {
       api<{ pins: any[] }>(`/api/v1/conversations/${convId}/pins`).catch(() => ({ pins: [] }))
     ])
     if (selectedChatId.value !== convId || version !== chatSelectVersion) return
-    messages.value = msgRes.messages || []
+    const received = new Map((msgRes.messages || []).map(message => [message.id, message]))
+    for (const message of messages.value) if (message.conversation_id === convId) received.set(message.id, message)
+    messages.value = [...received.values()].sort((a, b) => a.sequence - b.sequence)
+    hasEarlierMessages.value = (msgRes.messages || []).length === 50
     pinnedList.value = pinsRes.pins || []
     if (messages.value.length > 0) {
       const last = messages.value[messages.value.length - 1]
@@ -1400,6 +1423,29 @@ async function selectChat(convId: string) {
     if (selectedChatId.value === convId && version === chatSelectVersion) {
       isLoadingMessages.value = false
     }
+  }
+}
+
+async function loadEarlierMessages() {
+  if (!selectedChatId.value || earlierMessagesLoading.value || !hasEarlierMessages.value) return
+  const convId = selectedChatId.value, sessionToken = token.value, version = chatSelectVersion
+  const cursor = messages.value.reduce((lowest, message) => Math.min(lowest, message.sequence), Infinity)
+  if (!Number.isFinite(cursor)) return
+  const canvas = messagesCanvasRef.value, oldHeight = canvas?.scrollHeight || 0, oldTop = canvas?.scrollTop || 0
+  earlierMessagesLoading.value = true; earlierMessagesError.value = ''
+  try {
+    const result = await request<{ messages: Message[] }>(`/api/v1/conversations/${convId}/messages?limit=50&before=${cursor}&before_sequence=${cursor}`, sessionToken)
+    if (sessionToken !== token.value || convId !== selectedChatId.value || version !== chatSelectVersion) return
+    const earlier = (result.messages || []).filter(message => message.sequence < cursor)
+    const combined = new Map([...earlier, ...messages.value].map(message => [message.id, message]))
+    messages.value = [...combined.values()].sort((a, b) => a.sequence - b.sequence)
+    hasEarlierMessages.value = earlier.length === 50
+    await nextTick()
+    if (canvas && convId === selectedChatId.value && sessionToken === token.value && version === chatSelectVersion) canvas.scrollTop = oldTop + canvas.scrollHeight - oldHeight
+  } catch (error) {
+    if (sessionToken === token.value && convId === selectedChatId.value && version === chatSelectVersion) earlierMessagesError.value = error instanceof Error ? error.message : t('history_error')
+  } finally {
+    if (sessionToken === token.value && convId === selectedChatId.value && version === chatSelectVersion) earlierMessagesLoading.value = false
   }
 }
 
@@ -1516,36 +1562,66 @@ async function runConversationSearch() {
 
 // --- Messaging ---
 async function sendMessage() {
-  if (!selectedChatId.value || !draftMessage.value.trim()) return
+  if (!selectedChatId.value || !draftMessage.value.trim() || sendingConversations.value.has(selectedChatId.value)) return
   const body = draftMessage.value.trim()
-  const replyId = replyToMessage.value?.id
+  const reply = replyToMessage.value
+  const replyId = reply?.id
   const convId = selectedChatId.value
   const clientId = newClientID()
+  const senderId = currentUser.value?.id
+  const sessionToken = token.value
+  if (!senderId) return
+  const pendingSet = sendingConversations.value
+  const controller = new AbortController()
+  pendingSends.set(convId, controller)
+  pendingSet.add(convId)
+  const timeout = setTimeout(() => controller.abort(), 30000)
   draftMessage.value = ''
   replyToMessage.value = null
   try {
     error.value = ''
-    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
+    const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
       client_id: clientId,
       kind: 'text',
       body,
       ...(replyId ? { reply_to: replyId } : {})
-    })
-    if (!messages.value.some(m => m.id === res.message.id)) {
+    }, controller.signal)
+    if (sessionToken !== token.value) return
+    if (selectedChatId.value === convId && !messages.value.some(m => m.id === res.message.id)) {
       messages.value.push(res.message)
     }
     playSendSound()
     scrollToBottom()
     await loadChats()
   } catch (e) {
-    void queueOfflineMessage({
-      client_id: clientId,
-      conversation_id: convId,
-      kind: 'text',
-      body
-    })
-    note.value = '오프라인 상태입니다. 네트워크 복구 시 메시지가 자동 전송됩니다.'
+    if (sessionToken !== token.value) return
+    if (!(e instanceof ApiError)) {
+      try {
+        await queueOfflineMessage({ owner_id: senderId, client_id: clientId, conversation_id: convId, kind: 'text', body, ...(replyId ? { reply_to: replyId } : {}) })
+        note.value = t('message_queued')
+        if (navigator.onLine) void processOfflineQueue()
+        return
+      } catch { error.value = t('message_queue_failed') }
+    } else { error.value = e.message }
+    // A rejected request or failed local save must leave a recoverable draft.
+    if (selectedChatId.value === convId && !draftMessage.value) {
+      draftMessage.value = body
+      if (replyId) replyToMessage.value = messages.value.find(m => m.id === replyId) || null
+    } else if (selectedChatId.value !== convId) {
+      conversationDrafts.set(convId, { body, reply })
+    }
+  } finally {
+    clearTimeout(timeout)
+    pendingSet.delete(convId)
+    if (pendingSends.get(convId) === controller) pendingSends.delete(convId)
   }
+}
+
+function handleComposerEnter(event: KeyboardEvent) {
+  // Enter confirms an IME candidate before it can submit Korean/Japanese text.
+  if (event.isComposing || event.keyCode === 229) return
+  event.preventDefault()
+  void sendMessage()
 }
 
 function startEditMessage(msg: Message) {
@@ -1576,12 +1652,16 @@ async function toggleVoiceRecording() {
     isRecordingVoice.value = false
     return
   }
+  if (uploading.value || !selectedChatId.value) return
   if (!navigator.mediaDevices?.getUserMedia) {
     chooseAttachment('voice')
     return
   }
   try {
+    const conversation = selectedChatId.value
+    const sessionToken = token.value
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    if (sessionToken !== token.value) { stream.getTracks().forEach(track => track.stop()); return }
     recordedChunks = []
     mediaRecorderInstance = new MediaRecorder(stream)
     mediaRecorderInstance.ondataavailable = (e) => {
@@ -1589,28 +1669,11 @@ async function toggleVoiceRecording() {
     }
     mediaRecorderInstance.onstop = async () => {
       stream.getTracks().forEach(t => t.stop())
-      const blob = new Blob(recordedChunks, { type: 'audio/webm' })
-      if (blob.size > 0 && blob.size <= 512 * 1024 && selectedChatId.value) {
-        const bytes = new Uint8Array(await blob.arrayBuffer())
-        let binary = ''
-        for (const b of bytes) binary += String.fromCharCode(b)
-        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
-        const checksum = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('')
-        const att = await api<{ id: string; original_name: string }>('/api/v1/attachments', 'POST', {
-          original_name: `voice-${Date.now()}.webm`,
-          mime_type: 'audio/webm',
-          size_bytes: blob.size,
-          checksum_sha256: checksum,
-          content_base64: btoa(binary)
-        })
-        const res = await api<{ message: Message }>(`/api/v1/conversations/${selectedChatId.value}/messages`, 'POST', {
-          client_id: newClientID(),
-          kind: 'voice',
-          body: att.original_name,
-          metadata: { attachment_id: att.id, mime_type: 'audio/webm', size_bytes: blob.size }
-        })
-        if (!messages.value.some(m => m.id === res.message.id)) messages.value.push(res.message)
-      }
+      const mime = mediaRecorderInstance?.mimeType || 'audio/webm'
+      const blob = new Blob(recordedChunks, { type: mime })
+      uploading.value = true
+      try { await wrap(() => sendAttachmentFile(new File([blob], `voice-${Date.now()}.${mime.includes('mp4') ? 'm4a' : 'webm'}`, { type: mime }), conversation, sessionToken)) }
+      finally { uploading.value = false; isRecordingVoice.value = false }
     }
     mediaRecorderInstance.start()
     isRecordingVoice.value = true
@@ -1618,6 +1681,16 @@ async function toggleVoiceRecording() {
   } catch {
     chooseAttachment('voice')
   }
+}
+
+function discardVoiceRecording() {
+  if (mediaRecorderInstance) {
+    mediaRecorderInstance.onstop = null
+    if (mediaRecorderInstance.state !== 'inactive') mediaRecorderInstance.stop()
+    mediaRecorderInstance.stream.getTracks().forEach(track => track.stop())
+  }
+  recordedChunks = []
+  isRecordingVoice.value = false
 }
 
 function scrollToBottom() {
@@ -1655,18 +1728,22 @@ async function sendSticker(stickerId: string) {
 async function sendLocationMessage() {
   if (!selectedChatId.value) return
   const convId = selectedChatId.value
+  const sessionToken = token.value
   await wrap(async () => {
-    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
+    if (!navigator.geolocation) throw new Error(t('location_unavailable'))
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }))
+    if (sessionToken !== token.value) return
+    const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
       client_id: newClientID(),
       kind: 'location',
-      body: '서울특별시 강남구 테헤란로 152 (역삼동)',
+      body: t('location_shared'),
       metadata: {
-        lat: 37.5006,
-        lng: 127.0364,
-        label: '서울특별시 강남구 테헤란로 152 (강남파이낸스센터)'
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy_m: position.coords.accuracy
       }
     })
-    if (!messages.value.some(m => m.id === res.message.id)) {
+    if (sessionToken === token.value && selectedChatId.value === convId && !messages.value.some(m => m.id === res.message.id)) {
       messages.value.push(res.message)
     }
     playSendSound()
@@ -1676,52 +1753,55 @@ async function sendLocationMessage() {
   })
 }
 
-async function sendContactMessage() {
+function sendContactMessage() { showContactPicker.value = true }
+async function shareContact(f: User) {
   if (!selectedChatId.value) return
   const convId = selectedChatId.value
-  const f = friends.value[0]
+  const sessionToken = token.value
   await wrap(async () => {
-    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
+    const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
       client_id: newClientID(),
       kind: 'contact',
-      body: f?.display_name || 'K 🙏',
+      body: f.display_name,
       metadata: {
-        user_id: f?.id || 'peer-k',
-        handle: f?.handle || 'k_pray',
-        display_name: f?.display_name || 'K 🙏'
+        user_id: f.id,
+        ...(f.handle ? { handle: f.handle } : {}),
+        display_name: f.display_name
       }
     })
-    if (!messages.value.some(m => m.id === res.message.id)) {
+    if (sessionToken === token.value && selectedChatId.value === convId && !messages.value.some(m => m.id === res.message.id)) {
       messages.value.push(res.message)
     }
     playSendSound()
     scrollToBottom()
     await loadChats()
-    note.value = '👤 연락처 카드를 공유했습니다.'
+    showContactPicker.value = false
+    note.value = t('contact_shared')
   })
 }
 
 async function captureScreenToChat() {
-  if (!selectedChatId.value) {
-    switchNav('chats')
-    if (chats.value.length > 0) await selectChat(chats.value[0].id)
-  }
-  if (!selectedChatId.value) return
+  if (!selectedChatId.value || uploading.value) return
   const convId = selectedChatId.value
-  await wrap(async () => {
-    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
-      client_id: newClientID(),
-      kind: 'text',
-      body: '📸 [화면 캡처 공유] ' + new Date().toLocaleTimeString('ko-KR') + ' 데스크톱 작업 영역 스냅샷'
-    })
-    if (!messages.value.some(m => m.id === res.message.id)) {
-      messages.value.push(res.message)
-    }
-    playSendSound()
-    scrollToBottom()
-    await loadChats()
-    note.value = '✂️ 화면 캡처가 대화방에 전송되었습니다.'
-  })
+  const sessionToken = token.value
+  if (!navigator.mediaDevices?.getDisplayMedia) { error.value = t('capture_unavailable'); return }
+  uploading.value = true
+  try { await wrap(async () => {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+    try {
+      const video = document.createElement('video'); video.srcObject = stream; video.muted = true
+      await video.play()
+      const canvas = document.createElement('canvas')
+      const ratio = Math.min(1, 1280 / video.videoWidth)
+      canvas.width = Math.max(1, Math.round(video.videoWidth * ratio)); canvas.height = Math.max(1, Math.round(video.videoHeight * ratio))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error(t('capture_unavailable'))
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error(t('capture_unavailable'))), 'image/jpeg', .8))
+      stream.getTracks().forEach(track => track.stop())
+      await sendAttachmentFile(new File([blob], `LUNO-${Date.now()}.jpg`, { type: 'image/jpeg' }), convId, sessionToken)
+    } finally { stream.getTracks().forEach(track => track.stop()) }
+  }) } finally { uploading.value = false }
 }
 
 function cycleWallpaper() {
@@ -1745,31 +1825,35 @@ async function uploadSelectedFile(event: Event) {
   input.value = ''
   const conversation = selectedChatId.value
   if (!file || !conversation || uploading.value) return
-  if (file.size === 0 || file.size > 512 * 1024) { error.value = '현재 파일 전송 한도는 512 KiB입니다.'; return }
   uploading.value = true
-  try { await wrap(async () => {
+  try { await wrap(() => sendAttachmentFile(file, conversation, token.value)) } finally { uploading.value = false }
+}
+
+async function sendAttachmentFile(file: File, conversation: string, sessionToken: string) {
+    if (file.size === 0 || file.size > 512 * 1024) throw new Error(t('attachment_size_limit'))
     const bytes = new Uint8Array(await file.arrayBuffer())
     let binary = ''
     for (const byte of bytes) binary += String.fromCharCode(byte)
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
     const checksum = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('')
     const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'file'
-    const att = await api<{ id: string; original_name: string }>('/api/v1/attachments', 'POST', {
+    if (sessionToken !== token.value) return
+    const att = await request<{ id: string; original_name: string }>('/api/v1/attachments', sessionToken, 'POST', {
       original_name: file.name,
       mime_type: file.type || 'application/octet-stream',
       size_bytes: file.size,
       checksum_sha256: checksum,
       content_base64: btoa(binary)
     })
-    const res = await api<{ message: Message }>(`/api/v1/conversations/${conversation}/messages`, 'POST', {
+    if (sessionToken !== token.value) return
+    const res = await request<{ message: Message }>(`/api/v1/conversations/${conversation}/messages`, sessionToken, 'POST', {
       client_id: newClientID(),
       kind,
       body: att.original_name,
       metadata: { attachment_id: att.id, mime_type: file.type, size_bytes: file.size }
     })
-    if (selectedChatId.value === conversation && !messages.value.some(m => m.id === res.message.id)) messages.value.push(res.message)
+    if (sessionToken === token.value && selectedChatId.value === conversation && !messages.value.some(m => m.id === res.message.id)) messages.value.push(res.message)
     await loadChats()
-  }) } finally { uploading.value = false }
 }
 
 async function downloadAttachment(message: Message) {
@@ -2263,8 +2347,11 @@ async function submitOpenChatPost() {
 
 // --- Profile & Device Management ---
 async function saveProfileSettings() {
-  if (!editProfileName.value.trim()) return
-  await wrap(async () => {
+  if (!editProfileName.value.trim() || profileSaving.value || !profileDirty.value) return
+  profileSaving.value = true
+  profileSaveError.value = ''
+  profileSaved.value = false
+  try {
     const textBio = editProfileBio.value.trim()
     await api('/api/v1/me', 'PATCH', {
       display_name: editProfileName.value.trim(),
@@ -2273,8 +2360,12 @@ async function saveProfileSettings() {
       handle: editProfileHandle.value.trim()
     })
     currentUser.value = await api<User>('/api/v1/me')
-    note.value = '프로필 정보가 저장되었습니다.'
-  })
+    profileSaved.value = true
+  } catch (err) {
+    profileSaveError.value = err instanceof Error ? err.message : t('profile_save_error')
+  } finally {
+    profileSaving.value = false
+  }
 }
 
 async function revokeDevice(deviceId: string) {
@@ -2297,36 +2388,94 @@ function switchTheme(theme: 'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight')
 }
 
 // --- Logout ---
+function persistWebSession(session: LoginResult) {
+  token.value = session.access_token
+  currentDeviceId = session.device_id || ''
+  for (const storage of [localStorage, sessionStorage]) {
+    storage.removeItem('luno.auth_token')
+    storage.removeItem('luno.device_id')
+  }
+  const storage = autoLoginCheck.value ? localStorage : sessionStorage
+  storage.setItem('luno.auth_token', token.value)
+  if (currentDeviceId) storage.setItem('luno.device_id', currentDeviceId)
+}
 async function logout() {
-  try { await api('/api/v1/auth/logout', 'POST', {}) } catch { error.value = '서버 로그아웃을 확인하지 못했습니다. 기기 관리에서 세션을 폐기하세요.' }
+  try {
+    if (currentDeviceId) await api(`/api/v1/devices/${currentDeviceId}`, 'DELETE')
+    else throw new Error('Current device unavailable')
+  } catch { error.value = t('logout_unconfirmed') }
   clearLocalSession()
 }
 
 function clearLocalSession() {
+  for (const controller of pendingSends.values()) controller.abort()
+  pendingSends.clear()
+  sendingConversations.value = new Set()
+  chatSelectVersion++
+  discardVoiceRecording()
+  stopRealtime()
+  reconnectAttempts = 0
   localStorage.removeItem('luno.auth_token')
   sessionStorage.removeItem('luno.auth_token')
+  localStorage.removeItem('luno.device_id')
+  sessionStorage.removeItem('luno.device_id')
+  currentDeviceId = ''
   token.value = ''
   currentUser.value = null
   chats.value = []
   selectedChatId.value = ''
+  conversationDrafts.clear()
+  draftMessage.value = ''
+  replyToMessage.value = null
   messages.value = []
   if (callTimer) clearInterval(callTimer)
-  if (socket) socket.close()
-  socket = null
 }
 
 async function processOfflineQueue() {
-  if (!token.value) return
+  if (messageSyncInFlight) return messageSyncInFlight
+  messageSyncInFlight = synchronizeMessages()
+  try { await messageSyncInFlight } finally { messageSyncInFlight = null }
+}
+
+async function synchronizeMessages() {
+  if (!token.value || !currentUser.value) return
+  const sessionToken = token.value
+  const ownerId = currentUser.value.id
+  const recoveryConvId = selectedChatId.value
+  const recoveryAfter = messages.value.reduce((highest, msg) => Math.max(highest, msg.sequence), 0)
   try {
-    await flushOfflineQueue(async (msg) => {
-      await api(`/api/v1/conversations/${msg.conversation_id}/messages`, 'POST', {
+    await flushOfflineQueue(ownerId, async (msg) => {
+      if (sessionToken !== token.value) throw new Error('Session changed')
+      await request(`/api/v1/conversations/${msg.conversation_id}/messages`, sessionToken, 'POST', {
         client_id: msg.client_id,
         kind: msg.kind,
-        body: msg.body
+        body: msg.body,
+        ...(msg.reply_to ? { reply_to: msg.reply_to } : {})
       })
     })
+    if (sessionToken !== token.value) return
     if (selectedChatId.value) {
-      await selectChat(selectedChatId.value)
+      const convId = selectedChatId.value
+      // Replay every missed sequence, including gaps larger than the latest-page size.
+      const missed: Message[] = []
+      let after = convId === recoveryConvId ? recoveryAfter : 0
+      while (sessionToken === token.value && selectedChatId.value === convId) {
+        const delta = await api<{ messages?: Message[]; delta_messages?: Message[] }>(`/api/v1/conversations/${convId}/sync?after_sequence=${after}&since_sequence=${after}&limit=500`)
+        const batch = delta.messages || delta.delta_messages || []
+        missed.push(...batch)
+        const next = batch.reduce((highest, msg) => Math.max(highest, msg.sequence), after)
+        if (batch.length < 500 || next <= after) break
+        after = next
+      }
+      const { messages: recovered } = await api<{ messages: Message[] }>(`/api/v1/conversations/${convId}/messages?limit=50`)
+      if (sessionToken === token.value && selectedChatId.value === convId) {
+        const byId = new Map(messages.value.map(m => [m.id, m]))
+        for (const message of [...missed, ...(recovered || [])]) byId.set(message.id, message)
+        messages.value = [...byId.values()].sort((a, b) => a.sequence - b.sequence)
+        const last = messages.value[messages.value.length - 1]
+        if (last && document.visibilityState === 'visible') await api(`/api/v1/conversations/${convId}/read`, 'POST', { sequence: last.sequence }).catch(() => {})
+      }
+      await loadChats()
     } else {
       await loadChats()
     }
@@ -2334,17 +2483,26 @@ async function processOfflineQueue() {
 }
 
 function handleNetworkOnline() {
-  note.value = '네트워크가 연결되었습니다. 오프라인 대기열을 동기화합니다.'
-  void processOfflineQueue()
+  void connectRealtime()
 }
 
 function handleNetworkOffline() {
-  note.value = '오프라인 상태입니다. 작성한 메시지는 대기열에 안전하게 보관됩니다.'
+  realtimeState.value = 'offline'
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState !== 'visible' || !token.value) return
+  if (socket?.readyState === WebSocket.OPEN) void processOfflineQueue()
+  else void connectRealtime()
 }
 
 onBeforeUnmount(() => {
   if (callTimer) clearInterval(callTimer)
-  if (socket) socket.close()
+  discardVoiceRecording()
+  for (const controller of pendingSends.values()) controller.abort()
+  stopRealtime()
+  if (messageSyncTimer) clearInterval(messageSyncTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (typeof window !== 'undefined') {
     window.removeEventListener('online', handleNetworkOnline)
     window.removeEventListener('offline', handleNetworkOffline)
@@ -2360,18 +2518,6 @@ async function testPushNotification() {
   })
 }
 
-async function rotateE2EEKeys() {
-  await wrap(async () => {
-    const devId = 'web_' + (currentUser.value?.id?.slice(0, 8) || 'dev')
-    await api(`/api/v1/devices/${devId}/keys`, 'PUT', {
-      identity_key: `luno_ed25519_${Date.now()}`,
-      signed_prekey: `luno_spk_${Date.now()}`,
-      prekey_sig: `sig_${Date.now()}`,
-      one_time_prekeys: [`otk_${Date.now()}_1`, `otk_${Date.now()}_2`]
-    })
-    note.value = '🔐 [Letter Sealing] E2EE 암호화 키 번들이 갱신되었습니다.'
-  })
-}
 
 async function exportUserDataArchive() {
   await wrap(async () => {
@@ -2554,6 +2700,11 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  // Reconcile durable messages when an edge isolate cannot fan out to another one.
+  messageSyncTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && navigator.onLine && token.value) void processOfflineQueue()
+  }, 10000)
   if (typeof window !== 'undefined') {
     window.addEventListener('online', handleNetworkOnline)
     window.addEventListener('offline', handleNetworkOffline)
@@ -2563,6 +2714,8 @@ onMounted(async () => {
   const savedToken = localStorage.getItem('luno.auth_token') || sessionStorage.getItem('luno.auth_token')
   if (savedToken) {
     token.value = savedToken
+    const storage = localStorage.getItem('luno.auth_token') ? localStorage : sessionStorage
+    currentDeviceId = storage.getItem('luno.device_id') || ''
     try {
       const me = await api<User>('/api/v1/me')
       currentUser.value = me
@@ -2819,7 +2972,7 @@ onBeforeUnmount(() => {
             <div class="pc-avatar circle-36" :style="{ background: currentUser.avatar_color || 'var(--om-primary, #2563EB)' }">
               {{ currentUser.display_name.slice(0, 1) }}
             </div>
-            <span class="pc-dot-online"></span>
+            <span v-if="realtimeState === 'connected'" class="pc-dot-online" :title="t('connection_connected')"></span>
           </div>
 
           <!-- User Menu Dropdown -->
@@ -3649,8 +3802,8 @@ onBeforeUnmount(() => {
                 <span v-if="selectedChat.kind === 'group'" class="member-tag">👥 {{ selectedChat.member_count || 2 }}</span>
                 <span v-if="selectedChat.official" class="badge-verified">✓ 공식채널</span>
               </div>
-              <small class="e2ee-tag">
-                {{ selectedChat.official ? '자동 응답 기능 사용 중입니다.' : '🔒 보안 연결 (TLS 1.3 전송 및 AES-256 저장소 암호화)' }}
+              <small class="e2ee-tag ln-connection-state" :data-state="realtimeState" role="status">
+                {{ t('connection_' + realtimeState) }}
               </small>
             </div>
           </div>
@@ -3785,6 +3938,10 @@ onBeforeUnmount(() => {
 
         <!-- Message History Canvas -->
         <div ref="messagesCanvasRef" class="pc-chat-messages-canvas" :class="'wallpaper-' + chatWallpaper">
+          <div v-if="!isLoadingMessages && hasEarlierMessages" class="ln-history-control">
+            <button type="button" class="btn-secondary" :disabled="earlierMessagesLoading" @click="loadEarlierMessages">{{ t(earlierMessagesLoading ? 'history_loading' : 'history_earlier') }}</button>
+            <p v-if="earlierMessagesError" role="alert">{{ earlierMessagesError }}</p>
+          </div>
           <!-- Loading State -->
           <div v-if="isLoadingMessages" class="chat-canvas-state">
             <p class="empty-muted">대화 내용을 불러오는 중입니다...</p>
@@ -3823,16 +3980,16 @@ onBeforeUnmount(() => {
                     </div>
                     <div class="security-card-divider"></div>
                     <div class="security-card-body">
-                      <p class="security-desc-bold">WINDOWS에서 LUNO PC 버전에 로그인했습니다.</p>
+                      <p class="security-desc-bold">{{ msg.metadata?.device_name || t('security_login_notice') }}</p>
                       <p class="security-desc-sub">본인이 로그인하지 않았다면 아래 버튼을 눌러 로그아웃해 주세요. 또한, 안전한 LUNO 이용을 위해 비밀번호 변경을 권장합니다.</p>
                       <div class="security-specs-table">
                         <div class="spec-row">
                           <span class="spec-label">IP 주소:</span>
-                          <span class="spec-val">{{ (msg as any).client_ip || msg.metadata?.ip || '49.172.105.64' }}</span>
+                          <span class="spec-val">{{ (msg as any).client_ip || msg.metadata?.ip || '—' }}</span>
                         </div>
                         <div class="spec-row">
                           <span class="spec-label">위치:</span>
-                          <span class="spec-val">{{ (msg as any).client_location || msg.metadata?.location || 'South Korea Seoul Eunpyeong-gu' }}</span>
+                          <span class="spec-val">{{ (msg as any).client_location || msg.metadata?.location || '—' }}</span>
                         </div>
                       </div>
                       <div class="security-card-actions">
@@ -3927,17 +4084,14 @@ onBeforeUnmount(() => {
                     <div v-else-if="msg.kind === 'location'" class="bubble-location-card">
                       <div class="loc-card-top">📍 위치 공유</div>
                       <strong class="loc-card-label">{{ msg.metadata?.label || msg.body }}</strong>
-                      <small class="loc-card-coords">위도 {{ msg.metadata?.lat || 37.5006 }}, 경도 {{ msg.metadata?.lng || 127.0364 }}</small>
+                      <small v-if="typeof msg.metadata?.lat === 'number' && typeof msg.metadata?.lng === 'number'" class="loc-card-coords">{{ msg.metadata.lat }}, {{ msg.metadata.lng }}</small>
                     </div>
                     <div v-else-if="msg.kind === 'contact'" class="bubble-contact-card">
                       <div class="contact-card-top">👤 연락처 카드</div>
                       <strong class="contact-card-name">{{ msg.body }}</strong>
-                      <small class="contact-card-handle">@{{ msg.metadata?.handle || 'luno_friend' }}</small>
+                      <small v-if="msg.metadata?.handle" class="contact-card-handle">@{{ msg.metadata.handle }}</small>
                     </div>
-                    <div v-else-if="msg.metadata?.attachment_id" class="bubble-attachment-box">
-                      <span>📎 {{ msg.body }}</span>
-                      <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="downloadAttachment(msg)">다운로드</button>
-                    </div>
+                    <MessageAttachment v-else-if="msg.metadata?.attachment_id" :message="msg" :token="token" :labels="{ download: t('attachment_download'), retry: t('attachment_retry'), loading: t('attachment_loading'), error: t('attachment_error') }" />
                     <div v-else class="bubble-text-content">{{ msg.body }}</div>
 
                     <!-- Reactions Display -->
@@ -4042,16 +4196,17 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Textarea Form Area -->
-          <form class="pc-textarea-form" @submit.prevent="sendMessage">
+          <form class="pc-textarea-form" :aria-busy="sendingConversations.has(selectedChatId)" @submit.prevent="sendMessage">
             <textarea
               v-model="draftMessage"
+              :disabled="sendingConversations.has(selectedChatId)"
               :placeholder="t('inputPlaceholder')"
               rows="3"
-              @keydown.enter.exact.prevent="sendMessage"
+              @keydown.enter.exact="handleComposerEnter"
             ></textarea>
             <div class="pc-textarea-bottom">
-              <span class="char-count">{{ draftMessage.length }}/1000</span>
-              <button class="btn-green-send" :disabled="!draftMessage.trim()">{{ t('sendBtn') }}</button>
+              <span class="char-count">{{ draftMessage.length }}</span>
+              <button class="btn-green-send" :disabled="!draftMessage.trim() || sendingConversations.has(selectedChatId)">{{ sendingConversations.has(selectedChatId) ? t('message_sending') : t('sendBtn') }}</button>
             </div>
           </form>
         </footer>
@@ -4105,7 +4260,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- MOBILE FLOATING NAVIGATION CAPSULE (Screenshots 3, 4, 5) -->
-      <nav class="luno-mobile-floating-nav" aria-label="하단 탭 내비게이션">
+      <nav v-if="!selectedChat" class="luno-mobile-floating-nav" aria-label="하단 탭 내비게이션">
         <!-- Tab 1: 홈 (Home) -->
         <button
           class="mobile-nav-item"
@@ -4540,7 +4695,7 @@ onBeforeUnmount(() => {
             <!-- Phase 2: E2EE Key Management -->
             <div class="setting-toggle-row">
               <span>실험적 암호화 키 관리</span>
-              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="rotateE2EEKeys">키 번들 갱신</button>
+              <span class="muted">{{ t('e2ee_preparing') }}</span>
             </div>
           </div>
 
@@ -4553,17 +4708,17 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="setting-group" style="margin-top:8px">
-            <strong>👤 내 프로필 수정</strong>
-            <div class="flex-row" style="margin-top:6px">
-              <input v-model="editProfileName" placeholder="이름" style="flex:1" />
-              <input v-model="editProfileHandle" placeholder="LUNO ID (@handle)" style="flex:1" />
+          <form class="setting-group ln-profile-editor" :aria-busy="profileSaving" @submit.prevent="saveProfileSettings" @input="profileSaved = false; profileSaveError = ''">
+            <div class="ln-section-heading"><strong>{{ t('profileEdit') }}</strong><span>{{ t('profile_details') }}</span></div>
+            <div class="ln-profile-fields">
+              <label for="profile-name">{{ t('profile_name_label') }}<input id="profile-name" v-model="editProfileName" autocomplete="name" required :disabled="profileSaving" /></label>
+              <label for="profile-handle">LUNO ID<input id="profile-handle" v-model="editProfileHandle" autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="profileSaving" /></label>
+              <label for="profile-bio" class="ln-profile-bio">{{ t('profile_bio_label') }}<textarea id="profile-bio" v-model="editProfileBio" rows="3" :disabled="profileSaving" /></label>
             </div>
-            <div class="flex-row" style="margin-top:6px">
-              <input v-model="editProfileBio" placeholder="상태메시지" style="flex:1" />
-              <button class="btn-primary" @click="saveProfileSettings">저장</button>
-            </div>
-          </div>
+            <p class="ln-profile-hint">{{ t('profile_privacy') }}</p>
+            <p v-if="profileSaveError" class="ln-profile-error" role="alert">{{ profileSaveError }}</p>
+            <div class="ln-profile-save"><span role="status">{{ profileSaved ? t('profile_saved') : '' }}</span><button type="submit" class="btn-primary" :disabled="profileSaving || !profileDirty || !editProfileName.trim()">{{ profileSaving ? t('profile_saving') : t('profile_save') }}</button></div>
+          </form>
 
           <div class="setting-group" style="margin-top:8px">
             <strong>📱 PC/웹 QR 로그인 승인</strong>
@@ -4609,6 +4764,15 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <div v-if="showContactPicker" class="modal-backdrop" @click.self="showContactPicker = false">
+      <section class="standard-modal-box ln-contact-picker" role="dialog" aria-modal="true" aria-labelledby="contact-picker-title">
+        <header class="modal-header"><h3 id="contact-picker-title">{{ t('contact_choose') }}</h3><button class="btn-modal-close" :aria-label="t('contact_close')" @click="showContactPicker = false">✕</button></header>
+        <div class="modal-body-form">
+          <p v-if="!friends.length" class="muted">{{ t('contact_empty') }}</p>
+          <button v-for="friend in friends" :key="friend.id" type="button" class="btn-secondary ln-contact-choice" @click="shareContact(friend)"><strong>{{ friend.display_name }}</strong><small v-if="friend.handle">@{{ friend.handle }}</small></button>
+        </div>
+      </section>
+    </div>
     <!-- PASSWORD CHANGE MODAL -->
     <div v-if="showPasswordModal" class="modal-backdrop" @click.self="showPasswordModal = false">
       <div class="standard-modal-box password-modal" style="max-width: 420px; width: 92vw;">
