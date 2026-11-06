@@ -38,3 +38,6 @@ docs/roadmap/luno-100k/LUNO_QA_TASK_REGISTER.csv
 docs/roadmap/luno-100k/LUNO_ACCEPTANCE_CRITERIA.csv
 docs/roadmap/luno-100k/LUNO_SECURITY_TASK_REGISTER.csv
 
+
+# Claude Code personal settings
+.claude/settings.local.json
