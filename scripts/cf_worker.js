@@ -3048,6 +3048,7 @@ async function syncFromD1(db) {
   }
 }
 
+const READY_TABLES = ['users', 'wallets', 'luno_sessions', 'luno_messages', 'luno_read_cursors', 'luno_attachments', 'luno_ws_tickets', 'luno_audit'];
 let booted = null;
 function boot(env) {
   if (!booted) {
@@ -3119,8 +3120,15 @@ const workerCore = {
       try {
         const result = await env.DB.prepare('SELECT 1 AS ready').first();
         if (!result || result.ready !== 1) throw new Error('Database probe did not return ready');
-        const schema = await env.DB.prepare("SELECT COUNT(*) AS ready_tables FROM sqlite_master WHERE type='table' AND name IN ('users','wallets','luno_sessions','luno_messages','luno_read_cursors','luno_attachments','luno_ws_tickets','luno_audit')").first();
-        if (!schema || schema.ready_tables !== 8) return json({ status: 'not_ready', checks: { database: 'healthy', schema: 'missing_required_tables' } }, 503);
+        // Naming every required table makes a missing one fail to compile, and LIMIT 0
+        // reads no rows. Counting names in sqlite_master read the whole schema
+        // (46 rows on production) on every probe.
+        try {
+          await env.DB.prepare(`SELECT 1 FROM ${READY_TABLES.join(', ')} LIMIT 0`).all();
+        } catch (error) {
+          if (/no such table/i.test(String(error?.message))) return json({ status: 'not_ready', checks: { database: 'healthy', schema: 'missing_required_tables' } }, 503);
+          throw error;
+        }
         return json({ status: 'ready', brand: 'LUNO', runtime: 'cloudflare-worker', checks: { database: 'healthy', schema: 'ready' } });
       } catch {
         return json({ status: 'not_ready', checks: { database: 'unavailable' } }, 503);
