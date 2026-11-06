@@ -356,28 +356,34 @@ async function hydrateUserConversations(userId) {
   if (!db) return;
   await ensureSchema();
   // The conversation list needs only each room's latest message and the messages
-  // after the viewer's read cursor (unread count, mentions). Both are read through
-  // the (conversation_id, sequence) index, so D1 reads about one row per room plus
-  // its unread messages. A ROW_NUMBER() window here read every message of every
-  // room on each list refresh, because the window cannot push its limit into the index.
+  // after the viewer's read cursor (unread count, mentions), capped at the newest
+  // LIST_UNREAD_WINDOW. Per room that is one sequence range on the
+  // (conversation_id, sequence) index, starting at
+  //   MIN(MAX(cursor + 1, latest - (window - 1)), latest)
+  // which is the capped unread run when there are unread messages and just the
+  // latest message otherwise. D1 reads about one row per room plus its unread rows.
+  // A ROW_NUMBER() window here read every message of every room on each refresh,
+  // because the window cannot push its limit into the index.
+  // One SELECT, no UNION: D1 rejects compound SELECTs of more than 5 terms
+  // ("too many terms in compound SELECT"); multi-row VALUES is not limited.
   await hydrateCursors(userId);
   const cids = Array.from(conversations.values()).filter(c => c.members.includes(userId)).map(c => c.id);
   for (let i = 0; i < cids.length; i += LIST_HYDRATE_CHUNK) {
     const chunk = cids.slice(i, i + LIST_HYDRATE_CHUNK);
-    const parts = [], params = [];
-    for (const cid of chunk) {
-      parts.push('SELECT * FROM (SELECT * FROM luno_messages WHERE conversation_id = ? ORDER BY sequence DESC LIMIT 1)');
-      parts.push(`SELECT * FROM (SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence > ? ORDER BY sequence DESC LIMIT ${LIST_UNREAD_WINDOW})`);
-      params.push(cid, cid, readCursors.get(`${cid}:${userId}`) || 0);
-    }
-    const { results } = await db.prepare(parts.join(' UNION ALL ')).bind(...params).all();
+    const params = chunk.flatMap(cid => [cid, readCursors.get(`${cid}:${userId}`) || 0]);
+    const { results } = await db.prepare(
+      `WITH k(cid, cur) AS (VALUES ${chunk.map(() => '(?, ?)').join(', ')}),
+       t AS (SELECT cid, cur, (SELECT MAX(sequence) FROM luno_messages x WHERE x.conversation_id = k.cid) AS latest FROM k)
+       SELECT m.* FROM t JOIN luno_messages m
+         ON m.conversation_id = t.cid AND m.sequence >= MIN(MAX(t.cur + 1, t.latest - ${LIST_UNREAD_WINDOW - 1}), t.latest)`
+    ).bind(...params).all();
     const byConv = new Map(chunk.map(cid => [cid, []]));
     for (const r of results || []) byConv.get(r.conversation_id)?.push(r);
     for (const [cid, rows] of byConv) mergeRows(cid, rows);
   }
 }
-// D1 allows 100 bound parameters per statement; each room binds three.
-const LIST_HYDRATE_CHUNK = 30;
+// D1 allows 100 bound parameters per statement; each room binds two.
+const LIST_HYDRATE_CHUNK = 40;
 const LIST_UNREAD_WINDOW = 200;
 async function persistCursor(cid, userId, seq) {
   const db = dbOf();

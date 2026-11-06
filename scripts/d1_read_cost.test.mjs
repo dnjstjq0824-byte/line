@@ -79,6 +79,8 @@ test('conversation list reads the latest and unread messages through indexes and
     const messageReads = db.log.filter(e => /FROM luno_messages/.test(e.sql));
     assert.ok(messageReads.length >= 1);
     assert.ok(!messageReads.some(e => /ROW_NUMBER|OVER\s*\(/i.test(e.sql)), 'no window function over all messages');
+    // Production D1 rejects compound SELECTs of more than 5 terms; local SQLite allows 500.
+    for (const entry of messageReads) assert.ok((entry.sql.match(/\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/gi) || []).length <= 4, `compound SELECT over D1 limit:\n${entry.sql}`);
     for (const entry of messageReads) assertIndexed(db, entry, 'luno_messages');
     // Rows the list query returns: 1 latest + 4 unread for this room, never the 300 stored.
     const returned = messageReads.reduce((n, e) => n + db.raw.prepare(e.sql).all(...e.params).filter(r => r.conversation_id === room.id).length, 0);
