@@ -35,9 +35,18 @@ test('email-derived role escalation is reproduced in pre-fix source on an isolat
     const fixed = fs.readFileSync(new URL('./cf_worker.js', import.meta.url), 'utf8');
     // Restore only the two former role-inference expressions, and bypass the
     // new role rechecks, to reproduce the old authorization behavior in isolation.
-    const before = fixed.replaceAll('role: await storedUserRole(row.id)', "role: row.email.includes('admin') ? 'admin' : 'user'")
-      .replace('if (dbOf()) user.role = await storedUserRole(user.id);', '')
-      .replace('if (db) user.role = await storedUserRole(userId);', '');
+    const emailRole = "role: row.email.includes('admin') ? 'admin' : 'user'";
+    const patches = [
+      ['role: knownRole === undefined ? await storedUserRole(row.id) : knownRole', emailRole],
+      ['role: grantedRole(row.granted_role)', emailRole],
+      ['if (dbOf()) user.role = await storedUserRole(user.id);', ''],
+      ['if (db) user.role = grantedRoleFromSession;', '']
+    ];
+    let before = fixed;
+    for (const [from, to] of patches) {
+      assert.ok(before.includes(from), `pre-fix reproduction anchor missing: ${from}`);
+      before = before.replace(from, to);
+    }
     const api = await isolate(db, before);
     const account = await register(api, 'ordinary-admin-word@example.test');
     const fresh = await isolate(db, before);

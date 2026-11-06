@@ -127,6 +127,9 @@ const LUNO_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS luno_read_cursors (
     conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, sequence INTEGER NOT NULL, updated_at TEXT NOT NULL,
     PRIMARY KEY (conversation_id, user_id))`,
+  // hydrateCursors filters by user_id alone, which the composite primary key cannot serve.
+  `CREATE INDEX IF NOT EXISTS idx_luno_read_cursors_user ON luno_read_cursors(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_sessions_user_active ON luno_sessions(user_id, created_at) WHERE revoked_at IS NULL`,
   `CREATE TABLE IF NOT EXISTS luno_audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, target TEXT, detail TEXT, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS luno_ws_tickets (
@@ -143,7 +146,9 @@ async function ensureSchema() {
   if (!db) return false;
   if (!schemaReady) {
     schemaReady = (async () => {
-      for (const sql of LUNO_SCHEMA) await db.prepare(sql).run();
+      // Every new isolate runs this once; one batch is one round trip instead of one per statement.
+      if (typeof db.batch === 'function') await db.batch(LUNO_SCHEMA.map(sql => db.prepare(sql)));
+      else for (const sql of LUNO_SCHEMA) await db.prepare(sql).run();
       return true;
     })().catch(err => { schemaReady = null; throw err; });
   }
@@ -155,8 +160,13 @@ async function sha256Hex(text) {
 }
 function parsePbkdf2(stored) {
   if (typeof stored !== 'string' || !stored.startsWith('pbkdf2$')) return null;
-  const [, salt, hash] = stored.split('$');
-  return salt && hash ? { salt, hash } : null;
+  const parts = stored.split('$');
+  if (parts.length === 4) {
+    const iter = Number(parts[1]);
+    return Number.isInteger(iter) && iter > 0 && parts[2] && parts[3] ? { iter, salt: parts[2], hash: parts[3] } : null;
+  }
+  if (parts.length === 3 && parts[1] && parts[2]) return { iter: 1000, salt: parts[1], hash: parts[2] };
+  return null;
 }
 function clientInfo(request) {
   const ua = request.headers.get('User-Agent') || '';
@@ -284,7 +294,7 @@ async function persistPassword(user) {
   const db = dbOf();
   if (!db || !user.pw_hash || !user.pw_salt) return;
   await ensureSchema();
-  await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").bind(`pbkdf2$${user.pw_salt}$${user.pw_hash}`, user.id).run();
+  await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").bind(encodePasswordHash(user), user.id).run();
 }
 
 // ---------- Messages / read state ----------
@@ -304,12 +314,24 @@ function applyRows(cid, rows) {
   const keep = (messages.get(cid) || []).filter(m => !m.persisted);
   const list = keep.concat(rows.map(rowToMessage)).sort((a, b) => a.sequence - b.sequence);
   messages.set(cid, list);
-  if (conv) {
-    const max = list.reduce((a, m) => Math.max(a, m.sequence || 0), 0);
-    if (max > (conv.last_sequence || 0)) conv.last_sequence = max;
-    const lastAt = list.length ? list[list.length - 1].created_at : null;
-    if (lastAt && String(lastAt) > String(conv.updated_at || '')) conv.updated_at = lastAt;
-  }
+  noteLatest(conv, list);
+}
+// Adds or refreshes the given rows without dropping other cached messages, for
+// reads that fetch only part of a room (the conversation list).
+function mergeRows(cid, rows) {
+  if (!rows.length) return;
+  const byId = new Map((messages.get(cid) || []).map(m => [m.id, m]));
+  for (const r of rows) byId.set(r.id, rowToMessage(r));
+  const list = [...byId.values()].sort((a, b) => a.sequence - b.sequence);
+  messages.set(cid, list);
+  noteLatest(conversations.get(cid), list);
+}
+function noteLatest(conv, list) {
+  if (!conv) return;
+  const max = list.reduce((a, m) => Math.max(a, m.sequence || 0), 0);
+  if (max > (conv.last_sequence || 0)) conv.last_sequence = max;
+  const lastAt = list.length ? list[list.length - 1].created_at : null;
+  if (lastAt && String(lastAt) > String(conv.updated_at || '')) conv.updated_at = lastAt;
 }
 async function hydrateConversation(cid) {
   const db = dbOf();
@@ -333,18 +355,30 @@ async function hydrateUserConversations(userId) {
   const db = dbOf();
   if (!db) return;
   await ensureSchema();
-  const cids = Array.from(conversations.values()).filter(c => c.members.includes(userId)).map(c => c.id);
-  if (cids.length) {
-    const ph = cids.map(() => '?').join(',');
-    const { results } = await db.prepare(
-      `SELECT * FROM (SELECT m.*, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY sequence DESC) AS rn FROM luno_messages m WHERE conversation_id IN (${ph})) WHERE rn <= 200 ORDER BY conversation_id, sequence`
-    ).bind(...cids).all();
-    const byConv = new Map();
-    for (const r of results || []) { if (!byConv.has(r.conversation_id)) byConv.set(r.conversation_id, []); byConv.get(r.conversation_id).push(r); }
-    for (const cid of cids) applyRows(cid, byConv.get(cid) || []);
-  }
+  // The conversation list needs only each room's latest message and the messages
+  // after the viewer's read cursor (unread count, mentions). Both are read through
+  // the (conversation_id, sequence) index, so D1 reads about one row per room plus
+  // its unread messages. A ROW_NUMBER() window here read every message of every
+  // room on each list refresh, because the window cannot push its limit into the index.
   await hydrateCursors(userId);
+  const cids = Array.from(conversations.values()).filter(c => c.members.includes(userId)).map(c => c.id);
+  for (let i = 0; i < cids.length; i += LIST_HYDRATE_CHUNK) {
+    const chunk = cids.slice(i, i + LIST_HYDRATE_CHUNK);
+    const parts = [], params = [];
+    for (const cid of chunk) {
+      parts.push('SELECT * FROM (SELECT * FROM luno_messages WHERE conversation_id = ? ORDER BY sequence DESC LIMIT 1)');
+      parts.push(`SELECT * FROM (SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence > ? ORDER BY sequence DESC LIMIT ${LIST_UNREAD_WINDOW})`);
+      params.push(cid, cid, readCursors.get(`${cid}:${userId}`) || 0);
+    }
+    const { results } = await db.prepare(parts.join(' UNION ALL ')).bind(...params).all();
+    const byConv = new Map(chunk.map(cid => [cid, []]));
+    for (const r of results || []) byConv.get(r.conversation_id)?.push(r);
+    for (const [cid, rows] of byConv) mergeRows(cid, rows);
+  }
 }
+// D1 allows 100 bound parameters per statement; each room binds three.
+const LIST_HYDRATE_CHUNK = 30;
+const LIST_UNREAD_WINDOW = 200;
 async function persistCursor(cid, userId, seq) {
   const db = dbOf();
   if (!db) return;
@@ -530,44 +564,87 @@ const NEWS_SAMPLE = [
 ];
 
 
-async function pbkdf2(password, saltHex) {
+// ---------- Passwords ----------
+// Only PBKDF2 digests are ever compared. A stored digest is never accepted as the
+// password itself, and no plaintext copy is kept on the user object.
+// Stored form: pbkdf2$<iterations>$<salt>$<hash>. The older pbkdf2$<salt>$<hash>
+// form used 1,000 iterations and is upgraded on the next successful login.
+const PBKDF2_LEGACY_ITERATIONS = 1000;
+const PBKDF2_DEFAULT_ITERATIONS = 100000; // Workers Web Crypto refuses more than 100,000.
+const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!']);
+function pbkdf2Iterations() {
+  const configured = Number(CURRENT_ENV?.PBKDF2_ITERATIONS);
+  return Number.isInteger(configured) && configured >= 10000 && configured <= 100000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
+}
+async function pbkdf2(password, saltHex, iterations = PBKDF2_LEGACY_ITERATIONS) {
   try {
     const salt = Uint8Array.from(saltHex.match(/../g).map(h => parseInt(h, 16)));
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 1000 }, key, 256);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
     return Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
   } catch {
     return null;
   }
 }
-async function setPassword(user, password) {
-  user.raw_password = password;
-  user.password = password;
-  try {
-    const salt = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
-    user.pw_salt = salt;
-    user.pw_hash = await pbkdf2(password, salt);
-  } catch {
-    // fallback
+function timingSafeEqualText(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
+  return diff === 0;
+}
+function encodePasswordHash(user) {
+  return `pbkdf2$${user.pw_iter || PBKDF2_LEGACY_ITERATIONS}$${user.pw_salt}$${user.pw_hash}`;
+}
+// Fills the password fields of a user object from a users.password_hash value.
+// A value that is not a PBKDF2 digest is a legacy plaintext row: it is kept only
+// to verify and immediately re-hash it on the next login, never compared as a hash.
+function applyStoredPassword(user, stored) {
+  delete user.password; delete user.raw_password;
+  const hashed = parsePbkdf2(stored);
+  if (hashed) {
+    user.pw_hash = hashed.hash; user.pw_salt = hashed.salt; user.pw_iter = hashed.iter;
+    delete user.legacy_plain;
+  } else if (typeof stored === 'string' && stored && !REVOKED_LEGACY_PASSWORDS.has(stored) && !REVOKED_LEGACY_PASSWORDS.has(stored.replace(/^sha256:/, ''))) {
+    user.legacy_plain = stored.startsWith('sha256:') ? stored.slice(7) : stored;
+    delete user.pw_hash; delete user.pw_salt; delete user.pw_iter;
+  } else {
+    delete user.pw_hash; delete user.pw_salt; delete user.pw_iter; delete user.legacy_plain;
   }
+  return user;
+}
+async function setPassword(user, password) {
+  delete user.password; delete user.raw_password; delete user.legacy_plain;
+  const salt = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
+  const iterations = pbkdf2Iterations();
+  const hash = await pbkdf2(password, salt, iterations);
+  if (!hash) throw new Error('password hashing unavailable');
+  user.pw_salt = salt;
+  user.pw_hash = hash;
+  user.pw_iter = iterations;
 }
 async function checkPassword(user, password) {
-  if (!user || typeof password !== 'string') return false;
-  const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!']);
+  if (!user || typeof password !== 'string' || !password) return false;
   if (REVOKED_LEGACY_PASSWORDS.has(password)) return false;
-  if (user.password && user.password === password) return true;
-  if (user.raw_password && user.raw_password === password) return true;
-  if (user.pw_hash && (user.pw_hash === password || user.pw_hash === 'sha256:' + password)) return true;
-  if (user.password_hash && (user.password_hash === password || user.password_hash === 'sha256:' + password)) return true;
+  let valid = false;
   if (user.pw_hash && user.pw_salt) {
-    const hash = await pbkdf2(password, user.pw_salt);
-    if (hash && hash === user.pw_hash) return true;
+    const hash = await pbkdf2(password, user.pw_salt, user.pw_iter || PBKDF2_LEGACY_ITERATIONS);
+    valid = !!hash && timingSafeEqualText(hash, user.pw_hash);
+    if (!valid) return false;
+    if ((user.pw_iter || PBKDF2_LEGACY_ITERATIONS) >= pbkdf2Iterations()) return true;
+  } else if (typeof user.legacy_plain === 'string' && user.legacy_plain) {
+    if (!timingSafeEqualText(password, user.legacy_plain)) return false;
+    valid = true;
   }
-  return false;
+  if (!valid) return false;
+  // Upgrade a weak or plaintext record now that the real password is known.
+  await setPassword(user, password);
+  try { await persistPassword(user); } catch (err) { console.error('[LUNO password upgrade failed]', err?.message || err); }
+  return true;
 }
 async function hashPendingPasswords() {
   for (const u of users.values()) {
-    if (u.password && !u.pw_hash) {
+    if (typeof u.password === 'string' && u.password && !u.pw_hash) {
       await setPassword(u, u.password);
     }
   }
@@ -1025,34 +1102,43 @@ function json(data, status = 200, headers = {}) {
 // Authentication is session-backed only: a token is valid iff its digest exists in D1 (or the
 // in-memory store when no D1 is bound), has not been revoked and is inside its TTL. The old
 // stateless "cf-token-<userId>.*" fallback accepted any forged token and is removed.
-async function loadUserFromD1(id) {
+async function loadUserFromD1(id, knownRole) {
   const db = dbOf();
   if (!db) return null;
   const row = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
   if (!row) return null;
-  const hashed = parsePbkdf2(row.password_hash);
-  const u = {
+  const u = applyStoredPassword({
     id: row.id, email: row.email,
-    password: hashed ? undefined : row.password_hash, pw_hash: hashed ? hashed.hash : undefined, pw_salt: hashed ? hashed.salt : undefined,
-    display_name: row.display_name || row.email.split('@')[0], role: await storedUserRole(row.id),
-    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', created_at: row.created_at
-  };
+    display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', created_at: row.created_at,
+    state: row.state || undefined
+  }, row.password_hash);
   users.set(row.email.toLowerCase(), u);
   usersById.set(u.id, u);
   return u;
 }
 // Privilege assignments are provisioned separately by an authorized operator.
 // Email, demo seed data and the role copied into an old session are not grants.
+const GRANTABLE_ROLES = ['user', 'admin', 'partner', 'developer', 'creator', 'ads'];
+function grantedRole(role) { return GRANTABLE_ROLES.includes(role) ? role : 'user'; }
+// Legacy databases have no grants: fail closed until the approved migration
+// and explicit administrator provisioning have been completed.
+// Once an isolate sees the table is absent it stops querying it (still failing closed
+// to 'user'); a new isolate picks up the table as soon as the migration is applied.
+let rolesTableAbsent = false;
+function missingRolesTable(error) {
+  const missing = /no such table.*luno_user_roles/i.test(String(error?.message));
+  if (missing) rolesTableAbsent = true;
+  return missing;
+}
 async function storedUserRole(userId) {
   const db = dbOf();
-  if (!db) return 'user';
+  if (!db || rolesTableAbsent) return 'user';
   try {
     const assignment = await db.prepare('SELECT role FROM luno_user_roles WHERE user_id = ?').bind(userId).first();
-    return ['user', 'admin', 'partner', 'developer', 'creator', 'ads'].includes(assignment?.role) ? assignment.role : 'user';
+    return grantedRole(assignment?.role);
   } catch (error) {
-    // Legacy databases have no grants: fail closed until the approved migration
-    // and explicit administrator provisioning have been completed.
-    if (/no such table.*luno_user_roles/i.test(String(error?.message))) return 'user';
+    if (missingRolesTable(error)) return 'user';
     throw error;
   }
 }
@@ -1062,10 +1148,22 @@ async function getAuthUser(request) {
   const token = auth.slice(7).trim();
   if (!token || revokedTokens.has(token)) return null;
   let session = sessions.get(token);
+  let grantedRoleFromSession = 'user';
   const db = dbOf();
   if (db) {
     await ensureSchema();
-    const row = await db.prepare('SELECT session_id, user_id, role, created_at, revoked_at FROM luno_sessions WHERE token_hash = ?').bind(await sha256Hex(token)).first();
+    const tokenHash = await sha256Hex(token);
+    // One query per authenticated request: the session and the user's current
+    // grant are read together, so a revoked grant still takes effect immediately.
+    let row = null, joined = false;
+    if (!rolesTableAbsent) try {
+      row = await db.prepare('SELECT s.session_id, s.user_id, s.role, s.created_at, s.revoked_at, r.role AS granted_role FROM luno_sessions s LEFT JOIN luno_user_roles r ON r.user_id = s.user_id WHERE s.token_hash = ?').bind(tokenHash).first();
+      joined = true;
+    } catch (error) {
+      if (!missingRolesTable(error)) throw error;
+    }
+    if (!joined) row = await db.prepare('SELECT session_id, user_id, role, created_at, revoked_at FROM luno_sessions WHERE token_hash = ?').bind(tokenHash).first();
+    if (row) grantedRoleFromSession = grantedRole(row.granted_role);
     if (!row || row.revoked_at || Date.parse(row.created_at) + SESSION_TTL_MS < Date.now()) {
       sessions.delete(token);
       return null;
@@ -1077,9 +1175,9 @@ async function getAuthUser(request) {
   }
   const userId = session.user_id;
   let user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId) || null;
-  if (!user) user = await loadUserFromD1(userId);
+  if (!user) user = await loadUserFromD1(userId, db ? grantedRoleFromSession : undefined);
   if (!user || user.state === 'suspended' || user.state === 'deleted') return null;
-  if (db) user.role = await storedUserRole(userId);
+  if (db) user.role = grantedRoleFromSession;
   AUTH_CTX.set(request, { token, session_id: session.device_id });
   return user;
 }
@@ -2914,48 +3012,29 @@ async function d1Run(db, query, ...params) {
 async function syncFromD1(db) {
   if (!db) return;
   try {
-    const userRows = await db.prepare("SELECT * FROM users").all();
-    if (userRows && userRows.results) {
-      const REVOKED_LEGACY_PASSWORDS = new Set([
-        'LineAdmin#2026!',
-        'LineUser#2026!',
-        'sha256:LineAdmin#2026!',
-        'sha256:LineUser#2026!',
-        'Admin#2026!',
-        'User#2026!'
-      ]);
-      for (const row of userRows.results) {
-        const hashed = parsePbkdf2(row.password_hash);
-        let plain = undefined;
-        if (row.password_hash && !hashed && !REVOKED_LEGACY_PASSWORDS.has(row.password_hash)) {
-          if (row.password_hash.startsWith('sha256:')) {
-            plain = row.password_hash.slice(7);
-          } else {
-            plain = row.password_hash;
-          }
-        }
-        if (plain && REVOKED_LEGACY_PASSWORDS.has(plain)) {
-          plain = undefined;
-        }
-        const existing = users.get(row.email.toLowerCase());
-        const dName = (row.display_name === 'LINE Demo User' || !row.display_name) ? 'LUNO Demo User' : row.display_name;
-        const u = {
-          id: row.id,
-          email: row.email,
-          password: hashed ? undefined : (plain || existing?.password),
-          raw_password: hashed ? undefined : (plain || existing?.raw_password),
-          pw_hash: hashed ? hashed.hash : row.password_hash,
-          pw_salt: hashed ? hashed.salt : existing?.pw_salt,
-          display_name: dName,
-          role: await storedUserRole(row.id),
-          bio: (row.bio && !row.bio.includes('LINE')) ? row.bio : 'LUNO Global Messenger User',
-          status_message: row.status_message || '',
-          avatar_url: row.avatar_url || '',
-          created_at: row.created_at
-        };
-        users.set(row.email.toLowerCase(), u);
-        usersById.set(u.id, u);
-      }
+    // Users and their grants in one query; a role lookup per user ran on every isolate start.
+    let userRows = null;
+    if (!rolesTableAbsent) try {
+      userRows = await db.prepare('SELECT u.*, r.role AS granted_role FROM users u LEFT JOIN luno_user_roles r ON r.user_id = u.id').all();
+    } catch (error) {
+      if (!missingRolesTable(error)) throw error;
+    }
+    if (!userRows) userRows = await db.prepare('SELECT * FROM users').all();
+    for (const row of userRows?.results || []) {
+      const dName = (row.display_name === 'LINE Demo User' || !row.display_name) ? 'LUNO Demo User' : row.display_name;
+      const u = applyStoredPassword({
+        id: row.id,
+        email: row.email,
+        display_name: dName,
+        role: grantedRole(row.granted_role),
+        bio: (row.bio && !row.bio.includes('LINE')) ? row.bio : 'LUNO Global Messenger User',
+        status_message: row.status_message || '',
+        avatar_url: row.avatar_url || '',
+        created_at: row.created_at,
+        state: row.state || undefined
+      }, row.password_hash);
+      users.set(row.email.toLowerCase(), u);
+      usersById.set(u.id, u);
     }
     const friendRows = await db.prepare("SELECT * FROM friends").all();
     if (friendRows && friendRows.results) {

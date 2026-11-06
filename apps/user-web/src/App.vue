@@ -956,6 +956,15 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempts = 0
 let messageSyncTimer: ReturnType<typeof setInterval> | null = null
 let messageSyncInFlight: Promise<void> | null = null
+// Each reconcile costs four API calls (sync, messages, read, conversations). While the
+// realtime socket is open the Durable Object hub already delivers every event, so the
+// poll only runs as a slow safety net; it falls back to every tick when the socket is
+// down or the last reconcile failed (for example an offline message still queued).
+const MESSAGE_SYNC_TICK_MS = 10000
+const MESSAGE_SYNC_CONNECTED_MS = 60000
+let lastMessageSyncAt = 0
+let lastMessageSyncOk = false
+const reportedReadSequence = new Map<string, number>()
 function stopRealtime() {
   realtimeGeneration++
   if (reconnectTimer) clearTimeout(reconnectTimer)
@@ -2511,6 +2520,8 @@ async function synchronizeMessages() {
   const ownerId = currentUser.value.id
   const recoveryConvId = selectedChatId.value
   const recoveryAfter = messages.value.reduce((highest, msg) => Math.max(highest, msg.sequence), 0)
+  lastMessageSyncAt = Date.now()
+  lastMessageSyncOk = false
   try {
     await flushOfflineQueue(ownerId, async (msg) => {
       if (sessionToken !== token.value) throw new Error('Session changed')
@@ -2541,12 +2552,17 @@ async function synchronizeMessages() {
         for (const message of [...missed, ...(recovered || [])]) byId.set(message.id, message)
         messages.value = [...byId.values()].sort((a, b) => a.sequence - b.sequence)
         const last = messages.value[messages.value.length - 1]
-        if (last && document.visibilityState === 'visible') await api(`/api/v1/conversations/${convId}/read`, 'POST', { sequence: last.sequence }).catch(() => {})
+        // Report a read position only when it moved; the server keeps the maximum anyway.
+        if (last && document.visibilityState === 'visible' && last.sequence > (reportedReadSequence.get(`${ownerId}:${convId}`) || 0)) {
+          await api(`/api/v1/conversations/${convId}/read`, 'POST', { sequence: last.sequence })
+            .then(() => reportedReadSequence.set(`${ownerId}:${convId}`, last.sequence)).catch(() => {})
+        }
       }
       await loadChats()
     } else {
       await loadChats()
     }
+    lastMessageSyncOk = true
   } catch {}
 }
 
@@ -2771,8 +2787,10 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // Reconcile durable messages when an edge isolate cannot fan out to another one.
   messageSyncTimer = setInterval(() => {
-    if (document.visibilityState === 'visible' && navigator.onLine && token.value) void processOfflineQueue()
-  }, 10000)
+    if (document.visibilityState !== 'visible' || !navigator.onLine || !token.value) return
+    const due = realtimeState.value !== 'connected' || !lastMessageSyncOk || Date.now() - lastMessageSyncAt >= MESSAGE_SYNC_CONNECTED_MS
+    if (due) void processOfflineQueue()
+  }, MESSAGE_SYNC_TICK_MS)
   if (typeof window !== 'undefined') {
     window.addEventListener('online', handleNetworkOnline)
     window.addEventListener('offline', handleNetworkOffline)
