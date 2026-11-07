@@ -256,26 +256,34 @@
       <span class="meta-pill">⚡ 실시간 AI 통역</span>
     </div>
 
-    <!-- Direct download link -->
-    <a id="btn-apk-download" class="btn-download" href="./luno-messenger.apk" download="luno-messenger.apk">
+    <!-- Direct download links (per-ABI splits; most phones/tablets are arm64) -->
+    <a id="btn-apk-download" class="btn-download" href="./luno-messenger-arm64.apk" download="luno-messenger-arm64.apk">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
         <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
       </svg>
-      LUNO APK 다운로드 (.apk)
+      LUNO APK 다운로드 (arm64, 권장)
+    </a>
+    <a class="btn-download" style="margin-top: 10px;" href="./luno-messenger-arm32.apk" download="luno-messenger-arm32.apk">
+      구형 기기용 (arm32)
+    </a>
+    <a class="btn-download" style="margin-top: 10px;" href="./luno-messenger-x86_64.apk" download="luno-messenger-x86_64.apk">
+      에뮬레이터 / Chromebook용 (x86_64)
     </a>
 
     <!-- QR Code Section -->
     <div class="qr-container">
       <div class="qr-title">스마트폰 카메라로 스캔하여 직접 다운로드</div>
-      <img id="qr-image" class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fline-messenger.dnjstjqppk.workers.dev%2Fluno-messenger.apk" alt="LUNO APK 다운로드 QR 코드">
+      <img id="qr-image" class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fline-messenger.dnjstjqppk.workers.dev%2Fluno-messenger-arm64.apk" alt="LUNO APK 다운로드 QR 코드">
     </div>
 
     <!-- Package Integrity Verification -->
     <div style="margin-top: 18px; padding: 12px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 11.5px; text-align: left; color: #475569; word-break: break-all;">
       <div style="font-weight: 700; color: #1e293b; margin-bottom: 4px;">🛡️ 공식 패키지 무결성 검증 정보</div>
       <div><b>패키지명:</b> com.bookingnetwork.messenger.global_messenger</div>
-      <div><b>버전:</b> 2.0.0 (Build 1) | <b>파일 크기:</b> 17.1 MB (17,947,705 bytes)</div>
-      <div style="margin-top: 4px;"><b>SHA-256:</b> <code style="font-family: monospace; font-size: 10.5px; color: #0f172a;">EDB12456BEBFAB2FFB6ECADE4026EEB197E81CD1E6CC9856BFEA406C38A30DE5</code></div>
+      <div><b>버전:</b> 2.0.0 (Build 1)</div>
+      <div style="margin-top: 4px;"><b>arm64 (권장):</b> 17.7 MB (18,554,526 bytes)<br><code style="font-family: monospace; font-size: 10.5px; color: #0f172a;">71D46E57DAA673DF5F05F7B9508FDFF7A112D49ED2FB0C961EA6A80BB7752245</code></div>
+      <div style="margin-top: 4px;"><b>arm32:</b> 15.2 MB (15,990,264 bytes)<br><code style="font-family: monospace; font-size: 10.5px; color: #0f172a;">81D3D454AA4783ECFF10BE0181F3D82CFDDD022412A56B631DF14BF602D6D31A</code></div>
+      <div style="margin-top: 4px;"><b>x86_64:</b> 19.1 MB (20,045,989 bytes)<br><code style="font-family: monospace; font-size: 10.5px; color: #0f172a;">7DDC312668600EF45F0AB32F1EA5472424B883F64F206AC3CA35A0CE0D681EB4</code></div>
     </div>
 
     <!-- Key Features -->

@@ -84,6 +84,18 @@ function effectiveBottom(bodies) {
   return bottom;
 }
 
+function effectiveHeight(bodies) {
+  let height = null;
+  for (const body of bodies) {
+    for (const decl of body.split(';')) {
+      const [prop, ...rest] = decl.split(':');
+      if (!prop || rest.length === 0) continue;
+      if (prop.trim() === 'height') height = rest.join(':').replace(/!important/g, '').trim();
+    }
+  }
+  return height;
+}
+
 const mobile700 = mediaBody(v2, 'max-width:700px');
 
 test('mobile (<=700px) floating nav clears the Safari toolbar (safe-area bottom)', () => {
@@ -92,6 +104,13 @@ test('mobile (<=700px) floating nav clears the Safari toolbar (safe-area bottom)
   assert.ok(
     bottom.includes('env(safe-area-inset-bottom)'),
     `nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
+  );
+  // Toolbar-robust even when env() stops at the home indicator: 100vh-100dvh
+  // equals the visible toolbar height (0 when it hides). max() picks whichever
+  // is correct, so it can never double-count.
+  assert.ok(
+    bottom.includes('100dvh'),
+    `nav bottom must include a 100vh-100dvh toolbar term, got: ${bottom}`,
   );
 });
 
@@ -113,6 +132,20 @@ test('App.vue mobile nav base also respects the safe-area inset', () => {
   assert.ok(
     bottom.includes('env(safe-area-inset-bottom)'),
     `App.vue nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
+  );
+  assert.ok(
+    bottom.includes('100dvh'),
+    `App.vue nav bottom must include a 100vh-100dvh toolbar term, got: ${bottom}`,
+  );
+});
+
+test('mobile chat room sizes to the dynamic viewport so the send dock stays visible', () => {
+  const base768 = mediaBody(app, 'max-width: 768px');
+  const height = effectiveHeight(ruleBodies(base768, '.pc-chat-viewport'));
+  assert.ok(height, 'expected a height declaration for .pc-chat-viewport in the <=768px block');
+  assert.ok(
+    height.includes('100dvh'),
+    `chat viewport height must resolve to 100dvh (visible area above the toolbar), got: ${height}`,
   );
 });
 

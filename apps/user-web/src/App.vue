@@ -2209,6 +2209,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
     z-index: 200;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
   }
   .pc-login-card {
     width: calc(100vw - 32px);
@@ -2862,7 +2863,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
     display: flex;
     position: fixed;
     bottom: 16px;
-    bottom: max(16px, env(safe-area-inset-bottom));
+    bottom: max(16px, env(safe-area-inset-bottom), calc(100vh - 100dvh + 16px));
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
