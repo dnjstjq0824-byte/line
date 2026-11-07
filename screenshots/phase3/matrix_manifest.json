@@ -1,0 +1,184 @@
+[
+ {
+  "file": "chats_th_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=377r=453",
+   "nav-icon-wrap:l=401r=429",
+   "mobile-profile-avatar:l=402r=428",
+   "SPAN:l=410r=420",
+   "nav-label:l=397r=433"
+  ],
+  "errors": []
+ },
+ {
+  "file": "home_th_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=377r=453",
+   "nav-icon-wrap:l=401r=429",
+   "mobile-profile-avatar:l=402r=428",
+   "SPAN:l=410r=420",
+   "nav-label:l=397r=433"
+  ],
+  "errors": []
+ },
+ {
+  "file": "news_th_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=377r=453",
+   "nav-icon-wrap:l=401r=429",
+   "mobile-profile-avatar:l=402r=428",
+   "SPAN:l=410r=420",
+   "nav-label:l=397r=433"
+  ],
+  "errors": []
+ },
+ {
+  "file": "calls_th_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=377r=453",
+   "nav-icon-wrap:l=401r=429",
+   "mobile-profile-avatar:l=402r=428",
+   "SPAN:l=410r=420",
+   "nav-label:l=397r=433"
+  ],
+  "errors": []
+ },
+ {
+  "file": "wallet_th_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=377r=453",
+   "nav-icon-wrap:l=401r=429",
+   "mobile-profile-avatar:l=402r=428",
+   "SPAN:l=410r=420",
+   "nav-label:l=397r=433"
+  ],
+  "errors": []
+ },
+ {
+  "file": "chats_th_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "home_th_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "news_th_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "calls_th_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "wallet_th_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "chats_en_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=381r=457",
+   "nav-icon-wrap:l=405r=433",
+   "mobile-profile-avatar:l=406r=432",
+   "SPAN:l=414r=423",
+   "nav-label:l=401r=437"
+  ],
+  "errors": []
+ },
+ {
+  "file": "home_en_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=381r=457",
+   "nav-icon-wrap:l=405r=433",
+   "mobile-profile-avatar:l=406r=432",
+   "SPAN:l=414r=423",
+   "nav-label:l=401r=437"
+  ],
+  "errors": []
+ },
+ {
+  "file": "news_en_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "btn-subtab:l=294r=399",
+   "btn-subtab:l=399r=484",
+   "mobile-nav-item:l=381r=457",
+   "nav-icon-wrap:l=405r=433",
+   "mobile-profile-avatar:l=406r=432",
+   "SPAN:l=414r=423",
+   "nav-label:l=401r=437"
+  ],
+  "errors": []
+ },
+ {
+  "file": "calls_en_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=381r=457",
+   "nav-icon-wrap:l=405r=433",
+   "mobile-profile-avatar:l=406r=432",
+   "SPAN:l=414r=423",
+   "nav-label:l=401r=437"
+  ],
+  "errors": []
+ },
+ {
+  "file": "wallet_en_mobile_390.png",
+  "scrollX": false,
+  "over": [
+   "mobile-nav-item:l=381r=457",
+   "nav-icon-wrap:l=405r=433",
+   "mobile-profile-avatar:l=406r=432",
+   "SPAN:l=414r=423",
+   "nav-label:l=401r=437"
+  ],
+  "errors": []
+ },
+ {
+  "file": "chats_en_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "home_en_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "news_en_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "calls_en_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ },
+ {
+  "file": "wallet_en_tablet_768.png",
+  "scrollX": false,
+  "over": [],
+  "errors": []
+ }
+]
