@@ -7,6 +7,26 @@ import (
 	"testing"
 )
 
+func TestVersionEndpointReportsServiceBuild(t *testing.T) {
+	t.Setenv("GIT_COMMIT", "abc1234567890")
+	t.Setenv("BUILD_TIME", "2026-11-06T00:00:00Z")
+	app, err := New(Config{DSN: "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "version.db")), Secret: "0123456789abcdef0123456789abcdef", Service: "gateway"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	srv := httptest.NewServer(app.Handler())
+	defer srv.Close()
+	c := &apiClient{t: t, srv: srv}
+	st, body := c.req("GET", "/api/v1/version", nil)
+	if st != 200 {
+		t.Fatalf("version status: %d %v", st, body)
+	}
+	if body["commit"] != "abc1234567890" || body["short_commit"] != "abc1234" || body["worker_version"] != "go-gateway" || body["build_time"] != "2026-11-06T00:00:00Z" || body["env"] != "gateway" {
+		t.Fatalf("version body: %v", body)
+	}
+}
+
 func TestSystemHealthUsesPerInstanceOutboxDelivery(t *testing.T) {
 	app, err := New(Config{DSN: "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "health.db")), Secret: "0123456789abcdef0123456789abcdef", Service: "gateway"})
 	if err != nil {

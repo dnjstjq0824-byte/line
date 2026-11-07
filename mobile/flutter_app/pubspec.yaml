@@ -1,12 +1,13 @@
 name: luno_messenger
 publish_to: none
-description: LUNO Global Messenger Mobile Client — Connect Beyond Borders
+description: LUNO Global Messenger Mobile Client ??Connect Beyond Borders
 version: 2.0.0+1
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:
   flutter:
     sdk: flutter
+  go_router: ^14.2.0
   http: ^1.3.0
   web_socket_channel: ^3.0.2
   flutter_secure_storage: ^9.2.4

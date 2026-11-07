@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -142,7 +143,9 @@ func (a *App) sendWalletMoney(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	_, _ = tx.ExecContext(r.Context(), "UPDATE commerce.wallets SET balance=balance-$2, updated_at=now() WHERE user_id=$1", uid, in.Amount)
+	debit, derr := tx.ExecContext(r.Context(), "UPDATE commerce.wallets SET balance=balance-$2, updated_at=now() WHERE user_id=$1 AND balance>=$2", uid, in.Amount)
+	if derr != nil { fail(w, 500, "transfer failed"); return }
+	if dra, _ := debit.RowsAffected(); dra != 1 { fail(w, 400, "잔액이 부족합니다"); return }
 	_, _ = tx.ExecContext(r.Context(), "UPDATE commerce.wallets SET balance=balance+$2, updated_at=now() WHERE user_id=$1", in.ToUserID, in.Amount)
 
 	var txID string
@@ -221,6 +224,7 @@ func (a *App) sendWalletMoney(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) chargeWallet(w http.ResponseWriter, r *http.Request) {
+	if os.Getenv("ALLOW_WALLET_TOPUP_SIM") != "true" { fail(w, http.StatusServiceUnavailable, "payments unavailable: verified provider integration required"); return }
 	var in struct {
 		Amount int64 `json:"amount"`
 	}
@@ -254,6 +258,20 @@ func (a *App) chargeWallet(w http.ResponseWriter, r *http.Request) {
 			"created_at": time.Now().UTC().Format(time.RFC3339),
 		},
 	})
+}
+
+// listNews serves explicitly labelled editorial SAMPLE content (never real
+// press), mirroring the edge worker's NEWS_SAMPLE shape.
+func (a *App) listNews(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	hero := []any{
+		map[string]any{"id": "news-hero-01", "title": "LUNO 베타 오픈: 더 가벼운 글로벌 메신저", "press": "LUNO 에디토리얼(샘플)", "category": "공지", "published_at": now, "summary": "LUNO 베타 서비스가 열렸습니다.", "content": "LUNO 베타 서비스가 열렸습니다. 이 기사는 샘플 콘텐츠이며 실제 언론 기사가 아닙니다.", "sample": true},
+	}
+	popular := []any{
+		map[string]any{"id": "news-pop-01", "rank": 1, "title": "안전한 메신저 사용 수칙 5가지", "press": "LUNO 에디토리얼(샘플)", "category": "보안", "published_at": now, "summary": "QR 승인 내역 확인과 기기 관리로 계정을 지키세요.", "content": "QR 승인 내역 확인과 기기 관리로 계정을 지키세요. 이 기사는 샘플 콘텐츠이며 실제 언론 기사가 아닙니다.", "sample": true},
+		map[string]any{"id": "news-pop-02", "rank": 2, "title": "그룹 채팅 200% 활용법", "press": "LUNO 에디토리얼(샘플)", "category": "팁", "published_at": now, "summary": "투표·일정·앨범으로 모임을 정리하세요.", "content": "투표·일정·앨범으로 모임을 정리하세요. 이 기사는 샘플 콘텐츠이며 실제 언론 기사가 아닙니다.", "sample": true},
+	}
+	send(w, 200, map[string]any{"sample": true, "source": "LUNO 에디토리얼 샘플 콘텐츠 (실제 언론 기사가 아닙니다)", "hero": hero, "popular": popular, "fetched_at": now})
 }
 
 func (a *App) listStories(w http.ResponseWriter, r *http.Request) {

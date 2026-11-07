@@ -51,6 +51,7 @@ func ConfigFromEnv() (Config, error) {
 		APNsTeamID:            os.Getenv("APNS_TEAM_ID"),
 		APNsPrivateKey:        os.Getenv("APNS_PRIVATE_KEY"),
 		APNsBundleID:          os.Getenv("APNS_BUNDLE_ID"),
+		APNsProduction:        os.Getenv("APNS_PRODUCTION") == "true",
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
@@ -194,6 +195,10 @@ func (a *App) cors(next http.Handler) http.Handler {
 			}
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -283,6 +288,24 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /metrics", a.prometheusMetrics)
 	mux.HandleFunc("GET /api/v1/services", func(w http.ResponseWriter, r *http.Request) {
 		send(w, 200, map[string]any{"active_service": a.cfg.Service, "services": domainServices, "count": len(domainServices)})
+	})
+
+	mux.HandleFunc("GET /api/v1/version", func(w http.ResponseWriter, r *http.Request) {
+		commit := os.Getenv("GIT_COMMIT")
+		if commit == "" {
+			commit = "unknown"
+		}
+		short := commit
+		if len(short) > 7 {
+			short = short[:7]
+		}
+		send(w, 200, map[string]any{
+			"commit":         commit,
+			"short_commit":   short,
+			"worker_version": "go-" + a.cfg.Service,
+			"build_time":     os.Getenv("BUILD_TIME"),
+			"env":            a.cfg.Service,
+		})
 	})
 
 	active := func(names ...string) bool {
@@ -415,6 +438,7 @@ func (a *App) Handler() http.Handler {
 		mux.HandleFunc("POST /api/v1/voom/{id}/like", a.withAuth(a.likeVoomPost))
 		mux.HandleFunc("POST /api/v1/voom/{id}/comments", a.withAuth(a.commentVoomPost))
 		mux.HandleFunc("GET /api/v1/wallet", a.withAuth(a.getWallet))
+		mux.HandleFunc("GET /api/v1/news", a.withAuth(a.listNews))
 		mux.HandleFunc("POST /api/v1/wallet/send", a.withAuth(a.sendWalletMoney))
 		mux.HandleFunc("POST /api/v1/wallet/charge", a.withAuth(a.chargeWallet))
 	}
@@ -465,6 +489,13 @@ func (a *App) Handler() http.Handler {
 		mux.HandleFunc("GET /api/v1/ads/campaigns", a.withAuth(a.adsCampaigns))
 		mux.HandleFunc("POST /api/v1/ads/campaigns/{id}/groups", a.withAuth(a.createAdGroup))
 	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			fail(w, 404, "not found")
+			return
+		}
+		http.NotFound(w, r)
+	})
 	return a.cors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") && !a.limits.allow(r.RemoteAddr, r.URL.Path, time.Now()) {

@@ -3074,7 +3074,7 @@ const loginFailures = new Map();
 const workerCore = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-	if (url.pathname === '/api/v1/store/orders' && request.method === 'POST') {
+	if ((url.pathname === '/api/v1/store/orders' || url.pathname === '/api/v1/wallet/charge') && request.method === 'POST') {
 	  return json({ error: 'payments unavailable: verified provider integration required' }, 503);
 	}
     // Route the complete API to one persistent backend; never mix its identities

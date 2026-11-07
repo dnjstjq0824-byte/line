@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light dark" />
+<title>LUNO 개인정보처리방침</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; line-height: 1.7; }
+  h1 { font-size: 22px; color: #4F7CFF; }
+  h2 { font-size: 16px; margin-top: 28px; }
+  p, li, td { font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
+  .meta { color: #64748b; font-size: 12px; }
+  a { color: #4F7CFF; }
+</style>
+</head>
+<body>
+<h1>LUNO Global Messenger 개인정보처리방침</h1>
+<p class="meta">시행일: 2026-11-06 · 베타 서비스 기준. 정식 출시 시 처리 항목·보유 기간이 개정될 수 있습니다.</p>
+
+<h2>1. 수집 항목과 목적</h2>
+<table>
+<tr><th>항목</th><th>목적</th><th>보유 기간</th></tr>
+<tr><td>이메일, 비밀번호(해시), 표시 이름, ID·프로필</td><td>회원 식별·인증</td><td>회원 탈퇴 시까지</td></tr>
+<tr><td>기기 정보, 세션·접속 기록, IP</td><td>보안·부정 이용 방지</td><td>1년</td></tr>
+<tr><td>대화 메시지·첨부(암호화 저장)</td><td>메신저 기능 제공·동기화</td><td>이용자 삭제 또는 탈퇴 시까지</td></tr>
+<tr><td>푸시 토큰(암호화 저장)</td><td>알림 발송</td><td>토큰 만료·삭제 시까지</td></tr>
+<tr><td>신고·차단·감사 기록</td><td>안전·분쟁 대응</td><td>3년</td></tr>
+</table>
+
+<h2>2. 보관과 보호 조치</h2>
+<ul>
+<li>비밀번호는 PBKDF2-SHA256(310,000회)으로 해시 저장되며 평문을 보관하지 않습니다.</li>
+<li>메시지 본문과 푸시 토큰은 서버 측 키로 암호화(AES-256-GCM)하여 저장합니다.</li>
+<li>인증 토큰은 15분 단기 수명이며, 리프레시 토큰은 단 1회 사용 후 교체됩니다.</li>
+</ul>
+
+<h2>3. 제3자 제공과 처리 위탁</h2>
+<p>베타 기간에는 개인정보를 제3자에게 제공하지 않습니다. 푸시 발송(FCM/APNs), 클라우드 인프라(Cloudflare), 결제(PG) 도입 시 수탁자와 위탁 업무를 본 방침에 공개하고 동의를 받습니다.</p>
+
+<h2>4. 이용자의 권리</h2>
+<p>이용자는 설정 화면에서 대화 데이터 백업(JSON), 기기 해제, 계정 삭제를 직접 수행할 수 있습니다. 처리 정지·열람 요구는 서비스 내 신고 채널로 접수하며, 관련 법령에 따라 지체 없이 조치합니다.</p>
+
+<h2>5. 쿠키와 저장소</h2>
+<p>웹 클라이언트는 로그인을 위해 브라우저 저장소에 토큰을 보관합니다. 공용 기기에서는 반드시 로그아웃하고, 정식 출시 시 httpOnly 쿠키 기반으로 전환할 예정입니다.</p>
+
+<p><a href="./terms.html">이용약관 보기</a></p>
+</body>
+</html>

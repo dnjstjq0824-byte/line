@@ -1,0 +1,21 @@
+{
+  "version": "3.0.0",
+  "name": "LUNO Harbor",
+  "previous": "design-v2.tokens.json, kept immutable; v3 layers over it",
+  "light": {
+    "accent": "#0b4f45", "accent-hover": "#093e37", "accent-soft": "#d4e8df",
+    "bg": "#e8efed", "surface": "#ffffff", "raised": "#ffffff", "subtle": "#dfe8e4",
+    "text": "#12211e", "muted": "#5c6b67", "line": "#cbd8d3", "danger": "#c22e3d",
+    "on-accent": "#ffffff", "chat": "#dde7e3", "beacon": "#e4572e"
+  },
+  "dark": {
+    "accent": "#6fd3b6", "accent-hover": "#8addc3", "accent-soft": "#1e3a33",
+    "bg": "#0a1413", "surface": "#12201e", "raised": "#12201e", "subtle": "#1b2e2a",
+    "text": "#e9f2ef", "muted": "#9db0aa", "line": "#2a3e39", "danger": "#ff98a0",
+    "on-accent": "#0a1a17", "chat": "#0a1413", "beacon": "#ff7a59"
+  },
+  "spacingPx": [4, 8, 12, 16, 20, 24, 32, 48],
+  "radiusPx": {"control": 10, "card": 14, "avatar": 12, "sheet": 22, "lamp": 999},
+  "layout": {"compactMaxPx": 400, "mobileMaxPx": 720, "tabletMaxPx": 1120, "pageMaxPx": 880},
+  "fonts": ["Pretendard", "Noto Sans KR", "system-ui", "sans-serif"]
+}

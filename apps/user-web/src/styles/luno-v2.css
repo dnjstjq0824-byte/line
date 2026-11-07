@@ -193,6 +193,11 @@
   .line-desktop-app .pc-rail-bottom{display:flex!important}
   .line-desktop-app .luno-mobile-floating-nav{display:none!important}
   .line-desktop-app .pc-chat-viewport{position:relative!important;inset:auto!important;flex:1;width:auto!important;height:100dvh!important;min-width:0}
+  .line-desktop-app .pc-chat-topbar{flex-wrap:wrap!important;height:auto!important;min-height:64px;gap:8px 10px!important}
+  .line-desktop-app .chat-topbar-left{min-width:0;flex:1 1 auto}
+  .line-desktop-app .chat-header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .line-desktop-app .chat-topbar-actions{overflow-x:auto;flex-shrink:0;justify-content:flex-start;scrollbar-width:thin}
+  .line-desktop-app .chat-topbar-actions>*{flex-shrink:0}
   .line-desktop-app .pc-chat-messages-canvas{padding:20px!important}
 }
 

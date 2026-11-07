@@ -478,8 +478,8 @@ async function submitPasswordChange() {
     passwordChangeError.value = '새 비밀번호가 일치하지 않습니다.'
     return
   }
-  if (newPasswordInput.value.length < 8) {
-    passwordChangeError.value = '새 비밀번호는 8자 이상이어야 합니다.'
+  if (newPasswordInput.value.length < 12) {
+    passwordChangeError.value = '새 비밀번호는 12자 이상이어야 합니다.'
     return
   }
   try {
@@ -3119,6 +3119,17 @@ onBeforeUnmount(() => {
             <LineIcon name="calls" :size="20" />
           </button>
 
+          <!-- 5b. Wallet (지갑) -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'wallet' }"
+            title="지갑 (Wallet)"
+            @click="switchNav('wallet')"
+          >
+            <span class="pc-rail-indicator"></span>
+            <LineIcon name="money" :size="20" />
+          </button>
+
           <!-- 6. Add Friends (친구 추가) -->
           <button
             class="pc-rail-btn"
@@ -4394,6 +4405,17 @@ onBeforeUnmount(() => {
           </div>
           <span class="nav-label">통화</span>
         </button>
+        <!-- Tab 5: 지갑 (Wallet) -->
+        <button
+          class="mobile-nav-item"
+          :class="{ active: activeNav === 'wallet' }"
+          @click="switchNav('wallet')"
+        >
+          <div class="nav-icon-wrap">
+            <LineIcon name="money" :size="24" />
+          </div>
+          <span class="nav-label">지갑</span>
+        </button>
         <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><img v-if="currentUser.avatar_url" :src="currentUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser.display_name.slice(0, 1) }}</span></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
       </nav>
     </main>
@@ -4639,16 +4661,17 @@ onBeforeUnmount(() => {
     <div v-if="showChargeModal" class="modal-backdrop" @click.self="showChargeModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>➕ LUNO Pay 잔액 충전 (Sandbox)</h3>
+          <h3>➕ LUNO Pay 잔액 충전</h3>
           <button class="btn-modal-close" @click="showChargeModal = false">✕</button>
         </div>
         <div class="modal-body-form">
           <p>충전할 금액을 선택하세요:</p>
+          <p class="ln-charge-notice" role="note">실제 결제(PG) 연동 전까지 충전이 비활성화되어 있습니다. 지갑 간 송금은 정상 동작합니다.</p>
           <div class="charge-options-grid">
-            <button class="btn-charge-option" @click="executeChargeMoney(10000)">+ 10,000원</button>
-            <button class="btn-charge-option" @click="executeChargeMoney(30000)">+ 30,000원</button>
-            <button class="btn-charge-option" @click="executeChargeMoney(50000)">+ 50,000원</button>
-            <button class="btn-charge-option" @click="executeChargeMoney(100000)">+ 100,000원</button>
+            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 10,000원</button>
+            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 30,000원</button>
+            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 50,000원</button>
+            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 100,000원</button>
           </div>
         </div>
       </div>
@@ -4840,6 +4863,14 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
+            <strong>📄 약관 및 개인정보</strong>
+            <div style="margin-top:4px; display:flex; gap:12px;">
+              <a href="./legal/terms.html" target="_blank" rel="noopener">이용약관</a>
+              <a href="./legal/privacy.html" target="_blank" rel="noopener">개인정보처리방침</a>
+            </div>
+          </div>
+
+          <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
             <strong>ℹ️ 버전 및 빌드 정보</strong>
             <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
               <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '—' }}</span>
@@ -4876,10 +4907,10 @@ onBeforeUnmount(() => {
           <p v-if="passwordChangeError" class="error-text" style="color: #ef4444; font-size: 12px; margin: 0;">{{ passwordChangeError }}</p>
           <label>현재 비밀번호</label>
           <input v-model="currentPasswordInput" type="password" placeholder="현재 비밀번호를 입력하세요" required />
-          <label>새 비밀번호 (8자 이상)</label>
-          <input v-model="newPasswordInput" type="password" placeholder="새 비밀번호를 입력하세요" required minlength="8" />
+          <label>새 비밀번호 (12자 이상)</label>
+          <input v-model="newPasswordInput" type="password" placeholder="새 비밀번호를 입력하세요" required minlength="12" />
           <label>새 비밀번호 확인</label>
-          <input v-model="confirmPasswordInput" type="password" placeholder="새 비밀번호를 한 번 더 입력하세요" required minlength="8" />
+          <input v-model="confirmPasswordInput" type="password" placeholder="새 비밀번호를 한 번 더 입력하세요" required minlength="12" />
           <div class="modal-actions-right" style="margin-top: 14px;">
             <button type="button" class="btn-secondary" @click="showPasswordModal = false">취소</button>
             <button type="submit" class="btn-primary">비밀번호 변경</button>
@@ -8165,6 +8196,8 @@ onBeforeUnmount(() => {
 .send-target-info { padding: 8px 12px; background: #eff6ff; border-radius: 8px; font-size: 13px; color: #1e3a8a; }
 .quick-amounts, .charge-options-grid, .theme-choice-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 6px 0; }
 .btn-charge-option, .btn-theme-swatch { padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; font-weight: 600; cursor: pointer; }
+.btn-charge-option:disabled { opacity: .55; cursor: not-allowed; }
+.ln-charge-notice { font-size: 12px; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; }
 .btn-theme-swatch.active, .default.active, .dark.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
 .add-friend-modal, .new-chat-modal, .password-modal { max-width: 480px; width: 92vw; }
 .settings-modal {

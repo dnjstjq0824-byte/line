@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgres://messenger:${POSTGRES_PASSWORD:-messenger_dev}@postgres:5432/messenger?sslmode=disable
-      JWT_SECRET: ${JWT_SECRET:-0123456789abcdef0123456789abcdef}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to at least 32 cryptographically random characters}
       PORT: "8080"
       SERVICE_NAME: gateway
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}

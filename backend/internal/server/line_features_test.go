@@ -6,7 +6,76 @@ import (
 	"testing"
 )
 
+func TestNewsSampleFeed(t *testing.T) {
+	cfg := Config{
+		DSN:     "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "news.db")),
+		Secret:  "0123456789abcdef0123456789abcdef",
+		Service: "gateway",
+	}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+	c := &apiClient{t: t, srv: srv}
+	if st, _ := c.req("GET", "/api/v1/news", nil); st != 401 {
+		t.Fatalf("news without token must be 401, got %d", st)
+	}
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		"email": "news@example.test", "password": "NewsReaderPass#2026!", "display_name": "News Reader",
+	}); st != 201 {
+		t.Fatalf("register: %d %v", st, out)
+	}
+	status, result := c.req("POST", "/api/v1/auth/login", map[string]any{
+		"email": "news@example.test", "password": "NewsReaderPass#2026!",
+	})
+	if status != 200 {
+		t.Fatalf("login: %d %v", status, result)
+	}
+	c.token = result["access_token"].(string)
+	st, body := c.req("GET", "/api/v1/news", nil)
+	if st != 200 {
+		t.Fatalf("news status: %d %v", st, body)
+	}
+	if body["sample"] != true || len(body["hero"].([]any)) != 1 || len(body["popular"].([]any)) != 2 {
+		t.Fatalf("news body: %v", body)
+	}
+}
+
+func TestWalletChargeFailClosedWithoutSimulatorFlag(t *testing.T) {
+	t.Setenv("ALLOW_WALLET_TOPUP_SIM", "")
+	cfg := Config{
+		DSN:     "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "wallet_failclosed.db")),
+		Secret:  "0123456789abcdef0123456789abcdef",
+		Service: "gateway",
+	}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+	c := &apiClient{t: t, srv: srv}
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		"email": "failclosed@example.test", "password": "FailClosedPass#2026!", "display_name": "Fail Closed",
+	}); st != 201 {
+		t.Fatalf("register: %d %v", st, out)
+	}
+	status, result := c.req("POST", "/api/v1/auth/login", map[string]any{
+		"email": "failclosed@example.test", "password": "FailClosedPass#2026!",
+	})
+	if status != 200 {
+		t.Fatalf("login: %d %v", status, result)
+	}
+	c.token = result["access_token"].(string)
+	if st, out := c.req("POST", "/api/v1/wallet/charge", map[string]any{"amount": 10000}); st != 503 {
+		t.Fatalf("charge without simulator flag must fail closed: %d %v", st, out)
+	}
+}
+
 func TestLineFeaturesParity(t *testing.T) {
+	t.Setenv("ALLOW_WALLET_TOPUP_SIM", "true")
 	cfg := Config{
 		DSN:     "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "line_features.db")),
 		Secret:  "0123456789abcdef0123456789abcdef",
@@ -192,6 +261,18 @@ func TestLineFeaturesParity(t *testing.T) {
 	st, bobW := bob.req("GET", "/api/v1/wallet", nil)
 	if st != 200 || int64(bobW["balance"].(float64)) != 150000 {
 		t.Fatalf("bob wallet balance: %d %v", st, bobW)
+	}
+
+	// 7b. Overdraft is rejected atomically and the balance is unchanged.
+	if st, out := alice.req("POST", "/api/v1/wallet/send", map[string]any{
+		"to_user_id": bob.userID,
+		"amount":     999999999,
+	}); st != 400 {
+		t.Fatalf("overdraft must be rejected: %d %v", st, out)
+	}
+	st, wOut = alice.req("GET", "/api/v1/wallet", nil)
+	if st != 200 || int64(wOut["balance"].(float64)) != 150000 {
+		t.Fatalf("balance changed after rejected overdraft: %d %v", st, wOut)
 	}
 
 	// 8. Stories & VOOM

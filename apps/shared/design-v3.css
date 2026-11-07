@@ -1,0 +1,42 @@
+/* LUNO Harbor v3.0 — dispatch-desk language shared by Flutter Web and all
+   six static Vue consoles. Import AFTER design-v2.css; it only re-seats the
+   semantic --ln-* variables, so every existing .page rule keeps working.
+   Values mirror mobile/flutter_app/lib/design/v3.dart and
+   apps/shared/design-v3.tokens.json. */
+:root {
+  color-scheme: light;
+  --ln-accent:#0b4f45; --ln-accent-hover:#093e37; --ln-accent-soft:#d4e8df;
+  --ln-bg:#e8efed; --ln-surface:#ffffff; --ln-raised:#ffffff; --ln-subtle:#dfe8e4;
+  --ln-text:#12211e; --ln-muted:#5c6b67; --ln-line:#cbd8d3; --ln-danger:#c22e3d;
+  --ln-on-accent:#ffffff; --ln-chat:#dde7e3; --ln-shadow:0 16px 48px #12211e14;
+  --ln-beacon:#e4572e;
+  --ln-radius:14px; --ln-control-radius:10px; --ln-sheet-radius:22px; --ln-lamp-radius:999px;
+  --ln-font:'Pretendard','Noto Sans KR',system-ui,sans-serif;
+}
+:root[data-theme=dark] {
+  color-scheme:dark;
+  --ln-accent:#6fd3b6; --ln-accent-hover:#8addc3; --ln-accent-soft:#1e3a33;
+  --ln-bg:#0a1413; --ln-surface:#12201e; --ln-raised:#12201e; --ln-subtle:#1b2e2a;
+  --ln-text:#e9f2ef; --ln-muted:#9db0aa; --ln-line:#2a3e39; --ln-danger:#ff98a0;
+  --ln-on-accent:#0a1a17; --ln-chat:#0a1413; --ln-shadow:0 16px 48px #00000040;
+  --ln-beacon:#ff7a59;
+}
+@media(prefers-color-scheme:dark) {
+  :root:not([data-theme=light]):not([data-theme=dark]) {
+    color-scheme:dark; --ln-accent:#6fd3b6; --ln-accent-hover:#8addc3; --ln-accent-soft:#1e3a33;
+    --ln-bg:#0a1413; --ln-surface:#12201e; --ln-raised:#12201e; --ln-subtle:#1b2e2a;
+    --ln-text:#e9f2ef; --ln-muted:#9db0aa; --ln-line:#2a3e39; --ln-danger:#ff98a0;
+    --ln-on-accent:#0a1a17; --ln-chat:#0a1413; --ln-shadow:0 16px 48px #00000040;
+    --ln-beacon:#ff7a59;
+  }
+}
+/* Harbor primitives shared by every console. */
+.ln-masthead {display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.ln-masthead h1 {font-size:22px;font-weight:800;letter-spacing:-.3px;margin:0}
+.ln-masthead p {margin:2px 0 0;color:var(--ln-muted);font-size:12px}
+.ln-lamp {flex-shrink:0;width:3px;height:26px;border-radius:var(--ln-lamp-radius);background:var(--ln-beacon)}
+.ln-wordmark {display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--ln-muted)}
+.ln-wordmark strong {display:inline-block;padding:3px 7px;border-radius:7px;background:var(--ln-accent);color:var(--ln-on-accent);font-size:12px;font-weight:900;letter-spacing:.6px}
+.ln-tile {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:var(--ln-accent);color:var(--ln-on-accent);font-weight:800;font-size:17px;flex-shrink:0}
+.ln-badge {display:inline-block;padding:2px 8px;border-radius:var(--ln-lamp-radius);background:var(--ln-beacon);color:#fff;font-size:11px;font-weight:800}
+@media(prefers-reduced-motion:reduce){.ln-masthead,.ln-lamp{animation:none!important;transition:none!important}}
