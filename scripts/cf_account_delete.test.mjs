@@ -90,3 +90,33 @@ test('D-03: deletion survives a redeploy (fresh isolate, same D1)', async () => 
   const redeployed = await isolate();
   assert.equal((await redeployed('auth/login', 'POST', { email, password })).status, 401, 'deleted stays deleted after redeploy');
 });
+
+test('D-04: password checks work on a fresh isolate (iteration count persisted)', async () => {
+  const api = await isolate();
+  const email = `delme3-${Date.now()}@local.test`;
+  const password = 'DelMeStrong#2026!';
+  assert.equal((await api('auth/register', 'POST', { email, password, display_name: 'DelMe3' })).status, 201);
+  const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get(email);
+  assert.match(row.password_hash, /^pbkdf2\$\d+\$.+\$.+$/, 'register persists 4-segment digest with iterations');
+  const cold = await isolate();
+  const login = await cold('auth/login', 'POST', { email, password });
+  assert.equal(login.status, 200, 'login works on a cold isolate');
+  const { access_token } = await login.json();
+  assert.equal((await cold('me', 'DELETE', { password }, access_token)).status, 200, 'delete works on a cold isolate');
+  assert.equal((await cold('auth/login', 'POST', { email, password })).status, 401, 'login after deletion fails');
+});
+
+test('D-05: legacy 3-segment rows (1000 iterations) still verify and upgrade', async () => {
+  const { subtle } = await import('node:crypto');
+  const salt = 'ab'.repeat(16);
+  const key = await subtle.importKey('raw', new TextEncoder().encode('Legacy#2026!'), 'PBKDF2', false, ['deriveBits']);
+  const bits = await subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(Buffer.from(salt, 'hex')), iterations: 1000 }, key, 256);
+  const hash = Buffer.from(bits).toString('hex');
+  const email = `legacy-${Date.now()}@local.test`;
+  db.raw.prepare('INSERT INTO users (id, email, password_hash, display_name) VALUES (?, ?, ?, ?)').run(crypto.randomUUID(), email, `pbkdf2$${salt}$${hash}`, 'Legacy');
+  const cold = await isolate();
+  const login = await cold('auth/login', 'POST', { email, password: 'Legacy#2026!' });
+  assert.equal(login.status, 200, 'legacy 3-segment login works');
+  const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get(email);
+  assert.match(row.password_hash, /^pbkdf2\$\d+\$.+\$.+$/, 'legacy row upgraded to 4-segment on login');
+});

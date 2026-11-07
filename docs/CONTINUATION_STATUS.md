@@ -257,3 +257,18 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   Edge only); on-device verification remains unavailable.
 - Report updated (`COMMERCIALIZATION_REPORT.md` S2-S9, i18n inventory
   regenerated). Commit/push/deploy pending human approval per gate.
+## Hotfix: 2026-11-07 — PBKDF2 iteration count dropped on register
+
+- Prod live verification found a pre-existing worker auth bug: register
+  persisted `pbkdf2$salt$hash` (3 segments, no iteration count) while hashing
+  with 100,000 iterations; cold-isolate hydration assumed 1,000, so password
+  checks (login, DELETE /me, password change) failed with 401 for
+  API-registered accounts on fresh isolates.
+- Fix: register persists the documented 4-segment form via
+  `encodePasswordHash`; `checkPassword` retries unknown-iteration rows with
+  current iterations and self-heals the row; true legacy 1,000-iteration
+  rows keep working through the existing upgrade path.
+- Tests D-04 (cold-isolate login+delete) and D-05 (legacy 3-segment login
+  +upgrade) added to `scripts/cf_account_delete.test.mjs`; D-04 fails on
+  the pre-fix worker (red) and the suite is 5/5 green post-fix.
+- No D1 migration needed: production held zero PBKDF2 rows at fix time.

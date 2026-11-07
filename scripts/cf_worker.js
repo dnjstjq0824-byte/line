@@ -165,7 +165,9 @@ function parsePbkdf2(stored) {
     const iter = Number(parts[1]);
     return Number.isInteger(iter) && iter > 0 && parts[2] && parts[3] ? { iter, salt: parts[2], hash: parts[3] } : null;
   }
-  if (parts.length === 3 && parts[1] && parts[2]) return { iter: 1000, salt: parts[1], hash: parts[2] };
+  // 3-segment rows predate iteration storage: iter 0 means unknown (legacy 1000
+  // or register-written current). checkPassword retries both, then self-heals.
+  if (parts.length === 3 && parts[1] && parts[2]) return { iter: 0, salt: parts[1], hash: parts[2] };
   return null;
 }
 function clientInfo(request) {
@@ -634,10 +636,21 @@ async function checkPassword(user, password) {
   if (REVOKED_LEGACY_PASSWORDS.has(password)) return false;
   let valid = false;
   if (user.pw_hash && user.pw_salt) {
+    const iterKnown = !!user.pw_iter;
     const hash = await pbkdf2(password, user.pw_salt, user.pw_iter || PBKDF2_LEGACY_ITERATIONS);
     valid = !!hash && timingSafeEqualText(hash, user.pw_hash);
+    if (!valid && !iterKnown) {
+      const hash2 = await pbkdf2(password, user.pw_salt, pbkdf2Iterations());
+      valid = !!hash2 && timingSafeEqualText(hash2, user.pw_hash);
+      if (valid) user.pw_iter = pbkdf2Iterations();
+    }
     if (!valid) return false;
-    if ((user.pw_iter || PBKDF2_LEGACY_ITERATIONS) >= pbkdf2Iterations()) return true;
+    if ((user.pw_iter || PBKDF2_LEGACY_ITERATIONS) >= pbkdf2Iterations()) {
+      if (!iterKnown) {
+        try { await persistPassword(user); } catch (err) { console.error('[LUNO password upgrade failed]', err?.message || err); }
+      }
+      return true;
+    }
   } else if (typeof user.legacy_plain === 'string' && user.legacy_plain) {
     if (!timingSafeEqualText(password, user.legacy_plain)) return false;
     valid = true;
@@ -3267,7 +3280,7 @@ const workerCore = {
           // Passwords are persisted only as PBKDF2 digests; writes are awaited so a redeploy never loses the account.
           await ensureSchema();
           await env.DB.prepare("INSERT OR REPLACE INTO users (id, email, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
-            .bind(newUser.id, newUser.email, `pbkdf2$${newUser.pw_salt}$${newUser.pw_hash}`, newUser.display_name, newUser.bio).run();
+            .bind(newUser.id, newUser.email, encodePasswordHash(newUser), newUser.display_name, newUser.bio).run();
           await d1Run(env.DB, "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, datetime('now'))", newUser.id);
         }
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);
