@@ -22,5 +22,8 @@
     "dev:creator": "npm run dev -w @messenger/creator-console",
     "dev:ads": "npm run dev -w @messenger/ads-console",
     "build:apps": "npm run build --workspaces"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
   }
 }

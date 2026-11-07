@@ -23,6 +23,9 @@ abstract final class HarborLight {
   static const buoyBg = Color(0xFFFFF3D6);
   static const buoyInk = Color(0xFF7A5B00);
   static const danger = Color(0xFFC22E3D);
+  static const success = Color(0xFF2E7D32);
+  static const warning = Color(0xFF7A5B00);
+  static const info = Color(0xFF1D6FB8);
   static const tide = Color(0xFF1D6FB8); // links / info
   static const mine = Color(0xFF0B4F45); // own chat bubble
   static const theirs = Color(0xFFFFFFFF);
@@ -44,9 +47,37 @@ abstract final class HarborDark {
   static const buoyBg = Color(0xFF3A2F0E);
   static const buoyInk = Color(0xFFFFD98A);
   static const danger = Color(0xFFFF98A0);
+  static const success = Color(0xFF7BC98A);
+  static const warning = Color(0xFFFFD98A);
+  static const info = Color(0xFF7FB9EC);
   static const tide = Color(0xFF7FB9EC);
   static const mine = Color(0xFF2A5A4E);
   static const theirs = Color(0xFF1B2E2A);
+}
+
+/// Harbor elevation: two quiet shadows, no glow. Mirrors design-v3.tokens.json.
+abstract final class HarborShadow {
+  static const sm = [
+    BoxShadow(offset: Offset(0, 2), blurRadius: 8, color: Color(0x1F12211E)),
+  ];
+  static const md = [
+    BoxShadow(offset: Offset(0, 16), blurRadius: 48, color: Color(0x1412211E)),
+  ];
+  static const smDark = [
+    BoxShadow(offset: Offset(0, 2), blurRadius: 8, color: Color(0x55000000)),
+  ];
+  static const mdDark = [
+    BoxShadow(offset: Offset(0, 16), blurRadius: 48, color: Color(0x40000000)),
+  ];
+}
+
+/// Harbor type scale in logical px. Mirrors design-v3.tokens.json typePx.
+abstract final class HarborType {
+  static const display = 22.0;
+  static const title = 17.0;
+  static const body = 15.0;
+  static const small = 12.0;
+  static const micro = 11.0;
 }
 
 /// Deliberately varied radii: each surface has its own corner voice.

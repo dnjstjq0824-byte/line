@@ -675,7 +675,7 @@ function prefsOf(userId) {
   return userPrefs.get(userId);
 }
 function walletOf(userId) {
-  if (!wallets.has(userId)) wallets.set(userId, { balance: 50000, tx: [] });
+  if (!wallets.has(userId)) wallets.set(userId, { balance: 0, tx: [] }); // new wallets start empty: no phantom seed money
   return wallets.get(userId);
 }
 function packsOf(userId) {
@@ -3246,7 +3246,7 @@ const workerCore = {
           await ensureSchema();
           await env.DB.prepare("INSERT OR REPLACE INTO users (id, email, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
             .bind(newUser.id, newUser.email, `pbkdf2$${newUser.pw_salt}$${newUser.pw_hash}`, newUser.display_name, newUser.bio).run();
-          await d1Run(env.DB, "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 100000, datetime('now'))", newUser.id);
+          await d1Run(env.DB, "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, datetime('now'))", newUser.id);
         }
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);
       }

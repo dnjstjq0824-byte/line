@@ -1,10 +1,12 @@
-// Route: /keep — LUNO Keep locker. Previously write-only from chat;
-// the stored list (GET /api/v1/bookmarks) finally has its own page.
+// Route: /keep — LUNO Keep locker, backed by GET /api/v1/saved-messages.
+
 import 'package:flutter/material.dart';
 
 import '../design/responsive.dart';
-import '../design/v3.dart';
+
 import '../state/session.dart';
+import '../widgets/harbor_card.dart';
+import '../widgets/harbor_empty.dart';
 
 class KeepPage extends StatelessWidget {
   const KeepPage({super.key});
@@ -12,7 +14,6 @@ class KeepPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return RefreshIndicator(
       onRefresh: session.reload,
       child: ListView(
@@ -21,32 +22,15 @@ class KeepPage extends StatelessWidget {
             children: [
               const Masthead(title: 'Keep', subtitle: '보관한 신호 모음'),
               if (session.bookmarks.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 64),
-                  child: Column(
-                    children: [
-                      Icon(Icons.bookmark_outline,
-                          size: 44,
-                          color: dark ? HarborDark.channel : HarborLight.channel),
-                      const SizedBox(height: 12),
-                      Text('보관한 항목이 없습니다',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Text('대화방에서 책갈피 표시로 보관하세요',
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                  ),
+                const HarborEmpty(
+                  title: '보관한 항목이 없습니다',
+                  hint: '대화방에서 책갈피 표시로 보관하세요',
+                  icon: Icons.bookmark_outline,
                 ),
               for (final b in session.bookmarks)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Card(
-                    color: dark ? HarborDark.surface : Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(HarborRadius.card),
-                      side: BorderSide(
-                          color: dark ? HarborDark.channel : HarborLight.channel),
-                    ),
+                  child: HarborCard(
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Column(

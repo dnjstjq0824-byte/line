@@ -242,11 +242,11 @@ func TestLineFeaturesParity(t *testing.T) {
 
 	// 7. LINE Pay Wallet (get, charge, send money -> creates 'pay' message in direct chat)
 	st, wOut := alice.req("GET", "/api/v1/wallet", nil)
-	if st != 200 || int64(wOut["balance"].(float64)) != 125000 {
-		t.Fatalf("get wallet: %d %v", st, wOut)
+	if st != 200 || int64(wOut["balance"].(float64)) != 0 {
+		t.Fatalf("new wallet must start empty: %d %v", st, wOut)
 	}
 	st, cOut := alice.req("POST", "/api/v1/wallet/charge", map[string]any{"amount": 50000})
-	if st != 200 || int64(cOut["balance"].(float64)) != 175000 {
+	if st != 200 || int64(cOut["balance"].(float64)) != 50000 {
 		t.Fatalf("charge wallet: %d %v", st, cOut)
 	}
 	st, sOut := alice.req("POST", "/api/v1/wallet/send", map[string]any{
@@ -255,11 +255,11 @@ func TestLineFeaturesParity(t *testing.T) {
 		"note":            "점심값 더치페이",
 		"conversation_id": cid,
 	})
-	if st != 200 || int64(sOut["balance"].(float64)) != 150000 {
+	if st != 200 || int64(sOut["balance"].(float64)) != 25000 {
 		t.Fatalf("send money: %d %v", st, sOut)
 	}
 	st, bobW := bob.req("GET", "/api/v1/wallet", nil)
-	if st != 200 || int64(bobW["balance"].(float64)) != 150000 {
+	if st != 200 || int64(bobW["balance"].(float64)) != 25000 {
 		t.Fatalf("bob wallet balance: %d %v", st, bobW)
 	}
 
@@ -271,7 +271,7 @@ func TestLineFeaturesParity(t *testing.T) {
 		t.Fatalf("overdraft must be rejected: %d %v", st, out)
 	}
 	st, wOut = alice.req("GET", "/api/v1/wallet", nil)
-	if st != 200 || int64(wOut["balance"].(float64)) != 150000 {
+	if st != 200 || int64(wOut["balance"].(float64)) != 25000 {
 		t.Fatalf("balance changed after rejected overdraft: %d %v", st, wOut)
 	}
 

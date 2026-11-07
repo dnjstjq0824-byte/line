@@ -1,0 +1,212 @@
+[
+ {
+  "file": "login_mobile_390.png",
+  "page": "login",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/login",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "login_tablet_768.png",
+  "page": "login",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/login",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "login_tablet_landscape_1024.png",
+  "page": "login",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/login",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "home_mobile_390.png",
+  "page": "home",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/home",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "chats_mobile_390.png",
+  "page": "chats",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/chats",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "keep_mobile_390.png",
+  "page": "keep",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/keep",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "wallet_mobile_390.png",
+  "page": "wallet",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/wallet",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "settings_mobile_390.png",
+  "page": "settings",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/settings",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "news_mobile_390.png",
+  "page": "news",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/news",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "home_tablet_768.png",
+  "page": "home",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/home",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "chats_tablet_768.png",
+  "page": "chats",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/chats",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "keep_tablet_768.png",
+  "page": "keep",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/keep",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "wallet_tablet_768.png",
+  "page": "wallet",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/wallet",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "settings_tablet_768.png",
+  "page": "settings",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/settings",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "news_tablet_768.png",
+  "page": "news",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/news",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "home_tablet_landscape_1024.png",
+  "page": "home",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/home",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "chats_tablet_landscape_1024.png",
+  "page": "chats",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/chats",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "keep_tablet_landscape_1024.png",
+  "page": "keep",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/keep",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "wallet_tablet_landscape_1024.png",
+  "page": "wallet",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/wallet",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "settings_tablet_landscape_1024.png",
+  "page": "settings",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/settings",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "news_tablet_landscape_1024.png",
+  "page": "news",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/news",
+  "scrollX": false,
+  "errors": []
+ }
+]

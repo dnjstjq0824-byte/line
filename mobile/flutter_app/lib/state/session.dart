@@ -26,6 +26,7 @@ class SessionController extends ChangeNotifier {
   String error = '';
   String notice = '';
   String selfId = '';
+  String deviceId = '';
   String selfName = '';
   String selfHandle = '';
   String selfStatusMessage = '';
@@ -104,6 +105,7 @@ class SessionController extends ChangeNotifier {
     final saved = await storage.read(key: 'access_token');
     if (saved == null) return;
     api.token = saved;
+    deviceId = await storage.read(key: 'device_id') ?? '';
     try {
       final me = await api.call('/api/v1/me');
       selfId = me['id'] ?? '';
@@ -116,16 +118,21 @@ class SessionController extends ChangeNotifier {
       _registerPushToken();
     } catch (_) {
       await storage.delete(key: 'access_token');
+      await storage.delete(key: 'device_id');
       api.token = null;
+      deviceId = '';
     }
   }
 
   Future<void> _registerPushToken() async {
+    // Server contract (calling_media.go): device_id + provider + token.
+    // The legacy platform/device_name shape always answered 400.
+    if (deviceId.isEmpty) return;
     try {
       await api.call('/api/v1/push-tokens', method: 'POST', data: {
+        'device_id': deviceId,
+        'provider': 'fcm',
         'token': 'fcm-mobile-${uuid().substring(0, 12)}',
-        'platform': 'android',
-        'device_name': 'LUNO Mobile Flutter Client',
       });
     } catch (_) {}
   }
@@ -159,7 +166,9 @@ class SessionController extends ChangeNotifier {
         'device_name': 'LUNO Android Client',
       });
       api.token = result['access_token'];
+      deviceId = result['device_id'] ?? '';
       await storage.write(key: 'access_token', value: api.token);
+      await storage.write(key: 'device_id', value: deviceId);
       final me = await api.call('/api/v1/me');
       selfId = me['id'] ?? '';
       selfName = me['display_name'] ?? 'LUNO User';
@@ -191,7 +200,7 @@ class SessionController extends ChangeNotifier {
       api.call('/api/v1/stories').catchError((_) => <String, dynamic>{'stories': []}),
       api.call('/api/v1/community/rooms').catchError((_) => <String, dynamic>{'rooms': []}),
       api.call('/api/v1/wallet').catchError((_) => <String, dynamic>{'history': []}),
-      api.call('/api/v1/bookmarks').catchError((_) => <String, dynamic>{'bookmarks': []}),
+      api.call('/api/v1/saved-messages').catchError((_) => <String, dynamic>{'saved_messages': []}),
       api.call('/api/v1/news').catchError((_) => <String, dynamic>{'hero': [], 'popular': [], 'sample': true}),
       api.call('/api/v1/calls').catchError((_) => <String, dynamic>{'calls': []}),
     ]);
@@ -204,7 +213,7 @@ class SessionController extends ChangeNotifier {
     walletBalance = (resultsList[6]['balance'] as num?)?.toInt();
     walletPoints = (resultsList[6]['points'] as num?)?.toInt();
     walletHistory = resultsList[6]['history'] ?? [];
-    bookmarks = resultsList[7]['bookmarks'] ?? [];
+    bookmarks = resultsList[7]['saved_messages'] ?? [];
     newsHero = resultsList[8]['hero'] ?? [];
     newsPopular = resultsList[8]['popular'] ?? [];
     newsIsSample = resultsList[8]['sample'] != false;
@@ -475,7 +484,7 @@ class SessionController extends ChangeNotifier {
 
   Future<void> saveToKeep(String msgId, String body) {
     return run(() async {
-      await api.call('/api/v1/bookmarks', method: 'POST', data: {'message_id': msgId, 'note': body});
+      await api.call('/api/v1/saved-messages', method: 'POST', data: {'message_id': msgId});
       await reload();
       notice = 'LUNO Keep에 보관했습니다.';
     });
@@ -520,7 +529,7 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> exportGdprData() {
-    // Legacy endpoint: preserved as-is (server answers 404 -> error strip).
+    // Served by GET /api/v1/me/export-data (parity gap closure).
     return run(() async {
       final res = await api.call('/api/v1/me/export-data');
       notice = 'GDPR 데이터 백업 파일 생성 완료 (${res['stats']?['conversations_count'] ?? 0}개 대화)';
@@ -531,7 +540,9 @@ class SessionController extends ChangeNotifier {
     await wsSubscription?.cancel();
     await socket?.sink.close();
     await storage.delete(key: 'access_token');
+    await storage.delete(key: 'device_id');
     api.token = null;
+    deviceId = '';
     selfId = '';
     chats = [];
     friends = [];

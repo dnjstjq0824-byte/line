@@ -33,7 +33,7 @@ jobs:
         run: |
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/001_all_phases.sql
           for pass in 1 2; do
-            for migration in database/00[2-5]_*.sql; do
+            for migration in database/00[2-6]_*.sql; do
               psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
             done
           done

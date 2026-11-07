@@ -98,7 +98,7 @@ test('A-03: login creates a real security notice carrying an opaque session_id t
   assert.equal((await api('auth/sessions/revoke', 'POST', { session_id: notice.metadata.session_id }, me.access_token)).status, 200);
   assert.equal((await api('me', 'GET', null, victim.access_token)).status, 401, 'token behind the notice is really dead');
   // UI contract (static): no success toast on failure, sample notices cannot call revoke
-  const ui = fs.readFileSync(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
+  const ui = fs.readFileSync(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
   const fn = ui.slice(ui.indexOf('async function handleSecurityNoticeLogout'), ui.indexOf('const showPasswordModal'));
   assert.ok(fn.includes('metadata?.session_id') && !/catch\s*\{[^}]*처리가 완료/.test(fn), 'handler must use session_id and not fake success');
 });

@@ -14,4 +14,4 @@ npm run dev:creator
 npm run dev:ads
 ```
 
-The clients are minimal working UI for implemented backend endpoints, **not** full LINE-equivalent UX or finished business modules. Browser access tokens are currently persisted in localStorage/sessionStorage (see `gl()` in user-web `App.vue`); production requires httpOnly-cookie sessions, session lifecycle, OIDC and refresh-token hardening.
+The clients are minimal working UI for implemented backend endpoints, **not** full LINE-equivalent UX or finished business modules. Browser access tokens are currently persisted in localStorage/sessionStorage (see `storeSession()` in user-web `src/store/session.ts`); production requires httpOnly-cookie sessions, session lifecycle, OIDC and refresh-token hardening.

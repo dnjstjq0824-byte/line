@@ -246,13 +246,19 @@ func (a *App) createRichMenu(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Title      string         `json:"title"`
 		Definition map[string]any `json:"definition"`
+		Layout     string         `json:"layout"`
+		Tiles      []any           `json:"tiles"`
 		Enabled    bool           `json:"enabled"`
 	}
 	if decode(r, &in) != nil || len(strings.TrimSpace(in.Title)) < 2 {
 		fail(w, 400, "invalid rich menu")
 		return
 	}
-	defBytes, _ := json.Marshal(in.Definition)
+	def := in.Definition
+	if def == nil && (in.Layout != "" || in.Tiles != nil) {
+		def = map[string]any{"layout": in.Layout, "tiles": in.Tiles}
+	}
+	defBytes, _ := json.Marshal(def)
 	var id string
 	e := a.db.QueryRowContext(r.Context(),
 		"INSERT INTO business.rich_menus(official_account_id,title,definition,enabled) VALUES ($1,$2,$3,$4) RETURNING id",

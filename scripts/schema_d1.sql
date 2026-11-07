@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS friends (
 
 CREATE TABLE IF NOT EXISTS wallets (
   user_id TEXT PRIMARY KEY,
-  balance INTEGER DEFAULT 100000,
+  balance INTEGER DEFAULT 0,
   updated_at TEXT NOT NULL
 );
 

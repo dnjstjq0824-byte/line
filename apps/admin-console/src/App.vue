@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import LunoThemeToggle from '../../shared/LunoThemeToggle.vue'
+import BaseBadge from '../../shared/components/ui/BaseBadge.vue'
+import BaseButton from '../../shared/components/ui/BaseButton.vue'
+import BaseEmpty from '../../shared/components/ui/BaseEmpty.vue'
+import BaseTable from '../../shared/components/ui/BaseTable.vue'
 import { ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
 
@@ -10,6 +14,19 @@ const reports = ref<Array<Record<string, string>>>([])
 const auditLogs = ref<Array<Record<string, string>>>([])
 const featureFlags = ref<Array<Record<string, unknown>>>([])
 const newFlagKey = ref(''), newFlagEnabled = ref(false)
+const userColumns = [
+  { key: 'display_name', label: '이름' },
+  { key: 'email', label: '이메일' },
+  { key: 'role', label: '역할' },
+  { key: 'state', label: '상태' },
+  { key: 'actions', label: '제재 관리' },
+]
+const auditColumns = [
+  { key: 'created_at', label: '시간' },
+  { key: 'actor_user_id', label: '관리자 ID' },
+  { key: 'action', label: '작업' },
+  { key: 'target_id', label: '대상 ID' },
+]
 
 async function run(fn: () => Promise<void>) {
   error.value = ''; note.value = ''
@@ -99,14 +116,14 @@ async function saveFeatureFlag() {
       </div>
       <input type="email" v-model="email" placeholder="이메일" required />
       <input type="password" v-model="password" placeholder="비밀번호" required />
-      <button>로그인</button>
+      <BaseButton type="submit" variant="primary">로그인</BaseButton>
       <p class="muted">일반 사용자 계정은 접근이 거부됩니다(403 Forbidden).</p>
     </form>
 
     <main v-else>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <h2>통합 시스템 대시보드</h2>
-        <button @click="load">새로고침</button>
+        <BaseButton @click="load">새로고침</BaseButton>
       </div>
 
       <section class="metrics">
@@ -118,31 +135,22 @@ async function saveFeatureFlag() {
 
       <section class="panel">
         <h2>사용자 관리 및 제재 집행</h2>
-        <div class="scroll">
-          <table>
-            <thead>
-              <tr><th>이름</th><th>이메일</th><th>역할</th><th>상태</th><th>제재 관리</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="u in users" :key="u.id">
-                <td>{{ u.display_name }}</td>
-                <td>{{ u.email }}</td>
-                <td><span class="badge">{{ u.role }}</span></td>
-                <td><span :class="['status', u.state]">{{ u.state }}</span></td>
-                <td>
-                  <button v-if="u.state === 'active'" style="background:#d9534f;font-size:12px;padding:4px 8px" @click="takeAction(u.id, 'suspend')">정지</button>
-                  <button v-else-if="u.state === 'suspended'" style="background:#5cb85c;font-size:12px;padding:4px 8px" @click="takeAction(u.id, 'activate')">정지 해제</button>
-                  <button style="background:#f0ad4e;font-size:12px;padding:4px 8px" @click="takeAction(u.id, 'warn')">경고</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <BaseTable :columns="userColumns" :rows="users" row-key="id">
+          <template #cell-role="{ value }"><BaseBadge tone="info">{{ value }}</BaseBadge></template>
+          <template #cell-state="{ value }"><BaseBadge :tone="value === 'active' ? 'success' : 'danger'">{{ value }}</BaseBadge></template>
+          <template #cell-actions="{ row }">
+            <span style="display:inline-flex;gap:6px">
+              <BaseButton v-if="row.state === 'active'" size="sm" variant="danger" @click="takeAction(row.id, 'suspend')">정지</BaseButton>
+              <BaseButton v-else-if="row.state === 'suspended'" size="sm" variant="primary" @click="takeAction(row.id, 'activate')">정지 해제</BaseButton>
+              <BaseButton size="sm" @click="takeAction(row.id, 'warn')">경고</BaseButton>
+            </span>
+          </template>
+        </BaseTable>
       </section>
 
       <section class="panel">
         <h2>신고 및 악성 콘텐츠 처리</h2>
-        <p v-if="!reports.length">접수된 미처리 신고가 없습니다.</p>
+        <BaseEmpty v-if="!reports.length" title="접수된 미처리 신고가 없습니다" hint="새 신고가 들어오면 이 목록에 표시됩니다." />
         <div v-for="r in reports" :key="r.id" class="report-item">
           <div>
             <strong>[{{ r.category }}]</strong> 상태: <span class="badge">{{ r.state }}</span> — {{ r.details }}
@@ -161,29 +169,22 @@ async function saveFeatureFlag() {
           <label style="display:flex;align-items:center;gap:6px">
             <input type="checkbox" v-model="newFlagEnabled" style="width:auto" /> 활성화
           </label>
-          <button style="background:#0275d8">플래그 추가/수정</button>
+          <BaseButton type="submit" variant="primary">플래그 추가/수정</BaseButton>
         </form>
         <div v-for="f in featureFlags" :key="String(f.key)" class="item-line">
           <code>{{ f.key }}</code>
-          <span :class="['badge', f.enabled ? 'badge-on' : 'badge-off']">{{ f.enabled ? 'ON' : 'OFF' }}</span>
+          <BaseBadge :tone="f.enabled ? 'success' : 'danger'">{{ f.enabled ? 'ON' : 'OFF' }}</BaseBadge>
         </div>
       </section>
 
       <section class="panel">
         <h2>불변 감사 로그 (Audit Logs)</h2>
-        <div class="scroll" style="max-height:220px">
-          <table>
-            <thead><tr><th>시간</th><th>관리자 ID</th><th>작업</th><th>대상 ID</th></tr></thead>
-            <tbody>
-              <tr v-for="a in auditLogs" :key="a.id">
-                <td><small>{{ new Date(a.created_at).toLocaleString() }}</small></td>
-                <td><code>{{ a.actor_user_id }}</code></td>
-                <td><strong>{{ a.action }}</strong></td>
-                <td><code>{{ a.target_id }}</code></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <BaseTable :columns="auditColumns" :rows="auditLogs" row-key="id">
+          <template #cell-created_at="{ value }"><small>{{ new Date(String(value)).toLocaleString() }}</small></template>
+          <template #cell-actor_user_id="{ value }"><code>{{ value }}</code></template>
+          <template #cell-action="{ value }"><strong>{{ value }}</strong></template>
+          <template #cell-target_id="{ value }"><code>{{ value }}</code></template>
+        </BaseTable>
       </section>
     </main>
   </div>

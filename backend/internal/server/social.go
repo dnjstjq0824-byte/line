@@ -34,7 +34,7 @@ func (a *App) users(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) friends(w http.ResponseWriter, r *http.Request) {
 	rows, e := a.db.QueryContext(r.Context(),
-		"SELECT u.id,u.display_name,COALESCE(u.handle,''),COALESCE(u.bio,'') FROM social.friendships f JOIN identity.users u ON u.id=f.friend_id WHERE f.user_id=$1 AND u.state='active' ORDER BY u.display_name",
+		"SELECT u.id,u.display_name,COALESCE(u.handle,''),COALESCE(u.bio,''),COALESCE(u.avatar_url,''),CASE WHEN f.is_favorite THEN 1 ELSE 0 END,CASE WHEN b.blocked_id IS NULL THEN 0 ELSE 1 END FROM social.friendships f JOIN identity.users u ON u.id=f.friend_id LEFT JOIN social.blocks b ON b.user_id=f.user_id AND b.blocked_id=f.friend_id WHERE f.user_id=$1 AND u.state='active' ORDER BY u.display_name",
 		claims(r).Subject)
 	if e != nil {
 		fail(w, 500, "friend list failed")
@@ -43,9 +43,10 @@ func (a *App) friends(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	result := make([]any, 0)
 	for rows.Next() {
-		var id, name, handle, bio string
-		if rows.Scan(&id, &name, &handle, &bio) == nil {
-			result = append(result, map[string]string{"id": id, "display_name": name, "handle": handle, "bio": bio})
+		var id, name, handle, bio, avatar string
+		var fav, blocked int
+		if rows.Scan(&id, &name, &handle, &bio, &avatar, &fav, &blocked) == nil {
+			result = append(result, map[string]any{"id": id, "display_name": name, "handle": handle, "bio": bio, "avatar_url": avatar, "is_favorite": fav == 1, "is_blocked": blocked == 1})
 		}
 	}
 	send(w, 200, map[string]any{"friends": result})

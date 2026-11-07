@@ -57,7 +57,7 @@ CREATE TABLE identity.user_settings (
 
 CREATE TABLE social.friendships (
  user_id UUID NOT NULL REFERENCES identity.users(id), friend_id UUID NOT NULL REFERENCES identity.users(id),
- created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY(user_id, friend_id), CHECK(user_id<>friend_id)
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(), is_favorite BOOLEAN NOT NULL DEFAULT false, PRIMARY KEY(user_id, friend_id), CHECK(user_id<>friend_id)
 );
 CREATE TABLE social.blocks (
  user_id UUID NOT NULL REFERENCES identity.users(id), blocked_id UUID NOT NULL REFERENCES identity.users(id),
@@ -86,7 +86,7 @@ CREATE TABLE chat.conversation_members (
  conversation_id UUID NOT NULL REFERENCES chat.conversations(id), user_id UUID NOT NULL REFERENCES identity.users(id),
  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','admin','member')),
  last_read_sequence BIGINT NOT NULL DEFAULT 0, joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
- left_at TIMESTAMPTZ, muted_until TIMESTAMPTZ, PRIMARY KEY(conversation_id,user_id)
+ left_at TIMESTAMPTZ, muted_until TIMESTAMPTZ, pinned_at TIMESTAMPTZ, PRIMARY KEY(conversation_id,user_id)
 );
 CREATE INDEX member_by_user_idx ON chat.conversation_members(user_id,joined_at DESC);
 CREATE TABLE chat.messages (

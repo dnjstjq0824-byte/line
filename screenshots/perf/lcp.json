@@ -1,0 +1,20 @@
+{
+ "measured_at": "2026-11-07T09:54:31.767Z",
+ "target_ms": 2500,
+ "results": [
+  {
+   "device": "pc",
+   "width": 1440,
+   "route": "/",
+   "lcp_ms": 784,
+   "transfer_bytes": 1238423
+  },
+  {
+   "device": "mobile",
+   "width": 390,
+   "route": "/",
+   "lcp_ms": 520,
+   "transfer_bytes": 1280426
+  }
+ ]
+}

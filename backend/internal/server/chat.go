@@ -64,7 +64,7 @@ func (a *App) conversationMemberIDs(r *http.Request, conversationID string) []st
 
 func (a *App) conversations(w http.ResponseWriter, r *http.Request) {
 	uid := claims(r).Subject
-	rows, e := a.db.QueryContext(r.Context(), `SELECT c.id,c.kind,COALESCE(c.title,''),c.last_sequence,m.last_read_sequence,c.updated_at
+	rows, e := a.db.QueryContext(r.Context(), `SELECT c.id,c.kind,COALESCE(c.title,''),c.last_sequence,m.last_read_sequence,c.updated_at,CASE WHEN m.pinned_at IS NULL THEN 0 ELSE 1 END,CASE WHEN m.muted_until IS NOT NULL AND m.muted_until > now() THEN 1 ELSE 0 END
  FROM chat.conversation_members m JOIN chat.conversations c ON c.id=m.conversation_id
  WHERE m.user_id=$1 AND m.left_at IS NULL AND c.deleted_at IS NULL ORDER BY c.updated_at DESC LIMIT 200`, uid)
 	if e != nil {
@@ -74,13 +74,14 @@ func (a *App) conversations(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	type convRow struct {
 		id, kind, title string
+		pinned, muted   int
 		seq, read       int64
 		updated         time.Time
 	}
 	var rawRows []convRow
 	for rows.Next() {
 		var cr convRow
-		if rows.Scan(&cr.id, &cr.kind, &cr.title, &cr.seq, &cr.read, &cr.updated) == nil {
+		if rows.Scan(&cr.id, &cr.kind, &cr.title, &cr.seq, &cr.read, &cr.updated, &cr.pinned, &cr.muted) == nil {
 			rawRows = append(rawRows, cr)
 		}
 	}
@@ -123,7 +124,7 @@ func (a *App) conversations(w http.ResponseWriter, r *http.Request) {
 			"last_sequence":      cr.seq,
 			"last_read_sequence": cr.read,
 			"unread_count":       max(int64(0), cr.seq-cr.read),
-			"member_count":       memberCount,
+			"member_count": memberCount, "pinned": cr.pinned == 1, "muted": cr.muted == 1,
 			"last_message":       lastMsg,
 			"updated_at":         cr.updated,
 		})

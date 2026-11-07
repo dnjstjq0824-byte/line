@@ -65,7 +65,9 @@ func (a *App) followOfficialAccount(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) ensureWallet(r *http.Request, userID string) (int64, int64) {
 	_, _ = a.db.ExecContext(r.Context(),
-		`INSERT INTO commerce.wallets(user_id,balance,points) VALUES($1,125000,3450) ON CONFLICT(user_id) DO NOTHING`,
+		// New wallets start empty: phantom seed money with no ledger entry is
+		// fake balance and must never render as a real figure on a pay surface.
+		`INSERT INTO commerce.wallets(user_id,balance,points) VALUES($1,0,0) ON CONFLICT(user_id) DO NOTHING`,
 		userID)
 	var balance, points int64
 	_ = a.db.QueryRowContext(r.Context(),
