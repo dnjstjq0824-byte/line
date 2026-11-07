@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AuthView from './views/AuthView.vue'
-import MessengerView from './views/MessengerView.vue'
 import { readStoredToken } from './store/session'
 
 // Menu = URL: every reachable pane has an independent address.
@@ -9,7 +8,9 @@ export type NavPath = (typeof NAV_PATHS)[number]
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', component: AuthView },
-  { path: '/:nav?', component: MessengerView },
+  // Code-split: the messenger shell loads only after auth, keeping the
+  // first-paint bundle to the login view.
+  { path: '/:nav?', component: () => import('./views/MessengerView.vue') },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

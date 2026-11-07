@@ -1,10 +1,10 @@
 # LUNO 상용화 보고서 (Phase 0~5)
 
-- 기준 커밋: 본 미션 작업분(라우터 분리·i18n·앱캡처·지갑/푸시 정합 포함, 커밋 예정)
+- 기준 커밋: 본 미션 작업분(라우터 분리·i18n·앱캡처·지갑/푸시 정합·MessengerView i18n 462→0·관리자 샷 포함, 커밋 예정)
 - 일자: 2026-11-07 / 원칙: 계약·결제 일절 진행 없음(§11 준수)
 - 관련 산출물: [Phase 0 진단서](COMMERCIALIZATION_PHASE0_DIAGNOSIS.md),
-  [i18n 인벤토리](i18n-hardcoded-inventory.md), `screenshots/phase3/`(49장+manifest),
-  `screenshots/app/`(21장+manifest), `screenshots/perf/lcp.json`,
+  [i18n 인벤토리](i18n-hardcoded-inventory.md)(TOTAL 0), `screenshots/phase3/`(49장+manifest+EN 7장),
+  `screenshots/app/`(21장+manifest), `screenshots/admin/`(2장+manifest), `screenshots/perf/lcp.json`,
   `scripts/capture_screenshots.mjs`·`scripts/capture_app.mjs`·`scripts/measure_lcp.mjs`(재현 도구)
 
 ## 1. 현황 진단표
@@ -38,7 +38,9 @@ wallet_mobile_390(신규 계정 ₩0·0P 표시 확인).
 
 △=해당 구간 미촬영이 아니라 모바일 내비 한계로 wallet만 촬영. 미달: Flutter
 실기기/네이티브 샷(웹 빌드 렌더로 대체, CanvasKit 좌표 로그인은 Tab 무좌표
-방식으로 확정·검증), 관리자 로그인 이후 화면(데모 계정에 관리자 권한 없음).
+방식으로 확정·검증, `flutter devices`에 모바일/에뮬레이터 없음 확인).
+관리자 로그인 이후 화면은 해소: 로컬 Go+임시 sqlite+role 승격 경유 대시보드
+KO/EN 2장(`screenshots/admin/`, 에러 0건).
 
 ## 3. 전수 검사 결과표
 
@@ -57,7 +59,7 @@ wallet_mobile_390(신규 계정 ₩0·0P 표시 확인).
 | 성능 | LCP 측정(랩·무스로틀) | 통과 | PC 784ms·모바일 520ms(목표 2500ms), 전송 약 1.2MB |
 | 접근성 | 대비 AA(텍스트·상태색)·44px·포커스·모션 | 통과(신규분) | 토큰 테스트 + 컴포넌트 내장 |
 | 보안 | JWT·세션 무효화·CORS·헤더·레이트리밋 | 통과 | 코드+테스트 |
-| 관리자 | 콘솔 25화면 배선 | 통과 | 감사+빌드(로그인 이후 샷은 미촬영) |
+| 관리자 | 콘솔 25화면 배선 | 통과 | 감사+빌드+로그인 이후 대시보드 KO/EN 2샷(에러 0건) |
 
 ## 4. 상용화 기능 갭 분석표
 
@@ -71,11 +73,11 @@ wallet_mobile_390(신규 계정 ₩0·0P 표시 확인).
 | G1-17 | 푸시토큰 페이로드 불일치(앱 400) | 구현됨 | P0 | device_id 저장+정규 페이로드로 교정, 양 백엔드 호환 확인 |
 | G1-18 | 신규 지갑 팬텀 시드(Go 125000·워커 50000·D1 100000) | 구현됨 | P0 | 3곳 모두 0원 시드로 교정, 원장 무결성(빈 내역=0원) |
 | G2 | vue-router+URL 분리+App.vue 분할 | 구현됨 | P0 | 셸+AuthView+MessengerView+session 스토어, 빌드·49샷 그린 |
-| G3 | i18n 734→711줄 전환 | 부분 | P1 | AuthView 22건→0건, 누출 9건+브랜드 해결, 구조+인벤토리 완성 |
+| G3 | i18n 전수 전환(보정 693→0줄) | 구현됨 | P1 | AuthView·MessengerView(462→0, 신규키 441·4로케일)·콘솔 5종 0건, 스캐너 TOTAL 0, KO/EN 실데이터 회귀 |
 | G4 | 검색 자동완성 | 미구현 | P1 | 스펙 §6, LIKE 검색은 동작 중 |
-| G5 | SEO/사이트맵/robots | 미구현 | P1 | 메신저 특성상 낮음 |
+| G5 | SEO 최소(OG·canonical) | 구현됨 | P1 | OG PNG+canonical+절대경로, 사이트맵/robots 잔여 |
 | G6 | E2EE 실배선·소셜로그인·MFA | 미구현 | P2/계약 | 키 테이블만 존재 |
-| G7 | 모니터링·E2E 스위트 | 미구현 | P1 | Sentry 계약 항목(§10) |
+| G7 | 모니터링·E2E 스위트 | 구현됨 | P1 | 벤더 없이 로컬 링버퍼(웹+앱 배선), Go 실백엔드 여정 스위트(Go 없으면 skip) |
 
 ## 5. 엔진 비교표 (비교·추정치까지만, 계약 금지)
 
@@ -105,13 +107,13 @@ SMS 발신번호 등록 수일, 스토어 개발자 계정(Play $25 1회·Apple 
 
 | 항목 | ko | en | th | ja |
 | --- | --- | --- | --- | --- |
-| UI 사전 키 수 | 74 | 70 | 70 | 76 |
+| UI 사전 키 수 | 536 | 532 | 532 | 538 |
 | 원시 키 누출 | 0 | 0(9건 해소) | 0(9건 해소) | 0(9건 해소) |
 | 브랜드명 | LUNO 통일 | LUNO | LUNO | LUNO |
 
 - 구조: 자작 사전+handoff(ko/en)+UI 사전(4개). vue-i18n 미도입(전환은 P2).
-- 누락: 하드코딩 711줄 인벤토리(AuthView 22건 해소, 잔여 MessengerView 482+콘솔 229).
-  날짜 Intl 포맷은 적용, 통화·URL 로케일(/ko/)·hreflang은 잔여.
+- 누락: 하드코딩 인벤토리 TOTAL 0(스캐너 기계 판정). 날짜·상대시간·통화(KRW)
+  Intl 전면 적용. URL 로케일(/ko/)·hreflang은 잔여.
 - 번역 엔진: 5문장 코퍼스+키워드(현행). 실번역은 §5 계약 항목.
 
 ## 8. 보안·성능·SEO·접근성 점검표
@@ -123,9 +125,9 @@ SMS 발신번호 등록 수일, 스토어 개발자 계정(Play $25 1회·Apple 
 | 레이트리밋·CORS allowlist | ✓ | 인메모리 60req/min(분산은 P2 Redis) |
 | SQL 인젝션·XSS | ✓ 구조 | 플레이스홀더 전용, Vue 이스케이프(감사 샘플 기준) |
 | 토큰 보관 | △ | localStorage(인지된 한계, httpOnly 전환 P1) |
-| 번들 | 기록 | user-web JS 295KB(gzip 96KB), 코드스플리팅 잔여 |
-| LCP(랩·무스로틀) | ✓ | PC 784ms·모바일 520ms(목표 2500ms). 전송 1.2MB는 스플리팅 후속 과제 |
-| SEO/사이트맵 | 미실시 | P1 |
+| 번들 | 기록 | 첫 페인트 JS 263KB(gzip 89KB)+Messenger 청크 149KB, 사전 4로케일 포함 |
+| LCP(랩·무스로틀) | ✓ | PC 984ms·모바일 608ms 중앙값(목표 2500ms), 전송 1.18MB. 콜드런 스파이크 관측됨 |
+| SEO 최소 | ✓ | OG PNG+canonical+절대경로. 사이트맵/robots P1 잔여 |
 | 대비 AA·44px·포커스·모션배려 | ✓ 신규분 | 토큰 테스트 + 컴포넌트 내장 |
 
 ## 9. 상용화 로드맵
@@ -133,10 +135,10 @@ SMS 발신번호 등록 수일, 스토어 개발자 계정(Play $25 1회·Apple 
 | 단계 | 작업 | 담당 | 예상 |
 | --- | --- | --- | --- |
 | P0-1 | vue-router 도입+화면 분할+URL 매핑 | Vue | 완료(기계 분할+빌드+49샷 검증) |
-| P0-2 | 관리자 로그인 이후 샷+전 화면 상태 매트릭스 | QA | 3일 |
-| P1-1 | i18n 711줄 전환+handoff 정리 | Vue | 1~2주 |
+| P0-2 | 관리자 로그인 이후 샷+전 화면 상태 매트릭스 | QA | 샷 완료(admin 2장), 상태 매트릭스 잔여 |
+| P1-1 | i18n 전수 전환+handoff 정리 | Vue | 완료(693→0줄, KO/EN 실데이터 회귀) |
 | P1-2 | suggest API+UI+OpenAPI | Go+Vue+Flutter | 1주 |
-| P1-3 | 스플리팅+SEO 최소(LCP 측정 완료) | Vue | 2일 |
+| P1-3 | 스플리팅+SEO 최소(LCP 측정 완료) | Vue | 완료(첫 페인트 263KB, OG/canonical) |
 | P1-4 | 번역/전화/리치메뉴 잔여 | Go+계약 | 계약 후 1주 |
 | P2 | E2EE·소셜·MFA·분산 리밋·PG 실연동 | 전담 | 별도 산정 |
 

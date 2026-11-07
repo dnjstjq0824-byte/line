@@ -29,6 +29,7 @@ import {
 import { NAV_PATHS } from '../router'
 import {
   SUPPORTED_LOCALES,
+  UI_DICTIONARY,
   formatLocalizedTime,
   translateMessageText,
   type LunoLocale
@@ -105,14 +106,14 @@ async function handleTranslateMessage(msg: Message) {
       sourceLang: 'auto',
       engine: 'luno-ai',
       loading: false,
-      error: '번역에 실패했습니다.'
+      error: t('mvTranslateFailed')
     }
   }
 }
 
 // --- AI Voice/Video Call Live Captions UX ---
 const liveCaptionsEnabled = ref(false)
-const callSubtitles = ref('실시간 AI 통역 자막이 연결되었습니다.')
+const callSubtitles = ref(t('mvLiveCaptionsOn'))
 
 // --- Auth & Session State ---
 const basePath = import.meta.env.BASE_URL
@@ -173,21 +174,33 @@ export interface NewsArticle {
 
 const showQrModal = ref(false)
 
-const newsCategories = ['전체', '인기', '경제', 'IT/과학', '글로벌', '엔터', '북마크']
-const selectedNewsCategory = ref('전체')
+// News categories use stable IDs; labels resolve via t() (server sample feed still carries ko labels).
+const NEWS_CATEGORY_IDS = ['all', 'popular', 'economy', 'science', 'global', 'ent', 'bookmark']
+const NEWS_CAT_KEY: Record<string, string> = { all: 'mvNewsCatAll', popular: 'mvNewsCatPopular', economy: 'mvNewsCatEconomy', science: 'mvNewsCatScience', global: 'mvNewsCatGlobal', ent: 'mvNewsCatEnt', bookmark: 'mvNewsCatBookmark' }
+function newsCatLabel(id: string): string { return t(NEWS_CAT_KEY[id] || 'mvNewsCatAll') }
+function newsCatKoLabel(id: string): string { return UI_DICTIONARY.ko[NEWS_CAT_KEY[id] || 'mvNewsCatAll'] || id }
+const selectedNewsCategory = ref('all')
 const activeNewsArticle = ref<NewsArticle | null>(null)
 const newsBookmarks = ref<Set<string>>(new Set())
 
 const heroNewsSlides = ref<NewsArticle[]>([])
 const newsIsSample = ref(false)
 
+// BCP-47 tags for locale-aware Intl formatting (follows formatLocalizedTime precedent).
+const RTF_LOCALE: Record<LunoLocale, string> = { ko: 'ko-KR', en: 'en-US', th: 'th-TH', ja: 'ja-JP' }
+function formatKRW(amount: number): string {
+  try {
+    return new Intl.NumberFormat(RTF_LOCALE[currentLocale.value] || 'ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 }).format(amount)
+  } catch { return amount.toLocaleString() }
+}
 function relTime(iso: string): string {
   const ms = Date.now() - Date.parse(iso)
   if (!Number.isFinite(ms)) return iso
   const min = Math.max(1, Math.round(ms / 60000))
-  if (min < 60) return min + '분 전'
-  if (min < 60 * 24) return Math.round(min / 60) + '시간 전'
-  return Math.round(min / 1440) + '일 전'
+  const rtf = new Intl.RelativeTimeFormat(RTF_LOCALE[currentLocale.value] || 'ko-KR', { numeric: 'always' })
+  if (min < 60) return rtf.format(-min, 'minute')
+  if (min < 60 * 24) return rtf.format(-Math.round(min / 60), 'hour')
+  return rtf.format(-Math.round(min / 1440), 'day')
 }
 
 // News comes from GET /api/v1/news (explicitly labelled editorial SAMPLE content, never real press).
@@ -209,14 +222,14 @@ const heroNews = computed(() => heroNewsSlides.value[activeHeroSlideIndex.value]
 const popularNewsList = ref<NewsArticle[]>([])
 
 const filteredPopularNews = computed(() => {
-  if (selectedNewsCategory.value === '북마크') {
+  if (selectedNewsCategory.value === 'bookmark') {
     const all = [...heroNewsSlides.value, ...popularNewsList.value]
     return all.filter(a => newsBookmarks.value.has(a.id))
   }
-  if (selectedNewsCategory.value === '전체' || selectedNewsCategory.value === '인기') {
+  if (selectedNewsCategory.value === 'all' || selectedNewsCategory.value === 'popular') {
     return popularNewsList.value
   }
-  const filtered = popularNewsList.value.filter(a => a.category === selectedNewsCategory.value)
+  const filtered = popularNewsList.value.filter(a => a.category === newsCatKoLabel(selectedNewsCategory.value))
   return filtered.length > 0 ? filtered : popularNewsList.value
 })
 
@@ -242,7 +255,7 @@ function toggleNewsBookmark(id: string) {
 function shareNewsToChat(article: NewsArticle) {
   activeNewsArticle.value = null
   activeNav.value = 'chats'
-  const shareText = `[뉴스 공유] ${article.title}\n출처: ${article.press} · ${article.category}\n${article.content}`
+  const shareText = t('mvNewsShare').replace('{title}', article.title).replace('{press}', article.press).replace('{category}', article.category).replace('{content}', article.content)
   if (selectedChat.value) {
     draftMessage.value = shareText
   } else if (chats.value.length > 0) {
@@ -278,12 +291,12 @@ function addNewsComment(articleId: string) {
   if (!newsArticleComments.value[articleId]) newsArticleComments.value[articleId] = []
   newsArticleComments.value[articleId].push({
     id: 'c-' + Date.now(),
-    author: currentUser.value?.display_name || '나',
+    author: currentUser.value?.display_name || t('mvMe'),
     text,
-    time: '방금 전'
+    time: t('mvJustNow')
   })
   newCommentInput.value = ''
-  note.value = '기사에 댓글이 등록되었습니다.'
+  note.value = t('mvCommentPosted')
 }
 
 
@@ -306,10 +319,11 @@ const selectedCallRecord = ref<CallRecord | null>(null)
 
 function callDateText(iso: string): string {
   const d = new Date(iso)
+  const tag = RTF_LOCALE[currentLocale.value] || 'ko-KR'
   const diffDays = Math.floor((Date.now() - d.getTime()) / 86400000)
-  if (diffDays < 1) return d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })
-  if (diffDays < 7) return ['일', '월', '화', '수', '목', '금', '토'][d.getDay()] + '요일'
-  return (d.getMonth() + 1) + '. ' + d.getDate() + '.'
+  if (diffDays < 1) return d.toLocaleTimeString(tag, { hour: 'numeric', minute: '2-digit' })
+  if (diffDays < 7) return new Intl.DateTimeFormat(tag, { weekday: 'long' }).format(d)
+  return new Intl.DateTimeFormat(tag, { month: 'numeric', day: 'numeric' }).format(d)
 }
 
 // The call list is the server-side call ledger (GET /api/v1/calls), consistent with call_status chat bubbles.
@@ -392,7 +406,7 @@ function removeCallRecord(id: string) {
 }
 
 // --- Recent Search History (Section 3.2 & 4) ---
-const recentSearchKeywords = ref<string[]>(['K 🙏', '매일경제', '오픈채팅', 'CapCom', '회의록'])
+const recentSearchKeywords = ref<string[]>(['K 🙏', t('mvSeedPress'), t('navOpenChat'), 'CapCom', t('mvSeedMinutes')])
 
 function addSearchKeyword(kw: string) {
   if (!kw.trim()) return
@@ -410,14 +424,10 @@ function clearAllSearchKeywords() {
 
 // --- Date Dividers & Security Notice Helpers ---
 function formatDateDivider(dateStr?: string) {
-  if (!dateStr) return '오늘'
+  if (!dateStr) return t('mvToday')
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return dateStr
-  const month = d.getMonth() + 1
-  const day = d.getDate()
-  const days = ['일', '월', '화', '수', '목', '금', '토']
-  const dayOfWeek = days[d.getDay()]
-  return `${month}. ${day}. (${dayOfWeek})`
+  return new Intl.DateTimeFormat(RTF_LOCALE[currentLocale.value] || 'ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' }).format(d)
 }
 
 function shouldShowDateDivider(msg: any, index: number) {
@@ -432,7 +442,7 @@ function shouldShowDateDivider(msg: any, index: number) {
 async function handleSecurityNoticeLogout(msg: any) {
   const sessionId = msg.metadata?.session_id
   if (!sessionId) {
-    error.value = '이 알림에는 종료할 로그인 세션 정보가 없습니다 (샘플 알림).'
+    error.value = t('mvNoSessionInNotice')
     return
   }
   try {
@@ -442,11 +452,11 @@ async function handleSecurityNoticeLogout(msg: any) {
       void router.push('/login')
       return
     }
-    note.value = '해당 로그인 세션이 서버에서 종료되었습니다.'
+    note.value = t('mvSessionRevoked')
     await loadDevices()
   } catch (e) {
     // Never claim success when the server did not revoke anything.
-    error.value = e instanceof Error ? e.message : '세션 종료에 실패했습니다.'
+    error.value = e instanceof Error ? e.message : t('mvSessionRevokeFailed')
   }
 }
 
@@ -460,15 +470,15 @@ const passwordChangeError = ref('')
 
 async function submitPasswordChange() {
   if (!currentPasswordInput.value) {
-    passwordChangeError.value = '현재 비밀번호를 입력하세요.'
+    passwordChangeError.value = t('mvPwCurrentRequired')
     return
   }
   if (newPasswordInput.value !== confirmPasswordInput.value) {
-    passwordChangeError.value = '새 비밀번호가 일치하지 않습니다.'
+    passwordChangeError.value = t('mvPwMismatch')
     return
   }
   if (newPasswordInput.value.length < 12) {
-    passwordChangeError.value = '새 비밀번호는 12자 이상이어야 합니다.'
+    passwordChangeError.value = t('mvPwTooShort')
     return
   }
   try {
@@ -476,14 +486,14 @@ async function submitPasswordChange() {
       current_password: currentPasswordInput.value,
       new_password: newPasswordInput.value
     })
-    note.value = '비밀번호가 성공적으로 변경되었습니다. 다른 모든 세션이 만료되었습니다.'
+    note.value = t('mvPwChanged')
     showPasswordModal.value = false
     currentPasswordInput.value = ''
     newPasswordInput.value = ''
     confirmPasswordInput.value = ''
     passwordChangeError.value = ''
   } catch (err: any) {
-    passwordChangeError.value = err?.message || '비밀번호 변경 실패'
+    passwordChangeError.value = err?.message || t('mvPwChangeFailed')
   }
 }
 
@@ -529,7 +539,7 @@ function onRichMenuTileClick(tile: any) {
   } else if (tile.action.type === 'uri') {
     if (tile.action.uri) window.open(tile.action.uri, '_blank')
   } else if (tile.action.type === 'postback') {
-    draftMessage.value = `[포스트백] ${tile.action.data || tile.label}`
+    draftMessage.value = t('mvPostback').replace('{body}', String(tile.action.data || tile.label))
     void sendMessage()
   }
 }
@@ -675,30 +685,30 @@ function openMessageContextMenu(e: MouseEvent, msg: Message) {
   e.preventDefault()
   const items: ContextMenuItem[] = [
     {
-      label: '텍스트 복사',
+      label: t('mvCtxCopy'),
       shortcut: 'Ctrl+C',
       action: () => {
         navigator.clipboard?.writeText(msg.body).catch(() => {})
-        note.value = '메시지가 클립보드에 복사되었습니다.'
+        note.value = t('mvCopied')
       }
     },
     {
-      label: '답장',
+      label: t('mvReply'),
       action: () => startReply(msg)
     },
     {
-      label: 'Keep에 저장',
+      label: t('mvCtxKeep'),
       action: () => saveToKeep(msg)
     },
     {
-      label: '공지로 등록',
+      label: t('mvCtxPin'),
       action: () => pinMessage(msg.id)
     }
   ]
 
   if (currentUser.value && msg.sender_id === currentUser.value.id) {
     items.push({
-      label: '보내기 취소',
+      label: t('mvCtxUnsend'),
       danger: true,
       separator: true,
       action: () => unsendMessage(msg.id)
@@ -724,7 +734,7 @@ async function toggleFriendFavorite(friend: User) {
     await api(`/api/v1/friends/${friend.id}`, 'PATCH', { favorite: next })
     ;(friend as any).is_favorite = next
     await loadFriends()
-    note.value = next ? `★ ${friend.display_name}님을 즐겨찾기에 추가했습니다.` : `${friend.display_name}님을 즐겨찾기에서 해제했습니다.`
+    note.value = next ? t('mvFavAdded').replace('{name}', friend.display_name) : t('mvFavRemoved').replace('{name}', friend.display_name)
   })
 }
 
@@ -734,7 +744,7 @@ async function toggleFriendBlock(friend: User) {
     await api(`/api/v1/friends/${friend.id}`, 'PATCH', { blocked: next })
     ;(friend as any).is_blocked = next
     await loadFriends()
-    note.value = next ? `🚫 ${friend.display_name}님을 차단했습니다.` : `${friend.display_name}님 차단을 해제했습니다.`
+    note.value = next ? t('mvBlocked').replace('{name}', friend.display_name) : t('mvUnblocked').replace('{name}', friend.display_name)
   })
 }
 
@@ -758,7 +768,7 @@ async function toggleChatPin(chat: Chat) {
     await api(`/api/v1/conversations/${chat.id}/meta`, 'PATCH', { pinned: next })
     ;(chat as any).pinned = next
     await loadChats()
-    note.value = next ? '📌 대화방을 상단에 고정했습니다.' : '상단 고정을 해제했습니다.'
+    note.value = next ? t('mvChatPinned') : t('mvChatUnpinned')
   })
 }
 
@@ -768,7 +778,7 @@ async function toggleChatMute(chat: Chat) {
     await api(`/api/v1/conversations/${chat.id}/meta`, 'PATCH', { muted: next })
     ;(chat as any).muted = next
     await loadChats()
-    note.value = next ? '🔕 대화방 알림을 껐습니다.' : '🔔 대화방 알림을 켰습니다.'
+    note.value = next ? t('mvChatMuted') : t('mvChatUnmuted')
   })
 }
 
@@ -776,7 +786,7 @@ async function markChatAsRead(chat: Chat) {
   await wrap(async () => {
     await api(`/api/v1/conversations/${chat.id}/read`, 'POST', { sequence: chat.last_sequence || 999999 })
     await loadChats()
-    note.value = '✓ 읽음 처리되었습니다.'
+    note.value = t('mvMarkedRead')
   })
 }
 
@@ -784,7 +794,7 @@ async function markAllChatsRead() {
   await wrap(async () => {
     await api('/api/v1/conversations/read-all', 'POST', {})
     await loadChats()
-    note.value = '✓✓ 모든 대화방을 읽음 처리했습니다.'
+    note.value = t('mvAllMarkedRead')
   })
 }
 
@@ -793,7 +803,7 @@ async function leaveOrHideChat(chat: Chat) {
     await api(`/api/v1/conversations/${chat.id}`, 'DELETE')
     if (selectedChatId.value === chat.id) selectedChatId.value = ''
     await loadChats()
-    note.value = '대화방에서 나갔습니다.'
+    note.value = t('mvLeftChat')
   })
 }
 
@@ -803,19 +813,19 @@ function openChatContextMenu(e: MouseEvent, chat: Chat) {
   const isMuted = !!(chat as any).muted
   const items: ContextMenuItem[] = [
     {
-      label: isPinned ? '📌 상단 고정 해제' : '📌 대화방 상단 고정',
+      label: isPinned ? t('mvUnpinChat') : t('mvPinChat'),
       action: () => toggleChatPin(chat)
     },
     {
-      label: isMuted ? '🔔 알림 켜기' : '🔕 알림 끄기',
+      label: isMuted ? t('mvNotifOn') : t('mvNotifOff'),
       action: () => toggleChatMute(chat)
     },
     {
-      label: '✓ 읽음으로 표시',
+      label: t('mvMarkRead'),
       action: () => markChatAsRead(chat)
     },
     {
-      label: '🚪 대화방 나가기',
+      label: t('mvLeaveChat'),
       danger: true,
       separator: true,
       action: () => leaveOrHideChat(chat)
@@ -835,32 +845,32 @@ function openFriendContextMenu(e: MouseEvent, friend: User) {
   const isBlk = !!(friend as any).is_blocked
   const items: ContextMenuItem[] = [
     {
-      label: '💬 1:1 대화',
+      label: t('mvDirectChat'),
       action: () => startDirectChat(friend)
     },
     {
-      label: isFav ? '★ 즐겨찾기 해제' : '☆ 즐겨찾기 추가',
+      label: isFav ? t('mvFavRemove') : t('mvFavAdd'),
       action: () => toggleFriendFavorite(friend)
     },
     {
-      label: '📞 음성 통화',
+      label: t('mvVoiceCallAction'),
       action: () => startCallWithUser(friend, 'voice')
     },
     {
-      label: '📹 영상 통화',
+      label: t('mvVideoCallAction'),
       action: () => startCallWithUser(friend, 'video')
     },
     {
-      label: '👤 프로필 보기',
+      label: t('mvViewProfile'),
       action: () => { activeProfileUser.value = friend }
     },
     {
-      label: '💸 송금하기',
+      label: t('mvSendMoneyAction'),
       separator: true,
       action: () => openSendMoneyModal(friend)
     },
     {
-      label: isBlk ? '차단 해제' : '🚫 차단하기',
+      label: isBlk ? t('mvUnblock') : t('mvBlock'),
       danger: !isBlk,
       action: () => toggleFriendBlock(friend)
     }
@@ -879,10 +889,10 @@ const stickerPacks = ref<Array<{ id: string; title: string; price_minor: number;
 const showStickerPicker = ref(false)
 const activeStickerTab = ref(0)
 const stickersList = [
-  { id: 'pack-brown', name: '브라운 & 프렌즈', items: ['🐻', '🐰', '🐥', '🐸', '🐱', '🐶', '🐼', '🐨', '🦁', '🐯', '🦊', '🦄'] },
-  { id: 'pack-emotions', name: '표정 & 감정', items: ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '🤔', '😴', '😱', '🤩', '😇'] },
-  { id: 'pack-daily', name: '일상 & 음식', items: ['☕', '🍰', '🍕', '🍔', '🍣', '🍜', '🍺', '🍙', '🎉', '🎁', '💖', '👍'] },
-  { id: 'pack-work', name: '직장인 & 개발', items: ['💻', '⌨️', '📱', '🚀', '🔥', '✨', '💯', '☕', '💪', '🙏', '🆗', '✅'] }
+  { id: 'pack-brown', name: t('mvStickerPackBrown'), items: ['🐻', '🐰', '🐥', '🐸', '🐱', '🐶', '🐼', '🐨', '🦁', '🐯', '🦊', '🦄'] },
+  { id: 'pack-emotions', name: t('mvStickerPackEmotion'), items: ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '🤔', '😴', '😱', '🤩', '😇'] },
+  { id: 'pack-daily', name: t('mvStickerPackDaily'), items: ['☕', '🍰', '🍕', '🍔', '🍣', '🍜', '🍺', '🍙', '🎉', '🎁', '💖', '👍'] },
+  { id: 'pack-work', name: t('mvStickerPackOffice'), items: ['💻', '⌨️', '📱', '🚀', '🔥', '✨', '💯', '☕', '💪', '🙏', '🆗', '✅'] }
 ]
 
 // --- Calling Simulation ---
@@ -1030,19 +1040,19 @@ function onStartChatFromProfile(f: User) {
 
 function toggleNotifications() {
   notificationsEnabled.value = !notificationsEnabled.value
-  note.value = notificationsEnabled.value ? '알림이 켜졌습니다.' : '방해금지 모드: 알림이 꺼졌습니다.'
+  note.value = notificationsEnabled.value ? t('mvNotifEnabled') : t('mvDndEnabled')
 }
 
 function openEcosystemService(serviceId: string) {
   activeEcosystemId.value = serviceId
   if (serviceId === 'open-ai') {
     autoTranslateEnabled.value = true
-    note.value = 'Open AI 지능형 비서가 활성화되었습니다. 메시지 번역 및 AI 통역 기능을 이용하세요.'
+    note.value = t('mvAiEnabled')
   } else if (serviceId === 'open-video') {
     if (friends.value.length > 0) {
       startCallWithUser(friends.value[0], 'video')
     } else {
-      note.value = '영상 통화를 진행할 대화 상대를 선택해 주세요.'
+      note.value = t('mvPickCallPeer')
     }
   } else if (serviceId === 'open-cloud') {
     showKeepModal.value = true
@@ -1065,7 +1075,7 @@ async function approveQrLogin() {
     })
     approveChallengeInput.value = ''
     approveTokenInput.value = ''
-    note.value = 'PC/Web QR 로그인이 승인되었습니다.'
+    note.value = t('mvQrApproved')
   })
 }
 
@@ -1140,7 +1150,7 @@ async function connectRealtime() {
           const target = messages.value.find(m => m.id === data.message_id)
           if (target) {
             target.unsent = true
-            target.body = '메시지를 취소했습니다'
+            target.body = t('mvMsgUnsent')
           }
         } else if (data.type === 'message.reaction') {
           const target = messages.value.find(m => m.id === data.message_id)
@@ -1153,7 +1163,7 @@ async function connectRealtime() {
             })
           }
         } else if (data.type === 'call.ringing') {
-          activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: '수신된 통화' }
+          activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: t('mvIncomingTitle') }
         } else if (data.type === 'call.signal') {
           void handleIncomingCallSignal(data)
         } else if (data.type === 'call.state') {
@@ -1301,7 +1311,7 @@ async function selectChat(convId: string) {
     await Promise.all([loadChats(), loadPolls(convId)])
   } catch (e: any) {
     if (selectedChatId.value === convId && version === chatSelectVersion) {
-      conversationError.value = e?.message || '대화방 메시지를 불러올 수 없습니다.'
+      conversationError.value = e?.message || t('mvLoadMsgsFailed')
       messages.value = []
     }
   } finally {
@@ -1393,7 +1403,7 @@ async function createAlbum() {
     await api(`/api/v1/conversations/${cid}/albums`, 'POST', { title: newAlbumTitle.value.trim() })
     newAlbumTitle.value = ''
     await loadAlbums(cid)
-    note.value = '새 공유 앨범이 생성되었습니다.'
+    note.value = t('mvAlbumCreated')
   })
 }
 
@@ -1404,7 +1414,7 @@ async function createNote() {
     await api(`/api/v1/conversations/${cid}/notes`, 'POST', { body: newNoteBody.value.trim() })
     newNoteBody.value = ''
     await loadNotes(cid)
-    note.value = '대화방 릴레이 노트가 등록되었습니다.'
+    note.value = t('mvNoteCreated')
   })
 }
 
@@ -1421,7 +1431,7 @@ async function rsvpEvent(eventId: string, status: 'going' | 'maybe' | 'declined'
   await wrap(async () => {
     await api(`/api/v1/events/${eventId}/rsvp`, 'POST', { status })
     if (selectedChatId.value) await loadEvents(selectedChatId.value)
-    note.value = '일정 참석 여부가 반영되었습니다.'
+    note.value = t('mvRsvpSaved')
   })
 }
 
@@ -1527,7 +1537,7 @@ async function saveEditMessage() {
     }
     editingMessageId.value = ''
     editingMessageBody.value = ''
-    note.value = '메시지가 수정되었습니다.'
+    note.value = t('mvMsgEdited')
   })
 }
 
@@ -1562,7 +1572,7 @@ async function toggleVoiceRecording() {
     }
     mediaRecorderInstance.start()
     isRecordingVoice.value = true
-    note.value = '🎙️ 음성 메시지를 녹음 중입니다. 다시 누르면 전송됩니다.'
+    note.value = t('mvRecordingVoice')
   } catch {
     chooseAttachment('voice')
   }
@@ -1634,7 +1644,7 @@ async function sendLocationMessage() {
     playSendSound()
     scrollToBottom()
     await loadChats()
-    note.value = '📍 현재 위치 정보가 전송되었습니다.'
+    note.value = t('mvLocationSent')
   })
 }
 
@@ -1693,8 +1703,8 @@ function cycleWallpaper() {
   const order: Array<'skyblue' | 'slate' | 'mint' | 'dark'> = ['skyblue', 'slate', 'mint', 'dark']
   const next = order[(order.indexOf(chatWallpaper.value) + 1) % order.length]
   chatWallpaper.value = next
-  const names: Record<string, string> = { skyblue: 'LINE 스카이블루', slate: '클린 화이트', mint: '민트 브리즈', dark: '미드나잇 다크' }
-  note.value = `🎨 대화방 배경이 [${names[next]}]로 변경되었습니다.`
+  const names: Record<string, string> = { skyblue: t('mvWallSky'), slate: t('mvWallSlate'), mint: t('mvWallMint'), dark: t('mvWallDark') }
+  note.value = t('mvWallpaperChanged').replace('{name}', names[next])
 }
 
 function chooseAttachment(kind: 'image' | 'voice' | 'file') {
@@ -1746,7 +1756,7 @@ async function downloadAttachment(message: Message) {
   if (typeof id !== 'string') return
   await wrap(async () => {
     const response = await fetch(`${API_URL}/api/v1/attachments/${encodeURIComponent(id)}/content`, { headers: { Authorization: `Bearer ${token.value}` } })
-    if (!response.ok) throw new Error('파일을 다운로드할 수 없습니다.')
+    if (!response.ok) throw new Error(t('mvDownloadFailed'))
     const url = URL.createObjectURL(await response.blob())
     const link = document.createElement('a')
     link.href = url
@@ -1774,9 +1784,9 @@ async function unsendMessage(msgId: string) {
     const target = messages.value.find(m => m.id === msgId)
     if (target) {
       target.unsent = true
-      target.body = '메시지를 취소했습니다'
+      target.body = t('mvMsgUnsent')
     }
-    note.value = '메시지를 성공적으로 전송 취소했습니다.'
+    note.value = t('mvUnsendOk')
   })
 }
 
@@ -1787,7 +1797,7 @@ async function pinMessage(msgId: string) {
     await api(`/api/v1/conversations/${selectedChatId.value}/pins`, 'POST', { message_id: msgId })
     const res = await api<{ pins: any[] }>(`/api/v1/conversations/${selectedChatId.value}/pins`)
     pinnedList.value = res.pins || []
-    note.value = '대화방 상단 공지로 등록했습니다.'
+    note.value = t('mvNoticePinned')
   })
 }
 
@@ -1796,7 +1806,7 @@ async function unpinMessage(msgId: string) {
   await wrap(async () => {
     await api(`/api/v1/conversations/${selectedChatId.value}/pins/${msgId}`, 'DELETE')
     pinnedList.value = pinnedList.value.filter(p => p.message_id !== msgId)
-    note.value = '공지를 내렸습니다.'
+    note.value = t('mvNoticeUnpinned')
   })
 }
 
@@ -1809,7 +1819,7 @@ async function saveToKeep(msg: Message) {
       message_id: msg.id
     })
     await loadKeep()
-    note.value = '라인 Keep 보관함에 저장되었습니다.'
+    note.value = t('mvKeepSaved')
   })
 }
 
@@ -1819,14 +1829,14 @@ async function deleteFromKeep(item: any) {
   await wrap(async () => {
     await api(`/api/v1/saved-messages/${sid}`, 'DELETE')
     await loadKeep()
-    note.value = 'Keep 보관함에서 항목을 삭제했습니다.'
+    note.value = t('mvKeepDeleted')
   })
 }
 
 // Copy text helper
 function copyMessageText(text: string) {
   navigator.clipboard.writeText(text)
-  note.value = '메시지가 클립보드에 복사되었습니다.'
+  note.value = t('mvCopied')
 }
 
 // Reply message helper
@@ -1851,7 +1861,7 @@ async function createPoll() {
     newPollOption2.value = ''
     newPollOption3.value = ''
     showPollCreateModal.value = false
-    note.value = '새 투표가 생성되었습니다.'
+    note.value = t('mvPollCreated')
   })
 }
 
@@ -1878,7 +1888,7 @@ async function createEvent() {
     newEventDate.value = ''
     newEventLocation.value = ''
     showEventCreateModal.value = false
-    note.value = '대화방 일정이 등록되었습니다.'
+    note.value = t('mvEventCreated')
   })
 }
 
@@ -1912,7 +1922,7 @@ async function initPeerSession(callId: string, kind: 'voice' | 'video') {
 async function startCall(kind: 'voice' | 'video', overrideTitle?: string) {
   const targetConvId = selectedChatId.value || chats.value[0]?.id || 'chat-k-01'
   selectedChatId.value = targetConvId
-  const convTitle = overrideTitle || selectedChat.value?.title || '통화'
+  const convTitle = overrideTitle || selectedChat.value?.title || t('mvCall')
   await wrap(async () => {
     const webrtcId = await startWebRTCCall(targetConvId, kind, token.value, request)
     let callId = webrtcId
@@ -1995,7 +2005,7 @@ async function updateCallState(state: 'connected' | 'ended') {
       const targetConvId = selectedChatId.value
       const durText = durSec > 0 ? formatDuration(durSec) : undefined
       const wasConnected = prevCall.state === 'connected' && durSec > 0
-      const msgBody = wasConnected ? (prevCall.kind === 'video' ? '영상통화' : '음성통화') : '취소'
+      const msgBody = wasConnected ? (prevCall.kind === 'video' ? t('callVideo') : t('callVoice')) : t('mvCancel')
       endCallLocally()
       callHistoryList.value.unshift({
         id: 'call-' + Date.now(),
@@ -2004,7 +2014,7 @@ async function updateCallState(state: 'connected' | 'ended') {
         peer_avatar_color: '#315BCD',
         call_type: prevCall.kind,
         direction: wasConnected ? 'outgoing' : 'missed',
-        timestamp_text: '방금 전',
+        timestamp_text: t('mvJustNow'),
         duration_text: durText
       })
       if (targetConvId) {
@@ -2054,7 +2064,7 @@ function endCallLocally() {
 function openSendMoneyModal(friend: User) {
   sendTargetFriend.value = friend
   sendAmountInput.value = 10000
-  sendMemoInput.value = '커피값 보냅니다 ☕'
+  sendMemoInput.value = t('mvSendMemoDefault')
   showSendMoneyModal.value = true
 }
 
@@ -2073,7 +2083,7 @@ async function executeSendMoney() {
     })
     walletBalance.value = res.balance
     showSendMoneyModal.value = false
-    note.value = `${sendTargetFriend.value!.display_name}님께 ${sendAmountInput.value.toLocaleString()}원을 송금했습니다.`
+    note.value = t('mvSentMoney').replace('{name}', sendTargetFriend.value!.display_name).replace('{amount}', formatKRW(sendAmountInput.value))
     await Promise.all([loadWallet(), loadChats()])
   })
 }
@@ -2083,7 +2093,7 @@ async function executeChargeMoney(amount: number) {
     const res = await api<{ balance: number }>('/api/v1/wallet/charge', 'POST', { amount })
     walletBalance.value = res.balance
     showChargeModal.value = false
-    note.value = `LINE Pay 잔액이 ${amount.toLocaleString()}원 충전되었습니다.`
+    note.value = t('mvChargedMoney').replace('{amount}', formatKRW(amount))
     await loadWallet()
   })
 }
@@ -2116,7 +2126,7 @@ async function createGroupChat() {
     await loadChats()
     activeNav.value = 'chats'
     await selectChat(c.id)
-    note.value = '새 그룹 채팅방이 생성되었습니다.'
+    note.value = t('mvGroupCreated')
   })
 }
 
@@ -2127,7 +2137,7 @@ async function addFriendByHandle() {
     addFriendHandleInput.value = ''
     showAddFriendModal.value = false
     await loadFriends()
-    note.value = '친구가 추가되었습니다.'
+    note.value = t('mvFriendAdded')
   })
 }
 
@@ -2149,7 +2159,7 @@ async function publishStory() {
     })
     newStoryText.value = ''
     showNewStoryModal.value = false
-    note.value = '내 24시간 스토리가 등록되었습니다.'
+    note.value = t('mvStoryPosted')
     await loadTimelineStories()
   })
 }
@@ -2164,7 +2174,7 @@ async function createVoomPost() {
     })
     newVoomBody.value = ''
     showVoomCreateModal.value = false
-    note.value = 'LINE VOOM 포스트가 게시되었습니다.'
+    note.value = t('mvVoomPosted')
     await loadTimelineStories()
   })
 }
@@ -2204,7 +2214,7 @@ async function createOpenChatRoom() {
     newOpenChatRoomDesc.value = ''
     showCreateOpenChatModal.value = false
     await loadOpenChatRooms()
-    note.value = '새 오픈채팅방이 개설되었습니다.'
+    note.value = t('mvOpenChatCreated')
   })
 }
 
@@ -2262,7 +2272,7 @@ async function revokeDevice(deviceId: string) {
       return
     }
     await loadDevices()
-    note.value = '기기 세션이 해제되었습니다.'
+    note.value = t('mvDeviceRevoked')
   })
 }
 
@@ -2270,7 +2280,7 @@ async function revokeDevice(deviceId: string) {
 function switchTheme(theme: 'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight') {
   activeTheme.value = theme
   darkMode.value = theme === 'midnight'
-  note.value = `테마가 [${theme.toUpperCase()}]로 변경되었습니다.`
+  note.value = t('mvThemeChanged').replace('{name}', theme.toUpperCase())
 }
 
 // --- Logout ---
@@ -2395,10 +2405,10 @@ onBeforeUnmount(() => {
 async function testPushNotification() {
   await wrap(async () => {
     const deviceId = devicesList.value[0]?.id
-    if (!deviceId) { note.value = '등록된 기기가 없어 테스트 푸시를 발송할 수 없습니다.'; return }
+    if (!deviceId) { note.value = t('mvNoDevicePush'); return }
     const res = await api<{ status: string }>('/api/v1/push/test', 'POST', { device_id: deviceId })
     if (res?.status === 'test_push_queued') {
-      note.value = '🔔 [LUNO 푸시] 테스트 푸시 알림이 발송되었습니다!'
+      note.value = t('mvTestPushSent')
     }
   })
 }
@@ -2414,14 +2424,14 @@ async function exportUserDataArchive() {
     a.download = `luno_backup_${Date.now()}.json`
     a.click()
     URL.revokeObjectURL(url)
-    note.value = '💾 [GDPR] 사용자 대화 데이터 아카이브 다운로드가 완료되었습니다.'
+    note.value = t('mvBackupDone')
   })
 }
 
 const deletePasswordInput = ref('')
 async function deleteUserAccount() {
-  if (!deletePasswordInput.value) { error.value = '계정 삭제를 위해 비밀번호를 입력하세요.'; return }
-  if (!confirm('정말로 계정을 영구 삭제하시겠습니까? 모든 대화와 데이터가 삭제됩니다.')) return
+  if (!deletePasswordInput.value) { error.value = t('mvDeletePwRequired'); return }
+  if (!confirm(t('mvDeleteConfirm'))) return
   await wrap(async () => {
     await api('/api/v1/me', 'DELETE', { password: deletePasswordInput.value })
     deletePasswordInput.value = ''
@@ -2445,132 +2455,132 @@ const ECOSYSTEM_SERVICES: EcosystemServiceItem[] = [
   {
     id: 'open-search',
     name: 'Open Search',
-    nameKo: '통합 검색 & 지식 베이스',
+    nameKo: t('mvEcoSearchName'),
     icon: 'open-search',
     category: 'core',
     status: 'active',
-    statusText: '운영 중 (v2.4)',
-    description: '대화방, 메시지, 파일 및 외부 웹 정보를 통합 인덱싱하여 검색합니다.'
+    statusText: t('mvEcoSearchStatus'),
+    description: t('mvEcoSearchDesc')
   },
   {
     id: 'open-mail',
     name: 'Open Mail',
-    nameKo: '보안 메일 시스템',
+    nameKo: t('mvEcoMailName'),
     icon: 'open-mail',
     category: 'communication',
     status: 'active',
-    statusText: '연동 완료',
-    description: '메신저 계정과 일원화된 엔드투엔드 암호화 비즈니스 메일 서비스입니다.'
+    statusText: t('mvEcoMailStatus'),
+    description: t('mvEcoMailDesc')
   },
   {
     id: 'open-apps',
     name: 'Open Apps',
-    nameKo: '생태계 앱 허브',
+    nameKo: t('mvEcoAppsName'),
     icon: 'open-apps',
     category: 'productivity',
     status: 'active',
-    statusText: '공식 런처',
-    description: 'Open Scanner 생태계의 모든 웹 & 데스크톱 애플리케이션 모음입니다.'
+    statusText: t('mvEcoAppsStatus'),
+    description: t('mvEcoAppsDesc')
   },
   {
     id: 'open-video',
     name: 'Open Video',
-    nameKo: '고화질 영상 회의',
+    nameKo: t('mvEcoVideoName'),
     icon: 'open-video',
     category: 'communication',
     status: 'active',
-    statusText: 'WebRTC SFU 지원',
-    description: '실시간 AI 통역 자막과 노이즈 캔슬링을 지원하는 다자간 고화질 화상회의 솔루션입니다.'
+    statusText: t('mvEcoVideoStatus'),
+    description: t('mvEcoVideoDesc')
   },
   {
     id: 'open-stream',
     name: 'Open Stream',
-    nameKo: '라이브 스트리밍 & 보이스 룸',
+    nameKo: t('mvEcoStreamName'),
     icon: 'open-stream',
     category: 'communication',
     status: 'beta',
-    statusText: '베타 테스트 중',
-    description: '크리에이터 및 커뮤니티를 위한 초저지연 라이브 방송과 오디오 룸입니다.'
+    statusText: t('mvEcoStreamStatus'),
+    description: t('mvEcoStreamDesc')
   },
   {
     id: 'open-ai',
     name: 'Open AI Assistant',
-    nameKo: '지능형 AI 비서 & 실시간 통번역',
+    nameKo: t('mvEcoAiName'),
     icon: 'open-ai',
     category: 'core',
     status: 'active',
-    statusText: '운영 중 (Gemini 2.5 Pro)',
-    description: '메시지 다국어 자동번역, 음성 실시간 통역, 대화 요약 및 스마트 답장을 제공합니다.'
+    statusText: t('mvEcoAiStatus'),
+    description: t('mvEcoAiDesc')
   },
   {
     id: 'open-shopping',
     name: 'Open Shopping',
-    nameKo: '소셜 커머스 & 간편 결제',
+    nameKo: t('mvEcoPayName'),
     icon: 'money',
     category: 'lifestyle',
     status: 'beta',
-    statusText: 'LUNO Pay 연동',
-    description: '채팅 중 선물하기, 디지털 쿠폰 구매, 간편 결제 및 정산 플랫폼입니다.'
+    statusText: t('mvEcoPayStatus'),
+    description: t('mvEcoPayDesc')
   },
   {
     id: 'open-news',
     name: 'Open News',
-    nameKo: '실시간 뉴스 & 토픽',
+    nameKo: t('mvEcoNewsName'),
     icon: 'globe',
     category: 'lifestyle',
     status: 'preview',
-    statusText: '피드 준비 중',
-    description: '신뢰할 수 있는 언론사의 맞춤형 속보와 인기 토픽을 실시간으로 전달합니다.'
+    statusText: t('mvEcoNewsStatus'),
+    description: t('mvEcoNewsDesc')
   },
   {
     id: 'open-travel',
     name: 'Open Travel',
-    nameKo: '여행 & 모빌리티',
+    nameKo: t('mvEcoTravelName'),
     icon: 'globe',
     category: 'lifestyle',
     status: 'preview',
-    statusText: '개발 중',
-    description: '여행 일정 공유, 항공/호텔 예약, 그룹 여행 정산 기능을 제공합니다.'
+    statusText: t('mvEcoTravelStatus'),
+    description: t('mvEcoTravelDesc')
   },
   {
     id: 'open-cloud',
     name: 'Open Cloud (Keep Vault)',
-    nameKo: '암호화 클라우드 저장소',
+    nameKo: t('mvEcoDriveName'),
     icon: 'keep',
     category: 'productivity',
     status: 'active',
-    statusText: 'E2EE 암호화 적용',
-    description: '사진, 대용량 파일, 링크, 메모를 기기 간 즉시 동기화하는 영구 보관소입니다.'
+    statusText: t('mvEcoDriveStatus'),
+    description: t('mvEcoDriveDesc')
   },
   {
     id: 'open-workspace',
     name: 'Open Workspace',
-    nameKo: '실시간 공동 문서 & 스프레드시트',
+    nameKo: t('mvEcoDocsName'),
     icon: 'file',
     category: 'productivity',
     status: 'beta',
-    statusText: '협업 에디터 탑재',
-    description: '팀원과 함께 채팅창 내에서 실시간으로 문서를 작성하고 공유합니다.'
+    statusText: t('mvEcoDocsStatus'),
+    description: t('mvEcoDocsDesc')
   },
   {
     id: 'open-chat',
-    name: 'Open Chat (공개 커뮤니티)',
-    nameKo: '관심사 기반 오픈채팅',
+    name: t('mvEcoOcName'),
+    nameKo: t('mvEcoOcTag'),
     icon: 'openchat',
     category: 'communication',
     status: 'active',
-    statusText: '공식 운영 중',
-    description: '개인정보 노출 없이 익명 프로필로 대화할 수 있는 주제별 오픈 커뮤니티입니다.'
+    statusText: t('mvEcoOcStatus'),
+    description: t('mvEcoOcDesc')
   },
   {
     id: 'open-developer',
     name: 'Open Developer Platform',
-    nameKo: '개발자 센터 & 봇 API',
+    nameKo: t('mvEcoDevName'),
     icon: 'settings',
     category: 'developer',
     status: 'active',
-    statusText: 'REST/WebSocket/SDK 완비',
-    description: '메시징 봇, 웹훅, OAuth 연동, 엔터프라이즈 통합 API 콘솔입니다.',
+    statusText: t('mvEcoDevStatus'),
+    description: t('mvEcoDevDesc'),
     actionUrl: './developer/'
   }
 ]
@@ -2654,11 +2664,11 @@ onBeforeUnmount(() => {
               <small>{{ currentUser?.email }}</small>
             </div>
             <div class="dropdown-sep"></div>
-            <button class="dropdown-item" @click="activeProfileUser = currentUser">👤 프로필 설정</button>
+            <button class="dropdown-item" @click="activeProfileUser = currentUser">{{ t('mvProfileSettings') }}</button>
             <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
             <button class="dropdown-item" @click="showKeepModal = true">💾 {{ t('navKeep') }}</button>
             <div class="dropdown-sep"></div>
-            <button class="dropdown-item logout" @click="logout">로그아웃</button>
+            <button class="dropdown-item logout" @click="logout">{{ t('mvLogout') }}</button>
           </div>
 
           <!-- 2. Chats (대화) -->
@@ -2688,7 +2698,7 @@ onBeforeUnmount(() => {
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'news' }"
-            title="뉴스 (News)"
+            :title="t('mvRailNews')"
             @click="switchNav('news')"
           >
             <span class="pc-rail-indicator"></span>
@@ -2699,7 +2709,7 @@ onBeforeUnmount(() => {
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'calls' }"
-            title="통화 (Calls)"
+            :title="t('mvRailCalls')"
             @click="switchNav('calls')"
           >
             <span class="pc-rail-indicator"></span>
@@ -2710,7 +2720,7 @@ onBeforeUnmount(() => {
           <button
             class="pc-rail-btn"
             :class="{ active: activeNav === 'wallet' }"
-            title="지갑 (Wallet)"
+            :title="t('mvRailWallet')"
             @click="switchNav('wallet')"
           >
             <span class="pc-rail-indicator"></span>
@@ -2720,7 +2730,7 @@ onBeforeUnmount(() => {
           <!-- 6. Add Friends (친구 추가) -->
           <button
             class="pc-rail-btn"
-            title="친구 추가"
+            :title="t('mvAddFriend')"
             @click="showAddFriendModal = true"
           >
             <LineIcon name="add-friends" :size="20" />
@@ -2729,7 +2739,7 @@ onBeforeUnmount(() => {
           <!-- 5. Open Scanner Search -->
           <button
             class="pc-rail-btn"
-            title="Open Scanner Search (통합 검색)"
+            :title="t('mvRailSearch')"
             @click="openEcosystemService('open-search')"
           >
             <LineIcon name="open-search" :size="20" />
@@ -2738,7 +2748,7 @@ onBeforeUnmount(() => {
           <!-- 6. Open Mail -->
           <button
             class="pc-rail-btn"
-            title="Open Mail (보안 메일)"
+            :title="t('mvRailMail')"
             @click="openEcosystemService('open-mail')"
           >
             <LineIcon name="open-mail" :size="20" />
@@ -2747,7 +2757,7 @@ onBeforeUnmount(() => {
           <!-- 7. Open Apps (앱 허브) -->
           <button
             class="pc-rail-btn"
-            title="Open Apps (생태계 앱)"
+            :title="t('mvRailApps')"
             @click="openEcosystemService('open-apps')"
           >
             <LineIcon name="open-apps" :size="20" />
@@ -2756,7 +2766,7 @@ onBeforeUnmount(() => {
           <!-- 8. Open Video (화상 회의) -->
           <button
             class="pc-rail-btn"
-            title="Open Video (화상 회의)"
+            :title="t('mvRailVideo')"
             @click="openEcosystemService('open-video')"
           >
             <LineIcon name="open-video" :size="20" />
@@ -2765,7 +2775,7 @@ onBeforeUnmount(() => {
           <!-- 9. Open Stream (라이브 방송) -->
           <button
             class="pc-rail-btn"
-            title="Open Stream (라이브 방송)"
+            :title="t('mvRailStream')"
             @click="openEcosystemService('open-stream')"
           >
             <LineIcon name="open-stream" :size="20" />
@@ -2774,7 +2784,7 @@ onBeforeUnmount(() => {
           <!-- 10. Open AI (지능형 AI 비서) -->
           <button
             class="pc-rail-btn"
-            title="Open AI (지능형 비서 & 실시간 번역)"
+            :title="t('mvRailAi')"
             @click="openEcosystemService('open-ai')"
           >
             <LineIcon name="open-ai" :size="20" />
@@ -2783,7 +2793,7 @@ onBeforeUnmount(() => {
           <!-- 11. Open Services (전체 생태계) -->
           <button
             class="pc-rail-btn"
-            title="Open Services (전체 플랫폼)"
+            :title="t('mvRailServices')"
             @click="openEcosystemService('open-services')"
           >
             <LineIcon name="open-services" :size="20" />
@@ -2792,12 +2802,12 @@ onBeforeUnmount(() => {
 
         <div class="pc-rail-bottom">
           <!-- Mobile APK Download Button -->
-          <a href="./download.html" target="_blank" class="pc-rail-btn small" title="📱 Open Messenger 모바일 앱 (APK)" style="text-decoration: none;">
+          <a href="./download.html" target="_blank" class="pc-rail-btn small" :title="t('mvRailMobileApp')" style="text-decoration: none;">
             <span style="font-size: 16px;">📱</span>
           </a>
 
           <!-- Screen Capture Button (Screenshot 1 & 4) -->
-          <button class="pc-rail-btn small" title="화면 캡처 전송" @click="captureScreenToChat">
+          <button class="pc-rail-btn small" :title="t('mvRailCapture')" @click="captureScreenToChat">
             <span style="font-size: 15px;">✂️</span>
           </button>
 
@@ -2809,7 +2819,7 @@ onBeforeUnmount(() => {
           <!-- 12. Notifications Toggle -->
           <button
             class="pc-rail-btn small"
-            :title="notificationsEnabled ? '알림 켜짐' : '방해금지 (알림 꺼짐)'"
+            :title="notificationsEnabled ? t('mvNotifOnTitle') : t('mvDndTitle')"
             @click="toggleNotifications"
           >
             <LineIcon :name="notificationsEnabled ? 'bell' : 'bell-off'" :size="19" />
@@ -2822,23 +2832,23 @@ onBeforeUnmount(() => {
 
           <!-- 14. More / Consoles Menu Button -->
           <div class="rail-more-wrapper">
-            <button class="pc-rail-btn small" title="더보기 / 플랫폼 콘솔" @click="showConsolesMenu = !showConsolesMenu">
+            <button class="pc-rail-btn small" :title="t('mvRailMore')" @click="showConsolesMenu = !showConsolesMenu">
               <LineIcon name="more" :size="19" />
             </button>
 
             <!-- Consoles Dropdown Popover -->
             <div v-if="showConsolesMenu" class="pc-dropdown-menu consoles-menu" @click="showConsolesMenu = false">
-              <div class="dropdown-heading">🌐 Open Scanner 생태계 콘솔</div>
-              <a href="./admin/" target="_blank" class="dropdown-item">👑 관리자 콘솔 (Admin)</a>
-              <a href="./partner/" target="_blank" class="dropdown-item">🏢 파트너 콘솔 (Official)</a>
-              <a href="./developer/" target="_blank" class="dropdown-item">💻 개발자 콘솔 (Developers)</a>
-              <a href="./creator/" target="_blank" class="dropdown-item">🎨 크리에이터 마켓</a>
-              <a href="./ads/" target="_blank" class="dropdown-item">📢 광고주 센터</a>
+              <div class="dropdown-heading">{{ t('mvConsolesTitle') }}</div>
+              <a href="./admin/" target="_blank" class="dropdown-item">{{ t('mvConsoleAdmin') }}</a>
+              <a href="./partner/" target="_blank" class="dropdown-item">{{ t('mvConsolePartner') }}</a>
+              <a href="./developer/" target="_blank" class="dropdown-item">{{ t('mvConsoleDev') }}</a>
+              <a href="./creator/" target="_blank" class="dropdown-item">{{ t('mvConsoleCreator') }}</a>
+              <a href="./ads/" target="_blank" class="dropdown-item">{{ t('mvConsoleAds') }}</a>
               <div class="dropdown-sep"></div>
-              <button class="dropdown-item" @click="showEcosystemHub = true">🚀 Open Scanner 생태계 허브</button>
-              <a href="./download.html" target="_blank" class="dropdown-item" style="color: var(--om-primary, #2563EB); font-weight: 700;">📱 모바일 앱 다운로드 (APK)</a>
+              <button class="dropdown-item" @click="showEcosystemHub = true">{{ t('mvEcosystemHub') }}</button>
+              <a href="./download.html" target="_blank" class="dropdown-item" style="color: var(--om-primary, #2563EB); font-weight: 700;">{{ t('mvDownloadApp') }}</a>
               <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
-              <button class="dropdown-item logout" @click="logout">로그아웃</button>
+              <button class="dropdown-item logout" @click="logout">{{ t('mvLogout') }}</button>
             </div>
           </div>
         </div>
@@ -2854,18 +2864,18 @@ onBeforeUnmount(() => {
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" class="pc-pane-search-input" @keydown.enter="addSearchKeyword(friendSearchQuery)" />
               <button v-if="friendSearchQuery" class="btn-clear-search" @click="friendSearchQuery = ''">✕</button>
-              <button class="btn-scan-qr-search" title="QR 코드 스캔" @click="showQrModal = true">
+              <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="showQrModal = true">
                 <LineIcon name="scan" :size="15" />
               </button>
             </div>
-            <button class="btn-pane-collapse" title="접기/펼치기" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
+            <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
           </div>
 
           <!-- Recent Search Keywords (Section 3.2) -->
           <div v-if="recentSearchKeywords.length > 0" class="home-recent-searches">
             <div class="recent-searches-header">
-              <small>최근 검색어</small>
-              <button class="btn-clear-all-searches" @click="clearAllSearchKeywords">전체 삭제</button>
+              <small>{{ t('mvRecentSearch') }}</small>
+              <button class="btn-clear-all-searches" @click="clearAllSearchKeywords">{{ t('mvClearAll') }}</button>
             </div>
             <div class="recent-search-chips">
               <span v-for="kw in recentSearchKeywords" :key="kw" class="recent-keyword-chip">
@@ -2879,19 +2889,19 @@ onBeforeUnmount(() => {
           <div class="home-services-bar">
             <div class="home-service-item" @click="showStickerPicker = true">
               <span class="srv-icon">🐻</span>
-              <span class="srv-label">스티커</span>
+              <span class="srv-label">{{ t('mvSticker') }}</span>
             </div>
             <div class="home-service-item" @click="showSettingsModal = true">
               <span class="srv-icon">🎨</span>
-              <span class="srv-label">테마</span>
+              <span class="srv-label">{{ t('mvTheme') }}</span>
             </div>
             <div class="home-service-item" @click="activeNav = 'chats'">
               <span class="srv-icon">🛡️</span>
-              <span class="srv-label">공식 계정</span>
+              <span class="srv-label">{{ t('mvOfficialAccount') }}</span>
             </div>
             <div class="home-service-item" @click="showEcosystemHub = true">
               <span class="srv-icon">📱</span>
-              <span class="srv-label">LUNO 서비스</span>
+              <span class="srv-label">{{ t('mvLunoServices') }}</span>
             </div>
           </div>
 
@@ -2923,13 +2933,11 @@ onBeforeUnmount(() => {
             <!-- Accordion 0: Favorites (즐겨찾기 - 항상 노출) -->
             <div class="pc-accordion-section">
               <div class="pc-accordion-header" @click="favoritesSectionOpen = !favoritesSectionOpen">
-                <span class="accordion-title">즐겨찾기 {{ favoriteFriends.length }}</span>
+                <span class="accordion-title">{{ t('mvFavorites').replace('{n}', String(favoriteFriends.length)) }}</span>
                 <span class="accordion-caret">{{ favoritesSectionOpen ? '⌵' : '›' }}</span>
               </div>
               <div v-show="favoritesSectionOpen" class="pc-accordion-content">
-                <div v-if="favoriteFriends.length === 0" class="accordion-empty-hint" style="padding: 10px 14px; font-size: 12px; color: #94a3b8;">
-                  즐겨찾기한 친구가 없습니다. (친구 우클릭 또는 프로필에서 ★ 추가)
-                </div>
+                <div v-if="favoriteFriends.length === 0" class="accordion-empty-hint" style="padding: 10px 14px; font-size: 12px; color: #94a3b8;">{{ t('mvNoFavorites') }}</div>
                 <div
                   v-else
                   v-for="fav in favoriteFriends"
@@ -2945,7 +2953,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="friend-item-meta">
                     <div class="friend-item-name">★ {{ fav.display_name }}</div>
-                    <div class="friend-item-sub">{{ fav.status_message || fav.bio || 'LUNO 즐겨찾기 친구' }}</div>
+                    <div class="friend-item-sub">{{ fav.status_message || fav.bio || t('mvFavFallback') }}</div>
                   </div>
                 </div>
               </div>
@@ -2973,7 +2981,7 @@ onBeforeUnmount(() => {
                       {{ grp.title }}
                       <span class="group-count">({{ grp.member_count || 2 }})</span>
                     </div>
-                    <div class="friend-item-sub">{{ grp.last_message?.body || '그룹 대화방' }}</div>
+                    <div class="friend-item-sub">{{ grp.last_message?.body || t('mvGroupFallback') }}</div>
                   </div>
                 </div>
               </div>
@@ -2982,7 +2990,7 @@ onBeforeUnmount(() => {
             <!-- Accordion 1.5: Official Accounts (공식 계정) -->
             <div v-if="officialAccounts.length > 0" class="pc-accordion-section">
               <div class="pc-accordion-header" @click="officialSectionOpen = !officialSectionOpen">
-                <span class="accordion-title">공식 계정 {{ officialAccounts.length }}</span>
+                <span class="accordion-title">{{ t('mvOfficialAccounts').replace('{n}', String(officialAccounts.length)) }}</span>
                 <span class="accordion-caret">{{ officialSectionOpen ? '⌵' : '›' }}</span>
               </div>
               <div v-show="officialSectionOpen" class="pc-accordion-content">
@@ -2996,7 +3004,7 @@ onBeforeUnmount(() => {
                     🛡️
                   </div>
                   <div class="friend-item-meta">
-                    <div class="friend-item-name">{{ oa.name }} <span class="badge-verified">공식</span></div>
+                    <div class="friend-item-name">{{ oa.name }} <span class="badge-verified">{{ t('mvOfficial') }}</span></div>
                     <div class="friend-item-sub">{{ oa.description }}</div>
                   </div>
                 </div>
@@ -3027,7 +3035,7 @@ onBeforeUnmount(() => {
                       <span v-if="(f as any).is_favorite" class="fav-star-inline">★</span>
                       {{ f.display_name }}
                     </div>
-                    <div class="friend-item-sub">{{ f.status_message || f.bio || 'LUNO 친구' }}</div>
+                    <div class="friend-item-sub">{{ f.status_message || f.bio || t('mvFriendFallback') }}</div>
                   </div>
                 </div>
               </div>
@@ -3040,23 +3048,23 @@ onBeforeUnmount(() => {
           <!-- Top Chat Header Bar with Category Dropdown & Action Icons (Screenshot 4) -->
           <div class="pc-chat-main-header">
             <div class="chat-header-title-dropdown">
-              <span class="chat-main-heading">대화</span>
+              <span class="chat-main-heading">{{ t('mvChats') }}</span>
               <span class="dropdown-caret">▾</span>
             </div>
             <div class="chat-header-action-group">
-              <button class="btn-chat-head-tool" title="모든 대화 읽음 처리" @click="markAllChatsRead">
+              <button class="btn-chat-head-tool" :title="t('mvMarkAllRead')" @click="markAllChatsRead">
                 ✓✓
               </button>
-              <button class="btn-chat-head-tool" :title="chatSortAsc ? '이름순 정렬 중' : '최신순 정렬 중'" @click="chatSortAsc = !chatSortAsc">
+              <button class="btn-chat-head-tool" :title="chatSortAsc ? t('mvSortName') : t('mvSortRecent')" @click="chatSortAsc = !chatSortAsc">
                 ⇅
               </button>
-              <button class="btn-chat-head-tool" title="사진 및 파일 모아보기" @click="toggleDrawer('media')">
+              <button class="btn-chat-head-tool" :title="t('mvMediaView')" @click="toggleDrawer('media')">
                 <LineIcon name="photo" :size="16" />
               </button>
-              <button class="btn-chat-head-tool" title="캘린더" @click="toggleDrawer('events')">
+              <button class="btn-chat-head-tool" :title="t('mvCalendar')" @click="toggleDrawer('events')">
                 <LineIcon name="calendar" :size="16" />
               </button>
-              <button class="btn-chat-head-tool" title="새 대화 생성" @click="showNewChatModal = true">
+              <button class="btn-chat-head-tool" :title="t('mvNewChat')" @click="showNewChatModal = true">
                 <LineIcon name="chats" :size="16" />
                 <span class="tiny-plus">+</span>
               </button>
@@ -3068,20 +3076,20 @@ onBeforeUnmount(() => {
             <button class="btn-subtab" :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">{{ t('tabAll') }}</button>
             <button class="btn-subtab" :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">{{ t('tabDirect') }}</button>
             <button class="btn-subtab" :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">{{ t('tabGroup') }}</button>
-            <button class="btn-subtab filter-btn" :class="{ active: chatFilter === 'unread' }" @click="chatFilter = chatFilter === 'unread' ? 'all' : 'unread'" title="정렬 및 필터">⇄</button>
+            <button class="btn-subtab filter-btn" :class="{ active: chatFilter === 'unread' }" @click="chatFilter = chatFilter === 'unread' ? 'all' : 'unread'" :title="t('mvSortFilter')">⇄</button>
           </div>
 
           <!-- Search Bar with Scan QR icon and Collapse (<) (Screenshot 4) -->
           <div class="pc-search-bar-header">
             <div class="pc-search-box-wrap">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input v-model="searchKeyword" placeholder="검색" class="pc-pane-search-input" />
+              <input v-model="searchKeyword" :placeholder="t('mvSearch')" class="pc-pane-search-input" />
               <button v-if="searchKeyword" class="btn-clear-search" @click="searchKeyword = ''">✕</button>
-              <button class="btn-scan-qr-search" title="QR 코드 스캔" @click="showQrModal = true">
+              <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="showQrModal = true">
                 <LineIcon name="scan" :size="15" />
               </button>
             </div>
-            <button class="btn-pane-collapse" title="접기/펼치기" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
+            <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
           </div>
 
           <!-- CapCom / Open Scanner Game Banner Ad (Screenshot 4) -->
@@ -3113,15 +3121,15 @@ onBeforeUnmount(() => {
               <div class="pc-chat-item-meta">
                 <div class="chat-row-top">
                   <div class="chat-row-title">
-                    <span v-if="(c as any).pinned" class="chat-pin-mark" title="상단 고정됨">📌</span>
-                    {{ c.title || '대화방' }}
+                    <span v-if="(c as any).pinned" class="chat-pin-mark" :title="t('mvPinnedBadge')">📌</span>
+                    {{ c.title || t('mvChatFallback') }}
                     <span v-if="c.kind === 'group'" class="member-count-badge">({{ c.member_count || 2 }})</span>
-                    <span v-if="(c as any).muted" class="chat-mute-mark" title="알림 꺼짐">🔕</span>
+                    <span v-if="(c as any).muted" class="chat-mute-mark" :title="t('mvMutedBadge')">🔕</span>
                   </div>
                   <span class="chat-row-time">{{ formatTime(c.updated_at || '') }}</span>
                 </div>
                 <div class="chat-row-bottom">
-                  <span class="chat-row-preview">{{ c.last_message?.body || '메시지가 없습니다.' }}</span>
+                  <span class="chat-row-preview">{{ c.last_message?.body || t('mvNoMessages') }}</span>
                   <div class="chat-row-badges">
                     <span v-if="c.badge_n" class="badge-green-n">N</span>
                     <span v-else-if="c.unread_count && c.unread_count > 0" class="chat-unread-pill">{{ c.unread_count }}</span>
@@ -3132,7 +3140,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Floating Action Button (FAB) New Chat (Screenshot 1) -->
-          <button class="pc-floating-add-btn" title="새 대화 시작" @click="showNewChatModal = true">
+          <button class="pc-floating-add-btn" :title="t('mvStartNewChat')" @click="showNewChatModal = true">
             <LineIcon name="chats" :size="20" />
             <span class="fab-plus-mark">+</span>
           </button>
@@ -3142,9 +3150,9 @@ onBeforeUnmount(() => {
         <div v-else-if="activeNav === 'news'" class="pc-pane-body pc-news-pane">
           <!-- News Header -->
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">뉴스</h2>
+            <h2 class="pc-pane-title">{{ t('mvNews') }}</h2>
             <div class="news-header-tools">
-              <button class="btn-pc-header-tool" title="뉴스 설정" @click="showSettingsModal = true">
+              <button class="btn-pc-header-tool" :title="t('mvNewsSettings')" @click="showSettingsModal = true">
                 <LineIcon name="settings" :size="17" />
               </button>
             </div>
@@ -3152,21 +3160,19 @@ onBeforeUnmount(() => {
           <!-- News Category Filter Tabs -->
           <div class="pc-chat-subtabs-row">
             <button
-              v-for="cat in newsCategories"
+              v-for="cat in NEWS_CATEGORY_IDS"
               :key="cat"
               class="btn-subtab"
               :class="{ active: selectedNewsCategory === cat }"
               @click="selectedNewsCategory = cat"
             >
-              {{ cat }}
+              {{ newsCatLabel(cat) }}
             </button>
           </div>
 
           <!-- News Scroll List -->
           <div class="pc-pane-scroll news-scroll">
-            <div v-if="newsIsSample" class="news-sample-banner" style="margin:8px 12px;padding:8px 12px;border-radius:8px;background:#fff7e0;color:#7a5b00;font-size:12px;">
-              LUNO 에디토리얼 샘플 콘텐츠입니다. 실제 언론 기사가 아닙니다.
-            </div>
+            <div v-if="newsIsSample" class="news-sample-banner" style="margin:8px 12px;padding:8px 12px;border-radius:8px;background:#fff7e0;color:#7a5b00;font-size:12px;">{{ t('mvNewsSampleBanner') }}</div>
             <!-- Hero Featured News Card (Screenshot 5 & 9) -->
             <div
               v-if="heroNews"
@@ -3178,8 +3184,8 @@ onBeforeUnmount(() => {
               <div class="hero-image-wrap">
                 <img :src="heroNews.image_url" :alt="heroNews.title" class="hero-img" />
                 <div class="hero-gradient-overlay"></div>
-                <button class="btn-hero-nav prev" title="이전 기사" @click.stop="prevHeroSlide">‹</button>
-                <button class="btn-hero-nav next" title="다음 기사" @click.stop="nextHeroSlide">›</button>
+                <button class="btn-hero-nav prev" :title="t('mvPrevArticle')" @click.stop="prevHeroSlide">‹</button>
+                <button class="btn-hero-nav next" :title="t('mvNextArticle')" @click.stop="nextHeroSlide">›</button>
                 <div class="hero-slide-badge">{{ activeHeroSlideIndex + 1 }} / {{ heroNewsSlides.length }}</div>
                 <div class="hero-meta-bottom">
                   <h3 class="hero-title">{{ heroNews.title }}</h3>
@@ -3196,7 +3202,7 @@ onBeforeUnmount(() => {
                   :key="slide.id"
                   class="hero-dot"
                   :class="{ active: activeHeroSlideIndex === idx }"
-                  :title="'슬라이드 ' + (idx + 1)"
+                  :title="t('mvSlide').replace('{n}', String(idx + 1))"
                   @click.stop="activeHeroSlideIndex = idx"
                 ></span>
               </div>
@@ -3205,8 +3211,8 @@ onBeforeUnmount(() => {
             <!-- Ad Banner Card (Screenshot 5) -->
             <div class="news-ad-banner" @click="openEcosystemService('open-apps')">
               <div class="ad-text-block">
-                <span class="ad-headline">타협 없는 모바일 액션</span>
-                <span class="ad-sub">AD 몬스터헌터 아웃랜더스 &gt;</span>
+                <span class="ad-headline">{{ t('mvAdHeadline') }}</span>
+                <span class="ad-sub">{{ t('mvAdSub') }}</span>
               </div>
               <div class="ad-thumb">
                 <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?w=120&auto=format&fit=crop&q=80" alt="AD" />
@@ -3216,7 +3222,7 @@ onBeforeUnmount(() => {
             <!-- Category Section: 오늘의 인기 기사 (Screenshot 5) -->
             <div class="news-section-wrap">
               <div class="news-section-header">
-                <h4 class="section-title">오늘의 인기 기사</h4>
+                <h4 class="section-title">{{ t('mvTodayPopular') }}</h4>
               </div>
 
               <div class="news-ranked-list">
@@ -3247,9 +3253,9 @@ onBeforeUnmount(() => {
         <div v-else-if="activeNav === 'calls'" class="pc-pane-body pc-calls-pane">
           <!-- Calls Header -->
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">통화</h2>
+            <h2 class="pc-pane-title">{{ t('mvCall') }}</h2>
             <div class="calls-header-tools">
-              <button class="btn-pc-header-tool" title="새 통화 시작" @click="startCall('voice')">
+              <button class="btn-pc-header-tool" :title="t('mvNewCall')" @click="startCall('voice')">
                 <LineIcon name="call-voice" :size="17" />
               </button>
             </div>
@@ -3257,8 +3263,8 @@ onBeforeUnmount(() => {
 
           <!-- Calls Filter Subtabs -->
           <div class="pc-chat-subtabs-row">
-            <button class="btn-subtab" :class="{ active: callFilter === 'all' }" @click="callFilter = 'all'">전체 ({{ callHistoryList.length }})</button>
-            <button class="btn-subtab" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">부재중</button>
+            <button class="btn-subtab" :class="{ active: callFilter === 'all' }" @click="callFilter = 'all'">{{ t('tabAll') }} ({{ callHistoryList.length }})</button>
+            <button class="btn-subtab" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">{{ t('mvMissed') }}</button>
           </div>
 
           <!-- Calls Scroll List -->
@@ -3291,7 +3297,7 @@ onBeforeUnmount(() => {
               <!-- Quick Call Button on the Right -->
               <button
                 class="btn-call-history-action"
-                :title="log.peer_name + '에게 전화 걸기'"
+                :title="t('mvCallBack').replace('{name}', log.peer_name)"
                 @click.stop="startCallFromHistory(log, log.call_type)"
               >
                 <LineIcon name="calls" :size="18" />
@@ -3304,16 +3310,16 @@ onBeforeUnmount(() => {
         <div v-else-if="activeNav === 'voom'" class="pc-pane-body">
           <div class="pc-pane-header">
             <h2 class="pc-pane-title">LINE VOOM</h2>
-            <button class="btn-pc-header-tool" title="새 스토리" @click="showNewStoryModal = true">➕</button>
+            <button class="btn-pc-header-tool" :title="t('mvNewStory')" @click="showNewStoryModal = true">➕</button>
           </div>
           <div class="stories-row">
             <div class="story-item" @click="showNewStoryModal = true">
               <div class="story-ring plus">＋</div>
-              <small>스토리 추가</small>
+              <small>{{ t('mvAddStory') }}</small>
             </div>
             <div v-for="s in stories" :key="s.id" class="story-item">
               <div class="story-ring" :style="{ background: s.bg || 'var(--om-primary, #2563EB)' }">{{ (s.author_name || 'L').slice(0, 1) }}</div>
-              <small>{{ s.author_name || '친구' }}</small>
+              <small>{{ s.author_name || t('navFriends') }}</small>
             </div>
           </div>
           <div class="voom-list">
@@ -3327,7 +3333,7 @@ onBeforeUnmount(() => {
                   <button class="btn-like" :class="{ liked: v.liked }" @click="likeVoomPost(v.id)">
                     {{ v.liked ? '❤️' : '🤍' }} {{ v.likes || v.like_count || 0 }}
                   </button>
-                  <small>{{ v.comments?.length || 0 }}개의 댓글</small>
+                  <small>{{ t('mvCommentCount').replace('{n}', String(v.comments?.length || 0)) }}</small>
                 </div>
               </div>
             </div>
@@ -3337,8 +3343,8 @@ onBeforeUnmount(() => {
         <!-- VIEW 4: OPENCHAT -->
         <div v-else-if="activeNav === 'openchat'" class="pc-pane-body">
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">오픈채팅</h2>
-            <button class="btn-pc-header-tool" title="오픈채팅 만들기" @click="showCreateOpenChatModal = true">➕</button>
+            <h2 class="pc-pane-title">{{ t('navOpenChat') }}</h2>
+            <button class="btn-pc-header-tool" :title="t('mvCreateOpenChat')" @click="showCreateOpenChatModal = true">➕</button>
           </div>
           <div class="openchat-list">
             <div v-for="room in openChatRooms" :key="room.id" class="openchat-card" @click="selectOpenChatRoom(room)">
@@ -3354,7 +3360,7 @@ onBeforeUnmount(() => {
         <!-- VIEW 5: WALLET / SERVICES -->
         <div v-else-if="activeNav === 'wallet'" class="pc-pane-body">
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">LINE Pay / 서비스</h2>
+            <h2 class="pc-pane-title">{{ t('mvLinePayServices') }}</h2>
           </div>
           <div class="line-pay-card">
             <div class="pay-top">
@@ -3363,24 +3369,24 @@ onBeforeUnmount(() => {
             </div>
             <div class="pay-balance">₩ {{ walletBalance.toLocaleString() }}</div>
             <div class="pay-actions">
-              <button class="btn-pay-action" @click="showChargeModal = true">충전</button>
-              <button class="btn-pay-action secondary" @click="showSendMoneyModal = true">송금</button>
+              <button class="btn-pay-action" @click="showChargeModal = true">{{ t('mvCharge') }}</button>
+              <button class="btn-pay-action secondary" @click="showSendMoneyModal = true">{{ t('mvSend') }}</button>
             </div>
           </div>
           <div class="services-grid">
             <div class="service-box" @click="switchNav('voom')"><span class="icon">🎬</span><span class="title">LINE VOOM</span></div>
-            <div class="service-box" @click="showSettingsModal = true"><span class="icon">🎨</span><span class="title">테마 / 설정</span></div>
-            <div class="service-box" @click="showStickerPicker = true"><span class="icon">🐻</span><span class="title">스티커 샵</span></div>
+            <div class="service-box" @click="showSettingsModal = true"><span class="icon">🎨</span><span class="title">{{ t('mvThemeSettings') }}</span></div>
+            <div class="service-box" @click="showStickerPicker = true"><span class="icon">🐻</span><span class="title">{{ t('mvStickerShop') }}</span></div>
           </div>
           <div v-if="walletTx.length" class="wallet-tx-section">
-            <h4 class="wallet-tx-heading">최근 거래 내역</h4>
+            <h4 class="wallet-tx-heading">{{ t('mvRecentTx') }}</h4>
             <div v-for="tx in walletTx.slice(0, 8)" :key="tx.id" class="wallet-tx-row">
               <div class="wallet-tx-info">
-                <strong>{{ tx.title || tx.note || tx.kind || 'LUNO Pay 거래' }}</strong>
+                <strong>{{ tx.title || tx.note || tx.kind || t('mvTxFallback') }}</strong>
                 <small>{{ formatTime(tx.created_at) }}</small>
               </div>
               <span class="wallet-tx-amount" :class="{ plus: tx.amount > 0 }">
-                {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount.toLocaleString() }}원
+                {{ (tx.amount > 0 ? '+' : '') + formatKRW(tx.amount) }}
               </span>
             </div>
           </div>
@@ -3396,26 +3402,24 @@ onBeforeUnmount(() => {
           <h2 class="profile-preview-name">{{ selectedCallRecord.peer_name }}</h2>
           <p class="profile-preview-bio">
             <span :class="{ 'text-red': selectedCallRecord.direction === 'missed' }">
-              {{ selectedCallRecord.direction === 'missed' ? '부재중 전화' : selectedCallRecord.direction === 'incoming' ? '수신 통화' : '발신 통화' }}
+              {{ selectedCallRecord.direction === 'missed' ? t('mvMissedCall') : selectedCallRecord.direction === 'incoming' ? t('mvIncomingCall') : t('mvOutgoingCall') }}
             </span>
             · {{ selectedCallRecord.timestamp_text }}
             <span v-if="selectedCallRecord.duration_text">({{ selectedCallRecord.duration_text }})</span>
           </p>
           <div class="profile-preview-actions">
-            <button class="btn-start-chat-large" @click="startCallFromHistory(selectedCallRecord, 'voice')">
-              📞 무료 음성통화 걸기
-            </button>
+            <button class="btn-start-chat-large" @click="startCallFromHistory(selectedCallRecord, 'voice')">{{ t('mvFreeCallVoice') }}</button>
             <div class="profile-preview-subactions">
               <button type="button" class="btn-subaction-pill" @click="startCallFromHistory(selectedCallRecord, 'video')">
                 <LineIcon name="call-video" :size="16" />
-                <span>영상 통화</span>
+                <span>{{ t('mvVideoCallLabel') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" @click="openChatFromCallRecord(selectedCallRecord)">
                 <LineIcon name="chats" :size="16" />
-                <span>1:1 대화방 이동</span>
+                <span>{{ t('mvGotoDirect') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" @click="removeCallRecord(selectedCallRecord.id); selectedCallRecord = callHistoryList[0] || null">
-                <span>🗑️ 이력 삭제</span>
+                <span>{{ t('mvDeleteHistory') }}</span>
               </button>
             </div>
           </div>
@@ -3424,8 +3428,8 @@ onBeforeUnmount(() => {
           <div class="pc-watermark-wrap">
             <LineIcon name="calls" :size="68" />
           </div>
-          <h3 class="pc-empty-title">LUNO 무료 음성·영상 통화</h3>
-          <p class="pc-empty-desc">좌측 통화 이력에서 상대를 선택하거나 통화 아이콘을 눌러 통화를 시작하세요.</p>
+          <h3 class="pc-empty-title">{{ t('mvFreeCallsTitle') }}</h3>
+          <p class="pc-empty-desc">{{ t('mvFreeCallsDesc') }}</p>
         </div>
       </section>
 
@@ -3436,17 +3440,17 @@ onBeforeUnmount(() => {
             <div class="chat-topbar-info">
               <div class="title-row">
                 <span class="chat-header-title">{{ selectedOpenChatRoom.name }}</span>
-                <span class="badge-verified">공개 커뮤니티</span>
+                <span class="badge-verified">{{ t('mvPublicCommunity') }}</span>
               </div>
               <small class="e2ee-tag">{{ selectedOpenChatRoom.description }}</small>
             </div>
           </div>
         </header>
         <div class="pc-chat-messages-canvas">
-          <p v-if="!openChatPosts.length" class="empty-muted" style="margin:auto;">첫 커뮤니티 게시글을 남겨보세요!</p>
+          <p v-if="!openChatPosts.length" class="empty-muted" style="margin:auto;">{{ t('mvFirstPost') }}</p>
           <div v-for="post in openChatPosts" :key="post.id" class="openchat-post-card">
             <div class="openchat-post-meta">
-              <strong>익명 멤버 ({{ post.author_id.slice(0, 6) }})</strong>
+              <strong>{{ t('mvAnonMember').replace('{id}', post.author_id.slice(0, 6)) }}</strong>
               <small>{{ formatTime(post.created_at) }}</small>
             </div>
             <p class="openchat-post-body">{{ post.body }}</p>
@@ -3456,13 +3460,13 @@ onBeforeUnmount(() => {
           <form class="pc-textarea-form" @submit.prevent="submitOpenChatPost">
             <textarea
               v-model="newOpenChatPostBody"
-              placeholder="오픈채팅 커뮤니티에 메시지를 입력하세요..."
+              :placeholder="t('mvOpenChatPh')"
               rows="2"
               @keydown.enter.exact.prevent="submitOpenChatPost"
             ></textarea>
             <div class="pc-textarea-bottom">
               <span class="char-count">{{ newOpenChatPostBody.length }}/500</span>
-              <button class="btn-green-send" :disabled="!newOpenChatPostBody.trim()">등록</button>
+              <button class="btn-green-send" :disabled="!newOpenChatPostBody.trim()">{{ t('mvSubmit') }}</button>
             </div>
           </form>
         </footer>
@@ -3472,7 +3476,7 @@ onBeforeUnmount(() => {
         <!-- Chat Header -->
         <header class="pc-chat-topbar">
           <div class="chat-topbar-left">
-            <button class="btn-mobile-back" @click="selectedChatId = ''" title="뒤로가기">
+            <button class="btn-mobile-back" @click="selectedChatId = ''" :title="t('mvGoBack')">
               <LineIcon name="back" :size="18" />
             </button>
             <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : selectedChat.official ? '#00B900' : '#315BCD' }">
@@ -3482,7 +3486,7 @@ onBeforeUnmount(() => {
               <div class="title-row">
                 <span class="chat-header-title">{{ selectedChat.title }}</span>
                 <span v-if="selectedChat.kind === 'group'" class="member-tag">👥 {{ selectedChat.member_count || 2 }}</span>
-                <span v-if="selectedChat.official" class="badge-verified">✓ 공식채널</span>
+                <span v-if="selectedChat.official" class="badge-verified">{{ t('mvOfficialChannel') }}</span>
               </div>
               <small class="e2ee-tag ln-connection-state" :data-state="realtimeState" role="status">
                 {{ t('connection_' + realtimeState) }}
@@ -3500,7 +3504,7 @@ onBeforeUnmount(() => {
                 @click="autoTranslateEnabled = !autoTranslateEnabled"
               >
                 <LineIcon name="translate" :size="16" />
-                <span>{{ autoTranslateEnabled ? 'AI 자동번역 ON' : 'AI 번역' }}</span>
+                <span>{{ autoTranslateEnabled ? t('mvAiTranslateOn') : t('mvAiTranslate') }}</span>
               </button>
               <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language">
                 <option value="ko">KR</option>
@@ -3510,11 +3514,11 @@ onBeforeUnmount(() => {
               </select>
             </div>
 
-            <button class="btn-chat-action" title="배경 테마 변경" @click="cycleWallpaper">🎨</button>
+            <button class="btn-chat-action" :title="t('mvWallpaperTitle')" @click="cycleWallpaper">🎨</button>
             <button class="btn-chat-action" :title="t('callVoice')" @click="startCall('voice')"><LineIcon name="call-voice" :size="18" /></button>
             <button class="btn-chat-action" :title="t('callVideo')" @click="startCall('video')"><LineIcon name="call-video" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" title="일정 캘린더" @click="toggleDrawer('events')"><LineIcon name="calendar" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" title="대화 서랍 (노트/앨범/파일)" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" :title="t('mvEventsCalendar')" @click="toggleDrawer('events')"><LineIcon name="calendar" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
           </div>
         </header>
 
@@ -3522,8 +3526,8 @@ onBeforeUnmount(() => {
         <div v-if="pinnedList.length" class="pinned-banner" :class="{ expanded: pinnedExpanded }">
           <div class="pinned-summary" @click="pinnedExpanded = !pinnedExpanded">
             <span class="pin-icon">📢</span>
-            <span class="pin-text">{{ pinnedList[0].body || '상단 고정 공지사항' }}</span>
-            <button class="btn-unpin-inline" title="공지 내리기" @click.stop="unpinMessage(pinnedList[0].message_id)">✕</button>
+            <span class="pin-text">{{ pinnedList[0].body || t('mvPinnedFallback') }}</span>
+            <button class="btn-unpin-inline" :title="t('mvUnpinNotice')" @click.stop="unpinMessage(pinnedList[0].message_id)">✕</button>
             <span class="pin-toggle">{{ pinnedExpanded ? '▲' : '▼' }}</span>
           </div>
         </div>
@@ -3533,7 +3537,7 @@ onBeforeUnmount(() => {
           <div v-for="poll in activePolls.slice(0, 2)" :key="poll.id" class="poll-inline-card">
             <div class="poll-inline-head">
               <strong>📊 {{ poll.question }}</strong>
-              <small>{{ poll.closed ? '마감됨' : '투표 진행 중' }}</small>
+              <small>{{ poll.closed ? t('mvPollClosed') : t('mvPollOpen') }}</small>
             </div>
             <div class="poll-options-row">
               <button
@@ -3544,7 +3548,7 @@ onBeforeUnmount(() => {
                 @click="votePoll(poll.id, opt.id)"
               >
                 <span>{{ opt.text || opt.label }}</span>
-                <strong>{{ opt.votes ?? opt.count ?? 0 }}표</strong>
+                <strong>{{ t('mvVotes').replace('{n}', String(opt.votes ?? opt.count ?? 0)) }}</strong>
               </button>
             </div>
           </div>
@@ -3553,15 +3557,15 @@ onBeforeUnmount(() => {
         <!-- Slide-Over Conversation Drawer (Notes / Albums / Events / Media / Search) -->
         <div v-if="activeDrawer !== 'none'" class="pc-drawer-panel">
           <div class="drawer-tabs-bar">
-            <button :class="{ active: activeDrawer === 'notes' }" @click="toggleDrawer('notes')">📝 노트</button>
-            <button :class="{ active: activeDrawer === 'albums' }" @click="toggleDrawer('albums')">🖼️ 앨범</button>
-            <button :class="{ active: activeDrawer === 'events' }" @click="toggleDrawer('events')">📅 일정</button>
-            <button :class="{ active: activeDrawer === 'media' }" @click="toggleDrawer('media')">🗂️ 미디어</button>
+            <button :class="{ active: activeDrawer === 'notes' }" @click="toggleDrawer('notes')">{{ t('mvDrawerNotes') }}</button>
+            <button :class="{ active: activeDrawer === 'albums' }" @click="toggleDrawer('albums')">{{ t('mvDrawerAlbums') }}</button>
+            <button :class="{ active: activeDrawer === 'events' }" @click="toggleDrawer('events')">{{ t('mvDrawerEvents') }}</button>
+            <button :class="{ active: activeDrawer === 'media' }" @click="toggleDrawer('media')">{{ t('mvDrawerMedia') }}</button>
             <button class="btn-drawer-close" @click="activeDrawer = 'none'">✕</button>
           </div>
           <div class="drawer-search-bar">
-            <input v-model="chatSearchQuery" placeholder="대화방 내 메시지 검색..." @keydown.enter.prevent="runConversationSearch" />
-            <button class="btn-secondary" @click="runConversationSearch">검색</button>
+            <input v-model="chatSearchQuery" :placeholder="t('mvSearchInChatPh')" @keydown.enter.prevent="runConversationSearch" />
+            <button class="btn-secondary" @click="runConversationSearch">{{ t('mvSearch') }}</button>
           </div>
           <div v-if="chatSearchResults.length" class="drawer-search-results">
             <div v-for="sr in chatSearchResults" :key="sr.id" class="drawer-item-card">
@@ -3571,24 +3575,24 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="activeDrawer === 'notes'" class="drawer-body">
             <form class="flex-row" @submit.prevent="createNote">
-              <input v-model="newNoteBody" placeholder="새 대화방 노트 작성..." />
-              <button class="btn-primary" type="submit">등록</button>
+              <input v-model="newNoteBody" :placeholder="t('mvNewNotePh')" />
+              <button class="btn-primary" type="submit">{{ t('mvSubmit') }}</button>
             </form>
-            <p v-if="!chatNotes.length" class="empty-muted">등록된 노트가 없습니다.</p>
+            <p v-if="!chatNotes.length" class="empty-muted">{{ t('mvNoNotes') }}</p>
             <div v-for="n in chatNotes" :key="n.id" class="drawer-item-card">
               <div class="flex-row" style="justify-content:space-between">
                 <strong>{{ n.body }}</strong>
-                <button class="btn-delete-keep" @click="deleteNoteItem(n.id)">삭제</button>
+                <button class="btn-delete-keep" @click="deleteNoteItem(n.id)">{{ t('mvDelete') }}</button>
               </div>
               <small class="muted">{{ formatTime(n.created_at) }}</small>
             </div>
           </div>
           <div v-else-if="activeDrawer === 'albums'" class="drawer-body">
             <form class="flex-row" @submit.prevent="createAlbum">
-              <input v-model="newAlbumTitle" placeholder="새 공유 앨범 제목..." />
-              <button class="btn-primary" type="submit">생성</button>
+              <input v-model="newAlbumTitle" :placeholder="t('mvNewAlbumPh')" />
+              <button class="btn-primary" type="submit">{{ t('mvCreate') }}</button>
             </form>
-            <p v-if="!chatAlbums.length" class="empty-muted">생성된 공유 앨범이 없습니다.</p>
+            <p v-if="!chatAlbums.length" class="empty-muted">{{ t('mvNoAlbums') }}</p>
             <div v-for="alb in chatAlbums" :key="alb.id" class="drawer-item-card">
               <strong>🖼️ {{ alb.title }}</strong>
               <small class="muted">{{ formatTime(alb.created_at) }}</small>
@@ -3596,21 +3600,21 @@ onBeforeUnmount(() => {
           </div>
           <div v-else-if="activeDrawer === 'events'" class="drawer-body">
             <div class="flex-row" style="justify-content:space-between">
-              <strong>대화방 일정 ({{ chatEvents.length }})</strong>
-              <button class="btn-primary" @click="showEventCreateModal = true">+ 새 일정</button>
+              <strong>{{ t('mvChatEvents').replace('{n}', String(chatEvents.length)) }}</strong>
+              <button class="btn-primary" @click="showEventCreateModal = true">{{ t('mvNewEvent') }}</button>
             </div>
-            <p v-if="!chatEvents.length" class="empty-muted">등록된 일정이 없습니다.</p>
+            <p v-if="!chatEvents.length" class="empty-muted">{{ t('mvNoEvents') }}</p>
             <div v-for="ev in chatEvents" :key="ev.id" class="drawer-item-card">
               <strong>📅 {{ ev.title }}</strong>
-              <small class="muted">{{ ev.starts_at }} · {{ ev.location || '온라인' }}</small>
+              <small class="muted">{{ ev.starts_at }} · {{ ev.location || t('mvOnlineFallback') }}</small>
               <div class="flex-row" style="margin-top:6px">
-                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'going')">참석 ({{ ev.going?.length || 0 }})</button>
-                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'declined')">불참 ({{ ev.declined?.length || 0 }})</button>
+                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'going')">{{ t('mvAttend').replace('{n}', String(ev.going?.length || 0)) }}</button>
+                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'declined')">{{ t('mvDecline').replace('{n}', String(ev.declined?.length || 0)) }}</button>
               </div>
             </div>
           </div>
           <div v-else-if="activeDrawer === 'media'" class="drawer-body">
-            <p v-if="!chatMediaList.length" class="empty-muted">주고받은 사진·파일이 없습니다.</p>
+            <p v-if="!chatMediaList.length" class="empty-muted">{{ t('mvNoMedia') }}</p>
             <div v-for="m in chatMediaList" :key="m.id" class="drawer-item-card">
               <strong>📎 {{ m.body }}</strong>
               <small class="muted">{{ m.kind }} · {{ formatTime(m.created_at) }}</small>
@@ -3626,18 +3630,18 @@ onBeforeUnmount(() => {
           </div>
           <!-- Loading State -->
           <div v-if="isLoadingMessages" class="chat-canvas-state">
-            <p class="empty-muted">대화 내용을 불러오는 중입니다...</p>
+            <p class="empty-muted">{{ t('mvLoadingChat') }}</p>
           </div>
 
           <!-- Scoped Error State with Retry -->
           <div v-else-if="conversationError" class="chat-canvas-state error-state">
             <p class="error-state-text">⚠️ {{ conversationError }}</p>
-            <button class="btn-primary" @click="selectChat(selectedChatId)">다시 시도</button>
+            <button class="btn-primary" @click="selectChat(selectedChatId)">{{ t('mvRetry') }}</button>
           </div>
 
           <!-- Empty Conversation State -->
           <div v-else-if="messages.length === 0" class="chat-canvas-state">
-            <p class="empty-muted">아직 주고받은 메시지가 없습니다. 첫 인사를 건네보세요!</p>
+            <p class="empty-muted">{{ t('mvEmptyChat') }}</p>
           </div>
 
           <template v-else>
@@ -3658,29 +3662,25 @@ onBeforeUnmount(() => {
                 <div class="pc-security-card-container">
                   <div class="pc-security-notice-card">
                     <div class="security-card-header">
-                      <span class="security-title-green">{{ msg.body || '로그인 성공' }}</span>
+                      <span class="security-title-green">{{ msg.body || t('mvLoginOk') }}</span>
                     </div>
                     <div class="security-card-divider"></div>
                     <div class="security-card-body">
                       <p class="security-desc-bold">{{ msg.metadata?.device_name || t('security_login_notice') }}</p>
-                      <p class="security-desc-sub">본인이 로그인하지 않았다면 아래 버튼을 눌러 로그아웃해 주세요. 또한, 안전한 LUNO 이용을 위해 비밀번호 변경을 권장합니다.</p>
+                      <p class="security-desc-sub">{{ t('mvSecNoticeDesc') }}</p>
                       <div class="security-specs-table">
                         <div class="spec-row">
-                          <span class="spec-label">IP 주소:</span>
+                          <span class="spec-label">{{ t('mvIpLabel') }}</span>
                           <span class="spec-val">{{ (msg as any).client_ip || msg.metadata?.ip || '—' }}</span>
                         </div>
                         <div class="spec-row">
-                          <span class="spec-label">위치:</span>
+                          <span class="spec-label">{{ t('mvLocationLabel') }}</span>
                           <span class="spec-val">{{ (msg as any).client_location || msg.metadata?.location || '—' }}</span>
                         </div>
                       </div>
                       <div class="security-card-actions">
-                        <button class="btn-security-logout-green" @click="handleSecurityNoticeLogout(msg)">
-                          로그아웃
-                        </button>
-                        <button class="btn-security-pwchange-link" @click="showPasswordModal = true">
-                          비밀번호 변경
-                        </button>
+                        <button class="btn-security-logout-green" @click="handleSecurityNoticeLogout(msg)">{{ t('mvLogout') }}</button>
+                        <button class="btn-security-pwchange-link" @click="showPasswordModal = true">{{ t('mvPwChange') }}</button>
                       </div>
                     </div>
                   </div>
@@ -3708,7 +3708,7 @@ onBeforeUnmount(() => {
                     :class="{
                       outgoing: msg.sender_id === currentUser?.id,
                       incoming: msg.sender_id !== currentUser?.id,
-                      missed: msg.body.includes('부재중') || msg.body.includes('취소')
+                      missed: (msg as any).status === 'cancelled' || msg.metadata?.status === 'cancelled' || msg.body.includes(t('mvMissed')) || msg.body.includes(t('mvCancel'))
                     }"
                     @click="startCall('voice')"
                   >
@@ -3752,24 +3752,24 @@ onBeforeUnmount(() => {
                     @contextmenu.prevent="openMessageContextMenu($event, msg)"
                   >
                     <div v-if="msg.reply_to" class="bubble-reply-preview">
-                      <LineIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || '답장한 메시지' }}
+                      <LineIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || t('mvRepliedMsg') }}
                     </div>
 
                     <div v-if="editingMessageId === msg.id" class="inline-edit-box">
                       <input v-model="editingMessageBody" class="inline-edit-input" @keydown.enter.prevent="saveEditMessage" />
                       <div class="flex-row" style="margin-top:4px;gap:4px">
-                        <button class="btn-primary" style="padding:2px 8px;font-size:11px" @click="saveEditMessage">저장</button>
-                        <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="editingMessageId = ''">취소</button>
+                        <button class="btn-primary" style="padding:2px 8px;font-size:11px" @click="saveEditMessage">{{ t('mvSave') }}</button>
+                        <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="editingMessageId = ''">{{ t('mvCancel') }}</button>
                       </div>
                     </div>
                     <div v-else-if="msg.kind === 'sticker' && getStickerSvg(String(msg.metadata?.sticker_id || msg.body))" class="bubble-sticker-svg" v-html="getStickerSvg(String(msg.metadata?.sticker_id || msg.body))"></div>
                     <div v-else-if="msg.kind === 'location'" class="bubble-location-card">
-                      <div class="loc-card-top">📍 위치 공유</div>
+                      <div class="loc-card-top">{{ t('mvShareLocation') }}</div>
                       <strong class="loc-card-label">{{ msg.metadata?.label || msg.body }}</strong>
                       <small v-if="typeof msg.metadata?.lat === 'number' && typeof msg.metadata?.lng === 'number'" class="loc-card-coords">{{ msg.metadata.lat }}, {{ msg.metadata.lng }}</small>
                     </div>
                     <div v-else-if="msg.kind === 'contact'" class="bubble-contact-card">
-                      <div class="contact-card-top">👤 연락처 카드</div>
+                      <div class="contact-card-top">{{ t('mvContactCard') }}</div>
                       <strong class="contact-card-name">{{ msg.body }}</strong>
                       <small v-if="msg.metadata?.handle" class="contact-card-handle">@{{ msg.metadata.handle }}</small>
                     </div>
@@ -3811,13 +3811,13 @@ onBeforeUnmount(() => {
                 <!-- Bubble Hover Floating Action Bar -->
                 <div class="pc-bubble-toolbar">
                   <button :title="t('translateBtn')" @click="handleTranslateMessage(msg)"><LineIcon name="translate" :size="14" /></button>
-                  <button title="하트" @click="reactToMessage(msg.id, '❤️')"><LineIcon name="heart" :size="14" /></button>
-                  <button title="좋아요" @click="reactToMessage(msg.id, '👍')"><LineIcon name="thumbsup" :size="14" /></button>
-                  <button title="답장" @click="startReply(msg)"><LineIcon name="reply" :size="14" /></button>
-                  <button v-if="msg.sender_id === currentUser?.id" title="수정" @click="startEditMessage(msg)">✎</button>
-                  <button title="Keep에 저장" @click="saveToKeep(msg)"><LineIcon name="keep" :size="14" /></button>
-                  <button title="공지 등록" @click="pinMessage(msg.id)"><LineIcon name="pin" :size="14" /></button>
-                  <button v-if="msg.sender_id === currentUser?.id" title="보내기 취소" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
+                  <button :title="t('mvReactHeart')" @click="reactToMessage(msg.id, '❤️')"><LineIcon name="heart" :size="14" /></button>
+                  <button :title="t('mvReactLike')" @click="reactToMessage(msg.id, '👍')"><LineIcon name="thumbsup" :size="14" /></button>
+                  <button :title="t('mvReply')" @click="startReply(msg)"><LineIcon name="reply" :size="14" /></button>
+                  <button v-if="msg.sender_id === currentUser?.id" :title="t('mvEdit')" @click="startEditMessage(msg)">✎</button>
+                  <button :title="t('mvCtxKeep')" @click="saveToKeep(msg)"><LineIcon name="keep" :size="14" /></button>
+                  <button :title="t('mvNoticeRegister')" @click="pinMessage(msg.id)"><LineIcon name="pin" :size="14" /></button>
+                  <button v-if="msg.sender_id === currentUser?.id" :title="t('mvCtxUnsend')" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
                 </div>
               </div>
             </template>
@@ -3825,7 +3825,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Floating Scroll-to-Bottom Button (Matching Screenshot 7) -->
-        <button class="btn-scroll-bottom" title="맨 아래로 이동" @click="scrollToBottom">
+        <button class="btn-scroll-bottom" :title="t('mvJumpBottom')" @click="scrollToBottom">
           ↓
         </button>
 
@@ -3833,17 +3833,17 @@ onBeforeUnmount(() => {
         <footer class="pc-chat-input-dock">
           <!-- Reply Preview Banner -->
           <div v-if="replyToMessage" class="reply-composer-bar">
-            <span>↩ 답장 대상: <strong>{{ replyToMessage.body }}</strong></span>
+            <span>{{ t('mvReplyTo') }}<strong>{{ replyToMessage.body }}</strong></span>
             <button class="btn-clear-search" @click="replyToMessage = null">✕</button>
           </div>
 
           <!-- Sticker Picker Popover -->
           <div v-if="showStickerPicker" class="sticker-picker-popover">
             <div class="sticker-cat-tabs">
-              <button :class="{ active: activeStickerCategory === 'All' }" @click="activeStickerCategory = 'All'">전체</button>
-              <button :class="{ active: activeStickerCategory === 'Lumi' }" @click="activeStickerCategory = 'Lumi'">Lumi (루미)</button>
-              <button :class="{ active: activeStickerCategory === 'Nori' }" @click="activeStickerCategory = 'Nori'">Nori (노리)</button>
-              <button :class="{ active: activeStickerCategory === 'Poko' }" @click="activeStickerCategory = 'Poko'">Poko (포코)</button>
+              <button :class="{ active: activeStickerCategory === 'All' }" @click="activeStickerCategory = 'All'">{{ t('tabAll') }}</button>
+              <button :class="{ active: activeStickerCategory === 'Lumi' }" @click="activeStickerCategory = 'Lumi'">{{ t('mvBotLumi') }}</button>
+              <button :class="{ active: activeStickerCategory === 'Nori' }" @click="activeStickerCategory = 'Nori'">{{ t('mvBotNori') }}</button>
+              <button :class="{ active: activeStickerCategory === 'Poko' }" @click="activeStickerCategory = 'Poko'">{{ t('mvBotPoko') }}</button>
               <button class="btn-clear-search" style="margin-left:auto" @click="showStickerPicker = false">✕</button>
             </div>
             <div class="sticker-grid-items">
@@ -3863,18 +3863,18 @@ onBeforeUnmount(() => {
           <!-- Attachment Bar Icons -->
           <div class="pc-input-toolbar">
             <input ref="attachmentInput" type="file" hidden @change="uploadSelectedFile" />
-            <button class="btn-tool-icon" title="스티커" @click="showStickerPicker = !showStickerPicker">😊</button>
-            <button class="btn-tool-icon" title="사진 전송" :disabled="uploading" @click="chooseAttachment('image')">📷</button>
-            <button class="btn-tool-icon" title="파일 첨부" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
-            <button class="btn-tool-icon" :title="isRecordingVoice ? '녹음 종료' : '음성 녹음'" @click="toggleVoiceRecording">
+            <button class="btn-tool-icon" :title="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker">😊</button>
+            <button class="btn-tool-icon" :title="t('mvAttachPhoto')" :disabled="uploading" @click="chooseAttachment('image')">📷</button>
+            <button class="btn-tool-icon" :title="t('mvAttachFile')" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
+            <button class="btn-tool-icon" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="toggleVoiceRecording">
               {{ isRecordingVoice ? '⏹️' : '🎙️' }}
             </button>
-            <button class="btn-tool-icon" title="투표 만들기" @click="showPollCreateModal = true">📊</button>
-            <button class="btn-tool-icon" title="일정 등록" @click="showEventCreateModal = true">📅</button>
-            <button class="btn-tool-icon" title="위치 공유" @click="sendLocationMessage">📍</button>
-            <button class="btn-tool-icon" title="연락처 공유" @click="sendContactMessage">👤</button>
-            <button class="btn-tool-icon" title="화면 캡처" @click="captureScreenToChat">✂️</button>
-            <button class="btn-tool-icon" title="송금" @click="openSendMoneyFromChat">₩</button>
+            <button class="btn-tool-icon" :title="t('mvMakePoll')" @click="showPollCreateModal = true">📊</button>
+            <button class="btn-tool-icon" :title="t('mvAddEvent')" @click="showEventCreateModal = true">📅</button>
+            <button class="btn-tool-icon" :title="t('mvLocationShare')" @click="sendLocationMessage">📍</button>
+            <button class="btn-tool-icon" :title="t('mvShareContact')" @click="sendContactMessage">👤</button>
+            <button class="btn-tool-icon" :title="t('mvCapture')" @click="captureScreenToChat">✂️</button>
+            <button class="btn-tool-icon" :title="t('mvSend')" @click="openSendMoneyFromChat">₩</button>
           </div>
 
           <!-- Textarea Form Area -->
@@ -3910,20 +3910,20 @@ onBeforeUnmount(() => {
               {{ t('startChatBtn') }}
             </button>
             <div class="profile-preview-subactions">
-              <button type="button" class="btn-subaction-pill" title="음성 통화" @click="startCallWithUser(selectedFriendProfile, 'voice')">
+              <button type="button" class="btn-subaction-pill" :title="t('mvVoiceCall')" @click="startCallWithUser(selectedFriendProfile, 'voice')">
                 <LineIcon name="call-voice" :size="16" />
-                <span>음성 통화</span>
+                <span>{{ t('mvVoiceCall') }}</span>
               </button>
-              <button type="button" class="btn-subaction-pill" title="영상 통화" @click="startCallWithUser(selectedFriendProfile, 'video')">
+              <button type="button" class="btn-subaction-pill" :title="t('mvVideoCallLabel')" @click="startCallWithUser(selectedFriendProfile, 'video')">
                 <LineIcon name="call-video" :size="16" />
-                <span>영상 통화</span>
+                <span>{{ t('mvVideoCallLabel') }}</span>
               </button>
-              <button type="button" class="btn-subaction-pill" title="송금하기" @click="openSendMoneyModal(selectedFriendProfile)">
+              <button type="button" class="btn-subaction-pill" :title="t('mvSendMoney')" @click="openSendMoneyModal(selectedFriendProfile)">
                 <LineIcon name="money" :size="16" />
-                <span>송금하기</span>
+                <span>{{ t('mvSendMoney') }}</span>
               </button>
-              <button type="button" class="btn-subaction-pill" title="즐겨찾기" @click="toggleFriendFavorite(selectedFriendProfile)">
-                <span>{{ (selectedFriendProfile as any).is_favorite ? '★ 즐겨찾기됨' : '☆ 즐겨찾기' }}</span>
+              <button type="button" class="btn-subaction-pill" :title="t('mvFavTitle')" @click="toggleFriendFavorite(selectedFriendProfile)">
+                <span>{{ (selectedFriendProfile as any).is_favorite ? t('mvFaved') : t('mvFav') }}</span>
               </button>
             </div>
           </div>
@@ -3942,7 +3942,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- MOBILE FLOATING NAVIGATION CAPSULE (Screenshots 3, 4, 5) -->
-      <nav v-if="!selectedChat" class="luno-mobile-floating-nav" aria-label="하단 탭 내비게이션">
+      <nav v-if="!selectedChat" class="luno-mobile-floating-nav" :aria-label="t('mvBottomNav')">
         <!-- Tab 1: 홈 (Home) -->
         <button
           class="mobile-nav-item"
@@ -3952,7 +3952,7 @@ onBeforeUnmount(() => {
           <div class="nav-icon-wrap">
             <LineIcon name="home" :size="24" />
           </div>
-          <span class="nav-label">홈</span>
+          <span class="nav-label">{{ t('mvHome') }}</span>
         </button>
 
         <!-- Tab 2: 대화 (Chats) -->
@@ -3965,7 +3965,7 @@ onBeforeUnmount(() => {
             <LineIcon name="chats" :size="24" />
             <span v-if="totalUnreadCount > 0" class="mobile-nav-badge">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
           </div>
-          <span class="nav-label">대화</span>
+          <span class="nav-label">{{ t('mvChats') }}</span>
         </button>
 
         <!-- Tab 3: 뉴스 (News) -->
@@ -3978,7 +3978,7 @@ onBeforeUnmount(() => {
             <LineIcon name="news" :size="24" />
             <span class="mobile-nav-dot"></span>
           </div>
-          <span class="nav-label">뉴스</span>
+          <span class="nav-label">{{ t('mvNews') }}</span>
         </button>
 
         <!-- Tab 4: 통화 (Calls) -->
@@ -3990,7 +3990,7 @@ onBeforeUnmount(() => {
           <div class="nav-icon-wrap">
             <LineIcon name="calls" :size="24" />
           </div>
-          <span class="nav-label">통화</span>
+          <span class="nav-label">{{ t('mvCall') }}</span>
         </button>
         <!-- Tab 5: 지갑 (Wallet) -->
         <button
@@ -4001,7 +4001,7 @@ onBeforeUnmount(() => {
           <div class="nav-icon-wrap">
             <LineIcon name="money" :size="24" />
           </div>
-          <span class="nav-label">지갑</span>
+          <span class="nav-label">{{ t('mvWallet') }}</span>
         </button>
         <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser?.display_name?.slice(0, 1) }}</span></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
       </nav>
@@ -4011,17 +4011,17 @@ onBeforeUnmount(() => {
     <div v-if="showQrModal" class="modal-backdrop" @click.self="showQrModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>📷 내 QR 코드 및 스캔</h3>
+          <h3>{{ t('mvMyQr') }}</h3>
           <button class="btn-modal-close" @click="showQrModal = false">✕</button>
         </div>
         <div class="modal-body-form" style="align-items:center;text-align:center;">
-          <p class="modal-subtext">상대방이 아래 QR 코드를 스캔하면 즉시 친구로 추가됩니다.</p>
+          <p class="modal-subtext">{{ t('mvQrDesc') }}</p>
           <div class="pc-qr-matrix-card" style="margin:12px auto;">
             <LineIcon name="scan" :size="96" />
           </div>
           <p class="muted">@{{ currentUser?.handle || 'luno_user' }}</p>
           <div class="modal-actions-right" style="width:100%;justify-content:center;">
-            <button class="btn-primary" @click="showQrModal = false; showAddFriendModal = true">ID로 친구 검색하기</button>
+            <button class="btn-primary" @click="showQrModal = false; showAddFriendModal = true">{{ t('mvSearchById') }}</button>
           </div>
         </div>
       </div>
@@ -4033,43 +4033,41 @@ onBeforeUnmount(() => {
         <div class="news-reader-header">
           <span class="news-reader-press">{{ activeNewsArticle.press }}</span>
           <div class="news-reader-actions">
-            <button class="btn-news-action" :title="newsBookmarks.has(activeNewsArticle.id) ? '북마크 취소' : '북마크 저장'" @click="toggleNewsBookmark(activeNewsArticle.id)">
+            <button class="btn-news-action" :title="newsBookmarks.has(activeNewsArticle.id) ? t('mvBookmarkRemove') : t('mvBookmarkSave')" @click="toggleNewsBookmark(activeNewsArticle.id)">
               {{ newsBookmarks.has(activeNewsArticle.id) ? '🔖' : '📑' }}
             </button>
-            <button class="btn-news-action" title="닫기" @click="activeNewsArticle = null">✕</button>
+            <button class="btn-news-action" :title="t('mvClose')" @click="activeNewsArticle = null">✕</button>
           </div>
         </div>
         <div class="news-reader-body">
           <img :src="activeNewsArticle.image_url" :alt="activeNewsArticle.title" class="news-reader-img" />
           <h2 class="news-reader-title">{{ activeNewsArticle.title }}</h2>
           <div class="news-reader-meta">
-            <span>{{ activeNewsArticle.published_at }}</span> · <span>조회 {{ activeNewsArticle.views || '1.2만' }}</span>
+            <span>{{ activeNewsArticle.published_at }}</span> · <span>{{ t('mvViewsLabel') }} {{ activeNewsArticle.views || t('mvViewsDefault') }}</span>
           </div>
           <div class="news-reader-content">
             <p>{{ activeNewsArticle.summary || activeNewsArticle.content }}</p>
-            <p style="margin-top: 12px; color: var(--om-text-secondary, #64748B); font-size: 13px; line-height: 1.6;">
-              본 기사는 LUNO Global News 에디토리얼 시드 콘텐츠입니다. (실시간 언론사 RSS 제휴는 운영자 결정 게이트 대상) 메신저 친구들과 기사를 공유하거나 중요한 뉴스를 북마크에 보관할 수 있습니다.
-            </p>
+            <p style="margin-top: 12px; color: var(--om-text-secondary, #64748B); font-size: 13px; line-height: 1.6;">{{ t('mvNewsSeedNote') }}</p>
           </div>
 
           <!-- News Comments Section -->
           <div class="news-comments-box" style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
-            <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">💬 독자 댓글 ({{ (newsArticleComments[activeNewsArticle.id] || []).length }})</h4>
+            <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">{{ t('mvReaderComments').replace('{n}', String((newsArticleComments[activeNewsArticle.id] || []).length)) }}</h4>
             <div v-if="(newsArticleComments[activeNewsArticle.id] || []).length" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
               <div v-for="c in newsArticleComments[activeNewsArticle.id]" :key="c.id" style="font-size: 12px; background: #f8fafc; padding: 6px 10px; border-radius: 8px;">
                 <b>{{ c.author }}</b> <span style="color:#94a3b8; font-size:11px;">{{ c.time }}</span>
                 <p style="margin-top:2px;">{{ c.text }}</p>
               </div>
             </div>
-            <div v-else style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">첫 번째 댓글을 작성해 보세요.</div>
+            <div v-else style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">{{ t('mvFirstComment') }}</div>
             <form @submit.prevent="addNewsComment(activeNewsArticle.id)" style="display:flex; gap:6px;">
-              <input v-model="newCommentInput" placeholder="댓글을 입력하세요..." style="flex:1; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px;" />
-              <button type="submit" class="btn-primary" style="padding:6px 12px; font-size:12px;">등록</button>
+              <input v-model="newCommentInput" :placeholder="t('mvCommentPh')" style="flex:1; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px;" />
+              <button type="submit" class="btn-primary" style="padding:6px 12px; font-size:12px;">{{ t('mvSubmit') }}</button>
             </form>
           </div>
         </div>
         <div class="news-reader-footer">
-          <button class="btn-share-to-chat" @click="shareNewsToChat(activeNewsArticle)">💬 대화방으로 공유하기</button>
+          <button class="btn-share-to-chat" @click="shareNewsToChat(activeNewsArticle)">{{ t('mvShareToChat') }}</button>
         </div>
       </div>
     </div>
@@ -4087,7 +4085,7 @@ onBeforeUnmount(() => {
         <h3>{{ activeCall.title }}</h3>
         <p class="call-type-status">
           {{ activeCall.kind === 'video' ? '📹 ' + t('callVideo') : '📞 ' + t('callVoice') }} ·
-          <span v-if="activeCall.state === 'ringing'">연결 중...</span>
+          <span v-if="activeCall.state === 'ringing'">{{ t('mvConnecting') }}</span>
           <span v-else-if="activeCall.state === 'connected'" class="timer-active">{{ formatDuration(callDuration) }}</span>
         </p>
 
@@ -4119,25 +4117,21 @@ onBeforeUnmount(() => {
         <!-- Call Action Buttons -->
         <div class="call-controls-row">
           <template v-if="activeCall.state === 'connected'">
-            <button class="btn-call-circle" :class="{ off: isCallMuted }" title="마이크 음소거" @click="toggleCallMute">
+            <button class="btn-call-circle" :class="{ off: isCallMuted }" :title="t('mvMicMute')" @click="toggleCallMute">
               {{ isCallMuted ? '🔇' : '🎤' }}
             </button>
-            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isCallVideoOff }" title="카메라 켜기/끄기" @click="toggleCallVideo">
+            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isCallVideoOff }" :title="t('mvCameraToggle')" @click="toggleCallVideo">
               {{ isCallVideoOff ? '🚫' : '📹' }}
             </button>
-            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isScreenSharing }" title="화면 공유" @click="toggleScreenShare">
+            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isScreenSharing }" :title="t('mvScreenShare')" @click="toggleScreenShare">
               🖥️
             </button>
-            <button class="btn-call-circle" :class="{ off: !isCallSpeakerOn }" title="스피커폰" @click="isCallSpeakerOn = !isCallSpeakerOn">
+            <button class="btn-call-circle" :class="{ off: !isCallSpeakerOn }" :title="t('mvSpeaker')" @click="isCallSpeakerOn = !isCallSpeakerOn">
               🔊
             </button>
           </template>
-          <button v-if="activeCall.state === 'ringing'" class="btn-call-answer" @click="updateCallState('connected')">
-            📞 수락
-          </button>
-          <button class="btn-call-hangup" @click="updateCallState('ended')">
-            🔴 통화 종료
-          </button>
+          <button v-if="activeCall.state === 'ringing'" class="btn-call-answer" @click="updateCallState('connected')">{{ t('mvAnswerCall') }}</button>
+          <button class="btn-call-hangup" @click="updateCallState('ended')">{{ t('mvEndCall') }}</button>
         </div>
       </div>
     </div>
@@ -4179,9 +4173,7 @@ onBeforeUnmount(() => {
           <button class="btn-profile-action" @click="startDirectChat(activeProfileUser); startCall('video'); activeProfileUser = null">
             {{ t('profileVideo') }}
           </button>
-          <button class="btn-profile-action" @click="openSendMoneyModal(activeProfileUser); activeProfileUser = null">
-            💸 송금
-          </button>
+          <button class="btn-profile-action" @click="openSendMoneyModal(activeProfileUser); activeProfileUser = null">{{ t('mvSendShort') }}</button>
         </div>
       </div>
     </div>
@@ -4190,22 +4182,22 @@ onBeforeUnmount(() => {
     <div v-if="showKeepModal" class="modal-backdrop" @click.self="showKeepModal = false">
       <div class="standard-modal-box keep-modal">
         <div class="modal-header">
-          <h3>💾 LINE Keep 보관함 ({{ keepItems.length }})</h3>
+          <h3>{{ t('mvKeepTitle').replace('{n}', String(keepItems.length)) }}</h3>
           <button class="btn-modal-close" @click="showKeepModal = false">✕</button>
         </div>
         <div class="keep-filter-bar">
-          <button :class="{ active: keepFilter === 'all' }" @click="keepFilter = 'all'">전체</button>
-          <button :class="{ active: keepFilter === 'text' }" @click="keepFilter = 'text'">텍스트</button>
-          <button :class="{ active: keepFilter === 'image' }" @click="keepFilter = 'image'">사진/미디어</button>
-          <button :class="{ active: keepFilter === 'link' }" @click="keepFilter = 'link'">링크</button>
+          <button :class="{ active: keepFilter === 'all' }" @click="keepFilter = 'all'">{{ t('tabAll') }}</button>
+          <button :class="{ active: keepFilter === 'text' }" @click="keepFilter = 'text'">{{ t('mvKeepText') }}</button>
+          <button :class="{ active: keepFilter === 'image' }" @click="keepFilter = 'image'">{{ t('mvKeepMedia') }}</button>
+          <button :class="{ active: keepFilter === 'link' }" @click="keepFilter = 'link'">{{ t('mvKeepLink') }}</button>
         </div>
-        <input v-model="keepSearch" placeholder="보관된 내용 검색..." class="keep-search-input" />
+        <input v-model="keepSearch" :placeholder="t('mvKeepSearchPh')" class="keep-search-input" />
         <div class="keep-scroll-content">
-          <p v-if="!filteredKeepItems.length" class="empty-muted">저장된 Keep 항목이 없습니다.</p>
+          <p v-if="!filteredKeepItems.length" class="empty-muted">{{ t('mvKeepEmpty') }}</p>
           <div v-for="k in filteredKeepItems" :key="k.id || k.message_id" class="keep-item-card">
             <div class="keep-item-header">
               <span class="badge-keep-type">{{ k.kind }}</span>
-              <button class="btn-delete-keep" @click="deleteFromKeep(k)">✕ 삭제</button>
+              <button class="btn-delete-keep" @click="deleteFromKeep(k)">{{ t('mvDeleteItem') }}</button>
             </div>
             <div class="keep-body-text">{{ k.body }}</div>
             <small class="muted">{{ new Date(k.created_at).toLocaleString('ko-KR') }}</small>
@@ -4218,27 +4210,27 @@ onBeforeUnmount(() => {
     <div v-if="showSendMoneyModal" class="modal-backdrop" @click.self="showSendMoneyModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>💸 LUNO Pay 간편 송금 (모의 송금 / Sandbox)</h3>
+          <h3>{{ t('mvSendMoneyTitle') }}</h3>
           <button class="btn-modal-close" @click="showSendMoneyModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <p class="muted" style="margin: 0; font-size: 11.5px; color: #64748b;">* 본 기능은 샌드박스 모의 송금이며 실제 금융 자산이 이동하지 않습니다.</p>
+          <p class="muted" style="margin: 0; font-size: 11.5px; color: #64748b;">{{ t('mvSandboxNotice') }}</p>
           <div v-if="sendTargetFriend" class="send-target-info">
-            받는 사람: <strong>{{ sendTargetFriend.display_name }}</strong>
+            {{ t('mvSendTo') }} <strong>{{ sendTargetFriend.display_name }}</strong>
           </div>
-          <label>송금 금액 (원)</label>
+          <label>{{ t('mvSendAmount') }}</label>
           <input v-model.number="sendAmountInput" type="number" min="1000" step="1000" />
           <div class="quick-amounts">
-            <button @click="sendAmountInput = 10000">+1만</button>
-            <button @click="sendAmountInput = 30000">+3만</button>
-            <button @click="sendAmountInput = 50000">+5만</button>
-            <button @click="sendAmountInput = 100000">+10만</button>
+            <button @click="sendAmountInput = 10000">{{ t('mvPlus10k') }}</button>
+            <button @click="sendAmountInput = 30000">{{ t('mvPlus30k') }}</button>
+            <button @click="sendAmountInput = 50000">{{ t('mvPlus50k') }}</button>
+            <button @click="sendAmountInput = 100000">{{ t('mvPlus100k') }}</button>
           </div>
-          <label>보내는 메모</label>
-          <input v-model="sendMemoInput" placeholder="메모 입력" />
+          <label>{{ t('mvSendMemo') }}</label>
+          <input v-model="sendMemoInput" :placeholder="t('mvMemoPh')" />
           <div class="modal-actions-right">
-            <button class="btn-secondary" @click="showSendMoneyModal = false">취소</button>
-            <button class="btn-primary" @click="executeSendMoney">모의 송금하기</button>
+            <button class="btn-secondary" @click="showSendMoneyModal = false">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" @click="executeSendMoney">{{ t('mvMockSend') }}</button>
           </div>
         </div>
       </div>
@@ -4248,17 +4240,17 @@ onBeforeUnmount(() => {
     <div v-if="showChargeModal" class="modal-backdrop" @click.self="showChargeModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>➕ LUNO Pay 잔액 충전</h3>
+          <h3>{{ t('mvChargeTitle') }}</h3>
           <button class="btn-modal-close" @click="showChargeModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <p>충전할 금액을 선택하세요:</p>
-          <p class="ln-charge-notice" role="note">실제 결제(PG) 연동 전까지 충전이 비활성화되어 있습니다. 지갑 간 송금은 정상 동작합니다.</p>
+          <p>{{ t('mvChargePick') }}</p>
+          <p class="ln-charge-notice" role="note">{{ t('mvChargeNotice') }}</p>
           <div class="charge-options-grid">
-            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 10,000원</button>
-            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 30,000원</button>
-            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 50,000원</button>
-            <button class="btn-charge-option" disabled title="PG 연동 전에는 충전할 수 없습니다">+ 100,000원</button>
+            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge10k') }}</button>
+            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge30k') }}</button>
+            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge50k') }}</button>
+            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge100k') }}</button>
           </div>
         </div>
       </div>
@@ -4268,21 +4260,21 @@ onBeforeUnmount(() => {
     <div v-if="showPollCreateModal" class="modal-backdrop" @click.self="showPollCreateModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>📊 대화방 새 투표 만들기</h3>
+          <h3>{{ t('mvPollTitle') }}</h3>
           <button class="btn-modal-close" @click="showPollCreateModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <label>질문</label>
-          <input v-model="newPollQuestion" placeholder="예: 오늘 점심 메뉴는?" />
-          <label>선택지 1</label>
-          <input v-model="newPollOption1" placeholder="선택지 1" />
-          <label>선택지 2</label>
-          <input v-model="newPollOption2" placeholder="선택지 2" />
-          <label>선택지 3 (선택)</label>
-          <input v-model="newPollOption3" placeholder="선택지 3" />
+          <label>{{ t('mvPollQ') }}</label>
+          <input v-model="newPollQuestion" :placeholder="t('mvPollQPh')" />
+          <label>{{ t('mvOpt1') }}</label>
+          <input v-model="newPollOption1" :placeholder="t('mvOpt1')" />
+          <label>{{ t('mvOpt2') }}</label>
+          <input v-model="newPollOption2" :placeholder="t('mvOpt2')" />
+          <label>{{ t('mvOpt3') }}</label>
+          <input v-model="newPollOption3" :placeholder="t('mvOpt3Ph')" />
           <div class="modal-actions-right">
-            <button class="btn-secondary" @click="showPollCreateModal = false">취소</button>
-            <button class="btn-primary" @click="createPoll">투표 등록</button>
+            <button class="btn-secondary" @click="showPollCreateModal = false">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" @click="createPoll">{{ t('mvPollSubmit') }}</button>
           </div>
         </div>
       </div>
@@ -4292,19 +4284,19 @@ onBeforeUnmount(() => {
     <div v-if="showEventCreateModal" class="modal-backdrop" @click.self="showEventCreateModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>📅 대화방 일정 잡기</h3>
+          <h3>{{ t('mvEventTitle') }}</h3>
           <button class="btn-modal-close" @click="showEventCreateModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <label>일정 제목</label>
-          <input v-model="newEventTitle" placeholder="예: 팀 주간 싱크 미팅" />
-          <label>날짜 및 시간</label>
+          <label>{{ t('mvEventName') }}</label>
+          <input v-model="newEventTitle" :placeholder="t('mvEventNamePh')" />
+          <label>{{ t('mvEventWhen') }}</label>
           <input v-model="newEventDate" type="datetime-local" />
-          <label>장소 / 링크</label>
-          <input v-model="newEventLocation" placeholder="예: 구글 미트 / 강남역" />
+          <label>{{ t('mvEventWhere') }}</label>
+          <input v-model="newEventLocation" :placeholder="t('mvEventWherePh')" />
           <div class="modal-actions-right">
-            <button class="btn-secondary" @click="showEventCreateModal = false">취소</button>
-            <button class="btn-primary" @click="createEvent">일정 등록</button>
+            <button class="btn-secondary" @click="showEventCreateModal = false">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" @click="createEvent">{{ t('mvAddEvent') }}</button>
           </div>
         </div>
       </div>
@@ -4354,22 +4346,18 @@ onBeforeUnmount(() => {
           <div class="setting-group">
             <strong>🔤 {{ t('fontScaleLabel') }}</strong>
             <div class="font-scale-buttons">
-              <button class="btn-scale-chip" :class="{ active: fontScale === 'normal' }" @click="setFontScale('normal')">보통 (100%)</button>
-              <button class="btn-scale-chip" :class="{ active: fontScale === 'large' }" @click="setFontScale('large')">크게 (112%)</button>
-              <button class="btn-scale-chip" :class="{ active: fontScale === 'xlarge' }" @click="setFontScale('xlarge')">아주 크게 (125%)</button>
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'normal' }" @click="setFontScale('normal')">{{ t('mvFontNormal') }}</button>
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'large' }" @click="setFontScale('large')">{{ t('mvFontLarge') }}</button>
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'xlarge' }" @click="setFontScale('xlarge')">{{ t('mvFontXLarge') }}</button>
             </div>
           </div>
 
           <!-- 4. Design Theme & Dark Mode (Article 4 & 4.5) -->
           <div class="setting-group">
-            <strong>🎨 디자인 모드</strong>
+            <strong>{{ t('mvDesignMode') }}</strong>
             <div class="theme-choice-buttons">
-              <button class="btn-theme-swatch default" :class="{ active: !isDarkMode }" @click="enableLightMode">
-                🔵 LUNO Blue (라이트)
-              </button>
-              <button class="btn-theme-swatch dark" :class="{ active: isDarkMode }" @click="enableDarkMode">
-                🌙 LUNO Deep (다크)
-              </button>
+              <button class="btn-theme-swatch default" :class="{ active: !isDarkMode }" @click="enableLightMode">{{ t('mvThemeLightSwatch') }}</button>
+              <button class="btn-theme-swatch dark" :class="{ active: isDarkMode }" @click="enableDarkMode">{{ t('mvThemeDarkSwatch') }}</button>
             </div>
           </div>
 
@@ -4377,37 +4365,37 @@ onBeforeUnmount(() => {
           <div class="setting-group">
             <strong>🛡️ {{ t('securitySection') }}</strong>
             <div class="setting-toggle-row">
-              <span>연결 및 저장소 보안</span>
-              <span class="badge-status-on">서버 검증 필요</span>
+              <span>{{ t('mvConnSecurity') }}</span>
+              <span class="badge-status-on">{{ t('mvServerVerify') }}</span>
             </div>
             <div class="setting-toggle-row">
-              <span>👀 읽음 확인 표시 (Read Receipts)</span>
+              <span>{{ t('mvReadReceipts') }}</span>
               <input type="checkbox" checked />
             </div>
             <div class="setting-toggle-row">
-              <span>🔔 메시지 수신 사운드 알림</span>
+              <span>{{ t('mvSoundNotif') }}</span>
               <input type="checkbox" checked />
             </div>
             <!-- Phase 1: Push Notifications -->
             <div class="setting-toggle-row">
-              <span>🔔 WebPush / FCM 푸시 알림</span>
-              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="testPushNotification">테스트 발송</button>
+              <span>{{ t('mvPushNotif') }}</span>
+              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="testPushNotification">{{ t('mvTestSend') }}</button>
             </div>
 
             <!-- Phase 2: E2EE Key Management -->
             <div class="setting-toggle-row">
-              <span>실험적 암호화 키 관리</span>
+              <span>{{ t('mvKeyMgmt') }}</span>
               <span class="muted">{{ t('e2ee_preparing') }}</span>
             </div>
           </div>
 
           <!-- Phase 6: GDPR Data Portability & Deletion -->
           <div class="setting-group" style="margin-top:8px">
-            <strong>📂 데이터 백업 및 프라이버시 (GDPR)</strong>
-            <input v-model="deletePasswordInput" type="password" autocomplete="current-password" placeholder="계정 삭제를 위해 비밀번호 입력" aria-label="계정 삭제 확인용 비밀번호" class="pc-login-input" style="margin:2px 0 6px" />
+            <strong>{{ t('mvBackupPrivacy') }}</strong>
+            <input v-model="deletePasswordInput" type="password" autocomplete="current-password" :placeholder="t('mvDeletePwPh')" :aria-label="t('mvDeletePwAria')" class="pc-login-input" style="margin:2px 0 6px" />
             <div class="flex-row" style="margin-top:6px;gap:8px">
-              <button class="btn-secondary" style="flex:1" @click="exportUserDataArchive">💾 대화 데이터 백업 (JSON)</button>
-              <button class="btn-secondary" style="flex:1;color:#ef4444" @click="deleteUserAccount">⚠️ 계정 영구 삭제</button>
+              <button class="btn-secondary" style="flex:1" @click="exportUserDataArchive">{{ t('mvBackupData') }}</button>
+              <button class="btn-secondary" style="flex:1;color:#ef4444" @click="deleteUserAccount">{{ t('mvDeleteAccount') }}</button>
             </div>
           </div>
 
@@ -4424,52 +4412,52 @@ onBeforeUnmount(() => {
           </form>
 
           <div class="setting-group" style="margin-top:8px">
-            <strong>📱 PC/웹 QR 로그인 승인</strong>
+            <strong>{{ t('mvQrApproveTitle') }}</strong>
             <div class="flex-row" style="margin-top:6px">
               <input v-model="approveChallengeInput" placeholder="Challenge ID" style="flex:1" />
               <input v-model="approveTokenInput" placeholder="QR Token" style="flex:1" />
-              <button class="btn-secondary" @click="approveQrLogin">승인</button>
+              <button class="btn-secondary" @click="approveQrLogin">{{ t('mvApprove') }}</button>
             </div>
           </div>
 
           <div v-if="devicesList.length" class="setting-group" style="margin-top:8px">
-            <strong>💻 로그인된 기기 관리 ({{ devicesList.length }})</strong>
+            <strong>{{ t('mvDevicesTitle').replace('{n}', String(devicesList.length)) }}</strong>
             <div v-for="dv in devicesList" :key="dv.id" class="setting-toggle-row">
               <span>{{ dv.name }} ({{ dv.platform }})</span>
-              <button class="btn-delete-keep" @click="revokeDevice(dv.id)">해제</button>
+              <button class="btn-delete-keep" @click="revokeDevice(dv.id)">{{ t('mvRevoke') }}</button>
             </div>
           </div>
 
           <div class="setting-group" style="margin-top:12px; background: #eaf1ff; padding: 12px; border-radius: 12px; border: 1px solid #d9e1ec;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <div>
-                <strong style="color:#315BCD; font-size:13px;">📱 LUNO 모바일 네이티브 앱 (Android)</strong>
-                <p style="font-size:11px; color:#5b6475; margin-top:2px;">Android 앱 다운로드 및 빌드 정보</p>
+                <strong style="color:#315BCD; font-size:13px;">{{ t('mvMobileApp') }}</strong>
+                <p style="font-size:11px; color:#5b6475; margin-top:2px;">{{ t('mvMobileAppDesc') }}</p>
               </div>
-              <a href="./download.html" target="_blank" class="btn-primary" style="text-decoration:none; font-size:12px; padding:6px 12px; display:inline-block;">APK 다운로드</a>
+              <a href="./download.html" target="_blank" class="btn-primary" style="text-decoration:none; font-size:12px; padding:6px 12px; display:inline-block;">{{ t('mvApkDownload') }}</a>
             </div>
           </div>
 
           <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
-            <strong>📄 약관 및 개인정보</strong>
+            <strong>{{ t('mvLegal') }}</strong>
             <div style="margin-top:4px; display:flex; gap:12px;">
-              <a href="./legal/terms.html" target="_blank" rel="noopener">이용약관</a>
-              <a href="./legal/privacy.html" target="_blank" rel="noopener">개인정보처리방침</a>
+              <a href="./legal/terms.html" target="_blank" rel="noopener">{{ t('mvTerms') }}</a>
+              <a href="./legal/privacy.html" target="_blank" rel="noopener">{{ t('mvPrivacy') }}</a>
             </div>
           </div>
 
           <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
-            <strong>ℹ️ 버전 및 빌드 정보</strong>
+            <strong>{{ t('mvVersionInfo') }}</strong>
             <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
               <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '—' }}</span>
-              <span><b>Git Commit:</b> <code>{{ appVersion.commit || '확인 중…' }}</code></span>
+              <span><b>Git Commit:</b> <code>{{ appVersion.commit || t('checkingText') }}</code></span>
               <span><b>Build Time:</b> {{ appVersion.build_time || '—' }}</span>
               <span><b>Environment:</b> {{ appVersion.env || '—' }}</span>
             </div>
           </div>
 
           <div class="modal-actions-right">
-            <button class="btn-primary" @click="showSettingsModal = false">완료</button>
+            <button class="btn-primary" @click="showSettingsModal = false">{{ t('mvDone') }}</button>
           </div>
         </div>
       </div>
@@ -4488,20 +4476,20 @@ onBeforeUnmount(() => {
     <div v-if="showPasswordModal" class="modal-backdrop" @click.self="showPasswordModal = false">
       <div class="standard-modal-box password-modal" style="max-width: 420px; width: 92vw;">
         <div class="modal-header">
-          <h3>🔐 비밀번호 변경</h3>
+          <h3>{{ t('mvPwChangeTitle') }}</h3>
           <button class="btn-modal-close" @click="showPasswordModal = false">✕</button>
         </div>
         <form class="modal-body-form" @submit.prevent="submitPasswordChange">
           <p v-if="passwordChangeError" class="error-text" style="color: #ef4444; font-size: 12px; margin: 0;">{{ passwordChangeError }}</p>
-          <label>현재 비밀번호</label>
-          <input v-model="currentPasswordInput" type="password" placeholder="현재 비밀번호를 입력하세요" required />
-          <label>새 비밀번호 (12자 이상)</label>
-          <input v-model="newPasswordInput" type="password" placeholder="새 비밀번호를 입력하세요" required minlength="12" />
-          <label>새 비밀번호 확인</label>
-          <input v-model="confirmPasswordInput" type="password" placeholder="새 비밀번호를 한 번 더 입력하세요" required minlength="12" />
+          <label>{{ t('mvPwCurrent') }}</label>
+          <input v-model="currentPasswordInput" type="password" :placeholder="t('mvPwCurrentPh')" required />
+          <label>{{ t('mvPwNew') }}</label>
+          <input v-model="newPasswordInput" type="password" :placeholder="t('mvPwNewPh')" required minlength="12" />
+          <label>{{ t('mvPwConfirm') }}</label>
+          <input v-model="confirmPasswordInput" type="password" :placeholder="t('mvPwConfirmPh')" required minlength="12" />
           <div class="modal-actions-right" style="margin-top: 14px;">
-            <button type="button" class="btn-secondary" @click="showPasswordModal = false">취소</button>
-            <button type="submit" class="btn-primary">비밀번호 변경</button>
+            <button type="button" class="btn-secondary" @click="showPasswordModal = false">{{ t('mvCancel') }}</button>
+            <button type="submit" class="btn-primary">{{ t('mvPwChange') }}</button>
           </div>
         </form>
       </div>
@@ -4511,15 +4499,15 @@ onBeforeUnmount(() => {
     <div v-if="showNewStoryModal" class="modal-backdrop" @click.self="showNewStoryModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>📷 내 24시간 스토리 올리기</h3>
+          <h3>{{ t('mvStoryTitle') }}</h3>
           <button class="btn-modal-close" @click="showNewStoryModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <label>스토리 텍스트</label>
-          <input v-model="newStoryText" placeholder="오늘의 순간을 공유하세요..." @keydown.enter.prevent="publishStory" />
+          <label>{{ t('mvStoryText') }}</label>
+          <input v-model="newStoryText" :placeholder="t('mvStoryPh')" @keydown.enter.prevent="publishStory" />
           <div class="modal-actions-right">
-            <button class="btn-secondary" @click="showNewStoryModal = false">취소</button>
-            <button class="btn-primary" @click="publishStory">게시하기</button>
+            <button class="btn-secondary" @click="showNewStoryModal = false">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" @click="publishStory">{{ t('mvPublish') }}</button>
           </div>
         </div>
       </div>
@@ -4529,15 +4517,15 @@ onBeforeUnmount(() => {
     <div v-if="showVoomCreateModal" class="modal-backdrop" @click.self="showVoomCreateModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>🎬 새 LINE VOOM 포스트</h3>
+          <h3>{{ t('mvVoomTitle') }}</h3>
           <button class="btn-modal-close" @click="showVoomCreateModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <label>포스트 내용</label>
-          <input v-model="newVoomBody" placeholder="VOOM 영상/포스트 설명 입력..." @keydown.enter.prevent="createVoomPost" />
+          <label>{{ t('mvVoomBody') }}</label>
+          <input v-model="newVoomBody" :placeholder="t('mvVoomPh')" @keydown.enter.prevent="createVoomPost" />
           <div class="modal-actions-right">
-            <button class="btn-secondary" @click="showVoomCreateModal = false">취소</button>
-            <button class="btn-primary" @click="createVoomPost">게시하기</button>
+            <button class="btn-secondary" @click="showVoomCreateModal = false">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" @click="createVoomPost">{{ t('mvPublish') }}</button>
           </div>
         </div>
       </div>
@@ -4547,17 +4535,17 @@ onBeforeUnmount(() => {
     <div v-if="showCreateOpenChatModal" class="modal-backdrop" @click.self="showCreateOpenChatModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>🌐 새 오픈채팅방 만들기</h3>
+          <h3>{{ t('mvOpenChatTitle') }}</h3>
           <button class="btn-modal-close" @click="showCreateOpenChatModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <label>오픈채팅방 이름</label>
-          <input v-model="newOpenChatRoomName" placeholder="예: 판교 러닝 크루" />
-          <label>설명</label>
-          <input v-model="newOpenChatRoomDesc" placeholder="자유롭게 소개를 입력하세요" />
+          <label>{{ t('mvOpenChatName') }}</label>
+          <input v-model="newOpenChatRoomName" :placeholder="t('mvOpenChatNamePh')" />
+          <label>{{ t('mvDesc') }}</label>
+          <input v-model="newOpenChatRoomDesc" :placeholder="t('mvDescPh')" />
           <div class="modal-actions-right">
-            <button class="btn-secondary" @click="showCreateOpenChatModal = false">취소</button>
-            <button class="btn-primary" @click="createOpenChatRoom">개설하기</button>
+            <button class="btn-secondary" @click="showCreateOpenChatModal = false">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" @click="createOpenChatRoom">{{ t('mvCreateRoom') }}</button>
           </div>
         </div>
       </div>
@@ -4567,13 +4555,13 @@ onBeforeUnmount(() => {
     <div v-if="showCreateGroupModal" class="modal-backdrop" @click.self="showCreateGroupModal = false">
       <div class="standard-modal-box">
         <div class="modal-header">
-          <h3>👥 새 그룹 채팅방 만들기</h3>
+          <h3>{{ t('mvGroupTitle') }}</h3>
           <button class="btn-modal-close" @click="showCreateGroupModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <label>그룹 이름</label>
-          <input v-model="groupTitleInput" placeholder="그룹 채팅방 이름을 입력하세요" />
-          <label>초대할 친구 선택 ({{ selectedFriendsForGroup.length }}명 선택됨)</label>
+          <label>{{ t('mvGroupName') }}</label>
+          <input v-model="groupTitleInput" :placeholder="t('mvGroupNamePh')" />
+          <label>{{ t('mvGroupInvite').replace('{n}', String(selectedFriendsForGroup.length)) }}</label>
           <div class="select-friends-scroll">
             <label v-for="f in friends" :key="f.id" class="friend-check-item">
               <input v-model="selectedFriendsForGroup" type="checkbox" :value="f.id" />
@@ -4581,10 +4569,8 @@ onBeforeUnmount(() => {
             </label>
           </div>
           <div class="modal-actions-right">
-            <button class="btn-secondary" @click="showCreateGroupModal = false">취소</button>
-            <button class="btn-primary" :disabled="!groupTitleInput.trim() || !selectedFriendsForGroup.length" @click="createGroupChat">
-              그룹 생성
-            </button>
+            <button class="btn-secondary" @click="showCreateGroupModal = false">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" :disabled="!groupTitleInput.trim() || !selectedFriendsForGroup.length" @click="createGroupChat">{{ t('mvCreateGroup') }}</button>
           </div>
         </div>
       </div>
@@ -4594,29 +4580,29 @@ onBeforeUnmount(() => {
     <div v-if="showAddFriendModal" class="modal-backdrop" @click.self="showAddFriendModal = false">
       <div class="standard-modal-box add-friend-modal">
         <div class="modal-header">
-          <h3>➕ {{ t('navFriends') }} 추가</h3>
+          <h3>➕ {{ t('mvAddFriend') }}</h3>
           <button class="btn-modal-close" @click="showAddFriendModal = false">✕</button>
         </div>
         <div class="modal-body-form">
-          <p class="modal-subtext">Open Scanner 생태계의 친구를 ID, 이메일, 전화번호로 검색하여 추가하세요.</p>
-          <label>사용자 ID 또는 이메일 검색</label>
+          <p class="modal-subtext">{{ t('mvAddFriendDesc') }}</p>
+          <label>{{ t('mvIdSearchLabel') }}</label>
           <div class="flex-row">
-            <input v-model="addFriendHandleInput" placeholder="예: alice_kim 또는 alice@line-test.local" @keydown.enter.prevent="addFriendByHandle" />
-            <button class="btn-primary" @click="addFriendByHandle">추가</button>
+            <input v-model="addFriendHandleInput" :placeholder="t('mvIdSearchPh')" @keydown.enter.prevent="addFriendByHandle" />
+            <button class="btn-primary" @click="addFriendByHandle">{{ t('mvAdd') }}</button>
           </div>
           <div class="add-friend-quick-options">
             <div class="quick-opt-item">
               <span class="icon">📱</span>
               <div>
-                <strong>QR 코드로 친구 추가</strong>
-                <small>모바일 카메라로 상대방 QR 코드를 스캔하세요.</small>
+                <strong>{{ t('mvAddByQr') }}</strong>
+                <small>{{ t('mvAddByQrDesc') }}</small>
               </div>
             </div>
             <div class="quick-opt-item">
               <span class="icon">🔗</span>
               <div>
-                <strong>초대 링크 공유</strong>
-                <small>초대 링크를 생성하여 친구를 메신저로 초대합니다.</small>
+                <strong>{{ t('mvInviteLink') }}</strong>
+                <small>{{ t('mvInviteLinkDesc') }}</small>
               </div>
             </div>
           </div>
@@ -4628,7 +4614,7 @@ onBeforeUnmount(() => {
     <div v-if="showNewChatModal" class="modal-backdrop" @click.self="showNewChatModal = false">
       <div class="standard-modal-box new-chat-modal">
         <div class="modal-header">
-          <h3>💬 새 대화 시작</h3>
+          <h3>{{ t('mvNewConvo') }}</h3>
           <button class="btn-modal-close" @click="showNewChatModal = false">✕</button>
         </div>
         <div class="modal-body-form">
@@ -4636,20 +4622,20 @@ onBeforeUnmount(() => {
             <button class="btn-new-chat-type" @click="showNewChatModal = false; showCreateGroupModal = true">
               <span class="type-icon">👥</span>
               <div class="type-text">
-                <strong>그룹 대화방 만들기</strong>
-                <small>여러 친구를 한 번에 초대하여 그룹 대화를 나눕니다.</small>
+                <strong>{{ t('mvMakeGroup') }}</strong>
+                <small>{{ t('mvMakeGroupDesc') }}</small>
               </div>
             </button>
             <button class="btn-new-chat-type" @click="showNewChatModal = false; activeNav = 'openchat'">
               <span class="type-icon">🌐</span>
               <div class="type-text">
-                <strong>오픈채팅 참여하기</strong>
-                <small>공통 관심사 주제의 대화방을 둘러보고 대화에 참여합니다.</small>
+                <strong>{{ t('mvJoinOpenChat') }}</strong>
+                <small>{{ t('mvJoinOpenChatDesc') }}</small>
               </div>
             </button>
           </div>
 
-          <label style="margin-top: 14px;">친구 목록에서 1:1 대화 시작</label>
+          <label style="margin-top: 14px;">{{ t('mvStartDirectDesc') }}</label>
           <div class="select-friends-scroll" style="max-height: 180px;">
             <div
               v-for="f in friends"
@@ -4664,7 +4650,7 @@ onBeforeUnmount(() => {
                 <strong>{{ f.display_name }}</strong>
                 <small>{{ f.status_message || f.bio || 'Open Messenger' }}</small>
               </div>
-              <button class="btn-mini-chat">대화</button>
+              <button class="btn-mini-chat">{{ t('mvChats') }}</button>
             </div>
           </div>
         </div>
@@ -4677,14 +4663,12 @@ onBeforeUnmount(() => {
         <div class="modal-header">
           <div class="ecosystem-modal-title">
             <LineIcon name="open-messenger-logo" :size="24" />
-            <h3>Open Scanner 생태계 서비스 센터</h3>
+            <h3>{{ t('mvEcoTitle') }}</h3>
           </div>
           <button class="btn-modal-close" @click="showEcosystemHub = false">✕</button>
         </div>
         <div class="modal-body-form ecosystem-body">
-          <p class="ecosystem-intro">
-            Open Messenger는 Open Scanner 생태계의 모든 서비스를 연결하는 중앙 허브입니다.
-          </p>
+          <p class="ecosystem-intro">{{ t('mvEcoIntro') }}</p>
           <div class="ecosystem-cards-grid">
             <div
               v-for="svc in ECOSYSTEM_SERVICES"
@@ -4709,16 +4693,14 @@ onBeforeUnmount(() => {
                   :href="svc.actionUrl"
                   target="_blank"
                   class="btn-svc-action link"
-                >
-                  콘솔 열기 ↗
-                </a>
+                >{{ t('mvOpenConsole') }}</a>
                 <button
                   v-else
                   type="button"
                   class="btn-svc-action"
                   @click="openEcosystemService(svc.id); showEcosystemHub = false"
                 >
-                  {{ svc.status === 'preview' ? '준비 중 안내' : '실행하기' }}
+                  {{ svc.status === 'preview' ? t('mvPreviewGuide') : t('mvRunService') }}
                 </button>
               </div>
             </div>

@@ -2,6 +2,14 @@
 import LunoThemeToggle from '../../shared/LunoThemeToggle.vue'
 import { ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
+import { consoleT, detectConsoleLocale, setConsoleLocale, type ConsoleLocale } from '../../shared/console-i18n'
+
+const locale = ref<ConsoleLocale>(detectConsoleLocale())
+const t = (key: string, params?: Record<string, string | number>) => consoleT(locale.value, key, params)
+function toggleLocale() {
+  locale.value = locale.value === 'ko' ? 'en' : 'ko'
+  setConsoleLocale(locale.value)
+}
 
 type Org = { id: string; name: string; state: string; my_role: string }
 type Account = { id: string; name: string; status: string }
@@ -43,16 +51,16 @@ const newTicketContactID = ref(''), newTicketNote = ref(''), newTicketPrio = ref
 const newCampaignName = ref('')
 const newCouponCode = ref(''), newCouponRedemptions = ref(50)
 
-// Rich Menu state
-const richMenuTitle = ref('공식 채널 종합 리치 메뉴')
+// Rich Menu state (seed tiles localize once at init; the merchant then edits them as content)
+const richMenuTitle = ref(t('partner.seedTitle'))
 const richMenuLayout = ref<'grid_2x3' | 'grid_1x3'>('grid_2x3')
 const richMenuTiles = ref<RichMenuTile[]>([
-  { id: 't1', label: '📢 최신 공지', icon: '📢', action: { type: 'message', text: '공지사항' } },
-  { id: 't2', label: '💬 고객 상담', icon: '💬', action: { type: 'message', text: '상담' } },
-  { id: 't3', label: '🔒 보안 센터', icon: '🔒', action: { type: 'message', text: '보안 안내' } },
-  { id: 't4', label: '🎁 진행 이벤트', icon: '🎁', action: { type: 'message', text: '이벤트' } },
-  { id: 't5', label: '❓ 자주 묻는 질문', icon: '❓', action: { type: 'message', text: '도움말' } },
-  { id: 't6', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: 'https://line-messenger.dnjstjqppk.workers.dev' } },
+  { id: 't1', label: t('partner.seed1L'), icon: '📢', action: { type: 'message', text: t('partner.seed1T') } },
+  { id: 't2', label: t('partner.seed2L'), icon: '💬', action: { type: 'message', text: t('partner.seed2T') } },
+  { id: 't3', label: t('partner.seed3L'), icon: '🔒', action: { type: 'message', text: t('partner.seed3T') } },
+  { id: 't4', label: t('partner.seed4L'), icon: '🎁', action: { type: 'message', text: t('partner.seed4T') } },
+  { id: 't5', label: t('partner.seed5L'), icon: '❓', action: { type: 'message', text: t('partner.seed5T') } },
+  { id: 't6', label: t('partner.seed6L'), icon: '🌐', action: { type: 'uri', uri: 'https://line-messenger.dnjstjqppk.workers.dev' } },
 ])
 const selectedTileIndex = ref(0)
 
@@ -87,7 +95,7 @@ async function createOrg() {
     await request('/api/v1/partner/organizations', token.value, 'POST', { name: orgName.value, legal_name: orgName.value, country: country.value })
     orgName.value = ''
     await loadOrgs()
-    note.value = '기업 조직이 생성되었습니다.'
+    note.value = t('partner.orgCreated')
   })
 }
 
@@ -110,7 +118,7 @@ async function createAccount() {
     await request(`/api/v1/partner/organizations/${selectedOrg.value}/accounts`, token.value, 'POST', { name: accountName.value, description: '' })
     accountName.value = ''
     await selectOrg(selectedOrg.value)
-    note.value = '공식계정이 생성되었습니다.'
+    note.value = t('partner.accountCreated')
   })
 }
 
@@ -150,7 +158,7 @@ async function loadRichMenu() {
 
 async function saveRichMenu() {
   await run(async () => {
-    if (!accountReady.value || accountLoading.value) throw new Error('선택한 계정의 설정을 먼저 불러오세요.')
+    if (!accountReady.value || accountLoading.value) throw new Error(t('partner.loadFirst'))
     const tilesToSave = richMenuLayout.value === 'grid_1x3' ? richMenuTiles.value.slice(0, 3) : richMenuTiles.value
     await request(`/api/v1/partner/accounts/${selectedAccount.value}/rich-menus`, token.value, 'POST', {
       title: richMenuTitle.value.trim(),
@@ -158,7 +166,7 @@ async function saveRichMenu() {
       tiles: tilesToSave,
       enabled: true,
     })
-    note.value = 'Rich Menu 설정을 저장했습니다.'
+    note.value = t('partner.rmSaved')
   })
 }
 
@@ -171,9 +179,9 @@ function switchLayout(layout: 'grid_2x3' | 'grid_1x3') {
       const idx = richMenuTiles.value.length + 1
       richMenuTiles.value.push({
         id: `t${idx}`,
-        label: `버튼 ${idx}`,
+        label: t('partner.btnN', { n: idx }),
         icon: '📌',
-        action: { type: 'message', text: `버튼 ${idx}` }
+        action: { type: 'message', text: t('partner.btnN', { n: idx }) }
       })
     }
   }
@@ -189,7 +197,7 @@ async function loadBotRules() {
 async function createBotRule() {
   await run(async () => {
     const kw = newBotKeywords.value.split(',').map(s => s.trim()).filter(Boolean)
-    if (!kw.length || !newBotReply.value.trim()) throw new Error('키워드와 답변 내용을 모두 입력하세요.')
+    if (!kw.length || !newBotReply.value.trim()) throw new Error(t('partner.ruleNeedBoth'))
     await request(`/api/v1/partner/accounts/${selectedAccount.value}/bot-rules`, token.value, 'POST', {
       keywords: kw,
       reply: newBotReply.value.trim(),
@@ -198,7 +206,7 @@ async function createBotRule() {
     newBotKeywords.value = ''
     newBotReply.value = ''
     await loadBotRules()
-    note.value = '챗봇 자동응답 룰이 추가되었습니다.'
+    note.value = t('partner.ruleAdded')
   })
 }
 
@@ -206,20 +214,20 @@ async function deleteBotRule(id: string) {
   await run(async () => {
     await request(`/api/v1/partner/accounts/${selectedAccount.value}/bot-rules/${id}`, token.value, 'DELETE')
     await loadBotRules()
-    note.value = '자동응답 룰이 삭제되었습니다.'
+    note.value = t('partner.ruleDeleted')
   })
 }
 
 function runSimulator() {
   if (!simInput.value.trim()) return
-  const t = simInput.value.trim().toLowerCase()
+  const q = simInput.value.trim().toLowerCase()
   for (const r of botRules.value) {
-    if (r.keywords && r.keywords.some(k => t.includes(k.toLowerCase()))) {
+    if (r.keywords && r.keywords.some(k => q.includes(k.toLowerCase()))) {
       simOutput.value = r.reply
       return
     }
   }
-  simOutput.value = `[기본 응답] 메시지를 전달받았습니다. 하단 리치 메뉴를 누르시거나 '도움말'을 입력해 보세요.`
+  simOutput.value = t('partner.simDefault')
 }
 
 async function createTicket() {
@@ -231,7 +239,7 @@ async function createTicket() {
     })
     newTicketContactID.value = ''; newTicketNote.value = ''
     await loadTickets()
-    note.value = '고객 상담 티켓이 접수되었습니다.'
+    note.value = t('partner.ticketCreated')
   })
 }
 
@@ -239,10 +247,10 @@ async function createCampaign() {
   await run(async () => {
     await request(`/api/v1/partner/accounts/${selectedAccount.value}/campaigns`, token.value, 'POST', {
       name: newCampaignName.value.trim(),
-      message_template: { text: '공식계정 프로모션 알림' },
+      message_template: { text: t('partner.campTemplate') },
     })
     newCampaignName.value = ''
-    note.value = '브로드캐스트 메시지 캠페인이 등록되었습니다.'
+    note.value = t('partner.campCreated')
   })
 }
 
@@ -253,7 +261,7 @@ async function createCoupon() {
       max_redemptions: newCouponRedemptions.value,
     })
     newCouponCode.value = ''
-    note.value = '할인 쿠폰이 발급되었습니다.'
+    note.value = t('partner.couponCreated')
   })
 }
 </script>
@@ -261,42 +269,43 @@ async function createCoupon() {
 <template>
   <div class="wrap page">
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding:10px 14px;background:#fff;border-radius:10px;font-size:13px;align-items:center;border:1px solid #e0e8ee">
-      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
+      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.home') }}</a>
       <span style="color:#ccc">|</span>
-      <a href="../admin/" style="text-decoration:none;color:#334155;font-weight:600">👑 관리자</a>
-      <a href="../partner/" style="text-decoration:none;color:#315BCD;font-weight:700">🏢 파트너</a>
-      <a href="../developer/" style="text-decoration:none;color:#334155;font-weight:600">💻 개발자</a>
-      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">🎨 크리에이터</a>
-      <a href="../ads/" style="text-decoration:none;color:#334155;font-weight:600">📢 광고주</a>
-      <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
+      <a href="../admin/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.admin') }}</a>
+      <a href="../partner/" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.partner') }}</a>
+      <a href="../developer/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.developer') }}</a>
+      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.creator') }}</a>
+      <a href="../ads/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.ads') }}</a>
+      <button @click="toggleLocale" style="margin-left:auto;padding:4px 8px;font-size:12px">{{ t('nav.lang') }}</button>
+      <button v-if="token" @click="token = ''" style="padding:4px 8px;font-size:12px">{{ t('nav.logout') }}</button>
     </nav>
 
     <header><LunoThemeToggle />
-      <h1>LUNO 비즈니스 파트너 센터 (Partner)</h1>
-      <p>공식 채널 · Rich Menu 디자이너 · 챗봇 CRM · 브로드캐스트 캠페인 · 상담 티켓</p>
+      <h1>{{ t('partner.title') }}</h1>
+      <p>{{ t('partner.sub') }}</p>
     </header>
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="note" class="note">{{ note }}</p>
 
     <form class="panel" v-if="!token" @submit.prevent="login">
-      <h2>파트너 로그인</h2>
+      <h2>{{ t('partner.loginTitle') }}</h2>
       <div style="margin:8px 0;padding:8px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#64748b">
-        <span>🔒 파트너 기업 계정으로 로그인해 주세요.</span>
+        <span>{{ t('partner.loginHint') }}</span>
       </div>
-      <input v-model="email" type="email" placeholder="이메일" required />
-      <input v-model="password" type="password" placeholder="비밀번호" required />
-      <button>로그인</button>
+      <input v-model="email" type="email" :placeholder="t('form.emailPh')" required />
+      <input v-model="password" type="password" :placeholder="t('form.passwordPh')" required />
+      <button>{{ t('form.login') }}</button>
     </form>
 
     <main v-else class="grid">
       <!-- Left sidebar: Orgs and Accounts -->
       <section class="panel">
-        <h2>내 기업 조직</h2>
+        <h2>{{ t('partner.orgs') }}</h2>
         <form @submit.prevent="createOrg">
-          <input v-model="orgName" placeholder="기업명" minlength="2" required />
-          <input v-model="country" maxlength="8" placeholder="국가 코드" />
-          <button>조직 생성</button>
+          <input v-model="orgName" :placeholder="t('partner.orgNamePh')" minlength="2" required />
+          <input v-model="country" maxlength="8" :placeholder="t('partner.countryPh')" />
+          <button>{{ t('partner.createOrg') }}</button>
         </form>
         <div v-for="o in orgs" :key="o.id">
           <button class="item" :class="{ selected: selectedOrg === o.id }" @click="selectOrg(o.id)">
@@ -306,15 +315,15 @@ async function createCoupon() {
         </div>
 
         <template v-if="selectedOrg">
-          <h2 style="margin-top:24px">공식계정 목록</h2>
+          <h2 style="margin-top:24px">{{ t('partner.accounts') }}</h2>
           <form @submit.prevent="createAccount">
-            <input v-model="accountName" placeholder="공식계정 이름" minlength="2" required />
-            <button>공식계정 생성</button>
+            <input v-model="accountName" :placeholder="t('partner.accountNamePh')" minlength="2" required />
+            <button>{{ t('partner.createAccount') }}</button>
           </form>
           <div v-for="a in accounts" :key="a.id">
             <button class="item" :class="{ selected: selectedAccount === a.id }" @click="selectAccount(a.id)">
               <strong>{{ a.name }}</strong>
-              <small>상태: {{ a.status }}</small>
+              <small>{{ t('partner.accountState') }} {{ a.status }}</small>
             </button>
           </div>
         </template>
@@ -323,36 +332,36 @@ async function createCoupon() {
       <!-- Right Main Workspace: Tabs -->
       <section class="panel" v-if="selectedAccount">
         <div class="tabs-bar">
-          <button :class="{ active: activeTab === 'richmenu' }" @click="activeTab = 'richmenu'">📱 Rich Menu 디자이너</button>
-          <button :class="{ active: activeTab === 'botrules' }" @click="activeTab = 'botrules'">🤖 챗봇 CRM 자동응답</button>
-          <button :class="{ active: activeTab === 'tickets' }" @click="activeTab = 'tickets'">📩 고객 상담 티켓</button>
-          <button :class="{ active: activeTab === 'campaigns' }" @click="activeTab = 'campaigns'">📢 브로드캐스트</button>
+          <button :class="{ active: activeTab === 'richmenu' }" @click="activeTab = 'richmenu'">{{ t('partner.tabRichmenu') }}</button>
+          <button :class="{ active: activeTab === 'botrules' }" @click="activeTab = 'botrules'">{{ t('partner.tabBot') }}</button>
+          <button :class="{ active: activeTab === 'tickets' }" @click="activeTab = 'tickets'">{{ t('partner.tabTickets') }}</button>
+          <button :class="{ active: activeTab === 'campaigns' }" @click="activeTab = 'campaigns'">{{ t('partner.tabCampaigns') }}</button>
         </div>
 
         <!-- 1. Rich Menu Designer -->
         <div v-if="activeTab === 'richmenu'" class="tool-content">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <h3>인터랙티브 Rich Menu 디자이너</h3>
-            <button @click="saveRichMenu" :disabled="accountLoading || !accountReady" style="background:#06c755;font-weight:700">💾 Rich Menu 저장 및 활성화</button>
+            <h3>{{ t('partner.rmTitle') }}</h3>
+            <button @click="saveRichMenu" :disabled="accountLoading || !accountReady" style="background:#06c755;font-weight:700">{{ t('partner.rmSave') }}</button>
           </div>
-          <p class="muted">사용자가 공식 계정 대화방을 열었을 때 하단에 고정 표시되는 인터랙티브 타일 메뉴입니다.</p>
+          <p class="muted">{{ t('partner.rmDesc') }}</p>
 
           <div style="display:flex;gap:16px;margin:12px 0">
             <div style="flex:1">
-              <label style="font-size:12px;font-weight:600;display:block">메뉴 타이틀</label>
-              <input v-model="richMenuTitle" placeholder="메뉴 이름" style="width:100%;box-sizing:border-box" />
+              <label style="font-size:12px;font-weight:600;display:block">{{ t('partner.menuTitle') }}</label>
+              <input v-model="richMenuTitle" :placeholder="t('partner.menuNamePh')" style="width:100%;box-sizing:border-box" />
             </div>
             <div style="width:200px">
-              <label style="font-size:12px;font-weight:600;display:block">레이아웃 템플릿</label>
+              <label style="font-size:12px;font-weight:600;display:block">{{ t('partner.layoutTpl') }}</label>
               <div style="display:flex;gap:6px;margin-top:4px">
-                <button type="button" :class="{ 'btn-selected': richMenuLayout === 'grid_2x3' }" @click="switchLayout('grid_2x3')" style="flex:1;font-size:12px">2×3 (6칸)</button>
-                <button type="button" :class="{ 'btn-selected': richMenuLayout === 'grid_1x3' }" @click="switchLayout('grid_1x3')" style="flex:1;font-size:12px">1×3 (3칸)</button>
+                <button type="button" :class="{ 'btn-selected': richMenuLayout === 'grid_2x3' }" @click="switchLayout('grid_2x3')" style="flex:1;font-size:12px">{{ t('partner.layout6') }}</button>
+                <button type="button" :class="{ 'btn-selected': richMenuLayout === 'grid_1x3' }" @click="switchLayout('grid_1x3')" style="flex:1;font-size:12px">{{ t('partner.layout3') }}</button>
               </div>
             </div>
           </div>
 
           <!-- Interactive Grid Visualizer -->
-          <h4>실시간 미리보기 및 타일 선택</h4>
+          <h4>{{ t('partner.preview') }}</h4>
           <div class="rich-menu-preview" :class="richMenuLayout">
             <div
               v-for="(tile, i) in (richMenuLayout === 'grid_1x3' ? richMenuTiles.slice(0, 3) : richMenuTiles.slice(0, 6))"
@@ -363,36 +372,36 @@ async function createCoupon() {
             >
               <span class="tile-icon">{{ tile.icon }}</span>
               <span class="tile-label">{{ tile.label }}</span>
-              <span class="tile-type-badge">{{ tile.action.type === 'uri' ? '링크' : '메시지' }}</span>
+              <span class="tile-type-badge">{{ tile.action.type === 'uri' ? t('partner.linkBadge') : t('partner.msgBadge') }}</span>
             </div>
           </div>
 
           <!-- Tile Editor -->
           <div class="tile-editor" v-if="richMenuTiles[selectedTileIndex]">
-            <h4>타일 #{{ selectedTileIndex + 1 }} 설정</h4>
+            <h4>{{ t('partner.tileN', { n: selectedTileIndex + 1 }) }}</h4>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div>
-                <label>표시 라벨</label>
-                <input v-model="richMenuTiles[selectedTileIndex].label" placeholder="버튼 텍스트" />
+                <label>{{ t('partner.tileLabel') }}</label>
+                <input v-model="richMenuTiles[selectedTileIndex].label" :placeholder="t('partner.tileLabelPh')" />
               </div>
               <div>
-                <label>이모지 / 아이콘</label>
-                <input v-model="richMenuTiles[selectedTileIndex].icon" placeholder="📢, 💬, 🎁 등" />
+                <label>{{ t('partner.tileIcon') }}</label>
+                <input v-model="richMenuTiles[selectedTileIndex].icon" :placeholder="t('partner.tileIconPh')" />
               </div>
             </div>
             <div style="margin-top:10px">
-              <label>동작 종류</label>
+              <label>{{ t('partner.actionKind') }}</label>
               <select v-model="richMenuTiles[selectedTileIndex].action.type">
-                <option value="message">메시지 전송 (챗봇 연동)</option>
-                <option value="uri">웹링크 열기 (URI)</option>
+                <option value="message">{{ t('partner.actMessage') }}</option>
+                <option value="uri">{{ t('partner.actUri') }}</option>
               </select>
             </div>
             <div style="margin-top:10px" v-if="richMenuTiles[selectedTileIndex].action.type === 'message'">
-              <label>전송할 메시지 내용 (챗봇이 이 키워드를 인식하여 자동응답합니다)</label>
-              <input v-model="richMenuTiles[selectedTileIndex].action.text" placeholder="예: 공지사항, 상담, 이벤트" />
+              <label>{{ t('partner.msgContent') }}</label>
+              <input v-model="richMenuTiles[selectedTileIndex].action.text" :placeholder="t('partner.msgContentPh')" />
             </div>
             <div style="margin-top:10px" v-else>
-              <label>연결 웹사이트 주소 (HTTPS)</label>
+              <label>{{ t('partner.uriLabel') }}</label>
               <input v-model="richMenuTiles[selectedTileIndex].action.uri" placeholder="https://example.com" />
             </div>
           </div>
@@ -400,26 +409,26 @@ async function createCoupon() {
 
         <!-- 2. Chatbot CRM Rules -->
         <div v-else-if="activeTab === 'botrules'" class="tool-content">
-          <h3>챗봇 CRM 키워드 자동응답 룰 빌더</h3>
-          <p class="muted">고객이 특정 단어를 입력하거나 리치 메뉴 버튼을 눌렀을 때 챗봇이 즉시 자동 회신할 규칙을 구성합니다.</p>
+          <h3>{{ t('partner.botTitle') }}</h3>
+          <p class="muted">{{ t('partner.botDesc') }}</p>
 
           <!-- Add Rule Form -->
           <div style="background:#f8fafc;padding:16px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:18px">
-            <h4>새 자동응답 규칙 등록</h4>
+            <h4>{{ t('partner.newRule') }}</h4>
             <div style="margin:8px 0">
-              <label style="font-size:12px;font-weight:600">감지 키워드 (콤마로 구분하여 복수 등록 가능)</label>
-              <input v-model="newBotKeywords" placeholder="예: 배송, 택배, 송장" style="width:100%;box-sizing:border-box" />
+              <label style="font-size:12px;font-weight:600">{{ t('partner.kwLabel') }}</label>
+              <input v-model="newBotKeywords" :placeholder="t('partner.kwPh')" style="width:100%;box-sizing:border-box" />
             </div>
             <div style="margin:8px 0">
-              <label style="font-size:12px;font-weight:600">챗봇 자동 답변 메시지</label>
-              <textarea v-model="newBotReply" rows="3" placeholder="고객에게 자동으로 전송할 답변 내용을 입력하세요." style="width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #cad5e2"></textarea>
+              <label style="font-size:12px;font-weight:600">{{ t('partner.replyLabel') }}</label>
+              <textarea v-model="newBotReply" rows="3" :placeholder="t('partner.replyPh')" style="width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #cad5e2"></textarea>
             </div>
-            <button @click="createBotRule" style="background:#315BCD;font-weight:600">규칙 추가</button>
+            <button @click="createBotRule" style="background:#315BCD;font-weight:600">{{ t('partner.addRule') }}</button>
           </div>
 
           <!-- Rules List -->
-          <h4>등록된 챗봇 규칙 목록 ({{ botRules.length }}개)</h4>
-          <div v-if="botRules.length === 0" class="muted">등록된 규칙이 없습니다. 위에서 새 규칙을 추가하세요.</div>
+          <h4>{{ t('partner.ruleList', { n: botRules.length }) }}</h4>
+          <div v-if="botRules.length === 0" class="muted">{{ t('partner.ruleEmpty') }}</div>
           <div v-for="r in botRules" :key="r.id" class="rule-card">
             <div style="flex:1">
               <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
@@ -427,34 +436,34 @@ async function createCoupon() {
               </div>
               <div style="font-size:13px;white-space:pre-wrap;color:#334155">{{ r.reply }}</div>
             </div>
-            <button @click="deleteBotRule(r.id)" style="background:#ef4444;padding:4px 8px;font-size:12px;align-self:flex-start">삭제</button>
+            <button @click="deleteBotRule(r.id)" style="background:#ef4444;padding:4px 8px;font-size:12px;align-self:flex-start">{{ t('partner.delete') }}</button>
           </div>
 
           <!-- Interactive Simulator -->
           <div style="margin-top:24px;background:#f0fdf4;padding:16px;border-radius:10px;border:1px solid #bbf7d0">
-            <h4>💬 챗봇 응답 실시간 시뮬레이터</h4>
-            <p style="font-size:12px;color:#166534">고객 관점에서 메시지를 입력하고 규칙이 정상 작동하는지 테스트해 보세요.</p>
+            <h4>{{ t('partner.simTitle') }}</h4>
+            <p style="font-size:12px;color:#166534">{{ t('partner.simDesc') }}</p>
             <div style="display:flex;gap:8px">
-              <input v-model="simInput" placeholder="테스트 질문 입력 (예: 공지사항, 배송)" @keyup.enter="runSimulator" style="flex:1" />
-              <button @click="runSimulator" style="background:#16a34a">테스트 전송</button>
+              <input v-model="simInput" :placeholder="t('partner.simPh')" @keyup.enter="runSimulator" style="flex:1" />
+              <button @click="runSimulator" style="background:#16a34a">{{ t('partner.simSend') }}</button>
             </div>
             <div v-if="simOutput" style="margin-top:10px;padding:12px;background:#fff;border-radius:8px;border:1px solid #86efac;font-size:13px;white-space:pre-wrap">
-              <strong>🤖 챗봇 답변:</strong><br>{{ simOutput }}
+              <strong>{{ t('partner.simAnswer') }}</strong><br>{{ simOutput }}
             </div>
           </div>
         </div>
 
         <!-- 3. Customer Tickets (Shared Inbox) -->
         <div v-else-if="activeTab === 'tickets'" class="tool-content">
-          <h3>고객 상담 티켓 (Shared Inbox)</h3>
+          <h3>{{ t('partner.ticketsTitle') }}</h3>
           <form @submit.prevent="createTicket" class="mini-form">
-            <input v-model="newTicketContactID" placeholder="고객 Contact UUID" required />
-            <input v-model="newTicketNote" placeholder="상담 문의 내용" required />
+            <input v-model="newTicketContactID" :placeholder="t('partner.contactPh')" required />
+            <input v-model="newTicketNote" :placeholder="t('partner.ticketNotePh')" required />
             <select v-model="newTicketPrio">
-              <option value="normal">보통</option>
-              <option value="urgent">긴급</option>
+              <option value="normal">{{ t('partner.prioNormal') }}</option>
+              <option value="urgent">{{ t('partner.prioUrgent') }}</option>
             </select>
-            <button>티켓 접수</button>
+            <button>{{ t('partner.createTicket') }}</button>
           </form>
           <div v-for="t in tickets" :key="t.id" class="ticket-card">
             <span>[{{ t.priority }}] {{ t.internal_note }}</span>
@@ -464,22 +473,22 @@ async function createCoupon() {
 
         <!-- 4. Broadcast & Coupons -->
         <div v-else-if="activeTab === 'campaigns'" class="tool-content">
-          <h3>브로드캐스트 메시지 캠페인</h3>
+          <h3>{{ t('partner.campTitle') }}</h3>
           <form @submit.prevent="createCampaign" class="mini-form">
-            <input v-model="newCampaignName" placeholder="캠페인 명칭" required />
-            <button>캠페인 예약 발송</button>
+            <input v-model="newCampaignName" :placeholder="t('partner.campNamePh')" required />
+            <button>{{ t('partner.createCamp') }}</button>
           </form>
 
-          <h3 style="margin-top:24px">프로모션 쿠폰 발급</h3>
+          <h3 style="margin-top:24px">{{ t('partner.couponTitle') }}</h3>
           <form @submit.prevent="createCoupon" class="mini-form">
-            <input v-model="newCouponCode" placeholder="쿠폰 코드 (예: LINE2026)" required />
-            <input type="number" v-model="newCouponRedemptions" min="1" placeholder="수량" />
-            <button>쿠폰 생성</button>
+            <input v-model="newCouponCode" :placeholder="t('partner.couponPh')" required />
+            <input type="number" v-model="newCouponRedemptions" min="1" :placeholder="t('partner.couponQty')" />
+            <button>{{ t('partner.createCoupon') }}</button>
           </form>
         </div>
       </section>
 
-      <p v-else class="muted panel">왼쪽에서 기업 조직 및 공식계정을 선택하세요.</p>
+      <p v-else class="muted panel">{{ t('partner.pickOrg') }}</p>
     </main>
   </div>
 </template>

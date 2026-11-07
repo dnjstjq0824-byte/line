@@ -2,6 +2,14 @@
 import LunoThemeToggle from '../../shared/LunoThemeToggle.vue'
 import { ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
+import { consoleT, detectConsoleLocale, setConsoleLocale, type ConsoleLocale } from '../../shared/console-i18n'
+
+const locale = ref<ConsoleLocale>(detectConsoleLocale())
+const t = (key: string, params?: Record<string, string | number>) => consoleT(locale.value, key, params)
+function toggleLocale() {
+  locale.value = locale.value === 'ko' ? 'en' : 'ko'
+  setConsoleLocale(locale.value)
+}
 
 const token = ref(''), email = ref(''), password = ref(''), name = ref(''), org = ref(''), selectedAdv = ref('')
 const campaign = ref(''), objective = ref('conversions'), budget = ref(50000), error = ref(''), note = ref('')
@@ -39,7 +47,7 @@ async function addAdvertiser() {
     await request('/api/v1/ads/advertisers', token.value, 'POST', { organization_id: org.value, name: name.value })
     name.value = ''
     await refresh()
-    note.value = '광고주 계정이 생성되었습니다.'
+    note.value = t('ads.advDone')
   })
 }
 
@@ -54,7 +62,7 @@ async function addCampaign() {
     })
     campaign.value = ''
     await refresh()
-    note.value = '광고 캠페인이 생성되었습니다.'
+    note.value = t('ads.campDone')
   })
 }
 
@@ -67,7 +75,7 @@ async function addAdGroup() {
       bid_minor: bidAmount.value,
     })
     adGroupName.value = ''
-    note.value = '타겟팅 광고 그룹이 추가되었습니다.'
+    note.value = t('ads.groupDone')
   })
 }
 </script>
@@ -75,72 +83,73 @@ async function addAdGroup() {
 <template>
   <main class="page"><LunoThemeToggle class="ln-console-theme" />
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;font-size:13px;align-items:center">
-      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
+      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.home') }}</a>
       <span style="color:#ccc">|</span>
-      <a href="../admin/" style="text-decoration:none;color:#334155;font-weight:600">👑 관리자</a>
-      <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">🏢 파트너</a>
-      <a href="../developer/" style="text-decoration:none;color:#334155;font-weight:600">💻 개발자</a>
-      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">🎨 크리에이터</a>
-      <a href="../ads/" style="text-decoration:none;color:#315BCD;font-weight:700">📢 광고주</a>
-      <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
+      <a href="../admin/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.admin') }}</a>
+      <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.partner') }}</a>
+      <a href="../developer/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.developer') }}</a>
+      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.creator') }}</a>
+      <a href="../ads/" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.ads') }}</a>
+      <button @click="toggleLocale" style="margin-left:auto;padding:4px 8px;font-size:12px">{{ t('nav.lang') }}</button>
+      <button v-if="token" @click="token = ''" style="padding:4px 8px;font-size:12px">{{ t('nav.logout') }}</button>
     </nav>
 
     <header><h1>LUNO Advertiser Center (Ads)</h1></header>
-    <p>광고주 계정 · 타겟팅 캠페인 · 광고 그룹 및 입찰 예산 관리</p>
+    <p>{{ t('ads.sub') }}</p>
     <p role="alert" class="error" v-if="error">{{ error }}</p>
     <p class="note" v-if="note">{{ note }}</p>
 
     <form v-if="!token" @submit.prevent="login">
       <div style="margin:8px 0;padding:8px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#64748b">
-        <span>🔒 광고주 계정으로 로그인해 주세요.</span>
+        <span>{{ t('ads.loginHint') }}</span>
       </div>
-      <input v-model="email" type="email" placeholder="이메일" required />
-      <input v-model="password" type="password" placeholder="비밀번호" required />
-      <button>로그인</button>
+      <input v-model="email" type="email" :placeholder="t('form.emailPh')" required />
+      <input v-model="password" type="password" :placeholder="t('form.passwordPh')" required />
+      <button>{{ t('form.login') }}</button>
     </form>
 
     <template v-else>
       <section>
-        <h2>광고주 계정 생성</h2>
+        <h2>{{ t('ads.newAdv') }}</h2>
         <form @submit.prevent="addAdvertiser">
           <select v-model="org" required>
-            <option value="" disabled>기업 조직 선택</option>
+            <option value="" disabled>{{ t('ads.pickOrg') }}</option>
             <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
           </select>
-          <input v-model="name" placeholder="광고주 이름" required minlength="2" />
-          <button>광고주 생성</button>
+          <input v-model="name" :placeholder="t('ads.advNamePh')" required minlength="2" />
+          <button>{{ t('ads.createAdv') }}</button>
         </form>
       </section>
 
       <section>
-        <h2>캠페인 생성 및 관리</h2>
+        <h2>{{ t('ads.camps') }}</h2>
         <form @submit.prevent="addCampaign">
           <select v-model="selectedAdv" required>
-            <option value="" disabled>광고주 선택</option>
+            <option value="" disabled>{{ t('ads.pickAdv') }}</option>
             <option v-for="a in advertisers" :key="a.id" :value="a.id">{{ a.name }} ({{ a.status }})</option>
           </select>
-          <input v-model="campaign" placeholder="캠페인 명칭" minlength="2" required />
+          <input v-model="campaign" :placeholder="t('ads.campNamePh')" minlength="2" required />
           <select v-model="objective">
-            <option value="conversions">전환 (Conversions)</option>
-            <option value="awareness">인지도 (Awareness)</option>
-            <option value="traffic">트래픽 (Traffic)</option>
+            <option value="conversions">{{ t('ads.objConv') }}</option>
+            <option value="awareness">{{ t('ads.objAware') }}</option>
+            <option value="traffic">{{ t('ads.objTraffic') }}</option>
           </select>
-          <input v-model.number="budget" type="number" min="0" placeholder="일일 예산 (KRW)" />
-          <button>캠페인 생성</button>
+          <input v-model.number="budget" type="number" min="0" :placeholder="t('ads.budgetPh')" />
+          <button>{{ t('ads.createCamp') }}</button>
         </form>
 
         <div style="margin-top:16px">
-          <h3>내 캠페인 목록 (광고 그룹 설정)</h3>
+          <h3>{{ t('ads.myCamps') }}</h3>
           <div v-for="c in campaigns" :key="c.id" class="camp-card" :class="{ active: selectedCamp === c.id }" @click="selectedCamp = c.id">
-            <strong>{{ c.name }}</strong> · {{ c.status }} · 일일 {{ c.daily_budget_minor.toLocaleString() }} KRW
+            <strong>{{ c.name }}</strong> · {{ c.status }} · {{ t('ads.daily') }} {{ c.daily_budget_minor.toLocaleString() }} KRW
           </div>
 
           <div v-if="selectedCamp" class="sub-form">
-            <h4>선택한 캠페인에 타겟팅 광고 그룹 추가</h4>
+            <h4>{{ t('ads.addGroup') }}</h4>
             <form @submit.prevent="addAdGroup">
-              <input v-model="adGroupName" placeholder="광고 그룹 명칭 (예: 2040 수도권 타겟)" required />
-              <input type="number" v-model="bidAmount" min="10" placeholder="입찰가 (KRW)" />
-              <button>광고 그룹 생성</button>
+              <input v-model="adGroupName" :placeholder="t('ads.groupNamePh')" required />
+              <input type="number" v-model="bidAmount" min="10" :placeholder="t('ads.bidPh')" />
+              <button>{{ t('ads.createGroup') }}</button>
             </form>
           </div>
         </div>

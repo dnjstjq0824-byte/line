@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   status_message TEXT DEFAULT '',
   bio TEXT DEFAULT '',
   phone_number TEXT DEFAULT '',
+  state TEXT DEFAULT 'active',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

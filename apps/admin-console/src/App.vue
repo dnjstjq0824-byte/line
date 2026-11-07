@@ -4,8 +4,16 @@ import BaseBadge from '../../shared/components/ui/BaseBadge.vue'
 import BaseButton from '../../shared/components/ui/BaseButton.vue'
 import BaseEmpty from '../../shared/components/ui/BaseEmpty.vue'
 import BaseTable from '../../shared/components/ui/BaseTable.vue'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
+import { consoleT, detectConsoleLocale, setConsoleLocale, type ConsoleLocale } from '../../shared/console-i18n'
+
+const locale = ref<ConsoleLocale>(detectConsoleLocale())
+const t = (key: string, params?: Record<string, string | number>) => consoleT(locale.value, key, params)
+function toggleLocale() {
+  locale.value = locale.value === 'ko' ? 'en' : 'ko'
+  setConsoleLocale(locale.value)
+}
 
 const email = ref(''), password = ref(''), token = ref(''), error = ref(''), note = ref('')
 const metrics = ref<Record<string, number>>({})
@@ -14,19 +22,19 @@ const reports = ref<Array<Record<string, string>>>([])
 const auditLogs = ref<Array<Record<string, string>>>([])
 const featureFlags = ref<Array<Record<string, unknown>>>([])
 const newFlagKey = ref(''), newFlagEnabled = ref(false)
-const userColumns = [
-  { key: 'display_name', label: '이름' },
-  { key: 'email', label: '이메일' },
-  { key: 'role', label: '역할' },
-  { key: 'state', label: '상태' },
-  { key: 'actions', label: '제재 관리' },
-]
-const auditColumns = [
-  { key: 'created_at', label: '시간' },
-  { key: 'actor_user_id', label: '관리자 ID' },
-  { key: 'action', label: '작업' },
-  { key: 'target_id', label: '대상 ID' },
-]
+const userColumns = computed(() => [
+  { key: 'display_name', label: t('admin.colName') },
+  { key: 'email', label: t('admin.colEmail') },
+  { key: 'role', label: t('admin.colRole') },
+  { key: 'state', label: t('admin.colState') },
+  { key: 'actions', label: t('admin.colActions') },
+])
+const auditColumns = computed(() => [
+  { key: 'created_at', label: t('admin.colTime') },
+  { key: 'actor_user_id', label: t('admin.colActor') },
+  { key: 'action', label: t('admin.colAction') },
+  { key: 'target_id', label: t('admin.colTarget') },
+])
 
 async function run(fn: () => Promise<void>) {
   error.value = ''; note.value = ''
@@ -67,7 +75,7 @@ async function takeAction(subjectUserID: string, action: 'warn' | 'suspend' | 'a
       action,
       reason: `Admin console ${action} action`,
     })
-    note.value = `조치 (${action})가 완료되었습니다.`
+    note.value = t('admin.actionDone', { action })
     await load()
   })
 }
@@ -82,7 +90,7 @@ async function saveFeatureFlag() {
     })
     newFlagKey.value = ''
     newFlagEnabled.value = false
-    note.value = '기능 플래그가 저장되었습니다.'
+    note.value = t('admin.flagSaved')
     await load()
   })
 }
@@ -91,39 +99,40 @@ async function saveFeatureFlag() {
 <template>
   <div class="page">
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding:10px 14px;background:#fff;border-radius:10px;font-size:13px;align-items:center;border:1px solid #e0e8ee">
-      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
+      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.home') }}</a>
       <span style="color:#ccc">|</span>
-      <a href="../admin/" style="text-decoration:none;color:#315BCD;font-weight:700">👑 관리자</a>
-      <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">🏢 파트너</a>
-      <a href="../developer/" style="text-decoration:none;color:#334155;font-weight:600">💻 개발자</a>
-      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">🎨 크리에이터</a>
-      <a href="../ads/" style="text-decoration:none;color:#334155;font-weight:600">📢 광고주</a>
-      <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
+      <a href="../admin/" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.admin') }}</a>
+      <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.partner') }}</a>
+      <a href="../developer/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.developer') }}</a>
+      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.creator') }}</a>
+      <a href="../ads/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.ads') }}</a>
+      <button @click="toggleLocale" style="margin-left:auto;padding:4px 8px;font-size:12px">{{ t('nav.lang') }}</button>
+      <button v-if="token" @click="token = ''" style="padding:4px 8px;font-size:12px">{{ t('nav.logout') }}</button>
     </nav>
 
     <header><LunoThemeToggle />
-      <h1>LUNO 통합 관리자 센터 (Admin)</h1>
-      <span>역할: platform_admin · support · moderator</span>
+      <h1>{{ t('admin.title') }}</h1>
+      <span>{{ t('admin.roles') }}</span>
     </header>
 
     <p class="error" v-if="error" role="alert">{{ error }}</p>
     <p class="note" v-if="note">{{ note }}</p>
 
     <form v-if="!token" @submit.prevent="login" class="panel">
-      <h2>관리자 인증</h2>
+      <h2>{{ t('admin.authTitle') }}</h2>
       <div style="margin:8px 0;padding:8px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#64748b">
-        <span>🔒 보안 구역: 관리자 권한이 부여된 계정만 로그인이 가능합니다.</span>
+        <span>{{ t('admin.authHint') }}</span>
       </div>
-      <input type="email" v-model="email" placeholder="이메일" required />
-      <input type="password" v-model="password" placeholder="비밀번호" required />
-      <BaseButton type="submit" variant="primary">로그인</BaseButton>
-      <p class="muted">일반 사용자 계정은 접근이 거부됩니다(403 Forbidden).</p>
+      <input type="email" v-model="email" :placeholder="t('form.emailPh')" required />
+      <input type="password" v-model="password" :placeholder="t('form.passwordPh')" required />
+      <BaseButton type="submit" variant="primary">{{ t('form.login') }}</BaseButton>
+      <p class="muted">{{ t('admin.denyNote') }}</p>
     </form>
 
     <main v-else>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <h2>통합 시스템 대시보드</h2>
-        <BaseButton @click="load">새로고침</BaseButton>
+        <h2>{{ t('admin.dash') }}</h2>
+        <BaseButton @click="load">{{ t('admin.refresh') }}</BaseButton>
       </div>
 
       <section class="metrics">
@@ -134,42 +143,42 @@ async function saveFeatureFlag() {
       </section>
 
       <section class="panel">
-        <h2>사용자 관리 및 제재 집행</h2>
+        <h2>{{ t('admin.users') }}</h2>
         <BaseTable :columns="userColumns" :rows="users" row-key="id">
           <template #cell-role="{ value }"><BaseBadge tone="info">{{ value }}</BaseBadge></template>
           <template #cell-state="{ value }"><BaseBadge :tone="value === 'active' ? 'success' : 'danger'">{{ value }}</BaseBadge></template>
           <template #cell-actions="{ row }">
             <span style="display:inline-flex;gap:6px">
-              <BaseButton v-if="row.state === 'active'" size="sm" variant="danger" @click="takeAction(row.id, 'suspend')">정지</BaseButton>
-              <BaseButton v-else-if="row.state === 'suspended'" size="sm" variant="primary" @click="takeAction(row.id, 'activate')">정지 해제</BaseButton>
-              <BaseButton size="sm" @click="takeAction(row.id, 'warn')">경고</BaseButton>
+              <BaseButton v-if="row.state === 'active'" size="sm" variant="danger" @click="takeAction(row.id, 'suspend')">{{ t('admin.suspend') }}</BaseButton>
+              <BaseButton v-else-if="row.state === 'suspended'" size="sm" variant="primary" @click="takeAction(row.id, 'activate')">{{ t('admin.unsuspend') }}</BaseButton>
+              <BaseButton size="sm" @click="takeAction(row.id, 'warn')">{{ t('admin.warn') }}</BaseButton>
             </span>
           </template>
         </BaseTable>
       </section>
 
       <section class="panel">
-        <h2>신고 및 악성 콘텐츠 처리</h2>
-        <BaseEmpty v-if="!reports.length" title="접수된 미처리 신고가 없습니다" hint="새 신고가 들어오면 이 목록에 표시됩니다." />
+        <h2>{{ t('admin.reports') }}</h2>
+        <BaseEmpty v-if="!reports.length" :title="t('admin.reportsEmptyT')" :hint="t('admin.reportsEmptyH')" />
         <div v-for="r in reports" :key="r.id" class="report-item">
           <div>
-            <strong>[{{ r.category }}]</strong> 상태: <span class="badge">{{ r.state }}</span> — {{ r.details }}
+            <strong>[{{ r.category }}]</strong> {{ t('admin.reportState') }} <span class="badge">{{ r.state }}</span> — {{ r.details }}
           </div>
           <div v-if="r.state === 'open'" style="display:flex;gap:6px">
-            <button style="background:#d9534f;font-size:12px;padding:4px 8px" @click="takeAction(r.subject_user_id || '', 'suspend', r.id)">피신고자 정지</button>
-            <button style="background:#6c757d;font-size:12px;padding:4px 8px" @click="takeAction(r.subject_user_id || '', 'dismiss', r.id)">기각</button>
+            <button style="background:#d9534f;font-size:12px;padding:4px 8px" @click="takeAction(r.subject_user_id || '', 'suspend', r.id)">{{ t('admin.reporterSuspend') }}</button>
+            <button style="background:#6c757d;font-size:12px;padding:4px 8px" @click="takeAction(r.subject_user_id || '', 'dismiss', r.id)">{{ t('admin.dismiss') }}</button>
           </div>
         </div>
       </section>
 
       <section class="panel">
-        <h2>글로벌 Feature Flags</h2>
+        <h2>{{ t('admin.flags') }}</h2>
         <form @submit.prevent="saveFeatureFlag" style="display:flex;gap:8px;margin-bottom:12px">
-          <input v-model="newFlagKey" placeholder="플래그 키 (예: enable_e2ee, enable_openchat)" required />
+          <input v-model="newFlagKey" :placeholder="t('admin.flagKeyPh')" required />
           <label style="display:flex;align-items:center;gap:6px">
-            <input type="checkbox" v-model="newFlagEnabled" style="width:auto" /> 활성화
+            <input type="checkbox" v-model="newFlagEnabled" style="width:auto" /> {{ t('admin.enabled') }}
           </label>
-          <BaseButton type="submit" variant="primary">플래그 추가/수정</BaseButton>
+          <BaseButton type="submit" variant="primary">{{ t('admin.flagSave') }}</BaseButton>
         </form>
         <div v-for="f in featureFlags" :key="String(f.key)" class="item-line">
           <code>{{ f.key }}</code>
@@ -178,7 +187,7 @@ async function saveFeatureFlag() {
       </section>
 
       <section class="panel">
-        <h2>불변 감사 로그 (Audit Logs)</h2>
+        <h2>{{ t('admin.audit') }}</h2>
         <BaseTable :columns="auditColumns" :rows="auditLogs" row-key="id">
           <template #cell-created_at="{ value }"><small>{{ new Date(String(value)).toLocaleString() }}</small></template>
           <template #cell-actor_user_id="{ value }"><code>{{ value }}</code></template>

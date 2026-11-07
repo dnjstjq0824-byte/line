@@ -36,8 +36,7 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
 const browser = await chromium.launch();
-const results = [];
-for (const [device, width, height, mobile] of [['pc', 1440, 900, false], ['mobile', 390, 844, true]]) {
+async function sample(device, width, height, mobile) {
   const ctx = await browser.newContext({ viewport: { width, height }, isMobile: mobile, locale: 'ko-KR' });
   const page = await ctx.newPage();
   let bytes = 0;
@@ -54,9 +53,18 @@ for (const [device, width, height, mobile] of [['pc', 1440, 900, false], ['mobil
     po.observe({ type: 'largest-contentful-paint', buffered: true });
     setTimeout(() => { po.disconnect(); resolve(Math.round(last)); }, 3000);
   }));
-  results.push({ device, width, route: '/', lcp_ms: lcp, transfer_bytes: bytes });
-  console.log(`${device} ${width}: LCP=${lcp}ms transfer=${bytes}B`);
   await ctx.close();
+  return { lcp, bytes };
+}
+const results = [];
+for (const [device, width, height, mobile] of [['pc', 1440, 900, false], ['mobile', 390, 844, true]]) {
+  // Median of 3: a cold font-cache run can spike 3s+ and must not fail the gate.
+  const samples = [];
+  for (let i = 0; i < 3; i++) samples.push(await sample(device, width, height, mobile));
+  samples.sort((a, b) => a.lcp - b.lcp);
+  const med = samples[1];
+  results.push({ device, width, route: '/', lcp_ms: med.lcp, transfer_bytes: med.bytes, samples_ms: samples.map((s) => s.lcp) });
+  console.log(`${device} ${width}: LCP median=${med.lcp}ms samples=[${samples.map((s) => s.lcp)}] transfer=${med.bytes}B`);
 }
 await browser.close();
 server.close();

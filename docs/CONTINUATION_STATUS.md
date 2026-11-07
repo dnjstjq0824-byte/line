@@ -232,3 +232,28 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
 - The 13 pre-existing `postgres_integration_test.go` assertions still only run with
   `DATABASE_URL` set; they skip in this environment, so the new persistence test has
   been compiled and vetted but not executed against a live PostgreSQL.
+
+## Continuation: 2026-11-07 — MessengerView i18n completion + admin shots
+
+- Converted MessengerView hardcoded Korean 462 lines to 0 (scanner TOTAL 0):
+  441 new `mv*` keys in UI_DICTIONARY across ko/en/th/ja, 6 existing keys
+  reused (tabAll, navOpenChat, callVideo, callVoice, navFriends, checkingText).
+  `navChats`/`navAddFriends` deliberately NOT reused (handoff shadowing would
+  change ko copy; en/th/ja entries missing).
+- Structural conversions: news categories to stable IDs with ko-label server
+  match, relTime/callDateText/formatDateDivider to locale-aware Intl, KRW
+  amounts to Intl currency, call-status missed detection to metadata+t().
+- Validation: 6-workspace build green (vue-tsc), i18n scanner TOTAL 0,
+  key-resolution/ko-fidelity/placeholder audit scripts pass, pre_deploy_gate
+  6/6 green. KO capture 49 shots clean=49 (hybrid: local dist + prod API
+  proxy); EN messenger 7 shots with zero raw-key leaks; news filter probe
+  PASS (all 4 / economy 1 / bookmark 0). LCP medians PC 984ms / mobile 608ms
+  (target 2500ms). Static-only capture shows pre-existing WS-handshake console
+  noise (no backend); code path untouched by this change.
+- Admin console post-login shots: local Go + throwaway sqlite + node:sqlite
+  role elevation to platform_admin, 2 shots KO/EN in `screenshots/admin/`
+  with 0 errors. No prod credentials created (prod admin password REVOKED).
+- `flutter devices`: no mobile device or emulator attached (Windows/Chrome/
+  Edge only); on-device verification remains unavailable.
+- Report updated (`COMMERCIALIZATION_REPORT.md` S2-S9, i18n inventory
+  regenerated). Commit/push/deploy pending human approval per gate.

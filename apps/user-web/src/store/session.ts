@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { reportError } from '../../../shared/monitor'
 import { handoffText } from '../../../shared/handoff-i18n'
 import { UI_DICTIONARY, detectInitialLocale, type LunoLocale } from '../luno-i18n'
 import { request, type LoginResult, type User } from '../../../shared/api'
@@ -56,6 +57,7 @@ export const wrap = async (job: () => Promise<void>) => {
     await job()
   } catch (e) {
     error.value = (e as Error).message
+    reportError(e, { surface: 'user-web' })
   }
 }
 

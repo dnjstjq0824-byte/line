@@ -12,6 +12,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../api/client.dart';
 import '../legacy_tokens.dart';
+import '../util/error_report.dart';
 
 class SessionController extends ChangeNotifier {
   final Api api = Api();
@@ -95,6 +96,7 @@ class SessionController extends ChangeNotifier {
       await action();
     } catch (e) {
       error = e.toString().replaceFirst('Exception: ', '');
+      reportError(e);
     } finally {
       busy = false;
       notifyListeners();

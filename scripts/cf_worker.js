@@ -1738,6 +1738,28 @@ async function extended(p, request, url, me, token) {
       if (b.avatar_url !== undefined) me.avatar_url = b.avatar_url;
       return json({ ...publicUser(me), email: me.email, role: me.role });
     }
+    if (method === 'DELETE') {
+      // Parity with Go deleteAccount: password confirmation, soft-delete,
+      // every session revoked. Login already rejects state='deleted'.
+      const b = await readJson(request);
+      if (!b.password) return json({ error: 'password required for account deletion' }, 400);
+      if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
+      if (['user@line.local', 'alice@line-test.local'].includes((me.email || '').toLowerCase())) {
+        return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
+      }
+      me.state = 'deleted';
+      if (dbOf()) {
+        await ensureSchema();
+        const cols = await dbOf().prepare('PRAGMA table_info(users)').all();
+        if (!(cols.results || []).some((c) => c.name === 'state')) {
+          await dbOf().prepare("ALTER TABLE users ADD COLUMN state TEXT DEFAULT 'active'").run();
+        }
+        await dbOf().prepare('UPDATE users SET state = ?, updated_at = ? WHERE id = ?').bind('deleted', now(), myId).run();
+      }
+      await revokeOtherSessions(myId, '', myId);
+      await persistAudit(myId, 'account.delete', myId, {});
+      return json({ status: 'account_deleted' });
+    }
   }
   if (p === 'me/settings') {
     const prefs = prefsOf(myId);

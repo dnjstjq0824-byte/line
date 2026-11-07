@@ -2,6 +2,14 @@
 import LunoThemeToggle from '../../shared/LunoThemeToggle.vue'
 import { ref } from 'vue'
 import { request, type LoginResult } from '../../shared/api'
+import { consoleT, detectConsoleLocale, setConsoleLocale, type ConsoleLocale } from '../../shared/console-i18n'
+
+const locale = ref<ConsoleLocale>(detectConsoleLocale())
+const t = (key: string, params?: Record<string, string | number>) => consoleT(locale.value, key, params)
+function toggleLocale() {
+  locale.value = locale.value === 'ko' ? 'en' : 'ko'
+  setConsoleLocale(locale.value)
+}
 
 const token = ref(''), email = ref(''), password = ref(''), name = ref(''), appName = ref(''), orgID = ref(''), selectedAppID = ref(''), error = ref(''), note = ref(''), oneTimeSecret = ref('')
 const webhookURL = ref(''), webhookSecret = ref(''), miniAppOrigin = ref('')
@@ -31,7 +39,7 @@ async function add() {
     await request('/api/v1/developer/organizations', token.value, 'POST', { name: name.value })
     name.value = ''
     await refresh()
-    note.value = '개발자 조직이 생성되었습니다.'
+    note.value = t('dev.orgCreated')
   })
 }
 
@@ -49,7 +57,7 @@ async function createApp() {
     oneTimeSecret.value = x.client_secret_once
     appName.value = ''
     await selectOrg(orgID.value)
-    note.value = 'API 앱이 생성되었습니다. 시크릿 키를 안전하게 보관하세요.'
+    note.value = t('dev.appCreated')
   })
 }
 
@@ -61,7 +69,7 @@ async function registerWebhook() {
     })
     webhookSecret.value = res.signing_secret_once
     webhookURL.value = ''
-    note.value = 'Webhook 엔드포인트가 등록되었습니다.'
+    note.value = t('dev.webhookCreated')
   })
 }
 
@@ -73,7 +81,7 @@ async function registerMiniApp() {
       manifest: { name: 'Sample MiniApp', version: '1.0.0' },
     })
     miniAppOrigin.value = ''
-    note.value = 'MiniApp 심사 등록이 완료되었습니다.'
+    note.value = t('dev.miniappCreated')
   })
 }
 </script>
@@ -81,36 +89,37 @@ async function registerMiniApp() {
 <template>
   <main class="page"><LunoThemeToggle class="ln-console-theme" />
     <nav style="display:flex;gap:12px;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;font-size:13px;align-items:center">
-      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">💬 LUNO 메신저 홈</a>
+      <a href="../" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.home') }}</a>
       <span style="color:#ccc">|</span>
-      <a href="../admin/" style="text-decoration:none;color:#334155;font-weight:600">👑 관리자</a>
-      <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">🏢 파트너</a>
-      <a href="../developer/" style="text-decoration:none;color:#315BCD;font-weight:700">💻 개발자</a>
-      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">🎨 크리에이터</a>
-      <a href="../ads/" style="text-decoration:none;color:#334155;font-weight:600">📢 광고주</a>
-      <button v-if="token" @click="token = ''" style="margin-left:auto;padding:4px 8px;font-size:12px">로그아웃</button>
+      <a href="../admin/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.admin') }}</a>
+      <a href="../partner/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.partner') }}</a>
+      <a href="../developer/" style="text-decoration:none;color:#315BCD;font-weight:700">{{ t('nav.developer') }}</a>
+      <a href="../creator/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.creator') }}</a>
+      <a href="../ads/" style="text-decoration:none;color:#334155;font-weight:600">{{ t('nav.ads') }}</a>
+      <button @click="toggleLocale" style="margin-left:auto;padding:4px 8px;font-size:12px">{{ t('nav.lang') }}</button>
+      <button v-if="token" @click="token = ''" style="padding:4px 8px;font-size:12px">{{ t('nav.logout') }}</button>
     </nav>
 
     <header><h1>LUNO Developer Center (Developers)</h1></header>
-    <p>개발자 조직 · Messaging API 앱 · Webhook 발송 엔진 · Mini App 플랫폼</p>
+    <p>{{ t('dev.sub') }}</p>
     <p class="error" role="alert" v-if="error">{{ error }}</p>
     <p class="note" v-if="note">{{ note }}</p>
 
     <form @submit.prevent="login" v-if="!token">
       <div style="margin:8px 0;padding:8px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#64748b">
-        <span>🔒 개발자 계정으로 로그인해 주세요.</span>
+        <span>{{ t('dev.loginHint') }}</span>
       </div>
-      <input v-model="email" type="email" placeholder="이메일" required />
-      <input v-model="password" type="password" placeholder="비밀번호" required />
-      <button>로그인</button>
+      <input v-model="email" type="email" :placeholder="t('form.emailPh')" required />
+      <input v-model="password" type="password" :placeholder="t('form.passwordPh')" required />
+      <button>{{ t('form.login') }}</button>
     </form>
 
     <template v-else>
       <section>
-        <h2>개발자 조직</h2>
+        <h2>{{ t('dev.orgs') }}</h2>
         <form @submit.prevent="add">
-          <input v-model="name" placeholder="조직명" minlength="2" required />
-          <button>조직 생성</button>
+          <input v-model="name" :placeholder="t('dev.orgNamePh')" minlength="2" required />
+          <button>{{ t('dev.createOrg') }}</button>
         </form>
         <button v-for="o in orgs" :key="o.id" :class="{ active: orgID === o.id }" @click="selectOrg(o.id)">
           {{ o.name }} ({{ o.role }})
@@ -118,15 +127,15 @@ async function registerMiniApp() {
       </section>
 
       <section v-if="orgID">
-        <h2>API 앱 관리</h2>
+        <h2>{{ t('dev.apps') }}</h2>
         <form @submit.prevent="createApp">
-          <input v-model="appName" placeholder="앱 이름" minlength="2" required />
-          <button>앱 생성</button>
+          <input v-model="appName" :placeholder="t('dev.appNamePh')" minlength="2" required />
+          <button>{{ t('dev.createApp') }}</button>
         </form>
 
         <p class="secret" v-if="oneTimeSecret">
-          한 번만 표시되는 Client Secret (안전하게 보관): <code>{{ oneTimeSecret }}</code>
-          <button @click="oneTimeSecret = ''" style="margin-left:8px">닫기</button>
+          {{ t('dev.secretOnce') }} <code>{{ oneTimeSecret }}</code>
+          <button @click="oneTimeSecret = ''" style="margin-left:8px">{{ t('dev.close') }}</button>
         </p>
 
         <div v-for="a in apps" :key="a.id" class="app-card" :class="{ active: selectedAppID === a.id }" @click="selectedAppID = a.id">
@@ -135,19 +144,19 @@ async function registerMiniApp() {
         </div>
 
         <div v-if="selectedAppID" class="tool-box">
-          <h3>Webhook 등록</h3>
+          <h3>{{ t('dev.webhook') }}</h3>
           <form @submit.prevent="registerWebhook">
             <input v-model="webhookURL" placeholder="https://mybot.example.com/webhook" required />
-            <button>Webhook 등록</button>
+            <button>{{ t('dev.webhook') }}</button>
           </form>
           <p v-if="webhookSecret" class="secret">
-            Webhook 서명 시크릿: <code>{{ webhookSecret }}</code>
+            {{ t('dev.webhookSecret') }} <code>{{ webhookSecret }}</code>
           </p>
 
-          <h3>Mini App 등록</h3>
+          <h3>{{ t('dev.miniapp') }}</h3>
           <form @submit.prevent="registerMiniApp">
             <input v-model="miniAppOrigin" placeholder="https://miniapp.example.com" required />
-            <button>MiniApp 등록</button>
+            <button>{{ t('dev.miniappBtn') }}</button>
           </form>
         </div>
       </section>

@@ -1,20 +1,30 @@
 {
- "measured_at": "2026-11-07T09:54:31.767Z",
+ "measured_at": "2026-11-07T15:33:41.079Z",
  "target_ms": 2500,
  "results": [
   {
    "device": "pc",
    "width": 1440,
    "route": "/",
-   "lcp_ms": 784,
-   "transfer_bytes": 1238423
+   "lcp_ms": 984,
+   "transfer_bytes": 1176283,
+   "samples_ms": [
+    708,
+    984,
+    9308
+   ]
   },
   {
    "device": "mobile",
    "width": 390,
    "route": "/",
-   "lcp_ms": 520,
-   "transfer_bytes": 1280426
+   "lcp_ms": 608,
+   "transfer_bytes": 1176283,
+   "samples_ms": [
+    592,
+    608,
+    636
+   ]
   }
  ]
 }
