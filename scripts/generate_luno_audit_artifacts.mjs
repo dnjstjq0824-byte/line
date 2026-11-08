@@ -78,7 +78,7 @@ const FEATURE_MATRIX = [
   // 10. Operations & Admin
   { domain: 'Operations', feature: '5 Admin Consoles (Admin/Partner/Dev/Creator/Ads)', status: 'WORKING', platform: 'Web', evidence: 'dist_cf & apps/*', notes: 'All 5 Vue consoles compiled and deployed' },
   { domain: 'Operations', feature: 'Automated 9-Suite Backend Tests', status: 'WORKING', platform: 'CI/CD', evidence: 'scripts/cf_gateway.test.mjs, cf_worker.test.mjs, cf_phases.test.mjs', notes: '100% test pass rate' },
-  { domain: 'Operations', feature: 'Cloudflare Workers Live Anycast Deployment', status: 'WORKING', platform: 'Production Edge', evidence: 'https://line-messenger.dnjstjqppk.workers.dev', notes: 'Zero-latency global deployment verified' }
+  { domain: 'Operations', feature: 'Cloudflare Workers Live Anycast Deployment', status: 'WORKING', platform: 'Production Edge', evidence: 'https://luno-messenger.dnjstjqppk.workers.dev', notes: 'Zero-latency global deployment verified' }
 ];
 
 const TECHNICAL_DEBT = [

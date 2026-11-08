@@ -4,7 +4,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 </script>
 
 <template>
-  <div class="line-desktop-app" :class="[`theme-${activeTheme}`, { 'dark-mode': darkMode }]">
+  <div class="luno-desktop-app" :class="[`theme-${activeTheme}`, { 'dark-mode': darkMode }]">
     <!-- Global Floating Alerts (Toast style) -->
     <div v-if="error" class="floating-alert error" role="alert">
       <span>⚠️ {{ error }}</span>
@@ -21,9 +21,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 <style>
 /* ==========================================================================
-   AUTHENTIC LINE PC DESKTOP DESIGN SYSTEM
+   AUTHENTIC LUNO PC DESKTOP DESIGN SYSTEM
    ========================================================================== */
-.line-desktop-app {
+.luno-desktop-app {
   --line-green: var(--om-primary, #2563EB);
   --line-green-hover: var(--om-primary-hover, #1D4ED8);
   --line-slate-bg: var(--om-bg, #F7F9FC);
@@ -36,7 +36,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .pc-luno-logo { display: block; margin: 0 auto; max-width: 100%; object-fit: contain; }
 
-.line-desktop-app {
+.luno-desktop-app {
   display: flex;
   height: 100vh;
   width: 100vw;
@@ -520,7 +520,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 /* ==========================================================================
-   AUTHENTIC LINE PC DESKTOP WORKSPACE (3 PANES)
+   AUTHENTIC LUNO PC DESKTOP WORKSPACE (3 PANES)
    ========================================================================== */
 .pc-workspace {
   display: flex;
@@ -1587,7 +1587,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   cursor: not-allowed;
 }
 
-/* Empty Canvas (Authentic LINE PC Watermark) */
+/* Empty Canvas (Authentic LUNO PC Watermark) */
 .pc-empty-canvas {
   flex: 1;
   background: #f5f7fa;
@@ -1714,7 +1714,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .card-info p { font-size: 11px; color: #64748b; margin: 2px 0 0; }
 
 /* Wallet Card */
-.line-pay-card { margin: 12px; background: linear-gradient(135deg, var(--om-primary, #2563EB), var(--om-cyan, #22C7E8)); color: white; padding: 16px; border-radius: 12px; }
+.luno-pay-card { margin: 12px; background: linear-gradient(135deg, var(--om-primary, #2563EB), var(--om-cyan, #22C7E8)); color: white; padding: 16px; border-radius: 12px; }
 .pay-top { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
 .pay-balance { font-size: 22px; font-weight: 900; margin: 10px 0; }
 .pay-actions { display: flex; gap: 8px; }
@@ -2265,8 +2265,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
   margin-bottom: 12px;
 }
 
-.security-title-green {
-  color: #00B900;
+.security-title-luno {
+  color: #315BCD;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.4px;
@@ -2332,8 +2332,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
   margin-top: 6px;
 }
 
-.btn-security-logout-green {
-  background: #00B900;
+.btn-security-logout-luno {
+  background: #315BCD;
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -2767,7 +2767,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .btn-call-history-action:hover {
   background: #e2e8f0;
-  color: #00B900;
+  color: #315BCD;
 }
 
 /* ==========================================================================
@@ -2992,7 +2992,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .ad-badge-i { position: absolute; top: 2px; right: 2px; font-size: 9px; background: rgba(0,0,0,0.5); color: #fff; padding: 0 3px; border-radius: 3px; }
 .ad-logo-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .chat-row-badges { display: flex; align-items: center; gap: 4px; margin-left: 6px; flex-shrink: 0; }
-.badge-green-n { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #06C755; color: #ffffff; font-size: 10px; font-weight: 800; }
+.badge-luno-n { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #4F7CFF; color: #ffffff; font-size: 10px; font-weight: 800; }
 
 /* Generic Pane Header & News / Calls Specifics */
 .pc-pane-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid #f1f5f9; background: #ffffff; }
@@ -3147,7 +3147,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .wallet-tx-amount { font-weight: 700; color: #0f172a; }
 .wallet-tx-amount.plus { color: #16a34a; }
 
-/* Classic LINE Sky-Blue Wallpaper & Rich Message Cards (Screenshots 6 & 7) */
+/* Classic LUNO Sky-Blue Wallpaper & Rich Message Cards (Screenshots 6 & 7) */
 .wallpaper-skyblue {
   background: #8CABD9 !important;
 }

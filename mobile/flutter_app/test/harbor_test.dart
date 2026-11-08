@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:luno_messenger/design/responsive.dart';
-import 'package:luno_messenger/main.dart' show MessengerApp;
+import 'package:luno_messenger/main.dart'
+    show MessengerApp, lunoBg, lunoDeepBlue, lunoPrimary;
 import 'package:luno_messenger/design/v3.dart';
 import 'package:luno_messenger/nav.dart';
+import 'package:luno_messenger/pages/chats.dart';
 import 'package:luno_messenger/router.dart';
 import 'package:luno_messenger/state/session.dart';
 
@@ -33,12 +35,26 @@ void main() {
     const routes = [
       '/login', '/home', '/stories', '/channels', '/chats', '/feed',
       '/lounge', '/news', '/calls', '/wallet', '/settings', '/keep',
-      '/more', '/console', '/console/users', '/console/reports',
+      '/more', '/profile', '/splash', '/console', '/console/users', '/console/reports',
       '/console/flags', '/console/audit',
     ];
     expect(routes.toSet().length, routes.length);
-    expect(LunoNav.primary.length, 5);
-    expect(LunoNav.secondary.length, 5);
+    // reference-parity redesign (user-requested): bottom bar is 홈/대화/뉴스/통화.
+    // 피드/라운지 move to 더보기; every route keeps its own address.
+    expect(LunoNav.primary.length, 4);
+    expect(LunoNav.primary.map((d) => d.route),
+        ['/home', '/chats', '/news', '/calls']);
+    expect(LunoNav.secondary.length, 6);
+    expect(LunoNav.secondary.map((d) => d.route),
+        ['/feed', '/lounge', '/wallet', '/keep', '/settings', '/console']);
+  });
+
+  test('LUNO brand surfaces reuse frozen PO tokens', () {
+    expect(LunoBrand.primary, lunoPrimary);
+    expect(LunoBrand.deep, lunoDeepBlue);
+    expect(HarborLight.harbor, lunoDeepBlue);
+    expect(HarborLight.mine, lunoPrimary);
+    expect(HarborLight.fog, lunoBg);
   });
 
   test('harbor themes build for both brightnesses', () {
@@ -48,6 +64,73 @@ void main() {
     expect(dark.scaffoldBackgroundColor, HarborDark.fog);
     expect(light.colorScheme.primary, HarborLight.harbor);
     expect(dark.colorScheme.primary, HarborDark.harbor);
+  });
+
+  testWidgets('splash shows LUNO brand moment then forwards to login',
+      (WidgetTester tester) async {
+    final session = SessionController();
+    addTearDown(session.disposeAll);
+    final router = buildRouter(session);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      SessionScope(
+        notifier: session,
+        child: MaterialApp.router(
+          theme: LunoHarbor.theme(Brightness.light),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('luno-splash')), findsOneWidget);
+    for (final name in ['Lumi', 'Nori', 'Poko', 'Luno', 'Comet', 'Astro']) {
+      expect(find.text(name), findsOneWidget);
+    }
+    expect(find.text('Connect Beyond Borders'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('로그인'), findsWidgets);
+  });
+
+  testWidgets('empty chats shows Luno mascot', (WidgetTester tester) async {
+    final session = SessionController();
+    addTearDown(session.disposeAll);
+    await tester.pumpWidget(
+      SessionScope(
+        notifier: session,
+        child: MaterialApp(
+          theme: LunoHarbor.theme(Brightness.light),
+          home: const ChatsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+        find.text('대화방이 없습니다.\n홈에서 친구를 찾아 대화를 시작해보세요.'),
+        findsOneWidget);
+    expect(find.text('Luno'), findsOneWidget);
+  });
+
+  testWidgets('home renders reference sections', (WidgetTester tester) async {
+    final session = SessionController()
+      ..selfId = 'u-test'
+      ..selfName = 'Luno Tester';
+    addTearDown(session.disposeAll);
+    final router = buildRouter(session);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      SessionScope(
+        notifier: session,
+        child: MaterialApp.router(
+          theme: LunoHarbor.theme(Brightness.light),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('서비스'), findsOneWidget);
+    expect(find.text('공식 계정'), findsOneWidget);
+    expect(find.text('친구 (0)'), findsOneWidget);
+    expect(find.text('Luno Tester'), findsWidgets);
   });
 
   test('session helpers match legacy formatting', () {

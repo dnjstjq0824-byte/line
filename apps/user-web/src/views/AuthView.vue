@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import lunoLogo from '../../../shared/brand/luno-logo-horizontal.svg'
 import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
-import LineIcon from '../components/LineIcon.vue'
+import LunoIcon from '../components/LunoIcon.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SUPPORTED_LOCALES } from '../luno-i18n'
@@ -82,7 +82,7 @@ async function authAction() {
     const data = await request<LoginResult>('/api/v1/auth/login', null, 'POST', {
       email: email.value.trim(),
       password: password.value,
-      device_name: 'LINE Web Desktop Client',
+      device_name: 'LUNO Web Desktop Client',
       platform: 'web'
     })
     storeSession(data, autoLoginCheck.value)
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <button class="btn-win-dark" @click="toggleDarkMode" :title="isDarkMode ? t('lightModeTitle') : t('darkModeTitle')">
-              <LineIcon :name="isDarkMode ? 'sun' : 'moon'" :size="13" />
+              <LunoIcon :name="isDarkMode ? 'sun' : 'moon'" :size="13" />
             </button>
             <div class="pc-win-sys-controls">
               <button class="btn-sys-tool" :title="t('winMinTitle')">−</button>

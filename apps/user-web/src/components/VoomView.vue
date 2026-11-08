@@ -1,14 +1,14 @@
 <template>
   <div class="voom-view">
-    <div class="line-header">
-      <div class="line-header-title">VOOM</div>
-      <div class="line-header-actions">
-        <LineIcons name="plus" class="btn-icon" title="새 스토리" @click="showNewStoryModal = true" />
-        <LineIcons name="search" class="btn-icon" />
+    <div class="luno-header">
+      <div class="luno-header-title">VOOM</div>
+      <div class="luno-header-actions">
+        <LunoIcons name="plus" class="btn-icon" title="새 스토리" @click="showNewStoryModal = true" />
+        <LunoIcons name="search" class="btn-icon" />
       </div>
     </div>
 
-    <div class="line-content voom-content">
+    <div class="luno-content voom-content">
       <!-- 스토리 캐러셀 -->
       <div class="stories-row">
         <div class="story-item my-story" @click="showNewStoryModal = true">
@@ -36,7 +36,7 @@
                 ❤️ {{ v.like_count }}
               </button>
               <button class="btn-icon" @click="shareVoomPost(v.id)">
-                <LineIcons name="more" />
+                <LunoIcons name="more" />
               </button>
             </div>
           </div>
@@ -51,7 +51,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import LineIcons from './LineIcons.vue'
+import LunoIcons from './LunoIcons.vue'
 
 const props = {
   stories: { type: Array, default: () => [] },

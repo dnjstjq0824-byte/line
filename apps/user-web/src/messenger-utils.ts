@@ -1,4 +1,4 @@
-// WebRTC, E2EE, and Offline Queue utilities for LINE messenger web client
+// WebRTC, E2EE, and Offline Queue utilities for LUNO messenger web client
 
 export async function startWebRTCCall(convId: string, kind: 'voice' | 'video', token: string, requestFn: any): Promise<string | null> {
   try {

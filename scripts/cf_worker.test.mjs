@@ -44,9 +44,9 @@ async function login(email, password) {
 }
 
 test('private chat access and one-use realtime tickets', async () => {
-  const alice = await login('alice@line-test.local', 'Alice#Rotated$48wT');
-  const bob = await login('bob@line-test.local', 'Bob#Rotated$31qR');
-  const outsider = await login('user@line.local', 'LunoUser#Rotated$72mP');
+  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
+  const outsider = await login('user@luno.local', 'LunoUser#2026!');
   const cid = '00000000-0000-0000-0000-000000000010';
   assert.equal((await api('ws-ticket', null, 'POST')).status, 401);
   assert.equal((await api('ws', null, 'GET', undefined, { Upgrade: 'websocket' })).status, 401);
@@ -185,7 +185,7 @@ test('private chat access and one-use realtime tickets', async () => {
   assert.equal(likes, 1);
 
   // Admin Moderation test
-  const adminToken = await login('admin@line.local', 'LunoAdmin#RotatedEdge$99xK');
+  const adminToken = await login('admin@luno.local', 'LunoAdmin#2026!');
   const modRes = await api('admin/moderation/actions', adminToken, 'POST', {
     subject_user_id: '00000000-0000-0000-0000-000000000003',
     action: 'warn',
@@ -201,7 +201,7 @@ test('private chat access and one-use realtime tickets', async () => {
 // { ALLOW_LOCAL_DEMO } and so never saw it. These cases pin the deployed combination.
 test('the standalone demo backend is gated on the hostname, whatever the env vars say', async () => {
   const hit = (host, env, path = 'auth/login') => worker.fetch(new Request(`https://${host}/api/v1/${path}`, {
-    method: 'POST', body: JSON.stringify({ email: 'user@line.local', password: 'LunoUser#Rotated$72mP' }),
+    method: 'POST', body: JSON.stringify({ email: 'user@luno.local', password: 'LunoUser#2026!' }),
   }), env);
 
   const publicHost = 'luno.example';
@@ -223,7 +223,7 @@ test('the standalone demo backend is gated on the hostname, whatever the env var
   }
 
   // Cloudflare hostnames are public production surfaces too.
-  for (const host of ['line-messenger.dnjstjqppk.workers.dev', 'luno.pages.dev']) {
+  for (const host of ['luno-messenger.dnjstjqppk.workers.dev', 'luno.pages.dev']) {
     const env = { ALLOW_LOCAL_DEMO: 'true', ENABLE_DEMO_ACCOUNTS: 'true' };
     assert.equal((await hit(host, env)).status, 503);
     assert.equal((await hit(host, env, 'auth/demo')).status, 503);
@@ -239,7 +239,7 @@ test('the standalone demo backend is gated on the hostname, whatever the env var
 test('standalone host allowlist matches exact names and requires the literal master switch', async () => {
   const hit = (host, env) => worker.fetch(new Request(`https://${host}/api/v1/auth/login`, {
     method: 'POST',
-    body: JSON.stringify({ email: 'user@line.local', password: 'LunoUser#Rotated$72mP' }),
+    body: JSON.stringify({ email: 'user@luno.local', password: 'LunoUser#2026!' }),
   }), env);
   const env = { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: ' other.example, STAGING.LUNO.EXAMPLE , ' };
   assert.equal((await hit('staging.luno.example', env)).status, 200);

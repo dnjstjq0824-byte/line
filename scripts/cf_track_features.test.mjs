@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.ALLOW_LOCAL_DEMO = 'true';
-process.env.STANDALONE_HOSTS = '127.0.0.1,localhost,line-messenger.dnjstjqppk.workers.dev';
+process.env.STANDALONE_HOSTS = '127.0.0.1,localhost,luno-messenger.dnjstjqppk.workers.dev';
 process.env.ENABLE_DEMO_ACCOUNTS = 'true';
 
 const { default: worker } = await import('./cf_worker.js');
@@ -11,7 +11,7 @@ function req(path, opts = {}) {
   const headers = new Headers(opts.headers || {});
   headers.set('User-Agent', 'Mozilla/5.0 LunoTest/1.0');
   if (opts.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  return new Request('https://line-messenger.dnjstjqppk.workers.dev' + path, {
+  return new Request('https://luno-messenger.dnjstjqppk.workers.dev' + path, {
     method: opts.method || 'GET',
     headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined
@@ -62,7 +62,7 @@ test('Track 4: Official Account Rich Menu & Chatbot CRM engine', async () => {
   assert.ok(latestReply.body.includes('[LUNO 공지]'), 'Bot reply should match configured keyword rule');
 
   // 6. Test Partner Bot Rules CRUD
-  const adminLogin = await api('/api/v1/auth/login', null, 'POST', { email: 'admin@line.local', password: 'LunoAdmin#RotatedEdge$99xK' });
+  const adminLogin = await api('/api/v1/auth/login', null, 'POST', { email: 'admin@luno.local', password: 'LunoAdmin#2026!' });
   const adminToken = (await adminLogin.json()).access_token;
   assert.equal((await api('/api/v1/partner/accounts/oa-notice/bot-rules', token)).status, 403);
   const rulesListRes = await api('/api/v1/partner/accounts/oa-notice/bot-rules', adminToken);

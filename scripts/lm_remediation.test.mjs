@@ -22,14 +22,16 @@ async function api(path, method = 'GET', body = null, token = null) {
 
 test('LM-01: Rotated credentials, old passwords rejected with 401, fail-closed demo', async () => {
   // 1. Old credentials must fail
-  const oldUser = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LineUser#2026!' });
+  const oldUser = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LineUser#2026!' });
+  const retiredUser = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#Rotated$72mP' });
+  assert.equal(retiredUser.status, 401, 'Retired rotated password must be rejected');
   assert.equal(oldUser.status, 401, 'Old user password must be rejected');
 
-  const oldAdmin = await api('auth/login', 'POST', { email: 'admin@line.local', password: 'LineAdmin#2026!' });
+  const oldAdmin = await api('auth/login', 'POST', { email: 'admin@luno.local', password: 'LineAdmin#2026!' });
   assert.equal(oldAdmin.status, 401, 'Old admin password must be rejected');
 
-  // 2. Rotated credentials must succeed
-  const newUser = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  // 2. Current credentials must succeed
+  const newUser = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   assert.equal(newUser.status, 200, 'Rotated user password must succeed');
   const userJson = await newUser.json();
   assert.ok(userJson.access_token);
@@ -47,7 +49,7 @@ test('LM-01: Rotated credentials, old passwords rejected with 401, fail-closed d
 });
 
 test('LM-01 & A-02: Role check enforcement (normal user receives 403 on admin routes)', async () => {
-  const userLogin = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  const userLogin = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   const { access_token: userToken } = await userLogin.json();
 
   const adminStats = await api('admin/stats', 'GET', null, userToken);
@@ -67,7 +69,7 @@ test('LM-02 & A-03: Version endpoint returns commit and build metadata', async (
 });
 
 test('LM-03 & A-05: Official Accounts unique 3 items and conversation isolation', async () => {
-  const userLogin = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  const userLogin = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   const { access_token: token, user_id: userId } = await userLogin.json();
 
   // Exactly 3 unique official accounts
@@ -86,14 +88,14 @@ test('LM-03 & A-05: Official Accounts unique 3 items and conversation isolation'
   assert.ok(keep, 'Keep memo must exist for user');
 
   // Verify another user cannot access user A keep memo
-  const aliceLogin = await api('auth/login', 'POST', { email: 'alice@line-test.local', password: 'Alice#Rotated$48wT' });
+  const aliceLogin = await api('auth/login', 'POST', { email: 'alice@luno-test.local', password: 'Alice#Rotated$48wT' });
   const { access_token: aliceToken } = await aliceLogin.json();
   const aliceConvs = await (await api('conversations', 'GET', null, aliceToken)).json();
   assert.ok(!aliceConvs.conversations.some(c => c.id === `conv-keep-${userId}`), 'Alice must not see User keep memo');
 });
 
 test('LM-04 & A-06 & A-07: Badge Invariant and read-all idempotency', async () => {
-  const userLogin = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  const userLogin = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   const { access_token: token } = await userLogin.json();
 
   const convRes = await api('conversations', 'GET', null, token);
@@ -121,7 +123,7 @@ test('LM-04 & A-06 & A-07: Badge Invariant and read-all idempotency', async () =
 });
 
 test('LM-07 & A-10: Session revocation and password change', async () => {
-  const userLogin = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  const userLogin = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   const { access_token: token, device_id: sessionId } = await userLogin.json();
 
   // 1. Session revocation: a concrete session_id is required (raw tokens are never accepted)
@@ -133,34 +135,34 @@ test('LM-07 & A-10: Session revocation and password change', async () => {
   assert.equal(testRevoked.status, 401, 'Revoked token must be rejected with 401');
 
   // 2. Log in again with a fresh session
-  const freshLogin = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  const freshLogin = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   const { access_token: freshToken } = await freshLogin.json();
 
   // Change password
   const changeRes = await api('auth/change-password', 'POST', {
-    current_password: 'LunoUser#Rotated$72mP',
+    current_password: 'LunoUser#2026!',
     new_password: 'LunoUser#NewStrongPass$2026'
   }, freshToken);
   assert.equal(changeRes.status, 200);
 
   // Old password must fail
-  const oldAttempt = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  const oldAttempt = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   assert.equal(oldAttempt.status, 401, 'Previous password must be rejected');
 
   // New password must succeed
-  const newAttempt = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#NewStrongPass$2026' });
+  const newAttempt = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#NewStrongPass$2026' });
   assert.equal(newAttempt.status, 200, 'New password must succeed');
 
   // Reset back to standard rotated test password for other tests
   const { access_token: resetToken } = await newAttempt.json();
   await api('auth/change-password', 'POST', {
     current_password: 'LunoUser#NewStrongPass$2026',
-    new_password: 'LunoUser#Rotated$72mP'
+    new_password: 'LunoUser#2026!'
   }, resetToken);
 });
 
 test('LM-08 & A-11: 13 MESSAGE_KINDS round-trip verification', async () => {
-  const userLogin = await api('auth/login', 'POST', { email: 'user@line.local', password: 'LunoUser#Rotated$72mP' });
+  const userLogin = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' });
   const { access_token: token, user_id: userId } = await userLogin.json();
 
   const convRes = await api('conversations', 'GET', null, token);

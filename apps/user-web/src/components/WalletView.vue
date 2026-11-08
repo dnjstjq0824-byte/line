@@ -1,13 +1,13 @@
 <template>
   <div class="wallet-view">
-    <div class="line-header">
-      <div class="line-header-title">월렛</div>
-      <div class="line-header-actions">
-        <LineIcons name="more" class="btn-icon" />
+    <div class="luno-header">
+      <div class="luno-header-title">월렛</div>
+      <div class="luno-header-actions">
+        <LunoIcons name="more" class="btn-icon" />
       </div>
     </div>
 
-    <div class="line-content wallet-content">
+    <div class="luno-content wallet-content">
       <!-- 잔액 표시 -->
       <div class="wallet-balance">
         <div class="balance-amount">{{ walletBalance }}</div>
@@ -17,7 +17,7 @@
       <!-- 충전 버튼 -->
       <div class="charge-btn">
         <button class="btn-primary wide" @click="showChargeModal = true">
-          <LineIcons name="send" class="btn-icon" /> 잔액 충전
+          <LunoIcons name="send" class="btn-icon" /> 잔액 충전
         </button>
       </div>
 
@@ -56,7 +56,7 @@
             @click="openService(service.id)"
           >
             <div class="service-icon">
-              <LineIcons :name="service.icon" class="service-icon-svg" />
+              <LunoIcons :name="service.icon" class="service-icon-svg" />
             </div>
             <div class="service-name">{{ service.name }}</div>
           </div>
@@ -68,7 +68,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import LineIcons from './LineIcons.vue'
+import LunoIcons from './LunoIcons.vue'
 
 const props = {
   walletBalance: { type: Number, default: 50000 },

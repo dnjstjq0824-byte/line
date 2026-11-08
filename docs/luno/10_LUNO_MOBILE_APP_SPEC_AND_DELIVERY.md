@@ -10,7 +10,7 @@
 
 본 문서는 사용자의 "이제 실제 모바일 앱으로 구현해야 되지 않겠어?" 지시 및 PO Master 작업지시서 v1.0에 따라 개발된 **LUNO Global Messenger 네이티브 모바일 애플리케이션 (`mobile/flutter_app/`)**의 상세 구현 내역 및 테스트 결과를 기록합니다.
 
-웹 브라우저 환경(`https://line-messenger.dnjstjqppk.workers.dev`)과 연동되는 고성능 크로스 플랫폼 네이티브 클라이언트를 완성하였으며, 기존의 잔여 레거시 브랜딩 및 컬러를 PO 지침에 맞추어 완벽히 전환하였습니다.
+웹 브라우저 환경(`https://luno-messenger.dnjstjqppk.workers.dev`)과 연동되는 고성능 크로스 플랫폼 네이티브 클라이언트를 완성하였으며, 기존의 잔여 레거시 브랜딩 및 컬러를 PO 지침에 맞추어 완벽히 전환하였습니다.
 
 ---
 
@@ -19,7 +19,7 @@
 사용자가 첨부한 화면 캡처 분석 결과:
 1. **발생 현상:** 사용자의 크롬 브라우저 탭에 이전 세션에 로드되었던 페이지 및 설정 모달("라인 환경설정 & 테마")이 메모리에 유지되어 표시됨.
 2. **배포 현황 확인:**
-   - Cloudflare Worker (`line-messenger.dnjstjqppk.workers.dev`) 프로덕션 엣지는 이미 LUNO 배포판이 정식 배포되어 서비스 중 (`<title>LUNO — Connect Beyond Borders</title>`, LUNO Favicon, LUNO Deep Blue `#315BCD` 테마).
+   - Cloudflare Worker (`luno-messenger.dnjstjqppk.workers.dev`) 프로덕션 엣지는 이미 LUNO 배포판이 정식 배포되어 서비스 중 (`<title>LUNO — Connect Beyond Borders</title>`, LUNO Favicon, LUNO Deep Blue `#315BCD` 테마).
    - 브라우저 강력 새로고침(`Ctrl + Shift + R` 또는 `Ctrl + F5`) 수행 시 최신 LUNO 인터페이스로 즉시 전환됩니다.
 
 ---

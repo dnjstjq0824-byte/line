@@ -231,7 +231,7 @@ class _GateForm extends StatelessWidget {
                 color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
                 borderRadius: BorderRadius.circular(HarborRadius.control),
               ),
-              child: Text('💡 데모 계정: user@line.local / LineUser#2026!',
+              child: Text('💡 데모 계정: user@luno.local / LunoUser#2026!',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,

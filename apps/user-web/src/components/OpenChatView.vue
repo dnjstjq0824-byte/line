@@ -1,14 +1,14 @@
 <template>
   <div class="openchat-view">
-    <div class="line-header">
-      <div class="line-header-title">오픈채팅</div>
-      <div class="line-header-actions">
-        <LineIcons name="plus" class="btn-icon" />
-        <LineIcons name="search" class="btn-icon" />
+    <div class="luno-header">
+      <div class="luno-header-title">오픈채팅</div>
+      <div class="luno-header-actions">
+        <LunoIcons name="plus" class="btn-icon" />
+        <LunoIcons name="search" class="btn-icon" />
       </div>
     </div>
 
-    <div class="line-content openchat-content">
+    <div class="luno-content openchat-content">
       <!-- 커뮤니티 방 리스트 -->
       <div class="community-rooms">
         <div v-for="room in communityRooms" :key="room.id" class="room-item" @click="enterRoom(room.id)">
@@ -49,7 +49,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import LineIcons from './LineIcons.vue'
+import LunoIcons from './LunoIcons.vue'
 
 const props = {
   communityRooms: { type: Array, default: () => [] },

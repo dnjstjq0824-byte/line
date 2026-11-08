@@ -20,7 +20,9 @@ import 'pages/lounge.dart';
 import 'pages/more.dart';
 import 'pages/news.dart';
 import 'pages/news_article.dart';
+import 'pages/profile.dart';
 import 'pages/settings.dart';
+import 'pages/splash.dart';
 import 'pages/stories.dart';
 import 'pages/wallet.dart';
 import 'state/session.dart';
@@ -35,12 +37,17 @@ GoRouter buildRouter(SessionController session) {
       );
 
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/splash',
     refreshListenable: session,
     redirect: (context, state) {
       final location = state.uri.path;
-      if (!session.authed && location != '/login') return '/login';
-      if (session.authed && (location == '/login' || location == '/')) {
+      if (!session.authed && location != '/login' && location != '/splash') {
+        return '/login';
+      }
+      if (session.authed &&
+          (location == '/login' ||
+              location == '/' ||
+              location == '/splash')) {
         return '/home';
       }
       if (location == '/') return '/login';
@@ -50,6 +57,14 @@ GoRouter buildRouter(SessionController session) {
       GoRoute(
         path: '/login',
         pageBuilder: (context, state) => harborPage(context, state, const LoginPage()),
+      ),
+      GoRoute(
+        path: '/splash',
+        pageBuilder: (context, state) => harborPage(context, state, const SplashPage()),
+      ),
+      GoRoute(
+        path: '/profile',
+        pageBuilder: (context, state) => harborPage(context, state, const ProfilePage()),
       ),
       ShellRoute(
         builder: (context, state, child) => AdaptiveShell(child: child),

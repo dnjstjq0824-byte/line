@@ -72,7 +72,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           ),
         Expanded(
           child: Container(
-            color: dark ? HarborDark.fog : const Color(0xFFDDE7E3),
+            color: dark ? HarborDark.fog : lunoLightBlue,
             child: loading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(

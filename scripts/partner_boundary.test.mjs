@@ -9,7 +9,7 @@ async function api(path, token, method = 'GET', body) {
 }
 async function login(email, password) { return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token; }
 test('customers cannot read or mutate official-account management data', async () => {
-  const user = await login('user@line.local', 'LunoUser#Rotated$72mP');
+  const user = await login('user@luno.local', 'LunoUser#2026!');
   for (const [path, method, body] of [
     ['partner/accounts/oa-notice/rich-menus', 'GET'],
     ['partner/accounts/oa-notice/rich-menus', 'POST', { title: 'forged' }],
@@ -20,18 +20,18 @@ test('customers cannot read or mutate official-account management data', async (
   ]) assert.equal((await api(path, user, method, body)).status, 403, `${method} ${path}`);
 });
 test('organization listing excludes other owners and seeded admin retains management access', async () => {
-  const owner = await login('alice@line-test.local', 'Alice#Rotated$48wT');
-  const outsider = await login('bob@line-test.local', 'Bob#Rotated$31qR');
+  const owner = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+  const outsider = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
   const created = await (await api('partner/organizations', owner, 'POST', { name: 'Ownership test organization' })).json();
   const own = await (await api('partner/organizations', owner)).json();
   const other = await (await api('partner/organizations', outsider)).json();
   assert.ok(own.organizations.some(org => org.id === created.id));
   assert.equal(other.organizations.some(org => org.id === created.id), false);
-  const admin = await login('admin@line.local', 'LunoAdmin#RotatedEdge$99xK');
+  const admin = await login('admin@luno.local', 'LunoAdmin#2026!');
   assert.equal((await api('partner/accounts/oa-notice/bot-rules', admin)).status, 200);
 });
 test('unconfigured external services cannot claim delivery, transcription or payment success', async () => {
-  const user = await login('user@line.local', 'LunoUser#Rotated$72mP');
+  const user = await login('user@luno.local', 'LunoUser#2026!');
   for (const path of ['push-tokens/test', 'ai/stt', 'checkout', 'creator/settlements/request', 'developer/apps/unknown/webhooks/test']) {
     const response = await api(path, user, 'POST', { amount: 10000, mock_text: 'not a transcript' });
     assert.equal(response.status, 503, path);

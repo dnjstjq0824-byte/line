@@ -71,6 +71,22 @@ class _FeedPageState extends State<FeedPage> {
                 ),
               ),
               const SizedBox(height: 10),
+              if (session.feedPosts.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CrewBadge.mascot(),
+                      SizedBox(height: 12),
+                      Text(
+                        '아직 피드 글이 없습니다.\n첫 소식을 공유해보세요.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
               for (final p in session.feedPosts)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
@@ -89,7 +105,7 @@ class _FeedPageState extends State<FeedPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(
-                                child: Text("${p['author']} ${p['handle'] ?? ''}",
+                                child: Text("${p['author'] ?? 'LUNO'} ${p['handle'] ?? ''}",
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700)),
                               ),

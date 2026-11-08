@@ -2,7 +2,7 @@ from pathlib import Path
 import csv
 root=Path(__file__).resolve().parents[1]
 items=[
- 'LINE public feature inventory','Feature traceability matrix','Role and access model','Application separation and routes','Target platforms and browsers','Regional privacy and payment rules','End-to-end user scenarios','Independent messenger UX design','Design system and i18n','Release sequencing and gates',
+ 'Reference messenger public feature inventory','Feature traceability matrix','Role and access model','Application separation and routes','Target platforms and browsers','Regional privacy and payment rules','End-to-end user scenarios','Independent messenger UX design','Design system and i18n','Release sequencing and gates',
  'Go/Vue/Flutter/Tauri monorepo','Go domain-process architecture','Vue app bootstrap','Flutter mobile project','Tauri desktop project','REST gRPC and WebSocket contracts','PostgreSQL ERD and schema','Realtime WebSocket gateway','Database cache events and media infra','Local Docker and deployment bootstrap',
  'Account registration','Login and logout','JWT and session model','Multi-device login and QR pairing','Secure device storage and trust','Account backup and restore','User profile updates','User search visibility settings','Social graph data model','QR code friend adding',
  'Friend search and creation','Device contacts matching','Block and abuse-prevention','Conversation list and unread states','Direct text chat','Group chat and invitations','Message idempotency and ordering','Read receipts and cursor','Presence and typing indicators','Reply quote and forwarding',

@@ -1,9 +1,9 @@
 <template>
   <div class="chat-room-view">
-    <div class="line-header">
+    <div class="luno-header">
       <div class="chat-header">
         <button class="btn-icon" @click="$emit('back')">
-          <LineIcons name="chat" />
+          <LunoIcons name="chat" />
         </button>
         <div class="chat-header-info">
           <div class="avatar chat-avatar" :class="{ 'group-avatar': selectedChat?.kind === 'group' }">
@@ -14,14 +14,14 @@
             <div class="chat-header-status">{{ memberCount }}명 · {{ onlineStatus }}</div>
           </div>
         </div>
-        <div class="line-header-actions">
-          <LineIcons name="search" class="btn-icon" />
-          <LineIcons name="more" class="btn-icon" />
+        <div class="luno-header-actions">
+          <LunoIcons name="search" class="btn-icon" />
+          <LunoIcons name="more" class="btn-icon" />
         </div>
       </div>
     </div>
 
-    <div class="line-content chat-content">
+    <div class="luno-content chat-content">
       <!-- 메시지 목록 -->
       <div class="message-list" ref="messageList">
         <!-- 날짜 구분선 -->
@@ -62,7 +62,7 @@
       <!-- 하단 작곡자 -->
       <div class="message-composer">
         <button class="composer-btn" @click="$emit('attach')">
-          <LineIcons name="more" />
+          <LunoIcons name="more" />
         </button>
         <input
           v-model="draftMessage"
@@ -71,7 +71,7 @@
           @keydown.enter.prevent="sendMessage"
         />
         <button class="composer-btn active" @click="sendMessage">
-          <LineIcons name="send" />
+          <LunoIcons name="send" />
         </button>
       </div>
     </div>
@@ -80,7 +80,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import LineIcons from './LineIcons.vue'
+import LunoIcons from './LunoIcons.vue'
 
 const props = {
   selectedChat: { type: Object, default: null },

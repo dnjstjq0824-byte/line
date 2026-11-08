@@ -6,6 +6,31 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 
+/// Renders the list preview for a conversation's last message.
+/// The server sends an object ({id, kind, body, ...}); only the human
+/// readable part is shown, never the raw map.
+String previewOfLastMessage(dynamic last) {
+  if (last is Map) {
+    final body = '${last['body'] ?? ''}';
+    if (body.isNotEmpty && body != 'null') return body;
+    switch ('${last['kind'] ?? ''}') {
+      case 'call_status':
+        return '통화';
+      case 'sticker':
+        return '스티커';
+      case 'image':
+        return '사진';
+      case 'file':
+        return '파일';
+      case 'security_notice':
+        return '알림';
+    }
+    return '메시지를 입력해보세요';
+  }
+  final text = '$last';
+  return (text.isEmpty || text == 'null') ? '메시지를 입력해보세요' : text;
+}
+
 class ChatsPage extends StatelessWidget {
   const ChatsPage({super.key});
 
@@ -27,10 +52,17 @@ class ChatsPage extends StatelessWidget {
                 const Padding(
                   padding: EdgeInsets.all(32),
                   child: Center(
-                    child: Text(
-                      '대화방이 없습니다.\n홈에서 친구를 찾아 대화를 시작해보세요.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(height: 1.5),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CrewBadge.mascot(),
+                        SizedBox(height: 12),
+                        Text(
+                          '대화방이 없습니다.\n홈에서 친구를 찾아 대화를 시작해보세요.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(height: 1.5),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -92,7 +124,7 @@ class _BerthCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                     const SizedBox(height: 2),
-                    Text('${c['last_message'] ?? '메시지를 입력해보세요'}',
+                    Text(previewOfLastMessage(c['last_message']),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall),

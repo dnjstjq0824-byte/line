@@ -60,7 +60,7 @@ const richMenuTiles = ref<RichMenuTile[]>([
   { id: 't3', label: t('partner.seed3L'), icon: '🔒', action: { type: 'message', text: t('partner.seed3T') } },
   { id: 't4', label: t('partner.seed4L'), icon: '🎁', action: { type: 'message', text: t('partner.seed4T') } },
   { id: 't5', label: t('partner.seed5L'), icon: '❓', action: { type: 'message', text: t('partner.seed5T') } },
-  { id: 't6', label: t('partner.seed6L'), icon: '🌐', action: { type: 'uri', uri: 'https://line-messenger.dnjstjqppk.workers.dev' } },
+  { id: 't6', label: t('partner.seed6L'), icon: '🌐', action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } },
 ])
 const selectedTileIndex = ref(0)
 
@@ -342,7 +342,7 @@ async function createCoupon() {
         <div v-if="activeTab === 'richmenu'" class="tool-content">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <h3>{{ t('partner.rmTitle') }}</h3>
-            <button @click="saveRichMenu" :disabled="accountLoading || !accountReady" style="background:#06c755;font-weight:700">{{ t('partner.rmSave') }}</button>
+            <button @click="saveRichMenu" :disabled="accountLoading || !accountReady" style="background:#4F7CFF;font-weight:700">{{ t('partner.rmSave') }}</button>
           </div>
           <p class="muted">{{ t('partner.rmDesc') }}</p>
 
@@ -518,7 +518,7 @@ small{color:#6a798b}
 .rich-menu-preview.grid_1x3{grid-template-columns:repeat(3,1fr);grid-template-rows:80px}
 .preview-tile{background:#334155;color:#fff;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;border:2px solid transparent;transition:all .15s}
 .preview-tile:hover{background:#475569}
-.preview-tile.tile-active{border-color:#06c755;background:#1e3a5f}
+.preview-tile.tile-active{border-color:#4F7CFF;background:#1e3a5f}
 .tile-icon{font-size:20px;margin-bottom:2px}
 .tile-label{font-size:12px;font-weight:600}
 .tile-type-badge{position:absolute;top:4px;right:4px;font-size:9px;background:rgba(0,0,0,0.4);padding:2px 4px;border-radius:4px;color:#94a3b8}

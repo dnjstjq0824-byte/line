@@ -1,4 +1,4 @@
--- LINE Messenger D1 Relational Schema
+-- LUNO Messenger D1 Relational Schema
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -136,10 +136,10 @@ CREATE TABLE IF NOT EXISTS polls (
 -- Seed initial test users and official accounts if not present
 INSERT OR IGNORE INTO users (id, email, password_hash, display_name, status_message, bio, created_at, updated_at)
 VALUES 
-  ('00000000-0000-0000-0000-000000000001', 'user@line.local', 'sha256:LineUser#2026!', 'LINE Demo User', '오늘도 행복한 하루 🍀', 'LINE 공식 데모 계정입니다.', datetime('now'), datetime('now')),
-  ('00000000-0000-0000-0000-000000000002', 'admin@line.local', 'sha256:LineAdmin#2026!', 'LINE Admin', '메신저 시스템 관리자 🛡️', 'System Administrator', datetime('now'), datetime('now')),
-  ('00000000-0000-0000-0000-000000000003', 'alice@line-test.local', 'sha256:AliceStrongPass#2026', 'Alice Kim', '커피 한 잔의 여유 ☕', 'Developer & Designer', datetime('now'), datetime('now')),
-  ('00000000-0000-0000-0000-000000000004', 'bob@line-test.local', 'sha256:BobStrongPass#2026', 'Bob Lee', '열심히 코딩 중 💻', 'Software Engineer', datetime('now'), datetime('now'));
+  ('00000000-0000-0000-0000-000000000001', 'user@luno.local', 'sha256:LunoUser#2026!', 'LUNO Demo User', '오늘도 행복한 하루 🍀', 'LUNO 공식 데모 계정입니다.', datetime('now'), datetime('now')),
+  ('00000000-0000-0000-0000-000000000002', 'admin@luno.local', 'sha256:LunoAdmin#2026!', 'LUNO Admin', '메신저 시스템 관리자 🛡️', 'System Administrator', datetime('now'), datetime('now')),
+  ('00000000-0000-0000-0000-000000000003', 'alice@luno-test.local', 'sha256:AliceStrongPass#2026', 'Alice Kim', '커피 한 잔의 여유 ☕', 'Developer & Designer', datetime('now'), datetime('now')),
+  ('00000000-0000-0000-0000-000000000004', 'bob@luno-test.local', 'sha256:BobStrongPass#2026', 'Bob Lee', '열심히 코딩 중 💻', 'Software Engineer', datetime('now'), datetime('now'));
 
 INSERT OR IGNORE INTO wallets (user_id, balance, updated_at)
 VALUES 

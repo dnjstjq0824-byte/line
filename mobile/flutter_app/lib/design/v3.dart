@@ -5,29 +5,36 @@
 // Deliberately NOT a conference/landing look: no hero, no feature grid,
 // no bento, no aurora blobs, no gradient headline text, no purple accent,
 // no single global radius, no glassmorphism, no emoji feature icons.
+//
+// Brand direction (user-requested): reference layout with the LUNO brand
+// blues. Light chrome aliases the frozen PO tokens; LunoBrand below covers
+// the theme-independent brand moments (splash, covers, badges).
 import 'package:flutter/material.dart';
 
-/// Harbor daylight tokens.
+import '../legacy_tokens.dart';
+
+/// Harbor daylight tokens. Light chrome follows the LUNO brand blues
+/// (frozen PO tokens); only the night palette keeps the pine look.
 abstract final class HarborLight {
-  static const fog = Color(0xFFE8EFED); // page ground, cool eucalyptus grey
+  static const fog = lunoBg; // page ground
   static const surface = Color(0xFFFFFFFF);
-  static const chart = Color(0xFFDFE8E4); // inset / wash panels
-  static const ink = Color(0xFF12211E);
-  static const drift = Color(0xFF5C6B67); // secondary text
-  static const channel = Color(0xFFCBD8D3); // hairlines
-  static const harbor = Color(0xFF0B4F45); // primary deep pine
+  static const chart = Color(0xFFE4E9F2); // inset / wash panels, blue grey
+  static const ink = lunoNavy;
+  static const drift = lunoSlateGray; // secondary text
+  static const channel = lunoMistGray; // hairlines
+  static const harbor = lunoDeepBlue; // primary brand blue
   static const onHarbor = Color(0xFFFFFFFF);
   static const beacon = Color(0xFFE4572E); // signal vermilion: unread, calls, key CTAs
   static const onBeacon = Color(0xFFFFFFFF);
-  static const seaGlass = Color(0xFFD4E8DF); // selected wash
+  static const seaGlass = Color(0xFFE3EBFF); // selected wash, light brand blue
   static const buoyBg = Color(0xFFFFF3D6);
   static const buoyInk = Color(0xFF7A5B00);
-  static const danger = Color(0xFFC22E3D);
-  static const success = Color(0xFF2E7D32);
+  static const danger = Color(0xFFC22E3D); // kept: AA-chosen functional red
+  static const success = Color(0xFF2E7D32); // kept: AA-chosen functional green
   static const warning = Color(0xFF7A5B00);
   static const info = Color(0xFF1D6FB8);
   static const tide = Color(0xFF1D6FB8); // links / info
-  static const mine = Color(0xFF0B4F45); // own chat bubble
+  static const mine = lunoPrimary; // own chat bubble, brand blue
   static const theirs = Color(0xFFFFFFFF);
 }
 
@@ -261,6 +268,86 @@ class IdentityTile extends StatelessWidget {
               color: Colors.white,
               fontWeight: FontWeight.w800,
               fontSize: size * 0.42)),
+    );
+  }
+}
+
+/// LUNO brand-fixed tokens (identical in both brightnesses).
+/// Values alias the frozen PO tokens in legacy_tokens.dart.
+abstract final class LunoBrand {
+  static const primary = lunoPrimary;
+  static const deep = lunoDeepBlue;
+}
+
+/// Circular identity avatar in the reference style (people, profiles).
+class LineAvatar extends StatelessWidget {
+  final String glyph;
+  final Color color;
+  final double size;
+  const LineAvatar({super.key, required this.glyph, required this.color, this.size = 48});
+
+  @override
+  Widget build(BuildContext context) {
+    final ch = glyph.isEmpty ? '?' : glyph.characters.first;
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      child: Text(ch,
+          style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: size * 0.4)),
+    );
+  }
+}
+
+/// Orbit Crew badge: a crew member's face plus name.
+/// The crew faces are canonical product data (lunoOrbitCrewStickers in
+/// legacy_tokens.dart, pinned by messenger_test.dart) — this renders the
+/// product's own characters, not decorative icons.
+class CrewBadge extends StatelessWidget {
+  final String emoji;
+  final String name;
+  final double size;
+  final Color? background;
+  final Color? nameColor;
+  const CrewBadge(
+      {super.key,
+      required this.emoji,
+      required this.name,
+      this.size = 52,
+      this.background,
+      this.nameColor});
+
+  /// Luno the mascot for empty states.
+  const CrewBadge.mascot(
+      {super.key, this.size = 64, this.background, this.nameColor})
+      : emoji = '🚀🔥',
+        name = 'Luno';
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final bg =
+        background ?? (dark ? HarborDark.seaGlass : HarborLight.seaGlass);
+    final fg = nameColor ?? (dark ? HarborDark.ink : HarborLight.ink);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          child: Text(emoji, style: TextStyle(fontSize: size * 0.4)),
+        ),
+        const SizedBox(height: 4),
+        Text(name,
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
+      ],
     );
   }
 }

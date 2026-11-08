@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-const base = 'https://line-messenger.dnjstjqppk.workers.dev', cases = [];
+const base = 'https://luno-messenger.dnjstjqppk.workers.dev', cases = [];
 let token;
 async function probe(path, expected = 200, method = 'GET', body) {
   const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });

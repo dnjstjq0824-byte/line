@@ -66,7 +66,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<!-- Permissions for LINE-grade messenger capabilities -->
+	<!-- Permissions for LUNO messenger capabilities -->
 	<key>NSCameraUsageDescription</key>
 	<string>LUNO requires camera access to take profile photos, send photo/video messages, and conduct video calls.</string>
 	<key>NSMicrophoneUsageDescription</key>

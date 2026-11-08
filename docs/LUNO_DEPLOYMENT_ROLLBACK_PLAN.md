@@ -8,7 +8,7 @@
 1. Verify all 10 Cloudflare Worker tests and Go backend tests pass (`0 failed`).
 2. Build combined distribution: `node scripts/build_cf.js`.
 3. Deploy to Cloudflare Workers production: `npx wrangler deploy`.
-4. Run post-deploy smoke checks against `https://line-messenger.dnjstjqppk.workers.dev/healthz`.
+4. Run post-deploy smoke checks against `https://luno-messenger.dnjstjqppk.workers.dev/healthz`.
 
 ## 3. Instant Rollback Procedure
 - **Cloudflare Worker Rollback**: `npx wrangler rollback` restores the previous immutable Worker deployment in < 10 seconds while preserving Durable Object storage.

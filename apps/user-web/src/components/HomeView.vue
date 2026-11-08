@@ -1,14 +1,14 @@
 <template>
   <div class="home-view">
-    <div class="line-header">
-      <div class="line-header-title">홈</div>
-      <div class="line-header-actions">
-        <LineIcons name="search" class="btn-icon" />
-        <LineIcons name="settings" class="btn-icon" />
+    <div class="luno-header">
+      <div class="luno-header-title">홈</div>
+      <div class="luno-header-actions">
+        <LunoIcons name="search" class="btn-icon" />
+        <LunoIcons name="settings" class="btn-icon" />
       </div>
     </div>
 
-    <div class="line-content home-content">
+    <div class="luno-content home-content">
       <div class="profile-section">
         <div class="profile-header">
           <div class="avatar avatar-lg">
@@ -18,23 +18,23 @@
             <h1 class="profile-name">{{ currentUser?.display_name || '내 프로필' }}</h1>
             <p class="profile-status">{{ currentUser?.status_message || '상태 메시지가 없습니다' }}</p>
           </div>
-          <LineIcons name="more" class="btn-icon" />
+          <LunoIcons name="more" class="btn-icon" />
         </div>
         <div class="profile-quick-actions">
           <button class="quick-action">
-            <LineIcons name="chat" class="btn-icon" />
+            <LunoIcons name="chat" class="btn-icon" />
             <span>채팅</span>
           </button>
           <button class="quick-action">
-            <LineIcons name="voom" class="btn-icon" />
+            <LunoIcons name="voom" class="btn-icon" />
             <span>VOOM</span>
           </button>
           <button class="quick-action">
-            <LineIcons name="openchat" class="btn-icon" />
+            <LunoIcons name="openchat" class="btn-icon" />
             <span>오픈채팅</span>
           </button>
           <button class="quick-action">
-            <LineIcons name="wallet" class="btn-icon" />
+            <LunoIcons name="wallet" class="btn-icon" />
             <span>월렛</span>
           </button>
         </div>
@@ -58,7 +58,7 @@
                 {{ f.status_message || '' }}
               </div>
             </div>
-            <LineIcons name="more" class="btn-icon" />
+            <LunoIcons name="more" class="btn-icon" />
           </div>
           <div v-if="favoriteFriends.length === 0" class="empty-state">
             즐겨찾기한 친구가 없습니다.
@@ -71,7 +71,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import LineIcons from './LineIcons.vue'
+import LunoIcons from './LunoIcons.vue'
 
 const props = defineProps({
   currentUser: { type: Object, default: null },

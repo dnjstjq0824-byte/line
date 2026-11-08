@@ -1,0 +1,7 @@
+View [300,566][388,611] :: LUNO
+View [427,566][799,611] :: Connect Beyond Borders
+View [53,650][1028,1779] :: 로그인
+Connect Beyond Borders
+💡 데모 계정: user@luno.local / LunoUser#2026!
+Button [110,1469][970,1595] :: 로그인
+Button [110,1595][970,1721] :: 새 LUNO 계정 만들기

@@ -25,11 +25,11 @@ async function login(email, password) {
 
 test('P0-1 & P0-2: Verify official security channel and sample conversations resolve without 404', async () => {
   // Test A-01: Old exposed password must be rejected with 401
-  const oldLogin = await api('auth/login', null, 'POST', { email: 'user@line.local', password: 'LineUser#2026!' });
+  const oldLogin = await api('auth/login', null, 'POST', { email: 'user@luno.local', password: 'LineUser#2026!' });
   assert.equal(oldLogin.status, 401, 'Old password must be rejected with 401');
 
-  // Test with rotated password
-  const { token, user_id } = await login('user@line.local', 'LunoUser#Rotated$72mP');
+  // Test with current password
+  const { token, user_id } = await login('user@luno.local', 'LunoUser#2026!');
   assert.ok(token, 'Login should succeed');
 
   // Test A-03: Version endpoint check

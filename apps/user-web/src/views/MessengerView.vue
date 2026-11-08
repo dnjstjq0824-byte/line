@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
-import LineIcon from '../components/LineIcon.vue'
+import LunoIcon from '../components/LunoIcon.vue'
 import MessageAttachment from '../components/MessageAttachment.vue'
-import LineContextMenu, { type ContextMenuItem } from '../components/LineContextMenu.vue'
-import { LINE_STICKERS, type LineSticker } from '../line-stickers'
+import LunoContextMenu, { type ContextMenuItem } from '../components/LunoContextMenu.vue'
+import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
 import { playSendSound, playReceiveSound } from '../sound-effects'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -669,15 +669,15 @@ const contextMenu = ref<{
   items: []
 })
 
-const activeStickerCategory = ref<'All' | LineSticker['character']>('All')
+const activeStickerCategory = ref<'All' | LunoSticker['character']>('All')
 
 const filteredStickers = computed(() => {
-  if (activeStickerCategory.value === 'All') return LINE_STICKERS
-  return LINE_STICKERS.filter(s => s.character === activeStickerCategory.value)
+  if (activeStickerCategory.value === 'All') return LUNO_STICKERS
+  return LUNO_STICKERS.filter(s => s.character === activeStickerCategory.value)
 })
 
 function getStickerSvg(id: string): string {
-  const found = LINE_STICKERS.find(s => s.id === id)
+  const found = LUNO_STICKERS.find(s => s.id === id)
   return found ? found.svg : ''
 }
 
@@ -1599,7 +1599,7 @@ function scrollToBottom() {
 async function sendSticker(stickerId: string) {
   if (!selectedChatId.value) return
   showStickerPicker.value = false
-  const found = LINE_STICKERS.find(s => s.id === stickerId)
+  const found = LUNO_STICKERS.find(s => s.id === stickerId)
   await wrap(async () => {
     const res = await api<{ message: Message }>(`/api/v1/conversations/${selectedChatId.value}/messages`, 'POST', {
       client_id: newClientID(),
@@ -2645,7 +2645,7 @@ onBeforeUnmount(() => {
 <template>
 
 
-    <!-- 2. AUTHENTIC LINE PC DESKTOP MESSENGER (3-Pane Workspace) -->
+    <!-- 2. AUTHENTIC LUNO PC DESKTOP MESSENGER (3-Pane Workspace) -->
     <main class="pc-workspace">
       <!-- (Column 1) Sleek Midnight Navy Dock Rail (62px) -->
       <nav class="pc-rail">
@@ -2679,7 +2679,7 @@ onBeforeUnmount(() => {
             @click="switchNav('chats')"
           >
             <span class="pc-rail-indicator"></span>
-            <LineIcon name="chats" :size="22" />
+            <LunoIcon name="chats" :size="22" />
             <span v-if="totalUnreadCount > 0" class="pc-unread-pill">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
           </button>
 
@@ -2691,7 +2691,7 @@ onBeforeUnmount(() => {
             @click="switchNav('home')"
           >
             <span class="pc-rail-indicator"></span>
-            <LineIcon name="friends" :size="22" />
+            <LunoIcon name="friends" :size="22" />
           </button>
 
           <!-- 4. News (뉴스) -->
@@ -2702,7 +2702,7 @@ onBeforeUnmount(() => {
             @click="switchNav('news')"
           >
             <span class="pc-rail-indicator"></span>
-            <LineIcon name="news" :size="21" />
+            <LunoIcon name="news" :size="21" />
           </button>
 
           <!-- 5. Calls (통화) -->
@@ -2713,7 +2713,7 @@ onBeforeUnmount(() => {
             @click="switchNav('calls')"
           >
             <span class="pc-rail-indicator"></span>
-            <LineIcon name="calls" :size="20" />
+            <LunoIcon name="calls" :size="20" />
           </button>
 
           <!-- 5b. Wallet (지갑) -->
@@ -2724,7 +2724,7 @@ onBeforeUnmount(() => {
             @click="switchNav('wallet')"
           >
             <span class="pc-rail-indicator"></span>
-            <LineIcon name="money" :size="20" />
+            <LunoIcon name="money" :size="20" />
           </button>
 
           <!-- 6. Add Friends (친구 추가) -->
@@ -2733,7 +2733,7 @@ onBeforeUnmount(() => {
             :title="t('mvAddFriend')"
             @click="showAddFriendModal = true"
           >
-            <LineIcon name="add-friends" :size="20" />
+            <LunoIcon name="add-friends" :size="20" />
           </button>
 
           <!-- 5. Open Scanner Search -->
@@ -2742,7 +2742,7 @@ onBeforeUnmount(() => {
             :title="t('mvRailSearch')"
             @click="openEcosystemService('open-search')"
           >
-            <LineIcon name="open-search" :size="20" />
+            <LunoIcon name="open-search" :size="20" />
           </button>
 
           <!-- 6. Open Mail -->
@@ -2751,7 +2751,7 @@ onBeforeUnmount(() => {
             :title="t('mvRailMail')"
             @click="openEcosystemService('open-mail')"
           >
-            <LineIcon name="open-mail" :size="20" />
+            <LunoIcon name="open-mail" :size="20" />
           </button>
 
           <!-- 7. Open Apps (앱 허브) -->
@@ -2760,7 +2760,7 @@ onBeforeUnmount(() => {
             :title="t('mvRailApps')"
             @click="openEcosystemService('open-apps')"
           >
-            <LineIcon name="open-apps" :size="20" />
+            <LunoIcon name="open-apps" :size="20" />
           </button>
 
           <!-- 8. Open Video (화상 회의) -->
@@ -2769,7 +2769,7 @@ onBeforeUnmount(() => {
             :title="t('mvRailVideo')"
             @click="openEcosystemService('open-video')"
           >
-            <LineIcon name="open-video" :size="20" />
+            <LunoIcon name="open-video" :size="20" />
           </button>
 
           <!-- 9. Open Stream (라이브 방송) -->
@@ -2778,7 +2778,7 @@ onBeforeUnmount(() => {
             :title="t('mvRailStream')"
             @click="openEcosystemService('open-stream')"
           >
-            <LineIcon name="open-stream" :size="20" />
+            <LunoIcon name="open-stream" :size="20" />
           </button>
 
           <!-- 10. Open AI (지능형 AI 비서) -->
@@ -2787,7 +2787,7 @@ onBeforeUnmount(() => {
             :title="t('mvRailAi')"
             @click="openEcosystemService('open-ai')"
           >
-            <LineIcon name="open-ai" :size="20" />
+            <LunoIcon name="open-ai" :size="20" />
           </button>
 
           <!-- 11. Open Services (전체 생태계) -->
@@ -2796,7 +2796,7 @@ onBeforeUnmount(() => {
             :title="t('mvRailServices')"
             @click="openEcosystemService('open-services')"
           >
-            <LineIcon name="open-services" :size="20" />
+            <LunoIcon name="open-services" :size="20" />
           </button>
         </div>
 
@@ -2813,7 +2813,7 @@ onBeforeUnmount(() => {
 
           <!-- Keep Button -->
           <button class="pc-rail-btn small" :title="t('navKeep')" @click="showKeepModal = true">
-            <LineIcon name="keep" :size="19" />
+            <LunoIcon name="keep" :size="19" />
           </button>
 
           <!-- 12. Notifications Toggle -->
@@ -2822,18 +2822,18 @@ onBeforeUnmount(() => {
             :title="notificationsEnabled ? t('mvNotifOnTitle') : t('mvDndTitle')"
             @click="toggleNotifications"
           >
-            <LineIcon :name="notificationsEnabled ? 'bell' : 'bell-off'" :size="19" />
+            <LunoIcon :name="notificationsEnabled ? 'bell' : 'bell-off'" :size="19" />
           </button>
 
           <!-- 13. Settings Button -->
           <button class="pc-rail-btn small" :title="t('navSettings')" @click="showSettingsModal = true">
-            <LineIcon name="settings" :size="19" />
+            <LunoIcon name="settings" :size="19" />
           </button>
 
           <!-- 14. More / Consoles Menu Button -->
           <div class="rail-more-wrapper">
             <button class="pc-rail-btn small" :title="t('mvRailMore')" @click="showConsolesMenu = !showConsolesMenu">
-              <LineIcon name="more" :size="19" />
+              <LunoIcon name="more" :size="19" />
             </button>
 
             <!-- Consoles Dropdown Popover -->
@@ -2865,7 +2865,7 @@ onBeforeUnmount(() => {
               <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" class="pc-pane-search-input" @keydown.enter="addSearchKeyword(friendSearchQuery)" />
               <button v-if="friendSearchQuery" class="btn-clear-search" @click="friendSearchQuery = ''">✕</button>
               <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="showQrModal = true">
-                <LineIcon name="scan" :size="15" />
+                <LunoIcon name="scan" :size="15" />
               </button>
             </div>
             <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
@@ -2920,11 +2920,11 @@ onBeforeUnmount(() => {
               <!-- Action Chips: Keep 메모 & 앨범 모아보기 (Matching Screenshot 4) -->
               <div class="my-profile-action-chips">
                 <button type="button" class="btn-profile-chip" @click="openKeepMemoChat">
-                  <LineIcon name="keep" :size="13" />
+                  <LunoIcon name="keep" :size="13" />
                   <span>{{ t('keepMemo') }}</span>
                 </button>
                 <button type="button" class="btn-profile-chip" @click="toggleDrawer('albums')">
-                  <LineIcon name="camera" :size="13" />
+                  <LunoIcon name="camera" :size="13" />
                   <span>{{ t('albumView') }}</span>
                 </button>
               </div>
@@ -3000,7 +3000,7 @@ onBeforeUnmount(() => {
                   class="pc-friend-item-row"
                   @click="followOrOpenOfficialAccount(oa)"
                 >
-                  <div class="pc-avatar circle-38" :style="{ background: oa.color || '#06C755' }">
+                  <div class="pc-avatar circle-38" :style="{ background: oa.color || '#4F7CFF' }">
                     🛡️
                   </div>
                   <div class="friend-item-meta">
@@ -3059,13 +3059,13 @@ onBeforeUnmount(() => {
                 ⇅
               </button>
               <button class="btn-chat-head-tool" :title="t('mvMediaView')" @click="toggleDrawer('media')">
-                <LineIcon name="photo" :size="16" />
+                <LunoIcon name="photo" :size="16" />
               </button>
               <button class="btn-chat-head-tool" :title="t('mvCalendar')" @click="toggleDrawer('events')">
-                <LineIcon name="calendar" :size="16" />
+                <LunoIcon name="calendar" :size="16" />
               </button>
               <button class="btn-chat-head-tool" :title="t('mvNewChat')" @click="showNewChatModal = true">
-                <LineIcon name="chats" :size="16" />
+                <LunoIcon name="chats" :size="16" />
                 <span class="tiny-plus">+</span>
               </button>
             </div>
@@ -3086,7 +3086,7 @@ onBeforeUnmount(() => {
               <input v-model="searchKeyword" :placeholder="t('mvSearch')" class="pc-pane-search-input" />
               <button v-if="searchKeyword" class="btn-clear-search" @click="searchKeyword = ''">✕</button>
               <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="showQrModal = true">
-                <LineIcon name="scan" :size="15" />
+                <LunoIcon name="scan" :size="15" />
               </button>
             </div>
             <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
@@ -3114,7 +3114,7 @@ onBeforeUnmount(() => {
               @click="selectChat(c.id)"
               @contextmenu.prevent="openChatContextMenu($event, c)"
             >
-              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #8EC5FF)' : c.official ? '#06C755' : 'var(--om-primary, #4F7CFF)' }">
+              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #8EC5FF)' : c.official ? '#4F7CFF' : 'var(--om-primary, #4F7CFF)' }">
                 <span v-if="c.official">🛡️</span>
                 <span v-else>{{ c.title ? c.title.slice(0, 1) : 'L' }}</span>
               </div>
@@ -3131,7 +3131,7 @@ onBeforeUnmount(() => {
                 <div class="chat-row-bottom">
                   <span class="chat-row-preview">{{ c.last_message?.body || t('mvNoMessages') }}</span>
                   <div class="chat-row-badges">
-                    <span v-if="c.badge_n" class="badge-green-n">N</span>
+                    <span v-if="c.badge_n" class="badge-luno-n">N</span>
                     <span v-else-if="c.unread_count && c.unread_count > 0" class="chat-unread-pill">{{ c.unread_count }}</span>
                   </div>
                 </div>
@@ -3141,7 +3141,7 @@ onBeforeUnmount(() => {
 
           <!-- Floating Action Button (FAB) New Chat (Screenshot 1) -->
           <button class="pc-floating-add-btn" :title="t('mvStartNewChat')" @click="showNewChatModal = true">
-            <LineIcon name="chats" :size="20" />
+            <LunoIcon name="chats" :size="20" />
             <span class="fab-plus-mark">+</span>
           </button>
         </div>
@@ -3153,7 +3153,7 @@ onBeforeUnmount(() => {
             <h2 class="pc-pane-title">{{ t('mvNews') }}</h2>
             <div class="news-header-tools">
               <button class="btn-pc-header-tool" :title="t('mvNewsSettings')" @click="showSettingsModal = true">
-                <LineIcon name="settings" :size="17" />
+                <LunoIcon name="settings" :size="17" />
               </button>
             </div>
           </div>
@@ -3256,7 +3256,7 @@ onBeforeUnmount(() => {
             <h2 class="pc-pane-title">{{ t('mvCall') }}</h2>
             <div class="calls-header-tools">
               <button class="btn-pc-header-tool" :title="t('mvNewCall')" @click="startCall('voice')">
-                <LineIcon name="call-voice" :size="17" />
+                <LunoIcon name="call-voice" :size="17" />
               </button>
             </div>
           </div>
@@ -3300,7 +3300,7 @@ onBeforeUnmount(() => {
                 :title="t('mvCallBack').replace('{name}', log.peer_name)"
                 @click.stop="startCallFromHistory(log, log.call_type)"
               >
-                <LineIcon name="calls" :size="18" />
+                <LunoIcon name="calls" :size="18" />
               </button>
             </div>
           </div>
@@ -3309,7 +3309,7 @@ onBeforeUnmount(() => {
         <!-- VIEW 3: VOOM -->
         <div v-else-if="activeNav === 'voom'" class="pc-pane-body">
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">LINE VOOM</h2>
+            <h2 class="pc-pane-title">LUNO VOOM</h2>
             <button class="btn-pc-header-tool" :title="t('mvNewStory')" @click="showNewStoryModal = true">➕</button>
           </div>
           <div class="stories-row">
@@ -3360,11 +3360,11 @@ onBeforeUnmount(() => {
         <!-- VIEW 5: WALLET / SERVICES -->
         <div v-else-if="activeNav === 'wallet'" class="pc-pane-body">
           <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('mvLinePayServices') }}</h2>
+            <h2 class="pc-pane-title">{{ t('mvLunoPayServices') }}</h2>
           </div>
-          <div class="line-pay-card">
+          <div class="luno-pay-card">
             <div class="pay-top">
-              <span>LINE Pay</span>
+              <span>LUNO Pay</span>
               <span>POINT {{ walletPoints.toLocaleString() }} P</span>
             </div>
             <div class="pay-balance">₩ {{ walletBalance.toLocaleString() }}</div>
@@ -3374,7 +3374,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="services-grid">
-            <div class="service-box" @click="switchNav('voom')"><span class="icon">🎬</span><span class="title">LINE VOOM</span></div>
+            <div class="service-box" @click="switchNav('voom')"><span class="icon">🎬</span><span class="title">LUNO VOOM</span></div>
             <div class="service-box" @click="showSettingsModal = true"><span class="icon">🎨</span><span class="title">{{ t('mvThemeSettings') }}</span></div>
             <div class="service-box" @click="showStickerPicker = true"><span class="icon">🐻</span><span class="title">{{ t('mvStickerShop') }}</span></div>
           </div>
@@ -3411,11 +3411,11 @@ onBeforeUnmount(() => {
             <button class="btn-start-chat-large" @click="startCallFromHistory(selectedCallRecord, 'voice')">{{ t('mvFreeCallVoice') }}</button>
             <div class="profile-preview-subactions">
               <button type="button" class="btn-subaction-pill" @click="startCallFromHistory(selectedCallRecord, 'video')">
-                <LineIcon name="call-video" :size="16" />
+                <LunoIcon name="call-video" :size="16" />
                 <span>{{ t('mvVideoCallLabel') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" @click="openChatFromCallRecord(selectedCallRecord)">
-                <LineIcon name="chats" :size="16" />
+                <LunoIcon name="chats" :size="16" />
                 <span>{{ t('mvGotoDirect') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" @click="removeCallRecord(selectedCallRecord.id); selectedCallRecord = callHistoryList[0] || null">
@@ -3426,7 +3426,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-else class="pc-empty-dialog">
           <div class="pc-watermark-wrap">
-            <LineIcon name="calls" :size="68" />
+            <LunoIcon name="calls" :size="68" />
           </div>
           <h3 class="pc-empty-title">{{ t('mvFreeCallsTitle') }}</h3>
           <p class="pc-empty-desc">{{ t('mvFreeCallsDesc') }}</p>
@@ -3477,9 +3477,9 @@ onBeforeUnmount(() => {
         <header class="pc-chat-topbar">
           <div class="chat-topbar-left">
             <button class="btn-mobile-back" @click="selectedChatId = ''" :title="t('mvGoBack')">
-              <LineIcon name="back" :size="18" />
+              <LunoIcon name="back" :size="18" />
             </button>
-            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : selectedChat.official ? '#00B900' : '#315BCD' }">
+            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : selectedChat.official ? '#4F7CFF' : '#315BCD' }">
               {{ selectedChat.official ? 'L' : selectedChat.title ? selectedChat.title.slice(0, 1) : 'L' }}
             </div>
             <div class="chat-topbar-info">
@@ -3503,7 +3503,7 @@ onBeforeUnmount(() => {
                 :title="t('translateToggle')"
                 @click="autoTranslateEnabled = !autoTranslateEnabled"
               >
-                <LineIcon name="translate" :size="16" />
+                <LunoIcon name="translate" :size="16" />
                 <span>{{ autoTranslateEnabled ? t('mvAiTranslateOn') : t('mvAiTranslate') }}</span>
               </button>
               <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language">
@@ -3515,10 +3515,10 @@ onBeforeUnmount(() => {
             </div>
 
             <button class="btn-chat-action" :title="t('mvWallpaperTitle')" @click="cycleWallpaper">🎨</button>
-            <button class="btn-chat-action" :title="t('callVoice')" @click="startCall('voice')"><LineIcon name="call-voice" :size="18" /></button>
-            <button class="btn-chat-action" :title="t('callVideo')" @click="startCall('video')"><LineIcon name="call-video" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" :title="t('mvEventsCalendar')" @click="toggleDrawer('events')"><LineIcon name="calendar" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" @click="toggleDrawer('notes')"><LineIcon name="drawer" :size="18" /></button>
+            <button class="btn-chat-action" :title="t('callVoice')" @click="startCall('voice')"><LunoIcon name="call-voice" :size="18" /></button>
+            <button class="btn-chat-action" :title="t('callVideo')" @click="startCall('video')"><LunoIcon name="call-video" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" :title="t('mvEventsCalendar')" @click="toggleDrawer('events')"><LunoIcon name="calendar" :size="18" /></button>
+            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" @click="toggleDrawer('notes')"><LunoIcon name="drawer" :size="18" /></button>
           </div>
         </header>
 
@@ -3656,7 +3656,7 @@ onBeforeUnmount(() => {
                 v-if="msg.kind === 'security_notice'"
                 class="pc-msg-row security-notice-row"
               >
-                <div class="pc-avatar circle-34 other-avatar luno-official-avatar" style="background: #00B900; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px;">
+                <div class="pc-avatar circle-34 other-avatar luno-official-avatar" style="background: #4F7CFF; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px;">
                   LUNO
                 </div>
                 <div class="pc-security-card-container">
@@ -3713,7 +3713,7 @@ onBeforeUnmount(() => {
                     @click="startCall('voice')"
                   >
                     <div class="call-bubble-icon-wrap">
-                      <LineIcon name="calls" :size="16" />
+                      <LunoIcon name="calls" :size="16" />
                     </div>
                     <div class="call-bubble-content">
                       <div class="call-bubble-title">{{ msg.body }}</div>
@@ -3752,7 +3752,7 @@ onBeforeUnmount(() => {
                     @contextmenu.prevent="openMessageContextMenu($event, msg)"
                   >
                     <div v-if="msg.reply_to" class="bubble-reply-preview">
-                      <LineIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || t('mvRepliedMsg') }}
+                      <LunoIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || t('mvRepliedMsg') }}
                     </div>
 
                     <div v-if="editingMessageId === msg.id" class="inline-edit-box">
@@ -3810,14 +3810,14 @@ onBeforeUnmount(() => {
 
                 <!-- Bubble Hover Floating Action Bar -->
                 <div class="pc-bubble-toolbar">
-                  <button :title="t('translateBtn')" @click="handleTranslateMessage(msg)"><LineIcon name="translate" :size="14" /></button>
-                  <button :title="t('mvReactHeart')" @click="reactToMessage(msg.id, '❤️')"><LineIcon name="heart" :size="14" /></button>
-                  <button :title="t('mvReactLike')" @click="reactToMessage(msg.id, '👍')"><LineIcon name="thumbsup" :size="14" /></button>
-                  <button :title="t('mvReply')" @click="startReply(msg)"><LineIcon name="reply" :size="14" /></button>
+                  <button :title="t('translateBtn')" @click="handleTranslateMessage(msg)"><LunoIcon name="translate" :size="14" /></button>
+                  <button :title="t('mvReactHeart')" @click="reactToMessage(msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
+                  <button :title="t('mvReactLike')" @click="reactToMessage(msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
+                  <button :title="t('mvReply')" @click="startReply(msg)"><LunoIcon name="reply" :size="14" /></button>
                   <button v-if="msg.sender_id === currentUser?.id" :title="t('mvEdit')" @click="startEditMessage(msg)">✎</button>
-                  <button :title="t('mvCtxKeep')" @click="saveToKeep(msg)"><LineIcon name="keep" :size="14" /></button>
-                  <button :title="t('mvNoticeRegister')" @click="pinMessage(msg.id)"><LineIcon name="pin" :size="14" /></button>
-                  <button v-if="msg.sender_id === currentUser?.id" :title="t('mvCtxUnsend')" @click="unsendMessage(msg.id)"><LineIcon name="close" :size="14" /></button>
+                  <button :title="t('mvCtxKeep')" @click="saveToKeep(msg)"><LunoIcon name="keep" :size="14" /></button>
+                  <button :title="t('mvNoticeRegister')" @click="pinMessage(msg.id)"><LunoIcon name="pin" :size="14" /></button>
+                  <button v-if="msg.sender_id === currentUser?.id" :title="t('mvCtxUnsend')" @click="unsendMessage(msg.id)"><LunoIcon name="close" :size="14" /></button>
                 </div>
               </div>
             </template>
@@ -3911,15 +3911,15 @@ onBeforeUnmount(() => {
             </button>
             <div class="profile-preview-subactions">
               <button type="button" class="btn-subaction-pill" :title="t('mvVoiceCall')" @click="startCallWithUser(selectedFriendProfile, 'voice')">
-                <LineIcon name="call-voice" :size="16" />
+                <LunoIcon name="call-voice" :size="16" />
                 <span>{{ t('mvVoiceCall') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" :title="t('mvVideoCallLabel')" @click="startCallWithUser(selectedFriendProfile, 'video')">
-                <LineIcon name="call-video" :size="16" />
+                <LunoIcon name="call-video" :size="16" />
                 <span>{{ t('mvVideoCallLabel') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" :title="t('mvSendMoney')" @click="openSendMoneyModal(selectedFriendProfile)">
-                <LineIcon name="money" :size="16" />
+                <LunoIcon name="money" :size="16" />
                 <span>{{ t('mvSendMoney') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" :title="t('mvFavTitle')" @click="toggleFriendFavorite(selectedFriendProfile)">
@@ -3950,7 +3950,7 @@ onBeforeUnmount(() => {
           @click="switchNav('home')"
         >
           <div class="nav-icon-wrap">
-            <LineIcon name="home" :size="24" />
+            <LunoIcon name="home" :size="24" />
           </div>
           <span class="nav-label">{{ t('mvHome') }}</span>
         </button>
@@ -3962,7 +3962,7 @@ onBeforeUnmount(() => {
           @click="switchNav('chats')"
         >
           <div class="nav-icon-wrap">
-            <LineIcon name="chats" :size="24" />
+            <LunoIcon name="chats" :size="24" />
             <span v-if="totalUnreadCount > 0" class="mobile-nav-badge">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
           </div>
           <span class="nav-label">{{ t('mvChats') }}</span>
@@ -3975,7 +3975,7 @@ onBeforeUnmount(() => {
           @click="switchNav('news')"
         >
           <div class="nav-icon-wrap">
-            <LineIcon name="news" :size="24" />
+            <LunoIcon name="news" :size="24" />
             <span class="mobile-nav-dot"></span>
           </div>
           <span class="nav-label">{{ t('mvNews') }}</span>
@@ -3988,7 +3988,7 @@ onBeforeUnmount(() => {
           @click="switchNav('calls')"
         >
           <div class="nav-icon-wrap">
-            <LineIcon name="calls" :size="24" />
+            <LunoIcon name="calls" :size="24" />
           </div>
           <span class="nav-label">{{ t('mvCall') }}</span>
         </button>
@@ -3999,7 +3999,7 @@ onBeforeUnmount(() => {
           @click="switchNav('wallet')"
         >
           <div class="nav-icon-wrap">
-            <LineIcon name="money" :size="24" />
+            <LunoIcon name="money" :size="24" />
           </div>
           <span class="nav-label">{{ t('mvWallet') }}</span>
         </button>
@@ -4017,7 +4017,7 @@ onBeforeUnmount(() => {
         <div class="modal-body-form" style="align-items:center;text-align:center;">
           <p class="modal-subtext">{{ t('mvQrDesc') }}</p>
           <div class="pc-qr-matrix-card" style="margin:12px auto;">
-            <LineIcon name="scan" :size="96" />
+            <LunoIcon name="scan" :size="96" />
           </div>
           <p class="muted">@{{ currentUser?.handle || 'luno_user' }}</p>
           <div class="modal-actions-right" style="width:100%;justify-content:center;">
@@ -4096,7 +4096,7 @@ onBeforeUnmount(() => {
             :class="{ active: liveCaptionsEnabled }"
             @click="liveCaptionsEnabled = !liveCaptionsEnabled"
           >
-            <LineIcon name="translate" :size="15" />
+            <LunoIcon name="translate" :size="15" />
             <span>{{ liveCaptionsEnabled ? t('callLiveTranslate') + ' (ON)' : t('callLiveTranslate') + ' (OFF)' }}</span>
           </button>
         </div>
@@ -4136,7 +4136,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- PROFILE MODAL (Full LINE User Profile View) -->
+    <!-- PROFILE MODAL (Full LUNO User Profile View) -->
     <div v-if="activeProfileUser" class="modal-backdrop" @click.self="activeProfileUser = null">
       <div class="profile-modal-card" role="dialog" aria-modal="true" :aria-label="t('profileTitle')">
         <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || 'var(--om-primary, #2563EB)' }">
@@ -4662,7 +4662,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box ecosystem-modal">
         <div class="modal-header">
           <div class="ecosystem-modal-title">
-            <LineIcon name="open-messenger-logo" :size="24" />
+            <LunoIcon name="open-messenger-logo" :size="24" />
             <h3>{{ t('mvEcoTitle') }}</h3>
           </div>
           <button class="btn-modal-close" @click="showEcosystemHub = false">✕</button>
@@ -4678,7 +4678,7 @@ onBeforeUnmount(() => {
             >
               <div class="ecosystem-card-header">
                 <div class="svc-icon-box">
-                  <LineIcon :name="svc.icon" :size="20" />
+                  <LunoIcon :name="svc.icon" :size="20" />
                 </div>
                 <div class="svc-names">
                   <strong>{{ svc.name }}</strong>
@@ -4708,8 +4708,8 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-    <!-- Global LINE PC Context Menu -->
-    <LineContextMenu
+    <!-- Global LUNO PC Context Menu -->
+    <LunoContextMenu
       :visible="contextMenu.visible"
       :x="contextMenu.x"
       :y="contextMenu.y"

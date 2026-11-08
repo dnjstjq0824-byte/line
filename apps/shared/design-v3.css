@@ -5,10 +5,10 @@
    apps/shared/design-v3.tokens.json. */
 :root {
   color-scheme: light;
-  --ln-accent:#0b4f45; --ln-accent-hover:#093e37; --ln-accent-soft:#d4e8df;
-  --ln-bg:#e8efed; --ln-surface:#ffffff; --ln-raised:#ffffff; --ln-subtle:#dfe8e4;
-  --ln-text:#12211e; --ln-muted:#5c6b67; --ln-line:#cbd8d3; --ln-danger:#c22e3d; --ln-success:#2e7d32; --ln-warning:#7a5b00; --ln-info:#1d6fb8;
-  --ln-on-accent:#ffffff; --ln-chat:#dde7e3; --ln-shadow:0 16px 48px #12211e14; --ln-shadow-sm:0 2px 8px #12211e1f;
+  --ln-accent:#315bcd; --ln-accent-hover:#274ea8; --ln-accent-soft:#e3ebff;
+  --ln-bg:#f7faff; --ln-surface:#ffffff; --ln-raised:#ffffff; --ln-subtle:#e4e9f2;
+  --ln-text:#14213d; --ln-muted:#5b6475; --ln-line:#d9e1ec; --ln-danger:#c22e3d; --ln-success:#2e7d32; --ln-warning:#7a5b00; --ln-info:#1d6fb8;
+  --ln-on-accent:#ffffff; --ln-chat:#eaf1ff; --ln-shadow:0 16px 48px #12211e14; --ln-shadow-sm:0 2px 8px #12211e1f;
   --ln-beacon:#e4572e;
   --ln-radius:14px; --ln-control-radius:10px; --ln-sheet-radius:22px; --ln-lamp-radius:999px;
   --ln-font:'Pretendard','Noto Sans KR',system-ui,sans-serif;

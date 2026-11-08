@@ -35,19 +35,19 @@ function login(worker, env, email, password) {
 }
 
 // The passwords that cf_worker.js falls back to when nothing is configured.
-const SOURCE_ADMIN_PASSWORD = 'LunoAdmin#RotatedEdge$99xK';
-const SOURCE_DEMO_PASSWORD = 'LunoUser#Rotated$72mP';
+const SOURCE_ADMIN_PASSWORD = 'LunoAdmin#2026!';
+const SOURCE_DEMO_PASSWORD = 'LunoUser#2026!';
 
 test('a configured ADMIN_INITIAL_PASSWORD replaces the one written in the source', async () => {
   const worker = await freshWorker();
   const configured = 'OperatorChosen#Admin$2026';
   const env = { ALLOW_LOCAL_DEMO: 'true', ADMIN_INITIAL_PASSWORD: configured };
 
-  const accepted = await login(worker, env, 'admin@line.local', configured);
+  const accepted = await login(worker, env, 'admin@luno.local', configured);
   assert.equal(accepted.status, 200, 'the configured admin password must be accepted');
   assert.ok((await accepted.json()).access_token, 'a session should be issued');
 
-  const rejected = await login(worker, env, 'admin@line.local', SOURCE_ADMIN_PASSWORD);
+  const rejected = await login(worker, env, 'admin@luno.local', SOURCE_ADMIN_PASSWORD);
   assert.equal(rejected.status, 401,
     'once overridden, the password written in cf_worker.js must no longer work');
 });
@@ -57,10 +57,10 @@ test('a configured DEMO_INITIAL_PASSWORD replaces the one written in the source'
   const configured = 'OperatorChosen#Demo$2026';
   const env = { ALLOW_LOCAL_DEMO: 'true', DEMO_INITIAL_PASSWORD: configured };
 
-  const accepted = await login(worker, env, 'user@line.local', configured);
+  const accepted = await login(worker, env, 'user@luno.local', configured);
   assert.equal(accepted.status, 200, 'the configured demo password must be accepted');
 
-  const rejected = await login(worker, env, 'user@line.local', SOURCE_DEMO_PASSWORD);
+  const rejected = await login(worker, env, 'user@luno.local', SOURCE_DEMO_PASSWORD);
   assert.equal(rejected.status, 401,
     'once overridden, the password written in cf_worker.js must no longer work');
 });
@@ -68,8 +68,8 @@ test('a configured DEMO_INITIAL_PASSWORD replaces the one written in the source'
 test('the source fallback applies only when nothing is configured', async () => {
   const worker = await freshWorker();
   const env = { ALLOW_LOCAL_DEMO: 'true' };
-  assert.equal((await login(worker, env, 'admin@line.local', SOURCE_ADMIN_PASSWORD)).status, 200);
-  assert.equal((await login(worker, env, 'user@line.local', SOURCE_DEMO_PASSWORD)).status, 200);
+  assert.equal((await login(worker, env, 'admin@luno.local', SOURCE_ADMIN_PASSWORD)).status, 200);
+  assert.equal((await login(worker, env, 'user@luno.local', SOURCE_DEMO_PASSWORD)).status, 200);
 });
 
 test('an empty or non-string override does not silently lock the account out', async () => {
@@ -79,11 +79,11 @@ test('an empty or non-string override does not silently lock the account out', a
     const worker = await freshWorker();
     const env = { ALLOW_LOCAL_DEMO: 'true', ADMIN_INITIAL_PASSWORD: value };
     assert.equal(
-      (await login(worker, env, 'admin@line.local', SOURCE_ADMIN_PASSWORD)).status, 200,
+      (await login(worker, env, 'admin@luno.local', SOURCE_ADMIN_PASSWORD)).status, 200,
       `ADMIN_INITIAL_PASSWORD=${JSON.stringify(value)} should fall back to the source password`,
     );
     assert.equal(
-      (await login(worker, env, 'admin@line.local', '')).status, 401,
+      (await login(worker, env, 'admin@luno.local', '')).status, 401,
       'an empty password must never authenticate',
     );
   }

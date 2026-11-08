@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker Edge Gateway & Backend for LINE Messenger Monorepo.
+ * Cloudflare Worker Edge Gateway & Backend for LUNO Messenger Monorepo.
  * Serves static assets for frontend apps and handles full /api/v1 suite directly at the edge.
  * Supports native Cloudflare WebSocketPair real-time broadcasting and multi-console workflows.
  */
@@ -579,7 +579,7 @@ const NEWS_SAMPLE = [
 // form used 1,000 iterations and is upgraded on the next successful login.
 const PBKDF2_LEGACY_ITERATIONS = 1000;
 const PBKDF2_DEFAULT_ITERATIONS = 100000; // Workers Web Crypto refuses more than 100,000.
-const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!']);
+const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK']);
 function pbkdf2Iterations() {
   const configured = Number(CURRENT_ENV?.PBKDF2_ITERATIONS);
   return Number.isInteger(configured) && configured >= 10000 && configured <= 100000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
@@ -675,7 +675,7 @@ function publicUser(u) {
   if (o) return { id: o.id, display_name: o.name, handle: o.handle, bio: o.description, official: true, avatar_color: o.color };
   return {
     id: u.id, display_name: u.display_name, handle: u.handle, bio: u.bio || '',
-    status_message: u.status_message || '', avatar_color: u.avatar_color || '#06c755',
+    status_message: u.status_message || '', avatar_color: u.avatar_color || '#4F7CFF',
     birthday: u.birthday || '', avatar_url: u.avatar_url || ''
   };
 }
@@ -804,13 +804,13 @@ function botReply(text, account) {
   return '메시지를 전달받았습니다. 하단 리치 메뉴 버튼을 누르시거나 "도움말"을 입력해 보세요. 🤖';
 }
 function seedExtras() {
-  const alice = users.get('alice@line-test.local');
-  const bob = users.get('bob@line-test.local');
-  const demo = users.get('user@line.local');
-  const colors = { 'admin@line.local': '#6366f1', 'user@line.local': '#06c755', 'alice@line-test.local': '#f97316', 'bob@line-test.local': '#0ea5e9' };
-  const status = { 'admin@line.local': '운영 중 🛠️', 'user@line.local': '오늘도 좋은 하루 ☀️', 'alice@line-test.local': '커피 한 잔의 여유 ☕', 'bob@line-test.local': '코딩 중... 💻' };
+  const alice = users.get('alice@luno-test.local');
+  const bob = users.get('bob@luno-test.local');
+  const demo = users.get('user@luno.local');
+  const colors = { 'admin@luno.local': '#6366f1', 'user@luno.local': '#4F7CFF', 'alice@luno-test.local': '#f97316', 'bob@luno-test.local': '#0ea5e9' };
+  const status = { 'admin@luno.local': '운영 중 🛠️', 'user@luno.local': '오늘도 좋은 하루 ☀️', 'alice@luno-test.local': '커피 한 잔의 여유 ☕', 'bob@luno-test.local': '코딩 중... 💻' };
   for (const [email, u] of users) {
-    u.avatar_color = colors[email] || '#06c755';
+    u.avatar_color = colors[email] || '#4F7CFF';
     u.status_message = status[email] || '';
     usersById.set(u.id, u);
   }
@@ -838,7 +838,7 @@ function seedExtras() {
       { id: 't3', label: '🔒 보안 가이드', icon: '🔒', action: { type: 'message', text: '보안 안내' } },
       { id: 't4', label: '🎁 진행중 이벤트', icon: '🎁', action: { type: 'message', text: '이벤트' } },
       { id: 't5', label: '⚡ 신규 기능 안내', icon: '⚡', action: { type: 'message', text: '신규 기능' } },
-      { id: 't6', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: 'https://line-messenger.dnjstjqppk.workers.dev' } }
+      { id: 't6', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } }
     ]
   });
 
@@ -887,7 +887,7 @@ function seedExtras() {
     { id: 'r_d3', keywords: ['페이', '혜택'], reply: '💳 [LUNO Pay 혜택] LUNO Pay로 결제 시 전 가맹점 3% 무제한 캐시백 적립 혜택을 드립니다.' }
   ]);
 
-  const bg = ['linear-gradient(135deg,#06c755,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
+  const bg = ['linear-gradient(135deg,#4F7CFF,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
   timelinePosts.push(
     { id: uid(), author_id: alice.id, body: '오늘 한강 노을이 너무 예뻐요 🌇', bg: bg[1], visibility: 'friends', created_at: now(), likes: [bob.id], comments: [] },
     { id: uid(), author_id: bob.id, body: '새 프로젝트 배포 완료! 🚀', bg: bg[0], visibility: 'friends', created_at: now(), likes: [], comments: [] }
@@ -1021,8 +1021,8 @@ function ensureSeed(env) {
   const seeds = [
     {
       id: '00000000-0000-0000-0000-000000000001',
-      email: 'admin@line.local',
-      password: seedPassword('ADMIN_INITIAL_PASSWORD', 'LunoAdmin#RotatedEdge$99xK'),
+      email: 'admin@luno.local',
+      password: seedPassword('ADMIN_INITIAL_PASSWORD', 'LunoAdmin#2026!'),
       display_name: 'System Administrator',
       role: 'admin',
       handle: 'admin',
@@ -1030,8 +1030,8 @@ function ensureSeed(env) {
     },
     {
       id: '00000000-0000-0000-0000-000000000002',
-      email: 'user@line.local',
-      password: seedPassword('DEMO_INITIAL_PASSWORD', 'LunoUser#Rotated$72mP'),
+      email: 'user@luno.local',
+      password: seedPassword('DEMO_INITIAL_PASSWORD', 'LunoUser#2026!'),
       display_name: 'LUNO Demo User',
       role: 'user',
       handle: 'luno_user',
@@ -1039,7 +1039,7 @@ function ensureSeed(env) {
     },
     {
       id: '00000000-0000-0000-0000-000000000003',
-      email: 'alice@line-test.local',
+      email: 'alice@luno-test.local',
       password: 'Alice#Rotated$48wT',
       display_name: 'Alice Kim',
       role: 'user',
@@ -1048,7 +1048,7 @@ function ensureSeed(env) {
     },
     {
       id: '00000000-0000-0000-0000-000000000004',
-      email: 'bob@line-test.local',
+      email: 'bob@luno-test.local',
       password: 'Bob#Rotated$31qR',
       display_name: 'Bob Lee',
       role: 'user',
@@ -1063,8 +1063,8 @@ function ensureSeed(env) {
   }
 
   // Pre-seed friendship between Alice and Bob
-  const alice = users.get('alice@line-test.local');
-  const bob = users.get('bob@line-test.local');
+  const alice = users.get('alice@luno-test.local');
+  const bob = users.get('bob@luno-test.local');
   friendships.set(`${alice.id}:${bob.id}`, true);
   friendships.set(`${bob.id}:${alice.id}`, true);
 
@@ -1094,7 +1094,7 @@ function ensureSeed(env) {
   // Pre-seed OpenChat room
   communityRooms.set('room-1', {
     id: 'room-1',
-    name: 'LINE Global Developer Lounge',
+    name: 'LUNO Global Developer Lounge',
     description: 'Cloudflare Edge OpenChat for engineers and creators',
     visibility: 'public',
     created_at: new Date().toISOString()
@@ -1338,13 +1338,13 @@ const REACTIONS = ['❤️', '😍', '😂', '😮', '😢', '👍'];
 const INLINE_MIME = /^(image\/(png|jpeg|gif|webp)|audio\/(webm|ogg|mp4|mpeg|wav)|video\/(mp4|webm))$/;
 
 /**
- * Extended LINE-class messenger API. Returns a Response when a route is handled, otherwise null.
+ * Extended LUNO-class messenger API. Returns a Response when a route is handled, otherwise null.
  * Membership of /conversations/{id}/* and /calls/{id}/* is enforced by the caller before this runs.
  */
 
 const PEER_USERS = [
   { id: 'peer-k', display_name: 'K 🙏', handle: 'k_pray', email: 'k@luno.local', avatar_color: '#315BCD', status_message: '기도하며 준비 중' },
-  { id: 'peer-dodo', display_name: '도천재 도도형님', handle: 'dodo_genius', email: 'dodo@luno.local', avatar_color: '#06c755', status_message: '최고의 개발자' },
+  { id: 'peer-dodo', display_name: '도천재 도도형님', handle: 'dodo_genius', email: 'dodo@luno.local', avatar_color: '#22c55e', status_message: '최고의 개발자' },
   { id: 'peer-daechul', display_name: '이대철', handle: 'daechul_lee', email: 'daechul@luno.local', avatar_color: '#8b5cf6', status_message: '' },
   { id: 'peer-tuk', display_name: 'tuk', handle: 'tuk_official', email: 'tuk@luno.local', avatar_color: '#f59e0b', status_message: 'Online' },
   { id: 'peer-care', display_name: '😸care😸', handle: 'care_cat', email: 'care@luno.local', avatar_color: '#ec4899', status_message: 'Thank you' },
@@ -1416,7 +1416,7 @@ function ensureDefaultConversationsForUser(userId) {
     });
     messages.set(keepCid, [
       { id: `m-keep-${userId}-1`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-1', sequence: 1, kind: 'text', body: '나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.', read_count: 1, created_at: '2026-08-01T11:00:00Z' },
-      { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: 'https://line-messenger.dnjstjqppk.workers.dev/ 프로덕션 점검 완료', read_count: 1, created_at: '2026-08-01T11:30:00Z' }
+      { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: 'https://luno-messenger.dnjstjqppk.workers.dev/ 프로덕션 점검 완료', read_count: 1, created_at: '2026-08-01T11:30:00Z' }
     ]);
   }
 
@@ -1757,7 +1757,7 @@ async function extended(p, request, url, me, token) {
       const b = await readJson(request);
       if (!b.password) return json({ error: 'password required for account deletion' }, 400);
       if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
-      if (['user@line.local', 'alice@line-test.local'].includes((me.email || '').toLowerCase())) {
+      if (['user@luno.local', 'alice@luno-test.local'].includes((me.email || '').toLowerCase())) {
         return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
       }
       me.state = 'deleted';
@@ -1821,7 +1821,7 @@ async function extended(p, request, url, me, token) {
     await persistAudit(myId, 'password.change', myId, { other_sessions: 'revoked' });
     return json({ status: 'changed', other_sessions_revoked: true });
   }
-  if (p === 'me/qr' && method === 'GET') return json({ code: `LINE-FRIEND:${me.handle}`, handle: me.handle });
+  if (p === 'me/qr' && method === 'GET') return json({ code: `LUNO-FRIEND:${me.handle}`, handle: me.handle });
   if (p === 'me/stickers' && method === 'GET') {
     const owned = packsOf(myId);
     return json({ packs: STICKER_CATALOG.filter(pk => owned.has(pk.id)) });
@@ -1844,7 +1844,7 @@ async function extended(p, request, url, me, token) {
       let target = null;
       if (b.friend_id || b.target_user_id) target = usersById.get(b.friend_id || b.target_user_id);
       else if (b.handle || b.qr_code) {
-        const h = String(b.handle || String(b.qr_code).replace(/^LINE-FRIEND:/i, '')).toLowerCase().replace(/^@/, '');
+        const h = String(b.handle || String(b.qr_code).replace(/^(LINE-FRIEND|LUNO-FRIEND):/i, '')).toLowerCase().replace(/^@/, '');
         target = Array.from(users.values()).find(u => u.handle === h);
       }
       if (!target || target.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);
@@ -2442,7 +2442,7 @@ async function extended(p, request, url, me, token) {
   }
   if (p === 'calls' && method === 'GET') {
     await hydrateUserConversations(myId);
-    const peerColor = id => usersById.get(id)?.avatar_color || officialAccounts.get(id)?.color || '#06c755';
+    const peerColor = id => usersById.get(id)?.avatar_color || officialAccounts.get(id)?.color || '#4F7CFF';
     const rows = [];
     for (const c of callSessions.values()) {
       const conv = conversations.get(c.conversation_id);
@@ -2567,7 +2567,7 @@ async function extended(p, request, url, me, token) {
       const title = clip(b.title, 100);
       if (!title) return bad('제목을 입력하세요');
       const emoji = clip(b.emoji || '🎬', 8) || '🎬';
-      const bgs = ['linear-gradient(135deg,#06c755,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
+      const bgs = ['linear-gradient(135deg,#4F7CFF,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
       const v = { id: uid(), title, emoji, author_id: myId, bg: bgs[voomPosts.length % bgs.length], likes: 0, liked_by: [], comments: [], created_at: now() };
       voomPosts.push(v);
       return json(voomView(v, myId), 201);
@@ -2927,14 +2927,14 @@ async function extended(p, request, url, me, token) {
         areas: [
           { bounds: { x: 0, y: 0, width: 400, height: 400 }, action: { type: 'message', text: '공식 공지사항' } },
           { bounds: { x: 400, y: 0, width: 400, height: 400 }, action: { type: 'message', text: '고객센터 상담' } },
-          { bounds: { x: 800, y: 0, width: 400, height: 400 }, action: { type: 'uri', uri: 'https://line-messenger.dnjstjqppk.workers.dev' } },
+          { bounds: { x: 800, y: 0, width: 400, height: 400 }, action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } },
           { bounds: { x: 0, y: 400, width: 600, height: 400 }, action: { type: 'message', text: '진행중 이벤트' } },
           { bounds: { x: 600, y: 400, width: 600, height: 400 }, action: { type: 'message', text: '자주 묻는 질문' } }
         ],
         tiles: [
           { id: 't1', label: '📢 공식 공지', icon: '📢', action: { type: 'message', text: '공지사항' } },
           { id: 't2', label: '💬 고객센터 상담', icon: '💬', action: { type: 'message', text: '상담' } },
-          { id: 't3', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: 'https://line-messenger.dnjstjqppk.workers.dev' } },
+          { id: 't3', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } },
           { id: 't4', label: '🎁 진행중 이벤트', icon: '🎁', action: { type: 'message', text: '이벤트' } },
           { id: 't5', label: '❓ 자주 묻는 질문', icon: '❓', action: { type: 'message', text: '도움말' } },
           { id: 't6', label: '💳 LUNO Pay 혜택', icon: '💳', action: { type: 'message', text: '쿠폰' } }
@@ -3062,7 +3062,7 @@ async function syncFromD1(db) {
     }
     if (!userRows) userRows = await db.prepare('SELECT * FROM users').all();
     for (const row of userRows?.results || []) {
-      const dName = (row.display_name === 'LINE Demo User' || !row.display_name) ? 'LUNO Demo User' : row.display_name;
+      const dName = (row.display_name === 'LUNO Demo User' || !row.display_name) ? 'LUNO Demo User' : row.display_name;
       const u = applyStoredPassword({
         id: row.id,
         email: row.email,
@@ -3298,7 +3298,7 @@ const workerCore = {
         if (!user || user.state === 'suspended' || user.state === 'deleted') {
           return json({ error: 'invalid credentials' }, 401);
         }
-        const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!']);
+        const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK']);
         if (REVOKED_LEGACY_PASSWORDS.has(body.password)) {
           return json({ error: 'invalid credentials' }, 401);
         }
@@ -3335,7 +3335,7 @@ const workerCore = {
         // Strict allow-list: undefined, empty or unknown accounts are rejected, never defaulted.
         const account = typeof body.account === 'string' ? body.account.trim().toLowerCase() : '';
         if (!['user', 'alice'].includes(account)) return bad('지원하지 않는 데모 계정입니다 (user, alice만 허용)', 400);
-        const user = users.get(account === 'alice' ? 'alice@line-test.local' : 'user@line.local');
+        const user = users.get(account === 'alice' ? 'alice@luno-test.local' : 'user@luno.local');
         if (!user) return bad('데모 계정을 사용할 수 없습니다', 503);
         const { token, deviceId } = await createSession(user, request);
         return json({
@@ -3832,7 +3832,7 @@ const workerCore = {
       if (p === 'store/stickers') {
         return json({
           packs: [
-            { id: 'pack-1', title: 'Line Friends Special Edition', price_minor: 2500, currency: 'KRW' },
+            { id: 'pack-1', title: 'Luno Friends Special Edition', price_minor: 2500, currency: 'KRW' },
             { id: 'pack-2', title: 'Brown & Cony Daily Life', price_minor: 2500, currency: 'KRW' }
           ]
         });
@@ -3925,7 +3925,7 @@ const workerCore = {
 
       // 12. Developer Console
       if (p === 'developer/organizations') {
-        return json({ organizations: [{ id: 'dev-org-1', name: 'LINE Dev Team' }] });
+        return json({ organizations: [{ id: 'dev-org-1', name: 'LUNO Dev Team' }] });
       }
       if (p === 'developer/apps') {
         if (request.method === 'POST') {
@@ -3965,7 +3965,7 @@ const workerCore = {
 
       // 14. Ads Console
       if (p === 'ads/advertisers') {
-        return json({ advertisers: [{ id: 'adv-1', company_name: 'LINE Global Ads', status: 'verified' }] });
+        return json({ advertisers: [{ id: 'adv-1', company_name: 'LUNO Global Ads', status: 'verified' }] });
       }
       if (p === 'ads/campaigns') {
         if (request.method === 'POST') {

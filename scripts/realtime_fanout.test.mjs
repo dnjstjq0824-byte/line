@@ -156,9 +156,9 @@ async function isolate({ db, hub, extraEnv = {} } = {}) {
 }
 
 const CREDS = {
-  alice: ['alice@line-test.local', 'Alice#Rotated$48wT'],
-  bob: ['bob@line-test.local', 'Bob#Rotated$31qR'],
-  outsider: ['user@line.local', 'LunoUser#Rotated$72mP'],
+  alice: ['alice@luno-test.local', 'Alice#Rotated$48wT'],
+  bob: ['bob@luno-test.local', 'Bob#Rotated$31qR'],
+  outsider: ['user@luno.local', 'LunoUser#2026!'],
 };
 
 // ===========================================================================

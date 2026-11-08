@@ -1,14 +1,14 @@
 <template>
   <div class="chats-view">
-    <div class="line-header">
-      <div class="line-header-title">채팅</div>
-      <div class="line-header-actions">
-        <LineIcons name="search" class="btn-icon" />
-        <LineIcons name="more" class="btn-icon" />
+    <div class="luno-header">
+      <div class="luno-header-title">채팅</div>
+      <div class="luno-header-actions">
+        <LunoIcons name="search" class="btn-icon" />
+        <LunoIcons name="more" class="btn-icon" />
       </div>
     </div>
 
-    <div class="line-content chats-content">
+    <div class="luno-content chats-content">
       <div class="chat-filter-bar">
         <button
           v-for="filter in chatFilters"
@@ -64,14 +64,14 @@
     </div>
 
     <button class="fab" @click="newChat">
-      <LineIcons name="chat" />
+      <LunoIcons name="chat" />
     </button>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
-import LineIcons from './LineIcons.vue'
+import LunoIcons from './LunoIcons.vue'
 
 const props = {
   chats: { type: Array, default: () => [] },
@@ -224,7 +224,7 @@ const newChat = () => emit('new-chat')
   z-index: 50;
 }
 
-.fab .line-icon {
+.fab .luno-icon {
   width: 24px;
   height: 24px;
 }

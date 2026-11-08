@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Sitemap: https://line-messenger.dnjstjqppk.workers.dev/sitemap.xml
+Sitemap: https://luno-messenger.dnjstjqppk.workers.dev/sitemap.xml

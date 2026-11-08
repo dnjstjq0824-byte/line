@@ -1,4 +1,4 @@
-# Production Environment Configuration for LINE Messenger
+# Production Environment Configuration for LUNO Messenger
 
 ## Required Environment Variables
 

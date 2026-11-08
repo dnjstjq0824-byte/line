@@ -40,7 +40,7 @@ void main() {
 
   test('Api client helper constructs proper headers and points to production gateway', () {
     final api = Api();
-    expect(api.baseUrl, equals('https://line-messenger.dnjstjqppk.workers.dev'));
+    expect(api.baseUrl, equals('https://luno-messenger.dnjstjqppk.workers.dev'));
     expect(api.token, isNull);
     api.token = 'test-token';
     expect(api.token, equals('test-token'));

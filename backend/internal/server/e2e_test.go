@@ -108,7 +108,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	// -------------------------------------------------------------------------
 	androidA := &apiClient{t: t, srv: srv}
 	st, regA := androidA.req("POST", "/api/v1/auth/register", map[string]any{
-		"email":        "alice@line-test.local",
+		"email":        "alice@luno-test.local",
 		"password":     "AliceStrongPass#2026",
 		"display_name": "Alice Kim",
 		"phone_e164":   "+821011112222",
@@ -120,7 +120,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	androidA.userID = regA["id"].(string)
 
 	st, loginA := androidA.req("POST", "/api/v1/auth/login", map[string]any{
-		"email":       "alice@line-test.local",
+		"email":       "alice@luno-test.local",
 		"password":    "AliceStrongPass#2026",
 		"device_name": "Galaxy S26 Ultra",
 		"platform":    "android",
@@ -193,7 +193,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	// -------------------------------------------------------------------------
 	iosB := &apiClient{t: t, srv: srv}
 	st, regB := iosB.req("POST", "/api/v1/auth/register", map[string]any{
-		"email":        "bob@line-test.local",
+		"email":        "bob@luno-test.local",
 		"password":     "BobStrongPass#2026",
 		"display_name": "Bob Lee",
 		"phone_e164":   "+821033334444",
@@ -205,7 +205,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	iosB.userID = regB["id"].(string)
 
 	st, loginB := iosB.req("POST", "/api/v1/auth/login", map[string]any{
-		"email":       "bob@line-test.local",
+		"email":       "bob@luno-test.local",
 		"password":    "BobStrongPass#2026",
 		"device_name": "iPhone 17 Pro",
 		"platform":    "ios",
@@ -351,7 +351,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	st, callResp := pcA.req("POST", "/api/v1/calls", map[string]any{
 		"conversation_id": convID,
 		"kind":            "video",
-		"sdp_offer":       "v=0\r\no=- 461173 2 IN IP4 127.0.0.1\r\ns=LINE-PC-Video",
+		"sdp_offer":       "v=0\r\no=- 461173 2 IN IP4 127.0.0.1\r\ns=LUNO-PC-Video",
 	})
 	if st != 201 {
 		t.Fatalf("Scenario 10 start video call from PC failed: %d %v", st, callResp)
@@ -367,7 +367,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	// Bob sends WebRTC SDP Answer and accepts the call
 	st, sigResp := iosB.req("POST", "/api/v1/calls/"+callID+"/signal", map[string]any{
 		"signal_type": "answer",
-		"sdp":         "v=0\r\no=- 998877 2 IN IP4 127.0.0.1\r\ns=LINE-iOS-Answer",
+		"sdp":         "v=0\r\no=- 998877 2 IN IP4 127.0.0.1\r\ns=LUNO-iOS-Answer",
 	})
 	if st != 200 {
 		t.Fatalf("Scenario 10 call signal answer failed: %d %v", st, sigResp)

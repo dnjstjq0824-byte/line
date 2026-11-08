@@ -37,6 +37,6 @@ const lunoOrbitCrewStickers = [
 
 const lunoReactions = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 
-const defaultApiBase = 'https://line-messenger.dnjstjqppk.workers.dev';
+const defaultApiBase = 'https://luno-messenger.dnjstjqppk.workers.dev';
 const apiBase = String.fromEnvironment('API_URL', defaultValue: defaultApiBase);
 const storage = FlutterSecureStorage();

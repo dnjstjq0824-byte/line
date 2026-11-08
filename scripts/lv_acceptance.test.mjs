@@ -272,11 +272,11 @@ test('A-13: regression matrix (auth gates, RBAC, official accounts, friends, enu
   for (const p of ['me', 'conversations', 'friends', 'official-accounts', 'admin/stats', 'devices', 'news']) {
     assert.equal((await api(p)).status, 401, `unauthenticated ${p}`);
   }
-  const wrong = await api('auth/login', 'POST', { email: 'user@line.local', password: 'wrong-password' });
-  const ghost = await api('auth/login', 'POST', { email: 'nobody@line.local', password: 'wrong-password' });
+  const wrong = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'wrong-password' });
+  const ghost = await api('auth/login', 'POST', { email: 'nobody@luno.local', password: 'wrong-password' });
   assert.equal(wrong.status, 401); assert.equal(ghost.status, 401);
   assert.deepEqual(await wrong.json(), await ghost.json(), 'identical error body: no account enumeration');
-  assert.equal((await api('auth/login', 'POST', { email: 'user@line.local', password: 'LineUser#2026!' })).status, 401, 'legacy password');
+  assert.equal((await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LineUser#2026!' })).status, 401, 'legacy password');
   const t = await demo(api);
   for (const p of ['admin/stats', 'admin/users', 'admin/reports', 'admin/audit-logs', 'admin/feature-flags']) {
     assert.equal((await api(p, 'GET', null, t.access_token)).status, 403, `RBAC ${p}`);

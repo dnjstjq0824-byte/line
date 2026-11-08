@@ -34,7 +34,7 @@ class LoungePage extends StatelessWidget {
                         glyph: '${r['title'] ?? 'L'}',
                         color: dark ? HarborDark.harbor : HarborLight.harbor,
                       ),
-                      title: Text("${r['title']}",
+                      title: Text("${r['title'] ?? '라운지'}",
                           style: const TextStyle(fontWeight: FontWeight.w700)),
                       subtitle: Text(
                           "${r['description'] ?? ''} · 참여자 ${r['member_count'] ?? 1}명",
@@ -59,9 +59,16 @@ class LoungePage extends StatelessWidget {
               if (session.openRooms.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 64),
-                  child: Text('개설된 라운지가 없습니다',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CrewBadge.mascot(),
+                      const SizedBox(height: 12),
+                      Text('개설된 라운지가 없습니다',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleMedium),
+                    ],
+                  ),
                 ),
             ],
           ),

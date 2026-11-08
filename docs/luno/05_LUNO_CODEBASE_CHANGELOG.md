@@ -2,7 +2,7 @@
 **Document Version:** 1.0  
 **Effective Date:** 2026-10-30  
 **Repository Branch:** `main`  
-**Live Target Deployment:** `https://line-messenger.dnjstjqppk.workers.dev`  
+**Live Target Deployment:** `https://luno-messenger.dnjstjqppk.workers.dev`  
 **Cloudflare Deployment Version:** `b150e945-b316-412b-9b14-092b0348d929`  
 
 ---
@@ -78,11 +78,11 @@
 ## 4. 백엔드 및 데이터베이스 무결성 (Database & API Compatibility)
 
 ### 4.1 Cloudflare D1 Relational Database
-- **데이터베이스 ID**: `ed6615d0-cc8c-40fa-96b5-82e9382d90f6` (`line-messenger-db`)
+- **데이터베이스 ID**: `ed6615d0-cc8c-40fa-96b5-82e9382d90f6` (`luno-messenger-db`)
 - **하위 호환성 유지**:
   - 내부 REST API 엔드포인트(`/api/v1/*`)의 URL 및 요청/응답 규격은 안정성을 위해 100% 유지.
   - 기존 테이블(`users`, `chats`, `messages`, `friends`, `call_logs`)의 스키마 변경 없이 완벽 호환.
-  - 기존 유저 계정(`user@line.local`, `alice@line-test.local`, `admin@line.local`)의 비밀번호 및 친구 관계, 기존 대화 내용 손실 0건 보증.
+  - 기존 유저 계정(`user@luno.local`, `alice@luno-test.local`, `admin@luno.local`)의 비밀번호 및 친구 관계, 기존 대화 내용 손실 0건 보증.
 
 ### 4.2 API Endpoint: `POST /api/v1/translate`
 - **입력 파라미터**:

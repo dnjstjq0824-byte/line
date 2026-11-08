@@ -85,7 +85,7 @@ the Cloudflare runtime or cross-isolate delivery. No deployment was performed.
   single-choice switching and cancellation, viewer-specific vote state,
   creator-only closing, and rejection of votes after closing.
 
-Validation: `node --test scripts/cf_worker.test.mjs` passed (integration test suite covering private chat access, single-use realtime tickets, poll voting/closing, and Keep vault); `npm run build:apps` passed for all six apps; Cloudflare Worker deployed to live production (`https://line-messenger.dnjstjqppk.workers.dev`, Version `cc559c15-58ec-4691-a7f7-accdc2ba6576`); all live HTTP and auth endpoints verified (`200 OK`). Automated rebuilding CI/CD configured in `.github/workflows/deploy-cloudflare.yml` and `scripts/watch_rebuild.js`.
+Validation: `node --test scripts/cf_worker.test.mjs` passed (integration test suite covering private chat access, single-use realtime tickets, poll voting/closing, and Keep vault); `npm run build:apps` passed for all six apps; Cloudflare Worker deployed to live production (`https://luno-messenger.dnjstjqppk.workers.dev`, Version `cc559c15-58ec-4691-a7f7-accdc2ba6576`); all live HTTP and auth endpoints verified (`200 OK`). Automated rebuilding CI/CD configured in `.github/workflows/deploy-cloudflare.yml` and `scripts/watch_rebuild.js`.
 
 ## Continuation: 2026-11-04 — full-tree audit, Flutter build repair, cross-isolate realtime
 

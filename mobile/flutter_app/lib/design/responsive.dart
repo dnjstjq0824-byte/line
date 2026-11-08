@@ -482,7 +482,7 @@ class HarborWordmark extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
           decoration: BoxDecoration(
-            color: dark ? HarborDark.harbor : HarborLight.harbor,
+            color: dark ? HarborDark.harbor : LunoBrand.primary,
             borderRadius: BorderRadius.circular(7),
           ),
           child: Text('LUNO',

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 const output = 'docs/audit-20261105';
-const origin = 'https://line-messenger.dnjstjqppk.workers.dev';
+const origin = 'https://luno-messenger.dnjstjqppk.workers.dev';
 const source = fs.readFileSync('scripts/cf_worker.js', 'utf8');
 const probes = await Promise.all(['/api/v1/version', '/readyz', '/', '/admin/', '/partner/', '/developer/', '/creator/', '/ads/'].map(async path => {
   const response = await fetch(origin + path, { signal: AbortSignal.timeout(15000) });

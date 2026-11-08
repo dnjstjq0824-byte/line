@@ -27,7 +27,7 @@ const retainedPath='dist_worker/cf_worker.js';
 if(fs.existsSync(retainedPath)) {
  const retained=fs.readFileSync(retainedPath,'utf8');const block=source.match(/const BUILD_INFO = \{[\s\S]*?\};/)[0];
  const unstamped=retained.replace(/const BUILD_INFO = \{[\s\S]*?\};/,block);
- const version=await(await fetch('https://line-messenger.dnjstjqppk.workers.dev/api/v1/version')).json();
+ const version=await(await fetch('https://luno-messenger.dnjstjqppk.workers.dev/api/v1/version')).json();
  const digest=createHash('sha256').update(unstamped).digest('hex');
  fs.writeFileSync('docs/audit-20261105/phase1-production-role-readonly.json',JSON.stringify({measuredAt:new Date().toISOString(),method:'Retained local deployment artifact, BUILD_INFO restored to source placeholder, SHA compared with production self-reported source SHA',artifact:retainedPath,sha256:digest,productionReportedSha:version.worker_source_sha256,hashMatches:digest===version.worker_source_sha256,emailRoleInferencePresent:/role:\s*row\.email\.includes\('admin'\)/.test(unstamped),cachePreferredBeforeReload:/let user = usersById\.get\(userId\)/.test(unstamped),explicitRoleRefreshPresent:unstamped.includes('user.role = await storedUserRole(userId)'),remoteScriptDownloaded:false,productionAccountMutations:0,productionExploitExecuted:false,verdict:digest===version.worker_source_sha256?'PARTIAL':'BLOCKED',caveat:'Hash correlation with retained artifact is not an independent Cloudflare script download or dynamic production exploit. Live revocation/cached-session abuse is NOT_RUN.'},null,2));
 }

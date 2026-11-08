@@ -82,7 +82,7 @@
 
 ## 5. [Track 4] 공식 계정(OA) 리치 메뉴 & 챗봇 CRM
 
-### 5-1. 파트너 센터 비주얼 디자이너 ([`/partner/`](https://line-messenger.dnjstjqppk.workers.dev/partner/))
+### 5-1. 파트너 센터 비주얼 디자이너 ([`/partner/`](https://luno-messenger.dnjstjqppk.workers.dev/partner/))
 - **리치 메뉴 템플릿:** 2×3 그리드(6칸) 및 1×3 그리드(3칸) 지원.
 - **타일별 액션:**
   - `메시지 전송 (message)`: 사용자가 타일을 터치했을 때 특정 키워드를 대화방에 자동 전송 → 연계된 챗봇이 자동 응답.
@@ -91,7 +91,7 @@
   - 키워드 룰 빌더: 단어(예: "배송", "쿠폰", "공지사항") 입력 시 챗봇이 실시간 매칭하여 자동 답변.
   - 실시간 시뮬레이터 내장으로 배포 전 사전 테스트 가능.
 
-### 5-2. 메신저 대화방 리치 메뉴 UI ([`https://line-messenger.dnjstjqppk.workers.dev/`](https://line-messenger.dnjstjqppk.workers.dev/))
+### 5-2. 메신저 대화방 리치 메뉴 UI ([`https://luno-messenger.dnjstjqppk.workers.dev/`](https://luno-messenger.dnjstjqppk.workers.dev/))
 - 공식 계정(`oa-notice`, `oa-weather`, `oa-deals`) 입장 시 하단 입력창 상단에 인터랙티브 리치 메뉴가 렌더링됩니다.
 - "▲ 메뉴 열기 / ▼ 메뉴 닫기" 토글을 지원하여 채팅창 화면을 가리지 않고 자유롭게 여닫을 수 있습니다.
 - 타일 터치 시 챗봇 자동응답이 대화방에 즉각 수신됩니다.

@@ -1,0 +1,43 @@
+View [42,183][559,236] :: LUNO
+Connect Beyond Borders
+Button [828,147][954,273] :: 더보기
+Button [954,147][1080,273] :: 로그아웃
+View [0,283][1080,2127] :: 대화
+정박 중인 대화방 15곳
+View [42,475][1038,645] :: L
+LUNO 보안 알림
+{id: d0a14f44-d26f-4b0f-bc95-34673b582025, kind: security_notice, body: 로그인 성공, unsent: false, sender_id: oa-notice, created_at: 2026-11-08T05:16:53.834Z}
+4
+View [42,666][1038,837] :: 도
+도천재 도도형님
+{id: m-dodo-d88c1c30-ac1a-4455-9693-d0c97d4a4f27-1, kind: text, body: 새 친구와 지금 대화를 시작해보세요!, unsent: false, sender_id: peer-dodo, created_at: 2026-10-30T10:00:00Z}
+View [42,858][1038,1026] :: K
+K 🙏
+{id: m-k-d88c1c30-ac1a-4455-9693-d0c97d4a4f27-9, kind: text, body: 바쁘십니까, unsent: false, sender_id: peer-k, created_at: 2026-10-27T13:55:30Z}
+4
+View [42,1047][1038,1215] :: 😸
+😸care😸
+{id: m-care-d88c1c30-ac1a-4455-9693-d0c97d4a4f27-1, kind: text, body: Thank you, unsent: false, sender_id: peer-care, created_at: 2026-10-09T14:20:00Z}
+1
+View [42,1236][1038,1404] :: N
+Nunsinee8995
+{id: m-nunsinee-d88c1c30-ac1a-4455-9693-d0c97d4a4f27-1, kind: text, body: Ok, unsent: false, sender_id: peer-nunsinee, created_at: 2026-09-30T15:00:00Z}
+View [42,1614][1038,1782] :: T
+TONGGG'
+{id: m-tonggg-d88c1c30-ac1a-4455-9693-d0c97d4a4f27-1, kind: text, body: Hi, unsent: false, sender_id: peer-tonggg, created_at: 2026-09-26T16:10:00Z}
+View [42,1803][1038,1971] :: B
+B_biw
+{id: m-bbiw-d88c1c30-ac1a-4455-9693-d0c97d4a4f27-1, kind: text, body: Ok, unsent: false, sender_id: peer-bbiw, created_at: 2026-09-26T14:00:00Z}
+View [42,1992][1038,2127] :: 형
+형철♡위
+{id: m-hc-d88c1c30-ac1a-4455-9693-d0c97d4a4f27-1, kind: call_status, body: 통화가 취소됨, unsent: false, sender_id: d88c1c30-ac1a-4455-9693-d0c97d4a4f27, created_at: 2026-09-26T11:30:00Z}
+Button [0,2127][216,2337] :: 홈
+Tab 1 of 5
+Button [216,2127][432,2337] :: 대화
+Tab 2 of 5
+Button [432,2127][648,2337] :: 피드
+Tab 3 of 5
+Button [648,2127][864,2337] :: 라운지
+Tab 4 of 5
+Button [864,2127][1080,2337] :: 뉴스
+Tab 5 of 5

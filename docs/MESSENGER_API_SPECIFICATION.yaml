@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: Complete REST & Realtime API Suite for Global LINE-Identical Messenger Platform
 servers:
-  - url: https://line-messenger.dnjstjqppk.workers.dev
+  - url: https://luno-messenger.dnjstjqppk.workers.dev
     description: Cloudflare Global Edge Production Server
   - url: http://localhost:8080
     description: Local Go Backend Development Server
@@ -148,13 +148,13 @@ paths:
           description: Metrics saved
   /api/v1/wallet:
     get:
-      summary: Get LINE Pay balance and transactions
+      summary: Get LUNO Pay balance and transactions
       responses:
         '200':
           description: Pay wallet details
   /api/v1/wallet/charge:
     post:
-      summary: Charge LINE Pay balance
+      summary: Charge LUNO Pay balance
       responses:
         '200':
           description: Balance recharged

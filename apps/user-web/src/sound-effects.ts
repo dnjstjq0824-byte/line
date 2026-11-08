@@ -1,4 +1,4 @@
-// Web Audio API Synthesizer for Authentic LINE Messenger Sound Effects
+// Web Audio API Synthesizer for Authentic LUNO Messenger Sound Effects
 // Zero external asset dependencies, zero network latency, 100% reliable in any browser.
 
 let audioCtx: AudioContext | null = null;
@@ -18,7 +18,7 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
- * Signature LINE Incoming Message Chime
+ * Signature LUNO Incoming Message Chime
  * Harmonic two-tone chime (F#5 -> B5) with soft bell envelope
  */
 export function playReceiveSound() {
@@ -57,7 +57,7 @@ export function playReceiveSound() {
 }
 
 /**
- * LINE Message Sent "Pop" Sound
+ * LUNO Message Sent "Pop" Sound
  * Subtle gentle wooden pop (frequency slide down 520Hz -> 280Hz)
  */
 export function playSendSound() {

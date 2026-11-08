@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Deployment verification script for LINE messenger
+# Deployment verification script for LUNO messenger
 set -e
 
-echo "=== LINE Messenger Deployment Verification ==="
+echo "=== LUNO Messenger Deployment Verification ==="
 
 # 1. Backend health check
 echo "[1/6] Checking backend health..."
