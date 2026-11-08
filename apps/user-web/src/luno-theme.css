@@ -1,5 +1,5 @@
 /* LUNO-level UXUI enhancements */
-@import './luno-theme.css';
+
 
 /* Message Bubble Refinement */
 .bubble-content {
@@ -49,7 +49,7 @@
 @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
 
 /* Responsive */
-@media (max-width: 768px) {
+@media (max-width: 700px) {
   .bottom-nav { display: flex; }
   .fab { bottom: 72px; }
   .bubble-content { max-width: 85%; }

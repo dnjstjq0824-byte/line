@@ -2175,7 +2175,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* ==========================================================================
    RESPONSIVE DESIGN BREAKPOINTS (Article 12)
    ========================================================================== */
-@media (max-width: 768px) {
+@media (max-width: 700px) {
   .pc-workspace {
     flex-direction: column-reverse;
   }
@@ -2858,7 +2858,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   display: none; /* hidden on PC desktop layout */
 }
 
-@media (max-width: 768px) {
+@media (max-width: 700px) {
   .luno-mobile-floating-nav {
     display: flex;
     position: fixed;

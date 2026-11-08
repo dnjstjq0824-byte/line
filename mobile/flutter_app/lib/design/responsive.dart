@@ -12,8 +12,8 @@ enum DeviceKind { compactApp, mobile, tablet, desktop }
 
 abstract final class LunoBreakpoints {
   static const double compactMax = 400;
-  static const double mobileMax = 720;
-  static const double tabletMax = 1120;
+  static const double mobileMax = 700;
+  static const double tabletMax = 1100;
 
   static DeviceKind kindOf(double width) {
     if (width < compactMax) return DeviceKind.compactApp;

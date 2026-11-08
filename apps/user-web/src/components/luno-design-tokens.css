@@ -765,7 +765,7 @@ ul, ol {
   color: var(--line-text-primary);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 700px) {
   .chat-bubble {
     max-width: 85%;
   }

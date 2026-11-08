@@ -14,10 +14,10 @@ void main() {
     expect(LunoBreakpoints.kindOf(360), DeviceKind.compactApp);
     expect(LunoBreakpoints.kindOf(399), DeviceKind.compactApp);
     expect(LunoBreakpoints.kindOf(400), DeviceKind.mobile);
-    expect(LunoBreakpoints.kindOf(719), DeviceKind.mobile);
-    expect(LunoBreakpoints.kindOf(720), DeviceKind.tablet);
-    expect(LunoBreakpoints.kindOf(1119), DeviceKind.tablet);
-    expect(LunoBreakpoints.kindOf(1120), DeviceKind.desktop);
+    expect(LunoBreakpoints.kindOf(699), DeviceKind.mobile);
+    expect(LunoBreakpoints.kindOf(700), DeviceKind.tablet);
+    expect(LunoBreakpoints.kindOf(1099), DeviceKind.tablet);
+    expect(LunoBreakpoints.kindOf(1100), DeviceKind.desktop);
     expect(LunoBreakpoints.kindOf(1920), DeviceKind.desktop);
   });
 

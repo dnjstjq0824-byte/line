@@ -45,7 +45,7 @@ class _LoginPageState extends State<LoginPage> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 760;
+                final wide = constraints.maxWidth >= 700;
                 if (wide) {
                   return Row(
                     children: [
