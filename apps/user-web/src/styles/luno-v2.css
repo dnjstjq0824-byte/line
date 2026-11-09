@@ -422,3 +422,9 @@
   font-weight: 700;
   font-size: 12px;
 }
+
+.cam-error {
+  color: #ef4444;
+  font-size: 13px;
+  margin: 0;
+}

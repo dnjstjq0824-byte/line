@@ -1775,6 +1775,51 @@ async function sendEffectPhoto() {
     await wrap(() => sendAttachmentFile(out, conversation, sessionToken))
   } finally { uploading.value = false; closeEffectModal() }
 }
+function openEffectModal(file: File, conversation: string) {
+  closeEffectModal()
+  effectFile.value = file
+  effectConversation.value = conversation
+  effectPreviewUrl.value = URL.createObjectURL(file)
+}
+const showCameraModal = ref(false)
+const cameraVideoRef = ref<HTMLVideoElement | null>(null)
+const cameraStream = ref<MediaStream | null>(null)
+const cameraError = ref('')
+async function openCamera() {
+  if (!selectedChatId.value || uploading.value) return
+  showCameraModal.value = true
+  cameraError.value = ''
+  await nextTick()
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('no camera')
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+    if (!showCameraModal.value) { stream.getTracks().forEach(tr => tr.stop()); return }
+    cameraStream.value = stream
+    if (cameraVideoRef.value) cameraVideoRef.value.srcObject = stream
+  } catch {
+    cameraError.value = t('camFailed')
+  }
+}
+function closeCamera() {
+  cameraStream.value?.getTracks().forEach(tr => tr.stop())
+  cameraStream.value = null
+  cameraError.value = ''
+  showCameraModal.value = false
+}
+async function capturePhoto() {
+  const video = cameraVideoRef.value
+  const stream = cameraStream.value
+  const conversation = selectedChatId.value
+  if (!video || !stream || !conversation || video.videoWidth === 0) return
+  const canvas = document.createElement('canvas')
+  canvas.width = video.videoWidth
+  canvas.height = video.videoHeight
+  canvas.getContext('2d')?.drawImage(video, 0, 0)
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+  closeCamera()
+  if (!blob) { note.value = t('camFailed'); return }
+  openEffectModal(new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' }), conversation)
+}
 async function uploadSelectedFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -1782,10 +1827,7 @@ async function uploadSelectedFile(event: Event) {
   const conversation = selectedChatId.value
   if (!file || !conversation || uploading.value) return
   if (file.type.startsWith('image/')) {
-    closeEffectModal()
-    effectFile.value = file
-    effectConversation.value = conversation
-    effectPreviewUrl.value = URL.createObjectURL(file)
+    openEffectModal(file, conversation)
     return
   }
   uploading.value = true
@@ -4102,7 +4144,19 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <button class="btn-tool-icon" :title="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker">😊</button>
-            <button class="btn-tool-icon" :title="t('mvAttachPhoto')" :disabled="uploading" @click="chooseAttachment('image')">📷</button>
+            <div v-if="showCameraModal" class="fx-modal-backdrop" @click.self="closeCamera">
+              <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
+                <h3>{{ t('camTitle') }}</h3>
+                <video v-show="!cameraError" ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
+                <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
+                <div class="fx-actions">
+                  <button class="btn-secondary" @click="closeCamera">{{ t('mvCancel') }}</button>
+                  <button class="btn-secondary" @click="closeCamera(); chooseAttachment('image')">{{ t('camChooseFile') }}</button>
+                  <button v-if="!cameraError" class="btn-primary" @click="capturePhoto">{{ t('camCapture') }}</button>
+                </div>
+              </div>
+            </div>
+            <button class="btn-tool-icon" :title="t('mvAttachPhoto')" :disabled="uploading" @click="openCamera">📷</button>
             <button class="btn-tool-icon" :title="t('mvAttachFile')" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
             <button class="btn-tool-icon" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="toggleVoiceRecording">
               {{ isRecordingVoice ? '⏹️' : '🎙️' }}

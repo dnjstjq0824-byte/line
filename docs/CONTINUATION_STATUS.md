@@ -408,6 +408,18 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   pre_deploy_gate 6/6, i18n TOTAL 0. Follow-up fix 9eb6bd7 renamed the new callFilter ref to
   callVideoFilter (collided with the pre-existing call-history filter and
   broke the user-web build at deploy time); redeployed and live-verified.
+## Continuation: 2026-11-09 — P4b-5 in-app photo camera
+
+- No server change. Chat camera tile now opens an in-app sheet instead of
+  the system camera: mobile camera plugin (preview, front/back flip, medium
+  stills) and web getUserMedia modal (preview, file-picker fallback), both
+  feeding the existing photo-effect flow. Video/GIF/avatar modes stay open.
+- 4 cam keys x4 locales; fx-modal styles reused. Hardware-bound: no new
+  maintained tests (no runner for camera capture); verified by analyze +
+  user-web build + debug APK native compile. Verification: flutter 59/59 +
+  analyze clean, worker 104/104, Go pass, user-web build, pre_deploy_gate
+  6/6, i18n TOTAL 0.
+
 
 
 
