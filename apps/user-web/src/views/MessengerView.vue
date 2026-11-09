@@ -628,6 +628,7 @@ const profileDirty = computed(() => editProfileName.value.trim() !== (currentUse
 const isRecordingVoice = ref(false)
 let mediaRecorderInstance: MediaRecorder | null = null
 let recordedChunks: BlobPart[] = []
+let voiceRecordStartedAt = 0
 const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRef = ref<HTMLVideoElement | null>(null)
 const isScreenSharing = ref(false)
@@ -1566,10 +1567,12 @@ async function toggleVoiceRecording() {
       stream.getTracks().forEach(t => t.stop())
       const mime = mediaRecorderInstance?.mimeType || 'audio/webm'
       const blob = new Blob(recordedChunks, { type: mime })
+      const durationSec = Math.max(1, Math.min(300, Math.round((Date.now() - voiceRecordStartedAt) / 1000)))
       uploading.value = true
-      try { await wrap(() => sendAttachmentFile(new File([blob], `voice-${Date.now()}.${mime.includes('mp4') ? 'm4a' : 'webm'}`, { type: mime }), conversation, sessionToken)) }
+      try { await wrap(() => sendAttachmentFile(new File([blob], `voice-${Date.now()}.${mime.includes('mp4') ? 'm4a' : 'webm'}`, { type: mime }), conversation, sessionToken, durationSec)) }
       finally { uploading.value = false; isRecordingVoice.value = false }
     }
+    voiceRecordStartedAt = Date.now()
     mediaRecorderInstance.start()
     isRecordingVoice.value = true
     note.value = t('mvRecordingVoice')
@@ -1724,14 +1727,14 @@ async function uploadSelectedFile(event: Event) {
   try { await wrap(() => sendAttachmentFile(file, conversation, token.value)) } finally { uploading.value = false }
 }
 
-async function sendAttachmentFile(file: File, conversation: string, sessionToken: string) {
+async function sendAttachmentFile(file: File, conversation: string, sessionToken: string, voiceDurationSec?: number) {
     if (file.size === 0 || file.size > 512 * 1024) throw new Error(t('attachment_size_limit'))
     const bytes = new Uint8Array(await file.arrayBuffer())
     let binary = ''
     for (const byte of bytes) binary += String.fromCharCode(byte)
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
     const checksum = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('')
-    const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'file'
+    const kind = voiceDurationSec !== undefined ? 'voice' : file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'file'
     if (sessionToken !== token.value) return
     const att = await request<{ id: string; original_name: string }>('/api/v1/attachments', sessionToken, 'POST', {
       original_name: file.name,
@@ -1745,7 +1748,7 @@ async function sendAttachmentFile(file: File, conversation: string, sessionToken
       client_id: newClientID(),
       kind,
       body: att.original_name,
-      metadata: { attachment_id: att.id, mime_type: file.type, size_bytes: file.size }
+      metadata: { attachment_id: att.id, mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}) }
     })
     if (sessionToken === token.value && selectedChatId.value === conversation && !messages.value.some(m => m.id === res.message.id)) messages.value.push(res.message)
     await loadChats()

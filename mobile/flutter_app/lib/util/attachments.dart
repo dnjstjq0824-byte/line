@@ -19,6 +19,39 @@ Map<String, dynamic> attachmentMessageMetadata({
 }) =>
     {'attachment_id': id, 'mime_type': mime, 'size_bytes': size};
 
+/// Voice-note metadata: same attachment link plus playback length in seconds.
+/// The server clamps absurd durations (see cf_voice / voice backend tests);
+/// the client pre-clamps to the documented 0..300 window.
+Map<String, dynamic> voiceMessageMetadata({
+  required String id,
+  required String mime,
+  required int size,
+  required int durationSec,
+}) =>
+    {
+      'attachment_id': id,
+      'mime_type': mime,
+      'size_bytes': size,
+      'duration': durationSec.clamp(0, 300),
+    };
+
+/// Reads the playback length back out of a voice message, tolerating the
+/// int/double/string shapes JSON round-trips can produce.
+int? voiceDurationOf(dynamic msg) {
+  final meta = msg is Map ? msg['metadata'] : null;
+  final raw = meta is Map ? meta['duration'] : null;
+  if (raw is int) return raw;
+  if (raw is double) return raw.round();
+  if (raw is String) return int.tryParse(raw);
+  return null;
+}
+
+/// M:SS label for the voice bubble, e.g. 0:07 or 2:05.
+String voiceDurationLabel(int seconds) {
+  final s = seconds.clamp(0, 35999);
+  return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+}
+
 String attachmentContentUrl(String baseUrl, String id) =>
     '$baseUrl/api/v1/attachments/$id/content';
 

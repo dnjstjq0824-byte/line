@@ -9,6 +9,7 @@ import '../design/v3.dart';
 import '../legacy_tokens.dart';
 import '../state/session.dart';
 import '../util/attachments.dart';
+import '../util/voice_recorder.dart';
 import '../util/chat_time.dart';
 
 class ChatRoomPage extends StatefulWidget {
@@ -330,6 +331,14 @@ class _SignalBubble extends StatelessWidget {
                     token: session.api.token ?? '',
                     label: '${m['body']}',
                   ),
+                if ((m['kind'] == 'voice' || m['kind'] == 'audio') && attachmentIdOf(m) != null)
+                  VoiceBubble(
+                    url: attachmentContentUrl(
+                        session.api.baseUrl, attachmentIdOf(m)!),
+                    token: session.api.token ?? '',
+                    durationSec: voiceDurationOf(m) ?? 0,
+                    foreground: ink,
+                  ),
                 Text('${m['body']}',
                     style: TextStyle(
                         color: ink,
@@ -469,6 +478,17 @@ class _StickerDeck extends StatelessWidget {
   }
 }
 
+void _recordVoice(BuildContext context) {
+  final session = SessionScope.of(context, listen: false);
+  showDialog<VoiceRecording>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const VoiceRecordDialog(),
+  ).then((rec) {
+    if (rec != null) session.sendVoice(rec.bytes, durationSec: rec.seconds);
+  });
+}
+
 void _pickImageSource(BuildContext context) {
   final session = SessionScope.of(context, listen: false);
   showModalBottomSheet(
@@ -528,6 +548,12 @@ class _Composer extends StatelessWidget {
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onPressed: () =>
                   SessionScope.of(context, listen: false).toggleStickerPicker(),
+            ),
+            IconButton(
+              tooltip: '음성 메시지',
+              icon: Icon(Icons.mic_outlined,
+                  color: dark ? HarborDark.harbor : HarborLight.harbor),
+              onPressed: () => _recordVoice(context),
             ),
             Expanded(
               child: TextField(

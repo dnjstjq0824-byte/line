@@ -6,6 +6,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -443,6 +444,37 @@ class SessionController extends ChangeNotifier {
         'body': att['original_name'] ?? picked.name,
         'metadata': attachmentMessageMetadata(
             id: att['id'], mime: mime, size: bytes.length),
+      });
+      if (!messages.any((m) => m['id'] == x['message']['id'])) {
+        messages.add(x['message']);
+      }
+      await reload();
+    });
+  }
+
+  Future<void> sendVoice(Uint8List bytes,
+      {required int durationSec,
+      String mime = 'audio/mp4',
+      String name = 'voice-note.m4a'}) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      if (bytes.length > maxAttachmentBytes) {
+        throw Exception('파일이 너무 큽니다 (최대 512KB)');
+      }
+      final att = await api.call('/api/v1/attachments', method: 'POST', data: {
+        'conversation_id': selectedId,
+        'original_name': name,
+        'mime_type': mime,
+        'size_bytes': bytes.length,
+        'content_base64': base64Encode(bytes),
+      });
+      final x = await api.call('/api/v1/conversations/$selectedId/messages',
+          method: 'POST', data: {
+        'client_id': uuid(),
+        'kind': 'voice',
+        'body': att['original_name'] ?? name,
+        'metadata': voiceMessageMetadata(
+            id: att['id'], mime: mime, size: bytes.length, durationSec: durationSec),
       });
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
         messages.add(x['message']);

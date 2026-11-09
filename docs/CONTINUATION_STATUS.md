@@ -342,3 +342,17 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   refresh. Tests: Go login ceremony + replay/stale-counter/delete; worker
   login + management in cf_passkey.test.mjs (4/4). Live prod ceremony
   verified with residue cleanup. Mobile native deferred.
+## Continuation: 2026-11-09 — P4a voice messages
+
+- Contract pinned on both backends (no server change): kind:voice links an
+  attachment id + duration seconds; absurd durations clamp (worker test) and
+  Go persists/echoes the metadata (voice_test.go, previously uncommitted).
+- Mobile: VoiceRecordDialog (AAC-LC mono 32kbps .m4a, 2-min cap, preview,
+  mic-denied guidance) + VoiceBubble inline player (auth fetch, lazy audio)
+  + composer mic button + session.sendVoice. record/audioplayers/
+  path_provider added; RECORD_AUDIO/NSMicrophone already manifest-declared.
+- Web recordings now send kind:voice with measured duration (was kind:audio
+  without duration); playback reuses MessageAttachment audio player.
+- Verification: flutter 43/43 + analyze clean, Go full pass, worker 100/100,
+  6 web builds, pre_deploy_gate 6/6, i18n TOTAL 0.
+
