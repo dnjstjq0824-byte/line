@@ -309,6 +309,50 @@ func TestLineFeaturesParity(t *testing.T) {
 	}
 }
 
+func TestAddFriendByDisplayName(t *testing.T) {
+	cfg := Config{
+		DSN:     "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "luno_addfriend.db")),
+		Secret:  "0123456789abcdef0123456789abcdef",
+		Service: "gateway",
+	}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+
+	register := func(email, password, name, handle string) *apiClient {
+		c := &apiClient{t: t, srv: srv}
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+			"email": email, "password": password, "display_name": name, "handle": handle,
+		}); st != 201 {
+			t.Fatalf("register: %d %v", st, out)
+		}
+		status, result := c.req("POST", "/api/v1/auth/login", map[string]any{
+			"email": email, "password": password, "platform": "web", "device_name": "test",
+		})
+		if status != 200 {
+			t.Fatalf("login: %d %v", status, result)
+		}
+		c.token = result["access_token"].(string)
+		c.userID = result["user_id"].(string)
+		return c
+	}
+
+	dave := register("dave-qa@example.test", "DaveStrongPass#2026!", "Dave QA", "dave_qa")
+	register("carol-qa@example.test", "CarolStrongPass#2026!", "Carol QA", "carol_qa")
+
+	// Exact display-name match adds the friend (worker parity).
+	if st, out := dave.req("POST", "/api/v1/friends", map[string]any{"handle": "Carol QA"}); st != 201 {
+		t.Fatalf("add friend by display name: %d %v", st, out)
+	}
+	// Partial names must not resolve (no wrong-person add).
+	if st, _ := dave.req("POST", "/api/v1/friends", map[string]any{"handle": "Carol"}); st != 404 {
+		t.Fatalf("partial name should 404, got %d", st)
+	}
+}
+
 func TestTranslateFailClosedWithoutEngine(t *testing.T) {
 	cfg := Config{
 		DSN:     "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "translate.db")),

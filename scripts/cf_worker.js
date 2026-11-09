@@ -1423,6 +1423,10 @@ function ensureSeed(env) {
     users.set(s.email.toLowerCase(), s);
     usersById.set(s.id, s);
   }
+  // Demo identities are explicitly public: email search finds them.
+  for (const s of seeds) {
+    if (s.role !== 'admin') userPrefs.set(s.id, { ...DEFAULT_PREFS, searchable_by_email: true });
+  }
 
   // Pre-seed friendship between Alice and Bob
   const alice = users.get('alice@luno-test.local');
@@ -2264,8 +2268,11 @@ async function extended(p, request, url, me, token) {
       let target = null;
       if (b.friend_id || b.target_user_id) target = usersById.get(b.friend_id || b.target_user_id);
       else if (b.handle || b.qr_code) {
-        const h = String(b.handle || String(b.qr_code).replace(/^(LINE-FRIEND|LUNO-FRIEND):/i, '')).toLowerCase().replace(/^@/, '');
-        target = Array.from(users.values()).find(u => u.handle === h);
+        const h = String(b.handle || String(b.qr_code).replace(/^(LINE-FRIEND|LUNO-FRIEND):/i, '')).trim().toLowerCase().replace(/^@/, '');
+        const all = Array.from(users.values());
+        target = all.find(u => u.handle === h)
+          || all.find(u => u.email && u.email.toLowerCase() === h && prefsOf(u.id).searchable_by_email)
+          || all.find(u => u.display_name && u.display_name.toLowerCase() === h);
       }
       if (!target || target.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);
       if (target.id === myId) return bad('자기 자신은 친구로 추가할 수 없습니다');

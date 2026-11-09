@@ -901,7 +901,7 @@ const stickersList = [
 ]
 
 // --- Calling Simulation ---
-const activeCall = ref<{ id: string; kind: 'voice' | 'video'; state: 'ringing' | 'connected' | 'ended'; title: string } | null>(null)
+const activeCall = ref<{ id: string; kind: 'voice' | 'video'; state: 'ringing' | 'connected' | 'ended'; title: string; direction: 'outgoing' | 'incoming' } | null>(null)
 const callDuration = ref(0)
 const isCallMuted = ref(false)
 const isCallVideoOff = ref(false)
@@ -919,6 +919,8 @@ const groupTitleInput = ref('')
 const selectedFriendsForGroup = ref<string[]>([])
 const showAddFriendModal = ref(false)
 const addFriendHandleInput = ref('')
+const addFriendResults = ref<User[]>([])
+const addFriendSearched = ref(false)
 const showSettingsModal = ref(false)
 const showContactPicker = ref(false)
 watch(showSettingsModal, (open) => {
@@ -1173,7 +1175,10 @@ async function connectRealtime() {
             })
           }
         } else if (data.type === 'call.ringing') {
-          activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: t('mvIncomingTitle') }
+          const ownEcho = (data.initiated_by && data.initiated_by === currentUser.value?.id) || activeCall.value?.id === data.call_id
+          if (!ownEcho) {
+            activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: data.caller_name || data.caller_handle || t('mvIncomingTitle'), direction: 'incoming' }
+          }
         } else if (data.type === 'call.signal') {
           void handleIncomingCallSignal(data)
         } else if (data.type === 'call.state') {
@@ -2123,7 +2128,7 @@ async function startCall(kind: 'voice' | 'video', overrideTitle?: string) {
       })
       callId = c.id
     }
-    activeCall.value = { id: callId, kind, state: 'ringing', title: convTitle }
+    activeCall.value = { id: callId, kind, state: 'ringing', title: convTitle, direction: 'outgoing' }
     callDuration.value = 0
     try {
       const sess = await initPeerSession(callId, kind)
@@ -2135,6 +2140,11 @@ async function startCall(kind: 'voice' | 'video', overrideTitle?: string) {
         sdp: offer.sdp || ''
       }).catch(() => {})
     } catch {}
+    if (!rtcSession || !rtcSession.stream) {
+      note.value = t('callMediaFailed')
+      endCallLocally()
+      return
+    }
   })
 }
 
@@ -2302,6 +2312,8 @@ function endCallLocally() {
     clearInterval(callTimer)
     callTimer = null
   }
+  if (localVideoRef.value) localVideoRef.value.srcObject = null
+  if (remoteVideoRef.value) remoteVideoRef.value.srcObject = null
   endWebRTCCall(rtcSession?.pc || null, rtcSession?.stream || null)
   rtcSession = null
   isScreenSharing.value = false
@@ -2384,6 +2396,29 @@ async function addFriendByHandle() {
   await wrap(async () => {
     await api('/api/v1/friends', 'POST', { handle: addFriendHandleInput.value.trim() })
     addFriendHandleInput.value = ''
+    showAddFriendModal.value = false
+    await loadFriends()
+    note.value = t('mvFriendAdded')
+  })
+}
+
+async function searchUsersForAdd() {
+  const q = addFriendHandleInput.value.trim()
+  if (q.length < 2) return
+  await wrap(async () => {
+    const res = await api<{ users: User[] }>(`/api/v1/users?q=${encodeURIComponent(q)}`)
+    addFriendResults.value = res.users || []
+    addFriendSearched.value = true
+    if (addFriendResults.value.length === 0) error.value = t('mvAddFriendNoMatch')
+  })
+}
+
+async function addFriendById(id: string) {
+  await wrap(async () => {
+    await api('/api/v1/friends', 'POST', { friend_id: id })
+    addFriendHandleInput.value = ''
+    addFriendResults.value = []
+    addFriendSearched.value = false
     showAddFriendModal.value = false
     await loadFriends()
     note.value = t('mvFriendAdded')
@@ -4497,7 +4532,7 @@ onBeforeUnmount(() => {
         <h3>{{ activeCall.title }}</h3>
         <p class="call-type-status">
           {{ activeCall.kind === 'video' ? '📹 ' + t('callVideo') : '📞 ' + t('callVoice') }} ·
-          <span v-if="activeCall.state === 'ringing'">{{ t('mvConnecting') }}</span>
+          <span v-if="activeCall.state === 'ringing'">{{ activeCall.direction === 'outgoing' ? t('mvCalling') : t('mvConnecting') }}</span>
           <span v-else-if="activeCall.state === 'connected'" class="timer-active">{{ formatDuration(callDuration) }}</span>
           <span v-if="callRecording" class="rec-indicator">🔴 {{ t('callRecording') }}</span>
         </p>
@@ -4546,7 +4581,7 @@ onBeforeUnmount(() => {
               {{ callRecording ? '⏹️' : '⏺️' }}
             </button>
           </template>
-          <button v-if="activeCall.state === 'ringing'" class="btn-call-answer" @click="updateCallState('connected')">{{ t('mvAnswerCall') }}</button>
+          <button v-if="activeCall.state === 'ringing' && activeCall.direction === 'incoming'" class="btn-call-answer" @click="updateCallState('connected')">{{ t('mvAnswerCall') }}</button>
           <button class="btn-call-hangup" @click="updateCallState('ended')">{{ t('mvEndCall') }}</button>
         </div>
       </div>
@@ -5020,8 +5055,26 @@ onBeforeUnmount(() => {
           <p class="modal-subtext">{{ t('mvAddFriendDesc') }}</p>
           <label>{{ t('mvIdSearchLabel') }}</label>
           <div class="flex-row">
-            <input v-model="addFriendHandleInput" :placeholder="t('mvIdSearchPh')" @keydown.enter.prevent="addFriendByHandle" />
+            <input v-model="addFriendHandleInput" :placeholder="t('mvIdSearchPh')" @keydown.enter.prevent="searchUsersForAdd" />
+            <button class="btn-secondary" @click="searchUsersForAdd">{{ t('mvSearch') }}</button>
             <button class="btn-primary" @click="addFriendByHandle">{{ t('mvAdd') }}</button>
+          </div>
+          <div v-if="addFriendSearched && addFriendResults.length > 0" class="select-friends-scroll" style="max-height: 180px; margin-top: 10px;">
+            <div
+              v-for="u in addFriendResults"
+              :key="'add-' + u.id"
+              class="quick-pick-friend-row"
+              @click="addFriendById(u.id)"
+            >
+              <div class="pc-avatar circle-34" :style="{ background: u.avatar_color || 'var(--om-primary, #2563EB)' }">
+                {{ (u.display_name || '?').slice(0, 1) }}
+              </div>
+              <div class="friend-pick-meta">
+                <strong>{{ u.display_name }}</strong>
+                <small>{{ u.handle ? '@' + u.handle : '' }}</small>
+              </div>
+              <button class="btn-mini-chat">{{ t('mvAdd') }}</button>
+            </div>
           </div>
           <div class="add-friend-quick-options">
             <div class="quick-opt-item">

@@ -68,7 +68,7 @@ func (a *App) addFriend(w http.ResponseWriter, r *http.Request) {
 		h := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(in.Handle)), "@")
 		em := strings.ToLower(strings.TrimSpace(in.Email))
 		if h != "" {
-			_ = a.db.QueryRowContext(r.Context(), "SELECT id FROM identity.users WHERE (lower(handle)=$1 OR lower(email)=$1) AND state='active'", h).Scan(&friendID)
+			_ = a.db.QueryRowContext(r.Context(), "SELECT id FROM identity.users WHERE (lower(handle)=$1 OR lower(email)=$1 OR lower(display_name)=$1) AND state='active'", h).Scan(&friendID)
 		} else if em != "" {
 			_ = a.db.QueryRowContext(r.Context(), "SELECT id FROM identity.users WHERE lower(email)=$1 AND state='active'", em).Scan(&friendID)
 		}
