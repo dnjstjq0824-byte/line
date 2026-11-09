@@ -5,6 +5,7 @@ import MessageAttachment from '../components/MessageAttachment.vue'
 import LunoContextMenu, { type ContextMenuItem } from '../components/LunoContextMenu.vue'
 import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
 import { CALL_VIDEO_FILTERS, callRecordingName } from '../../../shared/call-fx'
+import { parseStorePacks } from '../../../shared/shop'
 import { playSendSound, playReceiveSound } from '../sound-effects'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -130,6 +131,7 @@ export type NavItem =
   | 'voom'
   | 'openchat'
   | 'wallet'
+  | 'shop'
   | 'add-friends'
   | 'open-search'
   | 'open-mail'
@@ -360,6 +362,7 @@ function switchNav(nav: NavItem) {
   if (nav === 'calls' && !selectedCallRecord.value && callHistoryList.value.length > 0) {
     selectedCallRecord.value = callHistoryList.value[0]
   }
+  if (nav === 'shop') void loadStorePacks()
 }
 
 const route = useRoute()
@@ -1234,6 +1237,17 @@ async function loadOfficialAccounts() {
     const res = await api<{ accounts: any[] }>('/api/v1/official-accounts')
     officialAccounts.value = res.accounts || []
   } catch {}
+}
+const storePacks = ref<ReturnType<typeof parseStorePacks>>([])
+const storeLoading = ref(false)
+async function loadStorePacks() {
+  if (!token.value) { storePacks.value = []; return }
+  storeLoading.value = true
+  try {
+    const res = await api<{ packs: any }>('/api/v1/store/stickers')
+    storePacks.value = parseStorePacks(res.packs)
+  } catch { storePacks.value = [] }
+  finally { storeLoading.value = false }
 }
 
 let keepLoadVersion = 0
@@ -2982,6 +2996,17 @@ onBeforeUnmount(() => {
             <LunoIcon name="money" :size="20" />
           </button>
 
+          <!-- 5c. Shop (쇼핑) -->
+          <button
+            class="pc-rail-btn"
+            :class="{ active: activeNav === 'shop' }"
+            :title="t('mvRailShop')"
+            @click="switchNav('shop')"
+          >
+            <span class="pc-rail-indicator"></span>
+            <LunoIcon name="shop" :size="20" />
+          </button>
+
           <!-- 6. Add Friends (친구 추가) -->
           <button
             class="pc-rail-btn"
@@ -3655,6 +3680,23 @@ onBeforeUnmount(() => {
               </span>
             </div>
           </div>
+        </div>
+        <div v-else-if="activeNav === 'shop'" class="pc-pane-body">
+          <div class="pc-pane-header">
+            <h2 class="pc-pane-title">{{ t('shopTitle') }}</h2>
+          </div>
+          <div v-if="storeLoading" class="shop-empty">{{ t('attachment_loading') }}</div>
+          <div v-else-if="!storePacks.length" class="shop-empty">{{ t('shopEmpty') }}</div>
+          <div v-for="pk in storePacks" :key="pk.id" class="shop-pack-row">
+            <div class="shop-pack-main">
+              <strong>{{ pk.title }}</strong>
+              <small v-if="pk.description">{{ pk.description }}</small>
+              <span v-if="pk.stickers.length" class="shop-pack-strip">{{ pk.stickers.slice(0, 8).join(' ') }}</span>
+            </div>
+            <span v-if="pk.owned" class="shop-owned">{{ t('shopOwned') }}</span>
+            <span v-else class="shop-price">{{ pk.priceMinor <= 0 ? t('shopFree') : pk.priceMinor + ' ' + pk.currency }}</span>
+          </div>
+          <p class="shop-pay-note">{{ t('shopPayNote') }}</p>
         </div>
       </aside>
 

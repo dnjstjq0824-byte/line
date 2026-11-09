@@ -3,7 +3,7 @@ import AuthView from './views/AuthView.vue'
 import { readStoredToken } from './store/session'
 
 // Menu = URL: every reachable pane has an independent address.
-export const NAV_PATHS = ['chats', 'home', 'news', 'calls', 'voom', 'openchat', 'wallet'] as const
+export const NAV_PATHS = ['chats', 'home', 'news', 'calls', 'voom', 'openchat', 'wallet', 'shop'] as const
 export type NavPath = (typeof NAV_PATHS)[number]
 
 const routes: RouteRecordRaw[] = [

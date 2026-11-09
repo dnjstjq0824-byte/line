@@ -436,6 +436,20 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   hardcoded 2-pack stub including "Brown & Cony" (third-party IP) for
   non-GET store/stickers; extended() shadows it for GET. Removal would flip
   POST/PUT/DELETE on that path from 200 to 404.
+## Continuation: 2026-11-09 — P4b-7 web shop surface
+
+- No server change. /shop route + rail button (new shop SVG icon) + catalog
+  pane in MessengerView: lazy load on entry, pack rows (title, description,
+  sticker strip, price/owned), honest payments-unavailable note. 6 shop keys
+  x4 locales.
+- Shared apps/shared/shop.ts (annotation-free, node-importable) parses both
+  backend shapes; pinned by scripts/shop.test.mjs (test-first failure, 3/3).
+  tsc strictness forced a JSON.parse default (never[] inference) and a loop
+  instead of filter (implicit-any callback). Red drill broke the currency
+  default (1 fail), restored byte-identical (sha256 match). Verification:
+  flutter 65/65 + analyze clean, worker 109/109, Go pass, user-web build,
+  pre_deploy_gate 6/6, i18n TOTAL 0.
+
 
 
 

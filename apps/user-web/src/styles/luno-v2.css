@@ -428,3 +428,53 @@
   font-size: 13px;
   margin: 0;
 }
+
+/* Shop pane: pack rows over the shared catalog parser. */
+.shop-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--ln-muted, #64748b);
+  font-size: 13px;
+}
+.shop-pack-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ln-surface, #ffffff);
+  margin: 0 12px 8px;
+}
+.shop-pack-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+.shop-pack-main small {
+  color: var(--ln-muted, #64748b);
+  font-size: 12px;
+}
+.shop-pack-strip {
+  font-size: 18px;
+  margin-top: 4px;
+}
+.shop-price {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.shop-owned {
+  font-size: 12px;
+  font-weight: 700;
+  color: #22c55e;
+  white-space: nowrap;
+}
+.shop-pay-note {
+  padding: 4px 16px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ln-muted, #64748b);
+}
