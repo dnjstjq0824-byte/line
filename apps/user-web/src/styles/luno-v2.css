@@ -300,3 +300,35 @@
 @media (prefers-reduced-motion: reduce) {
   .bubble-sticker-svg.sticker-effect { animation: none; }
 }
+
+/* Smart-channel slot: server-driven notice card above the talk list. */
+.channel-slot-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ln-accent-soft, #EAF1FF);
+}
+.channel-slot-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ln-text, #1e293b);
+}
+.channel-slot-text strong {
+  font-size: 13px;
+}
+.channel-slot-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}

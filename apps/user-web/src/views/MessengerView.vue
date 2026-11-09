@@ -1196,12 +1196,25 @@ async function connectRealtime() {
 }
 
 // --- Data Fetchers ---
+const channelSlot = ref<{ id: string; title: string; body: string } | null>(null)
+const channelSlotDismissed = ref(false)
+async function loadChannelSlot() {
+  if (!token.value) { channelSlot.value = null; return }
+  try {
+    const res = await api<{ slot: { id: string; title: string; body: string } | null }>('/api/v1/channel/slot')
+    const s = res.slot
+    channelSlot.value = s && typeof s.id === 'string' && typeof s.title === 'string' && typeof s.body === 'string'
+      ? { id: s.id, title: s.title, body: s.body }
+      : null
+  } catch { channelSlot.value = null }
+}
 async function loadChats() {
   const sessionToken = token.value
   try {
     const res = await api<{ conversations: Chat[] }>('/api/v1/conversations')
     if (sessionToken === token.value) chats.value = res.conversations || []
   } catch {}
+  void loadChannelSlot()
 }
 
 async function loadFriends() {
@@ -3190,6 +3203,15 @@ onBeforeUnmount(() => {
               <span class="ad-badge-i">ⓘ</span>
               <img :src="lunoMark" alt="LUNO" class="ad-logo-img" />
             </div>
+          </div>
+
+          <!-- Smart-channel slot: server-driven notice card (LINE parity) -->
+          <div v-if="channelSlot && !channelSlotDismissed" class="channel-slot-card">
+            <div class="channel-slot-text">
+              <strong>{{ channelSlot.title }}</strong>
+              <span>{{ channelSlot.body }}</span>
+            </div>
+            <button class="channel-slot-close" :title="t('mvClose')" @click="channelSlotDismissed = true">✕</button>
           </div>
 
           <!-- Chats Scroll List (Screenshots 1 & 4) -->

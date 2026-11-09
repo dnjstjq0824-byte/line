@@ -6,6 +6,7 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../util/chat_time.dart';
+import '../util/channel_slot.dart';
 
 /// Renders the list preview for a conversation's last message.
 /// The server sends an object ({id, kind, body, ...}); only the human
@@ -49,6 +50,15 @@ class ChatsPage extends StatelessWidget {
                 title: '토크',
                 subtitle: '정박 중인 대화방 ${session.chats.length}곳',
               ),
+              if (session.channelSlot != null &&
+                  !session.dismissedChannelSlots
+                      .contains(session.channelSlot!.id))
+                ChannelSlotCard(
+                  slot: session.channelSlot!,
+                  dark: dark,
+                  onDismiss: () =>
+                      session.dismissChannelSlot(session.channelSlot!.id),
+                ),
               if (session.chats.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(32),

@@ -1,6 +1,6 @@
 {
  "frozen": "working-tree 2026-11-07, V3 renewal baseline",
- "count": 165,
+ "count": 166,
  "routes": [
   "DELETE /api/v1/attachments/{id}",
   "DELETE /api/v1/blocks/{id}",
@@ -26,6 +26,7 @@
   "GET /api/v1/blocks",
   "GET /api/v1/calls",
   "GET /api/v1/calls/health",
+  "GET /api/v1/channel/slot",
   "GET /api/v1/community/rooms",
   "GET /api/v1/community/rooms/{id}/posts",
   "GET /api/v1/conversations",

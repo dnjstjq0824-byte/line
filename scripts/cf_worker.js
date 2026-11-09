@@ -1697,6 +1697,12 @@ const groupCallRooms = new Map();
 const richMenus = new Map();
 const creatorSettlements = new Map();
 const REACTIONS = ['❤️', '😍', '😂', '😮', '😢', '👍'];
+// Smart-channel slot: curated LUNO announcements only (no ad network).
+const CHANNEL_NOTICES = [
+  { id: 'luno-voice-launch', title: '음성 메시지 출시', body: '대화방 마이크 버튼으로 최대 2분까지 녹음해 보세요.', starts_at: '2026-11-09T00:00:00Z', ends_at: '2027-02-09T00:00:00Z' },
+  { id: 'luno-passkey-login', title: '패스키 로그인 지원', body: '비밀번호 없이 지문·얼굴로 로그인할 수 있습니다.', starts_at: '2026-11-09T00:00:00Z', ends_at: '2027-02-09T00:00:00Z' },
+];
+
 const INLINE_MIME = /^(image\/(png|jpeg|gif|webp)|audio\/(webm|ogg|mp4|mpeg|wav)|video\/(mp4|webm))$/;
 
 /**
@@ -3606,6 +3612,14 @@ const workerCore = {
     // Health / Readyz / Metrics / Version
     if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
       return json(BUILD_INFO);
+    }
+    if (url.pathname === '/api/v1/channel/slot' && request.method === 'GET') {
+      const auth = await getAuthUser(request);
+      if (!auth) return json({ error: 'unauthorized' }, 401);
+      const now = new Date().toISOString();
+      const active = CHANNEL_NOTICES.find(n => n.starts_at <= now && now < n.ends_at);
+      if (!active) return json({ slot: null });
+      return json({ slot: { id: active.id, title: active.title, body: active.body } });
     }
     if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
       const auth = await getAuthUser(request);

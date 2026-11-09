@@ -365,5 +365,20 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
 - Verification: flutter 48/48 + analyze clean, sticker red drill (broken
   entry fails 1 test, restored green), worker 100/100, Go pass, 6 web
   builds, pre_deploy_gate 6/6, i18n TOTAL 0.
+## Continuation: 2026-11-09 — P4b-2 smart-channel slot
+
+- New endpoint both backends: GET /api/v1/channel/slot (authed, contract
+  165 -> 166, golden refrozen). Serves one curated LUNO notice (voice launch
+  first, passkey second) inside date windows, null when none active. No ad
+  network; existing Go /api/v1/ads/* management APIs left untouched.
+- Mobile: channel_slot parser + card + session field/dismiss wired into
+  reload() and ChatsPage. Web: slot card above the list in MessengerView
+  (ChatsView.vue is unused legacy), fetched with loadChats, mvClose reused.
+- Test-first: both endpoint tests failed 404 before implementation. Red
+  drill broke the worker shape (title/body undefined fails), restored
+  byte-identical (sha256 match). Verification: flutter 53/53 + analyze
+  clean, worker 102/102, Go full pass, 6 web builds, pre_deploy_gate 6/6,
+  i18n TOTAL 0.
+
 
 

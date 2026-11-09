@@ -502,7 +502,8 @@ func (a *App) Handler() http.Handler {
 		mux.HandleFunc("GET /api/v1/creator/settlements", a.withAuth(a.creatorSettlements))
 	}
 	if active("ads") {
-		mux.HandleFunc("GET /api/v1/ads/advertisers", a.withAuth(a.advertisers))
+		mux.HandleFunc("GET /api/v1/channel/slot", a.withAuth(a.channelSlot))
+mux.HandleFunc("GET /api/v1/ads/advertisers", a.withAuth(a.advertisers))
 		mux.HandleFunc("POST /api/v1/ads/advertisers", a.withAuth(a.createAdvertiser))
 		mux.HandleFunc("POST /api/v1/ads/campaigns", a.withAuth(a.createAdsCampaign))
 		mux.HandleFunc("GET /api/v1/ads/campaigns", a.withAuth(a.adsCampaigns))

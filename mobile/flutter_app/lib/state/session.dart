@@ -15,6 +15,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api/client.dart';
 import '../legacy_tokens.dart';
 import '../util/attachments.dart';
+import '../util/channel_slot.dart';
 import '../util/error_report.dart';
 
 class SessionController extends ChangeNotifier {
@@ -60,6 +61,15 @@ class SessionController extends ChangeNotifier {
   // GET /api/v1/news serves LUNO editorial SAMPLE cards, never real press
   // articles. Treated as sample until the server says otherwise.
   bool newsIsSample = true;
+
+  // Smart-channel slot (GET /api/v1/channel/slot). Null hides the card.
+  ChannelSlot? channelSlot;
+  final Set<String> dismissedChannelSlots = {};
+
+  void dismissChannelSlot(String id) {
+    dismissedChannelSlots.add(id);
+    notifyListeners();
+  }
 
   String selectedId = '';
   String selectedTitle = '';
@@ -192,6 +202,7 @@ class SessionController extends ChangeNotifier {
       api.call('/api/v1/saved-messages').catchError((_) => <String, dynamic>{'saved_messages': []}),
       api.call('/api/v1/news').catchError((_) => <String, dynamic>{'hero': [], 'popular': [], 'sample': true}),
       api.call('/api/v1/calls').catchError((_) => <String, dynamic>{'calls': []}),
+      api.call('/api/v1/channel/slot').catchError((_) => <String, dynamic>{}),
     ]);
     chats = resultsList[0]['conversations'] ?? [];
     friends = resultsList[1]['friends'] ?? [];
@@ -207,6 +218,7 @@ class SessionController extends ChangeNotifier {
     newsPopular = resultsList[8]['popular'] ?? [];
     newsIsSample = resultsList[8]['sample'] != false;
     callHistory = resultsList[9]['calls'] ?? [];
+    channelSlot = channelSlotOf(resultsList[10]);
     notifyListeners();
   }
 
