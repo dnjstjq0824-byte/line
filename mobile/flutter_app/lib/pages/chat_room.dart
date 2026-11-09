@@ -1,7 +1,5 @@
 // Route: /chats/:cid — the vessel deck. Messages only; pins, notes,
 // events and polls each have their own sub-route below this one.
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,6 +13,7 @@ import '../util/voice_recorder.dart';
 import '../util/stickers.dart';
 import '../util/photo_effects.dart';
 import '../util/inapp_camera.dart';
+import '../util/video_bubble.dart';
 import '../util/chat_time.dart';
 
 class ChatRoomPage extends StatefulWidget {
@@ -336,6 +335,12 @@ class _SignalBubble extends StatelessWidget {
                     token: session.api.token ?? '',
                     label: '${m['body']}',
                   ),
+                if (m['kind'] == 'video' && attachmentIdOf(m) != null)
+                  VideoBubble(
+                    url: attachmentContentUrl(
+                        session.api.baseUrl, attachmentIdOf(m)!),
+                    token: session.api.token ?? '',
+                  ),
                 if ((m['kind'] == 'voice' || m['kind'] == 'audio') && attachmentIdOf(m) != null)
                   VoiceBubble(
                     url: attachmentContentUrl(
@@ -519,20 +524,21 @@ Future<void> _sendImageWithEffect(BuildContext context, ImageSource source) asyn
 
 Future<void> _captureWithInAppCamera(BuildContext context) async {
   final session = SessionScope.of(context, listen: false);
-  final bytes = await showDialog<Uint8List>(
+  final pic = await showDialog<PickedImage>(
     context: context,
     builder: (_) => const InAppCameraSheet(),
   );
-  if (bytes == null || !context.mounted) return;
+  if (pic == null || !context.mounted) return;
+  if (pic.mime.startsWith('video/')) {
+    await session.sendPickedImage(pic);
+    return;
+  }
   final effect = await showModalBottomSheet<String>(
     context: context,
-    builder: (_) => PhotoEffectSheet(bytes: bytes),
+    builder: (_) => PhotoEffectSheet(bytes: pic.bytes),
   );
   if (effect == null) return;
-  await session.sendPickedImage(
-    PickedImage(bytes: bytes, name: 'camera-${DateTime.now().millisecondsSinceEpoch}.jpg', mime: 'image/jpeg'),
-    effect: effect,
-  );
+  await session.sendPickedImage(pic, effect: effect);
 }
 
 void _pickImageSource(BuildContext context) {

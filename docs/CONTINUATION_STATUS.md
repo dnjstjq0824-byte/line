@@ -449,6 +449,22 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   default (1 fail), restored byte-identical (sha256 match). Verification:
   flutter 65/65 + analyze clean, worker 109/109, Go pass, user-web build,
   pre_deploy_gate 6/6, i18n TOTAL 0.
+## Continuation: 2026-11-09 — P4b-8 video messages
+
+- No server change: attachment + kind:video contract pinned by
+  cf_video.test.mjs and video_test.go (201 echo incl. mime, dangling 404).
+  Worker drops video duration, so clients send none (uniform contract).
+- Mobile: InAppCameraSheet photo/video tabs (low preset, 8s auto-stop),
+  sendPickedImage reused for clips, lazy VideoBubble (auth headers, duration
+  after load, bounded dispose fix for a real init-failure hang), chat-list
+  preview text. Web: camera modal photo/video tabs, 400kbps MediaRecorder,
+  8s cap, existing video player; camPhoto/camVideo x4 locales.
+- GIF/avatar stay open (no mobile GIF encoder, no AR). Red drill dropped
+  the worker mime echo (cf_video fails), restored byte-identical (sha256
+  match). Verification: flutter 69/69 + analyze clean, debug APK native
+  compile, worker 110/110, Go full pass, user-web build, pre_deploy_gate
+  6/6, i18n TOTAL 0.
+
 
 
 

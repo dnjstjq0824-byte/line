@@ -22,6 +22,8 @@ String previewOfLastMessage(dynamic last) {
         return '스티커';
       case 'image':
         return '사진';
+      case 'video':
+        return '동영상';
       case 'file':
         return '파일';
       case 'security_notice':

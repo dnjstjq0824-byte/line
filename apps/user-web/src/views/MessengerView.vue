@@ -1799,14 +1799,25 @@ const showCameraModal = ref(false)
 const cameraVideoRef = ref<HTMLVideoElement | null>(null)
 const cameraStream = ref<MediaStream | null>(null)
 const cameraError = ref('')
+const cameraMode = ref<'photo' | 'video'>('photo')
+const videoRecording = ref(false)
+const videoElapsed = ref(0)
+let videoRecorder: MediaRecorder | null = null
+let videoChunks: BlobPart[] = []
+let videoTimer: ReturnType<typeof setInterval> | null = null
 async function openCamera() {
   if (!selectedChatId.value || uploading.value) return
   showCameraModal.value = true
   cameraError.value = ''
   await nextTick()
+  await acquireCamera(cameraMode.value)
+}
+async function acquireCamera(mode: 'photo' | 'video') {
+  cameraStream.value?.getTracks().forEach(tr => tr.stop())
+  cameraStream.value = null
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('no camera')
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+    const stream = await navigator.mediaDevices.getUserMedia(mode === 'video' ? { video: true, audio: true } : { video: true })
     if (!showCameraModal.value) { stream.getTracks().forEach(tr => tr.stop()); return }
     cameraStream.value = stream
     if (cameraVideoRef.value) cameraVideoRef.value.srcObject = stream
@@ -1814,11 +1825,63 @@ async function openCamera() {
     cameraError.value = t('camFailed')
   }
 }
+async function switchCameraMode(mode: 'photo' | 'video') {
+  if (cameraMode.value === mode || videoRecording.value) return
+  cameraMode.value = mode
+  cameraError.value = ''
+  await nextTick()
+  await acquireCamera(mode)
+}
 function closeCamera() {
+  if (videoTimer) { clearInterval(videoTimer); videoTimer = null }
+  if (videoRecorder && videoRecorder.state !== 'inactive') {
+    videoRecorder.onstop = null
+    videoRecorder.stop()
+  }
+  videoRecorder = null
+  videoRecording.value = false
   cameraStream.value?.getTracks().forEach(tr => tr.stop())
   cameraStream.value = null
   cameraError.value = ''
   showCameraModal.value = false
+}
+async function startVideoCapture() {
+  const stream = cameraStream.value
+  const conversation = selectedChatId.value
+  if (!stream || !conversation || videoRecording.value || uploading.value) return
+  videoChunks = []
+  videoElapsed.value = 0
+  try {
+    videoRecorder = new MediaRecorder(stream, { videoBitsPerSecond: 400000 })
+  } catch {
+    videoRecorder = new MediaRecorder(stream)
+  }
+  const rec = videoRecorder
+  const sessionToken = token.value
+  rec.ondataavailable = (e) => { if (e.data.size > 0) videoChunks.push(e.data) }
+  rec.onstop = async () => {
+    if (videoTimer) { clearInterval(videoTimer); videoTimer = null }
+    videoRecording.value = false
+    videoRecorder = null
+    const mime = rec.mimeType || 'video/webm'
+    const ext = mime.includes('mp4') ? 'mp4' : mime.includes('ogg') ? 'ogv' : 'webm'
+    const file = new File(videoChunks, `video-${Date.now()}.${ext}`, { type: mime })
+    videoChunks = []
+    closeCamera()
+    if (file.size === 0) return
+    uploading.value = true
+    try { await wrap(() => sendAttachmentFile(file, conversation, sessionToken)) }
+    finally { uploading.value = false }
+  }
+  rec.start()
+  videoRecording.value = true
+  videoTimer = setInterval(() => {
+    videoElapsed.value++
+    if (videoElapsed.value >= 8 && videoRecorder) stopVideoCapture()
+  }, 1000)
+}
+function stopVideoCapture() {
+  if (videoRecorder && videoRecorder.state !== 'inactive') videoRecorder.stop()
 }
 async function capturePhoto() {
   const video = cameraVideoRef.value
@@ -4189,12 +4252,19 @@ onBeforeUnmount(() => {
             <div v-if="showCameraModal" class="fx-modal-backdrop" @click.self="closeCamera">
               <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
                 <h3>{{ t('camTitle') }}</h3>
+                <div class="cam-tabs">
+                  <button :class="{ active: cameraMode === 'photo' }" :disabled="videoRecording" @click="switchCameraMode('photo')">{{ t('camPhoto') }}</button>
+                  <button :class="{ active: cameraMode === 'video' }" :disabled="videoRecording" @click="switchCameraMode('video')">{{ t('camVideo') }}</button>
+                </div>
                 <video v-show="!cameraError" ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
                 <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
+                <p v-if="videoRecording" class="rec-indicator">🔴 {{ videoElapsed }}s / 8s</p>
                 <div class="fx-actions">
                   <button class="btn-secondary" @click="closeCamera">{{ t('mvCancel') }}</button>
-                  <button class="btn-secondary" @click="closeCamera(); chooseAttachment('image')">{{ t('camChooseFile') }}</button>
-                  <button v-if="!cameraError" class="btn-primary" @click="capturePhoto">{{ t('camCapture') }}</button>
+                  <button v-if="cameraMode === 'photo'" class="btn-secondary" @click="closeCamera(); chooseAttachment('image')">{{ t('camChooseFile') }}</button>
+                  <button v-if="!cameraError && cameraMode === 'photo'" class="btn-primary" @click="capturePhoto">{{ t('camCapture') }}</button>
+                  <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="startVideoCapture">⏺️</button>
+                  <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="stopVideoCapture">⏹️</button>
                 </div>
               </div>
             </div>

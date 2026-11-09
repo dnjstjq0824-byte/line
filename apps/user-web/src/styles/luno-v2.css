@@ -478,3 +478,27 @@
   line-height: 1.5;
   color: var(--ln-muted, #64748b);
 }
+
+.cam-tabs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.cam-tabs button {
+  border: 1px solid var(--ln-channel, #d9e1ec);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 4px 16px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.cam-tabs button.active {
+  background: var(--ln-accent, #4f7cff);
+  border-color: transparent;
+  color: #ffffff;
+}
+.cam-tabs button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
