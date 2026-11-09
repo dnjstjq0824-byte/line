@@ -1,6 +1,6 @@
 {
  "frozen": "working-tree 2026-11-07, V3 renewal baseline",
- "count": 158,
+ "count": 159,
  "routes": [
   "DELETE /api/v1/attachments/{id}",
   "DELETE /api/v1/blocks/{id}",
@@ -148,6 +148,7 @@
   "POST /api/v1/saved-messages",
   "POST /api/v1/store/orders",
   "POST /api/v1/stories",
+  "POST /api/v1/translate",
   "POST /api/v1/uploads/init",
   "POST /api/v1/uploads/{id}/complete",
   "POST /api/v1/voom",

@@ -1,4 +1,4 @@
-// Route: /settings — engine room. Translation, QR approval, sealing, GDPR.
+// Route: /settings — engine room. Translation, QR approval, security, GDPR.
 import 'package:flutter/material.dart';
 
 import '../design/responsive.dart';
@@ -162,15 +162,14 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               child: Column(
                 children: [
-                  SwitchListTile(
-                    title: const Text('Letter Sealing (종단간 E2EE)',
+                  ListTile(
+                    leading: Icon(Icons.lock_outline,
+                        color: dark ? HarborDark.harbor : HarborLight.harbor),
+                    title: const Text('종단간 암호화 (E2EE)',
                         style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 14)),
-                    subtitle: Text('Signal X3DH & Double Ratchet 암호화 활성화',
+                            fontSize: 14, fontWeight: FontWeight.w700)),
+                    subtitle: Text('준비 중 — 현재 서버 암호화 저장만 적용됩니다',
                         style: Theme.of(context).textTheme.bodySmall),
-                    value: session.letterSealing,
-                    onChanged: (v) => SessionScope.of(context, listen: false)
-                        .setLetterSealing(v),
                   ),
                   const Divider(height: 1),
                   ListTile(

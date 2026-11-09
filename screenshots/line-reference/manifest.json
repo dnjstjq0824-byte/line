@@ -1,0 +1,401 @@
+[
+ {
+  "file": "screenshots\\line-reference\\appstore_01_shot1.webp",
+  "bytes": 8018,
+  "page": "https://apps.apple.com/jp/app/line/id443904275",
+  "src": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/d8/d9/d2/d8d9d2a2-c6a1-7e57-378b-06f873846ae7/basic_default-0-0-1x_U007epad-0-6-0-0-sRGB-0-85-220.png/600x1300bb.webp"
+ },
+ {
+  "file": "screenshots\\line-reference\\appstore_02_JP.webp",
+  "bytes": 29060,
+  "page": "https://apps.apple.com/jp/app/line/id443904275",
+  "src": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/f9/9c/55/f99c553e-c29c-fc9e-4bf1-3d60629b833b/df5c289c-1f28-4ae1-b245-d56e4025adbe_Chat_02_5.8_JP.png/600x1300bb.webp"
+ },
+ {
+  "file": "screenshots\\line-reference\\appstore_03_JP.webp",
+  "bytes": 31426,
+  "page": "https://apps.apple.com/jp/app/line/id443904275",
+  "src": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/61/7c/a3/617ca3e7-8c6a-eb30-9871-b0a6fc01b6ae/d4fac565-e292-4954-8ba8-86404d1de62f_Sticker_02_5.8_JP.png/600x1300bb.webp"
+ },
+ {
+  "file": "screenshots\\line-reference\\appstore_04_jp.webp",
+  "bytes": 45056,
+  "page": "https://apps.apple.com/jp/app/line/id443904275",
+  "src": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/b1/5c/ce/b15cce4e-0f2d-8254-142d-95f1f5911664/ff4e57a2-89c7-4ee0-a2cb-d2e74c5b39c1_02_2Call_jp.png/600x1300bb.webp"
+ },
+ {
+  "file": "screenshots\\line-reference\\appstore_05_shot5.webp",
+  "bytes": 43536,
+  "page": "https://apps.apple.com/jp/app/line/id443904275",
+  "src": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/5e/a5/f3/5ea5f3b3-c6c7-e5c8-d7a5-b9fc4b924699/60b49d55-546e-44aa-84bc-988f737b04fe_02_Camera_5.8_7_JP@1x.png/600x1300bb.webp"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000098_01.png",
+  "bytes": 82884,
+  "page": "https://help.line.me/line/smartphone?contentId=20000098&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/ko/helpArticle/20000098_01_flowchart_ko.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000098_02.png",
+  "bytes": 18379,
+  "page": "https://help.line.me/line/smartphone?contentId=20000098&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/ios/ja/helpArticle/01.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000098_03.png",
+  "bytes": 49702,
+  "page": "https://help.line.me/line/smartphone?contentId=20000098&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/ios/ja/helpArticle/02.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000098_04.png",
+  "bytes": 52415,
+  "page": "https://help.line.me/line/smartphone?contentId=20000098&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/ios/ja/helpArticle/03.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000098_05.png",
+  "bytes": 44761,
+  "page": "https://help.line.me/line/smartphone?contentId=20000098&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/ios/ja/helpArticle/04.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000098_06.png",
+  "bytes": 48665,
+  "page": "https://help.line.me/line/smartphone?contentId=20000098&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/ios/ja/helpArticle/05.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000276_01.png",
+  "bytes": 13400,
+  "page": "https://help.line.me/line/smartphone?contentId=20000276&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/android/ja/helpArticle/gear_regular.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000276_02.png",
+  "bytes": 8536,
+  "page": "https://help.line.me/line/smartphone?contentId=20000276&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/android/ja/helpArticle/volume-slash_regular.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20000276_05.png",
+  "bytes": 3957,
+  "page": "https://help.line.me/line/smartphone?contentId=20000276&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/ja/helpArticle/arrow-left_regular.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20001192_01.png",
+  "bytes": 3957,
+  "page": "https://help.line.me/line/smartphone?contentId=20001192&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/ja/helpArticle/arrow-right_regular.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20020173_01.png",
+  "bytes": 6115,
+  "page": "https://help.line.me/line/smartphone?contentId=20020173&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/android/ja/helpArticle/20027038-01_android_jp.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20020173_02.png",
+  "bytes": 8310,
+  "page": "https://help.line.me/line/smartphone?contentId=20020173&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/android/ja/helpArticle/20027038-02_android_jp.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_50000087_02.png",
+  "bytes": 10387,
+  "page": "https://help.line.me/line/smartphone?contentId=50000087&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/ja/helpArticle/chat-ellipsis_regular.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\help_20018574_02.png",
+  "bytes": 8170,
+  "page": "https://help.line.me/line/smartphone?contentId=20018574&lang=ko",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/ja/helpArticle/redo_regular.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_02.png",
+  "bytes": 76749,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/e77798ba4d5044fd9a55c85e6d201b47.png?updatedAt=1784020357000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_03.png",
+  "bytes": 172894,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/114e0511ef99493499fc448b9150ec42.png?updatedAt=1781489817000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_04.jpg",
+  "bytes": 115272,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/ed3000d3cda24a76b54ff1b5d7518474.jpg?updatedAt=1776735804000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_05.png",
+  "bytes": 102526,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/e9d7eb1fa02f4ff1b768c5d9707bdbf1.png?updatedAt=1773622399000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_06.png",
+  "bytes": 69293,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/f18e1bfa43cc489f9c6fca311bc5cbe1.png?updatedAt=1771218091000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_08.png",
+  "bytes": 6138,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/4f8c5273c8724022a05f1c8038b03c8c.png?updatedAt=1771218081000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_09.png",
+  "bytes": 5672,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/6528e9fdc9124f5093f930d4c6a6ad7b.png?updatedAt=1771218082000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_top_10.png",
+  "bytes": 6610,
+  "page": "https://guide.line.me/ja/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/5f81b41d5d0f48dab2ddbc62c9b711ac.png?updatedAt=1771218083000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_features-and-columns_2.png",
+  "bytes": 192338,
+  "page": "https://guide.line.me/ja/features-and-columns/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/c939465ef64d47449622fe93e7332f0d.png?updatedAt=1771218145000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_features-and-columns_3.png",
+  "bytes": 923689,
+  "page": "https://guide.line.me/ja/features-and-columns/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/1c03d9dce1f141d492ef57d87c9116d2.png?updatedAt=1792370560000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_features-and-columns_4.png",
+  "bytes": 1734661,
+  "page": "https://guide.line.me/ja/features-and-columns/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/4b20563209d141158ba01d13c1deccef.png?updatedAt=1791860137000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_update_3.png",
+  "bytes": 1656013,
+  "page": "https://guide.line.me/ja/update/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/b34eae494e014ca89905c4ef22279ca7.png?updatedAt=1772616755000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_update_4.jpg",
+  "bytes": 295893,
+  "page": "https://guide.line.me/ja/update/",
+  "src": "https://vos.line-scdn.net/guide-portal/guideportal_ogp.jpg"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_signup_3.png",
+  "bytes": 167719,
+  "page": "https://guide.line.me/ja/signup/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/f58ceec1bed846ccb12638768a54a894.png?updatedAt=1786699428000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_signup_4.png",
+  "bytes": 72850,
+  "page": "https://guide.line.me/ja/signup/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/33e511d3fa0a4e0e907f55cb400bcb13.png?updatedAt=1771218099000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guide_ja_friends-and-groups_4.png",
+  "bytes": 115610,
+  "page": "https://guide.line.me/ja/friends-and-groups/",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/52085fcb186a48449d98dcd7cbf9c341.png?updatedAt=1771218109000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_02.png",
+  "bytes": 102526,
+  "page": "https://guide.line.me/ja/update/chat-renewal2025.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/e9d7eb1fa02f4ff1b768c5d9707bdbf1.png?updatedAt=1773622399000\n?updatedAt=1772673809000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_03.png",
+  "bytes": 108517,
+  "page": "https://guide.line.me/ja/update/chat-renewal2025.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/e7db3c0508ce4d009d4f3bd5cb49f5f2.png?updatedAt=1773622393000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_04.png",
+  "bytes": 330282,
+  "page": "https://guide.line.me/ja/update/chat-renewal2025.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/109fdea1ea694eed96d91bc054c82dfb.png?updatedAt=1773622894000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_05.png",
+  "bytes": 567711,
+  "page": "https://guide.line.me/ja/update/chat-renewal2025.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/90d04d25af394107a4edfdd3d2d41efd.png?updatedAt=1773622395000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_06.png",
+  "bytes": 455999,
+  "page": "https://guide.line.me/ja/update/chat-renewal2025.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/7e89a5f461ed42d0aaffbc2e71dcdc6b.png?updatedAt=1773622397000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_08.png",
+  "bytes": 271196,
+  "page": "https://guide.line.me/ja/services/chatpreview.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/06c812f18d6e4388bfb5ed6d1a568dbf.png?updatedAt=1793593449000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_09.png",
+  "bytes": 1210488,
+  "page": "https://guide.line.me/ja/services/chatpreview.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/e7845f0f7d794b64b95206c81b7bdfcb.png?updatedAt=1793609718000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_10.png",
+  "bytes": 1671349,
+  "page": "https://guide.line.me/ja/services/chatpreview.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/209cc94ca6414900816e94af6a3b2945.png?updatedAt=1793609985000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_14.png",
+  "bytes": 323309,
+  "page": "https://guide.line.me/ja/services/linelabs-callrecording.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/f584b0f68d4949dfa566a06ee0b32af0.png?updatedAt=1791858911000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_15.png",
+  "bytes": 1933685,
+  "page": "https://guide.line.me/ja/services/linelabs-callrecording.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/b25bb1f0dd04472cb9d2c2625336b799.png?updatedAt=1792472633000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_16.png",
+  "bytes": 211451,
+  "page": "https://guide.line.me/ja/services/linelabs-callrecording.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/0a201c196f674978ac1332cf504443a4.png?updatedAt=1792472630000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_17.png",
+  "bytes": 430811,
+  "page": "https://guide.line.me/ja/services/linelabs-callrecording.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/6d46f36615614830a92c94f427b49954.png?updatedAt=1792472629000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_18.png",
+  "bytes": 213646,
+  "page": "https://guide.line.me/ja/services/linelabs-callrecording.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/e2635bb8d60943bda2b21860ff95ebd0.png?updatedAt=1792472627000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_20.png",
+  "bytes": 76749,
+  "page": "https://guide.line.me/ja/account-and-settings/passkey.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-5a71hmrptrzkpwbm6vix2ovx/e77798ba4d5044fd9a55c85e6d201b47.png?updatedAt=1784020357000?updatedAt=1784020347000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_21.png",
+  "bytes": 460907,
+  "page": "https://guide.line.me/ja/account-and-settings/passkey.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-5a71hmrptrzkpwbm6vix2ovx/ec3b09ee74554543a237776b1d62cf91.png?updatedAt=1784020347000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_22.png",
+  "bytes": 139122,
+  "page": "https://guide.line.me/ja/account-and-settings/passkey.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-5a71hmrptrzkpwbm6vix2ovx/04c1bab7e80a478a8d040ce359c59bbb.png?updatedAt=1784020349000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_23.png",
+  "bytes": 80495,
+  "page": "https://guide.line.me/ja/account-and-settings/passkey.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-5a71hmrptrzkpwbm6vix2ovx/dc011f7f71a14020b6d6499fa029264a.png?updatedAt=1784020350000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_24.png",
+  "bytes": 37193,
+  "page": "https://guide.line.me/ja/account-and-settings/passkey.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-5a71hmrptrzkpwbm6vix2ovx/b458724e02ec44cfaf535b8ea15bc45b.png?updatedAt=1784020351000"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_26.png",
+  "bytes": 69293,
+  "page": "https://guide.line.me/ja/account-and-settings/backup-pin.html",
+  "src": "https://guide.line.me/ja/create_backup-pin_KV.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_27.png",
+  "bytes": 78504,
+  "page": "https://guide.line.me/ja/account-and-settings/backup-pin.html",
+  "src": "https://guide.line.me/ja/assets-laicon/laicon__gear.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_28.png",
+  "bytes": 164742,
+  "page": "https://guide.line.me/ja/account-and-settings/backup-pin.html",
+  "src": "https://guide.line.me/ja/create_backup-pin_iOS_01.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_29.png",
+  "bytes": 209419,
+  "page": "https://guide.line.me/ja/account-and-settings/backup-pin.html",
+  "src": "https://guide.line.me/ja/create_backup-pin_iOS_02.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_30.jpg",
+  "bytes": 86307,
+  "page": "https://guide.line.me/ja/account-and-settings/backup-pin.html",
+  "src": "https://guide.line.me/ja/create_backup-pin_iOS_03.jpeg"
+ },
+ {
+  "file": "screenshots\\line-reference\\guideart_36.jpg",
+  "bytes": 1260379,
+  "page": "https://guide.line.me/ja/features-and-columns/satellitemode.html",
+  "src": "https://vos.line-scdn.net/landpress-content-v2-hdwumsd77xurao3sza3uue7t/ca36df4c5ae04a6bbbc80b0fd8fa5102.jpeg?updatedAt=1789097072000"
+ },
+ {
+  "file": "screenshots\\line-reference\\pc_40.png",
+  "bytes": 80547,
+  "page": "https://help.line.me/line/smartphone/sp?contentId=20018574&lang=en",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/en/helpArticle/iPadlogin-other_EN.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\pc_41.png",
+  "bytes": 110381,
+  "page": "https://help.line.me/line/smartphone/sp?contentId=20018574&lang=en",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/en/helpArticle/20018574_android-1_en_20260226.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\pc_42.png",
+  "bytes": 257500,
+  "page": "https://help.line.me/line/smartphone/sp?contentId=20018574&lang=en",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/en/helpArticle/20018574_android-2_en_20260226.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\pc_43.png",
+  "bytes": 121173,
+  "page": "https://help.line.me/line/smartphone/sp?contentId=20018574&lang=en",
+  "src": "https://scdn.line-apps.com/lan/image/line/smartphone/en/helpArticle/20018574_android-3_en_20260226.png"
+ },
+ {
+  "file": "screenshots\\line-reference\\pcweb_04.jpg",
+  "bytes": 14769,
+  "page": "https://www.wikihow.tech/Make-Calls-on-the-Line-App-on-PC-or-Mac",
+  "src": "https://www.wikihow.tech/images/thumb/6/65/Make-Calls-on-the-Line-App-on-PC-or-Mac-Step-1.jpg/aid9689099-v4-728px-Make-Calls-on-the-Line-App-on-PC-or-Mac-Step-1.jpg",
+  "third_party": true
+ },
+ {
+  "file": "screenshots\\line-reference\\pcweb_06.jpg",
+  "bytes": 16947,
+  "page": "https://www.wikihow.tech/Make-Calls-on-the-Line-App-on-PC-or-Mac",
+  "src": "https://www.wikihow.com/images/thumb/3/37/Make-Calls-on-the-Line-App-on-PC-or-Mac-Step-2.jpg/v4-460px-Make-Calls-on-the-Line-App-on-PC-or-Mac-Step-2.jpg",
+  "third_party": true
+ },
+ {
+  "file": "screenshots\\line-reference\\pcweb_08.jpg",
+  "bytes": 32701,
+  "page": "https://www.wikihow.tech/Make-Calls-on-the-Line-App-on-PC-or-Mac",
+  "src": "https://www.wikihow.tech/images/thumb/3/37/Make-Calls-on-the-Line-App-on-PC-or-Mac-Step-2.jpg/aid9689099-v4-728px-Make-Calls-on-the-Line-App-on-PC-or-Mac-Step-2.jpg",
+  "third_party": true
+ }
+]

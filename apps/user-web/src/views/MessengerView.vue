@@ -569,7 +569,6 @@ const newNoteBody = ref('')
 const newAlbumTitle = ref('')
 const editingMessageId = ref('')
 const editingMessageBody = ref('')
-const letterSealingEnabled = ref(true)
 const openChatRooms = ref<Array<{ id: string; name: string; description: string; visibility: string }>>([])
 const selectedOpenChatRoom = ref<{ id: string; name: string; description: string } | null>(null)
 const openChatPosts = ref<Array<{ id: string; author_id: string; body: string; created_at: string }>>([])
@@ -3034,6 +3033,7 @@ onBeforeUnmount(() => {
                     <div class="friend-item-name">
                       <span v-if="(f as any).is_favorite" class="fav-star-inline">★</span>
                       {{ f.display_name }}
+                      <span v-if="(f as any).birthday_today" class="bday-badge" :title="t('mvBirthdayToday')">🎂</span>
                     </div>
                     <div class="friend-item-sub">{{ f.status_message || f.bio || t('mvFriendFallback') }}</div>
                   </div>

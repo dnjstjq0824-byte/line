@@ -445,6 +445,9 @@ func (a *App) Handler() http.Handler {
 		mux.HandleFunc("POST /api/v1/voom/{id}/comments", a.withAuth(a.commentVoomPost))
 		mux.HandleFunc("GET /api/v1/wallet", a.withAuth(a.getWallet))
 		mux.HandleFunc("GET /api/v1/news", a.withAuth(a.listNews))
+		mux.HandleFunc("POST /api/v1/translate", a.withAuth(func(w http.ResponseWriter, r *http.Request) {
+			fail(w, http.StatusServiceUnavailable, "translation unavailable: verified engine integration required")
+		}))
 		mux.HandleFunc("POST /api/v1/wallet/send", a.withAuth(a.sendWalletMoney))
 		mux.HandleFunc("POST /api/v1/wallet/charge", a.withAuth(a.chargeWallet))
 	}

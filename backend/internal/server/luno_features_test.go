@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNewsSampleFeed(t *testing.T) {
@@ -304,5 +306,163 @@ func TestLineFeaturesParity(t *testing.T) {
 	}
 	if st, out := alice.req("GET", "/api/v1/official-accounts", nil); st != 200 {
 		t.Fatalf("official accounts: %d %v", st, out)
+	}
+}
+
+func TestTranslateFailClosedWithoutEngine(t *testing.T) {
+	cfg := Config{
+		DSN:     "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "translate.db")),
+		Secret:  "0123456789abcdef0123456789abcdef",
+		Service: "gateway",
+	}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+	c := &apiClient{t: t, srv: srv}
+	if st, _ := c.req("POST", "/api/v1/translate", map[string]any{"text": "hello"}); st != 401 {
+		t.Fatalf("translate without token must be 401, got %d", st)
+	}
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		"email": "translate@example.test", "password": "TranslatePass#2026!", "display_name": "Translator",
+	}); st != 201 {
+		t.Fatalf("register: %d %v", st, out)
+	}
+	status, result := c.req("POST", "/api/v1/auth/login", map[string]any{
+		"email": "translate@example.test", "password": "TranslatePass#2026!",
+	})
+	if status != 200 {
+		t.Fatalf("login: %d %v", status, result)
+	}
+	c.token = result["access_token"].(string)
+	if st, out := c.req("POST", "/api/v1/translate", map[string]any{"text": "hello", "target_lang": "ko"}); st != 503 {
+		t.Fatalf("translate without engine must fail closed: %d %v", st, out)
+	}
+}
+
+func TestPushSendersFailClosedWhenUnconfigured(t *testing.T) {
+	ctx := context.Background()
+	app := &App{}
+	if app.sendFCM(ctx, "", "", "device-token", "t", "b", "{}") {
+		t.Fatal("sendFCM without project must fail closed")
+	}
+	if app.sendFCM(ctx, "proj", "", "device-token", "t", "b", "{}") {
+		t.Fatal("sendFCM without access token must fail closed")
+	}
+	if app.sendAPNs(ctx, Config{}, "device-token", "t", "b", "{}") {
+		t.Fatal("sendAPNs without configuration must fail closed")
+	}
+}
+
+func TestPushQueueNotMarkedDeliveredWhenUnconfigured(t *testing.T) {
+	cfg := Config{
+		DSN:          "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "push_failclosed.db")),
+		Secret:       "0123456789abcdef0123456789abcdef",
+		Service:      "gateway",
+		PushTokenKey: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+	}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+	c := &apiClient{t: t, srv: srv}
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		"email": "pushfail@example.test", "password": "PushFailPass#2026!", "display_name": "Push Fail",
+	}); st != 201 {
+		t.Fatalf("register: %d %v", st, out)
+	}
+	status, result := c.req("POST", "/api/v1/auth/login", map[string]any{
+		"email": "pushfail@example.test", "password": "PushFailPass#2026!",
+	})
+	if status != 200 {
+		t.Fatalf("login: %d %v", status, result)
+	}
+	c.token = result["access_token"].(string)
+	c.userID = result["user_id"].(string)
+	c.devID = result["device_id"].(string)
+	if st, out := c.req("POST", "/api/v1/push-tokens", map[string]any{
+		"device_id": c.devID, "provider": "fcm", "token": "local-test-token",
+	}); st != 201 {
+		t.Fatalf("register push token: %d %v", st, out)
+	}
+	if _, err := app.db.Exec("INSERT INTO realtime.push_queue(user_id,title,body,payload) VALUES($1,'t','b','{}')", c.userID); err != nil {
+		t.Fatal(err)
+	}
+	app.drainPushQueue(context.Background())
+	var delivered, attempts int
+	if err := app.db.QueryRow("SELECT delivered_at IS NOT NULL, attempts FROM realtime.push_queue").Scan(&delivered, &attempts); err != nil {
+		t.Fatal(err)
+	}
+	if delivered != 0 || attempts != 1 {
+		t.Fatalf("unconfigured push must stay queued, got delivered=%d attempts=%d", delivered, attempts)
+	}
+}
+
+func TestFriendBirthdayToday(t *testing.T) {
+	cfg := Config{
+		DSN:     "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "birthday.db")),
+		Secret:  "0123456789abcdef0123456789abcdef",
+		Service: "gateway",
+	}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+
+	login := func(email, password, name string) *apiClient {
+		c := &apiClient{t: t, srv: srv}
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+			"email": email, "password": password, "display_name": name,
+		}); st != 201 {
+			t.Fatalf("register: %d %v", st, out)
+		}
+		status, result := c.req("POST", "/api/v1/auth/login", map[string]any{
+			"email": email, "password": password,
+		})
+		if status != 200 {
+			t.Fatalf("login: %d %v", status, result)
+		}
+		c.token = result["access_token"].(string)
+		c.userID = result["user_id"].(string)
+		return c
+	}
+	alice := login("alice-bday@example.test", "AliceBdayPass#2026!", "Alice Bday")
+	bob := login("bob-bday@example.test", "BobBdayPass#2026!", "Bob Bday")
+	if st, out := alice.req("POST", "/api/v1/friends", map[string]any{"friend_id": bob.userID}); st != 201 {
+		t.Fatalf("add friend: %d %v", st, out)
+	}
+	today := time.Now().UTC().Format("01-02")
+	st, me := bob.req("PATCH", "/api/v1/me", map[string]any{"birthday": today})
+	if st != 200 {
+		t.Fatalf("set birthday: %d %v", st, me)
+	}
+	if me["birthday"] != today {
+		t.Fatalf("PATCH /me must echo birthday, got %v", me["birthday"])
+	}
+	if st, _ := bob.req("PATCH", "/api/v1/me", map[string]any{"birthday": "13-99"}); st != 400 {
+		t.Fatalf("invalid birthday must be 400, got %d", st)
+	}
+	st, list := alice.req("GET", "/api/v1/friends", nil)
+	if st != 200 {
+		t.Fatalf("list friends: %d %v", st, list)
+	}
+	found := false
+	for _, f := range list["friends"].([]any) {
+		row := f.(map[string]any)
+		if row["display_name"] == "Bob Bday" {
+			found = true
+			if row["birthday_today"] != true {
+				t.Fatalf("expected birthday_today=true, got %v", row)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("bob missing from friends: %v", list)
 	}
 }

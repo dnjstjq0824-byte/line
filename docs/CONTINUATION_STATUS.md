@@ -272,3 +272,40 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   +upgrade) added to `scripts/cf_account_delete.test.mjs`; D-04 fails on
   the pre-fix worker (red) and the suite is 5/5 green post-fix.
 - No D1 migration needed: production held zero PBKDF2 rows at fix time.
+
+## Continuation: 2026-11-09 — honesty sweep, LINE UX survey, agent prep
+
+- Removed false E2EE display (mobile letterSealing state/lock/toggle, web dead
+  ref, worker flag), fake FCM token registration, and fake mobile SDP.
+- Translate now fails closed on both backends (Go route added, worker echo
+  removed); route contract re-frozen 158 -> 159 (translate only).
+- Worker news samples rewritten to obvious LUNO-editorial copy (ids kept).
+- Push delivery no longer reports simulated success; unconfigured sends stay
+  queued and fail after retries. New Go (3) and worker (1) tests, red-drilled.
+- LINE UX survey: docs/LINE_UX_SURVEY.md + 66 reference images.
+- Agent sidecar scaffolded in agent/ (stdlib poll, whitelist, --echo); tests 4/4.
+- Verification: go build/vet/test, worker 93/93, flutter analyze/test,
+  6 web builds, pre_deploy_gate 6/6 GREEN. No commit/push/deploy.
+
+## Continuation: 2026-11-09 — LINE gap P1/P2 + birthday parity
+
+- Shell recovered (previous session STATUS_DLL_INIT_FAILED cleared by CLI
+  restart). Continued the 3-item plan: LINE gap first, then cleanup deploy.
+- P1 small parity (mobile): conversation rows gained list time + group member
+  count (`lib/util/chat_time.dart` + `test/chat_time_test.dart` 5/5, widget
+  coverage in `test/chat_parity_test.dart`); rooms gained date dividers +
+  bubble-side time; home gained a birthday card. Web already had dividers,
+  counts and times; added a birthday badge + `mvBirthdayToday` key (ko/en/th/ja).
+- P2 tabs (mobile): bottom bar 4 (홈/대화/뉴스/통화) -> LINE 5
+  (홈/토크/쇼핑/뉴스/앱). New `/shop` (honest "preparing", no commerce
+  backend) and `/apps` (directory over real secondary destinations) routes;
+  calls moved to secondary; AppBar shortcut now opens /apps (/more kept for
+  deep-link compat). `harbor_test` contract updated (approved change).
+- Birthday backend parity: `identity.users.birthday` (MM-DD) via 001 schema +
+  replay-safe 007 migration; Go `GET /friends` returns `birthday` +
+  `birthday_today` (UTC, worker parity), `PATCH /me` validates MM-DD and GET
+  /me echoes it. Worker behavior locked with a regression test (was untested).
+- P3 passkey + P4 media (in-app camera effects, call effects/recording, voice
+  messages, effect stickers, shopping/smart-channel backends) deferred with
+  scope recorded in `docs/LINE_UX_SURVEY.md` §7: each needs native/crypto
+  work beyond this increment.

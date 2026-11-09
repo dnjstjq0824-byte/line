@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'design/responsive.dart';
 import 'design/v3.dart';
+import 'pages/apps.dart';
 import 'pages/auth.dart';
 import 'pages/calls.dart';
 import 'pages/channels.dart';
@@ -22,6 +23,7 @@ import 'pages/news.dart';
 import 'pages/news_article.dart';
 import 'pages/profile.dart';
 import 'pages/settings.dart';
+import 'pages/shop.dart';
 import 'pages/splash.dart';
 import 'pages/stories.dart';
 import 'pages/wallet.dart';
@@ -97,6 +99,7 @@ GoRouter buildRouter(SessionController session) {
           ),
           GoRoute(path: '/feed', pageBuilder: (c, s) => harborPage(c, s, const FeedPage())),
           GoRoute(path: '/lounge', pageBuilder: (c, s) => harborPage(c, s, const LoungePage())),
+          GoRoute(path: '/shop', pageBuilder: (c, s) => harborPage(c, s, const ShopPage())),
           GoRoute(path: '/news', pageBuilder: (c, s) => harborPage(c, s, const NewsPage())),
           GoRoute(
             path: '/news/:aid',
@@ -107,6 +110,7 @@ GoRouter buildRouter(SessionController session) {
           GoRoute(path: '/settings', pageBuilder: (c, s) => harborPage(c, s, const SettingsPage())),
           GoRoute(path: '/keep', pageBuilder: (c, s) => harborPage(c, s, const KeepPage())),
           GoRoute(path: '/more', pageBuilder: (c, s) => harborPage(c, s, const MorePage())),
+          GoRoute(path: '/apps', pageBuilder: (c, s) => harborPage(c, s, const AppsPage())),
           GoRoute(path: '/console', pageBuilder: (c, s) => harborPage(c, s, const ConsolePage())),
           GoRoute(
             path: '/console/users',

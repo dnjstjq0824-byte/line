@@ -16,6 +16,7 @@ import (
 func (a *App) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		MessageID      string `json:"message_id"`
+		ConversationID string `json:"conversation_id"`
 		OriginalName   string `json:"original_name"`
 		MimeType       string `json:"mime_type"`
 		SizeBytes      int64  `json:"size_bytes"`
@@ -32,6 +33,12 @@ func (a *App) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.EncryptionMode = "none"
+	if in.ConversationID != "" {
+		if !auth.ValidUUID(in.ConversationID) || !a.isMember(r, in.ConversationID) {
+			fail(w, 404, "conversation unavailable")
+			return
+		}
+	}
 	content, err := base64.StdEncoding.Strict().DecodeString(in.ContentBase64)
 	if err != nil || len(content) == 0 || len(content) > 512*1024 || int64(len(content)) != in.SizeBytes {
 		fail(w, 400, "invalid bytes or size; maximum 512 KiB")

@@ -8,10 +8,12 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../api/client.dart';
 import '../legacy_tokens.dart';
+import '../util/attachments.dart';
 import '../util/error_report.dart';
 
 class SessionController extends ChangeNotifier {
@@ -19,7 +21,6 @@ class SessionController extends ChangeNotifier {
 
   bool busy = false;
   bool registerMode = false;
-  bool letterSealing = true;
   bool showStickerPicker = false;
   bool autoTranslate = false;
   String targetTranslateLang = 'ko'; // ko, en, th, ja, zh, es
@@ -117,26 +118,12 @@ class SessionController extends ChangeNotifier {
       notifyListeners();
       await reload();
       await connect();
-      _registerPushToken();
     } catch (_) {
       await storage.delete(key: 'access_token');
       await storage.delete(key: 'device_id');
       api.token = null;
       deviceId = '';
     }
-  }
-
-  Future<void> _registerPushToken() async {
-    // Server contract (calling_media.go): device_id + provider + token.
-    // The legacy platform/device_name shape always answered 400.
-    if (deviceId.isEmpty) return;
-    try {
-      await api.call('/api/v1/push-tokens', method: 'POST', data: {
-        'device_id': deviceId,
-        'provider': 'fcm',
-        'token': 'fcm-mobile-${uuid().substring(0, 12)}',
-      });
-    } catch (_) {}
   }
 
   void setRegisterMode(bool value) {
@@ -179,7 +166,6 @@ class SessionController extends ChangeNotifier {
       notifyListeners();
       await reload();
       await connect();
-      _registerPushToken();
     });
   }
 
@@ -377,8 +363,8 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       final res = await api.call('/api/v1/calls', method: 'POST', data: {
         'conversation_id': conversationId,
+        // Signaling-only invite: no WebRTC media stack in this build, so no SDP is offered.
         'kind': kind,
-        'sdp_offer': 'v=0\r\n',
       });
       activeCall = res;
     });
@@ -432,6 +418,39 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  Future<void> sendImage(ImageSource source) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      final picked = await ImagePicker().pickImage(
+          source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 85);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.length > maxAttachmentBytes) {
+        throw Exception('파일이 너무 큽니다 (최대 512KB)');
+      }
+      final mime = picked.mimeType ?? 'image/jpeg';
+      final att = await api.call('/api/v1/attachments', method: 'POST', data: {
+        'conversation_id': selectedId,
+        'original_name': picked.name,
+        'mime_type': mime,
+        'size_bytes': bytes.length,
+        'content_base64': base64Encode(bytes),
+      });
+      final x = await api.call('/api/v1/conversations/$selectedId/messages',
+          method: 'POST', data: {
+        'client_id': uuid(),
+        'kind': attachmentKindForMime(mime),
+        'body': att['original_name'] ?? picked.name,
+        'metadata': attachmentMessageMetadata(
+            id: att['id'], mime: mime, size: bytes.length),
+      });
+      if (!messages.any((m) => m['id'] == x['message']['id'])) {
+        messages.add(x['message']);
+      }
+      await reload();
+    });
+  }
+
   Future<void> translateMessage(String msgId, String text) async {
     if (translations.containsKey(msgId)) {
       translations.remove(msgId);
@@ -441,7 +460,7 @@ class SessionController extends ChangeNotifier {
     translations[msgId] = {'loading': true};
     notifyListeners();
     try {
-      // Legacy endpoint: preserved as-is (server answers 404 -> catch below).
+      // No translation engine is configured: the server answers 503 -> catch below.
       final res = await api.call('/api/v1/translate', method: 'POST', data: {
         'text': text,
         'target_lang': targetTranslateLang,
@@ -630,11 +649,6 @@ class SessionController extends ChangeNotifier {
 
   void setTargetTranslateLang(String value) {
     targetTranslateLang = value;
-    notifyListeners();
-  }
-
-  void setLetterSealing(bool value) {
-    letterSealing = value;
     notifyListeners();
   }
 

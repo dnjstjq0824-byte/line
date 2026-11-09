@@ -27,6 +27,8 @@ void main() {
     expect(LunoNav.parentOf('/news/hero'), '/news');
     expect(LunoNav.parentOf('/console/users'), '/console');
     expect(LunoNav.parentOf('/stories'), '/home');
+    expect(LunoNav.parentOf('/shop'), '/shop');
+    expect(LunoNav.parentOf('/apps'), '/apps');
     expect(LunoNav.parentOf('/channels'), '/home');
     expect(LunoNav.parentOf('/home'), '/home');
   });
@@ -35,18 +37,18 @@ void main() {
     const routes = [
       '/login', '/home', '/stories', '/channels', '/chats', '/feed',
       '/lounge', '/news', '/calls', '/wallet', '/settings', '/keep',
-      '/more', '/profile', '/splash', '/console', '/console/users', '/console/reports',
-      '/console/flags', '/console/audit',
+      '/more', '/shop', '/apps', '/profile', '/splash', '/console', '/console/users',
+      '/console/reports', '/console/flags', '/console/audit',
     ];
     expect(routes.toSet().length, routes.length);
-    // reference-parity redesign (user-requested): bottom bar is 홈/대화/뉴스/통화.
-    // 피드/라운지 move to 더보기; every route keeps its own address.
-    expect(LunoNav.primary.length, 4);
+    // LINE parity (user-requested 2026-11-09): bottom bar is 홈/토크/쇼핑/뉴스/앱.
+    // 통화 moves to the 앱 directory; every route keeps its own address.
+    expect(LunoNav.primary.length, 5);
     expect(LunoNav.primary.map((d) => d.route),
-        ['/home', '/chats', '/news', '/calls']);
-    expect(LunoNav.secondary.length, 6);
+        ['/home', '/chats', '/shop', '/news', '/apps']);
+    expect(LunoNav.secondary.length, 7);
     expect(LunoNav.secondary.map((d) => d.route),
-        ['/feed', '/lounge', '/wallet', '/keep', '/settings', '/console']);
+        ['/calls', '/feed', '/lounge', '/wallet', '/keep', '/settings', '/console']);
   });
 
   test('LUNO brand surfaces reuse frozen PO tokens', () {

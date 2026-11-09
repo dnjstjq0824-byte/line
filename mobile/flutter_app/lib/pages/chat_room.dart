@@ -2,11 +2,14 @@
 // events and polls each have their own sub-route below this one.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../legacy_tokens.dart';
 import '../state/session.dart';
+import '../util/attachments.dart';
+import '../util/chat_time.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String conversationId;
@@ -78,7 +81,19 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: session.messages.length,
-                    itemBuilder: (_, i) => _SignalBubble(entry: session.messages[i]),
+                    itemBuilder: (_, i) {
+                      final msg = session.messages[i];
+                      final prev = i > 0 ? session.messages[i - 1] : null;
+                      final prevIso = prev == null ? null : prev['created_at'];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showDateDivider(prevIso, msg['created_at']))
+                            _DateDivider(iso: msg['created_at']),
+                          _SignalBubble(entry: msg),
+                        ],
+                      );
+                    },
                   ),
           ),
         ),
@@ -153,13 +168,6 @@ class _DeckHeader extends StatelessWidget {
                             fontSize: 15),
                       ),
                     ),
-                    if (session.letterSealing)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: Icon(Icons.lock,
-                            size: 14,
-                            color: dark ? HarborDark.harbor : HarborLight.seaGlass),
-                      ),
                   ],
                 ),
               ),
@@ -204,6 +212,75 @@ class _DeckHeader extends StatelessWidget {
   }
 }
 
+class _ChatImage extends StatelessWidget {
+  final String url;
+  final String token;
+  final String label;
+  const _ChatImage({required this.url, required this.token, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => Dialog(
+            insetPadding: const EdgeInsets.all(16),
+            child: Image.network(url, headers: {'Authorization': 'Bearer $token'},
+                errorBuilder: (_, __, ___) => const Padding(
+                    padding: EdgeInsets.all(24), child: Text('이미지를 불러올 수 없습니다'))),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(url,
+              headers: {'Authorization': 'Bearer $token'},
+              height: 180,
+              fit: BoxFit.cover,
+              loadingBuilder: (ctx, child, progress) => progress == null
+                  ? child
+                  : const SizedBox(
+                      height: 180, child: Center(child: CircularProgressIndicator())),
+              errorBuilder: (_, __, ___) =>
+                  Text(label, style: const TextStyle(fontSize: 12))),
+        ),
+      ),
+    );
+  }
+}
+
+class _DateDivider extends StatelessWidget {
+  final dynamic iso;
+  const _DateDivider({required this.iso});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final label = dividerLabel(iso);
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: dark
+                ? HarborDark.seaGlass
+                : Colors.white.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(HarborRadius.lamp),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: dark ? HarborDark.drift : HarborLight.drift)),
+        ),
+      ),
+    );
+  }
+}
+
 class _SignalBubble extends StatelessWidget {
   final dynamic entry;
   const _SignalBubble({required this.entry});
@@ -224,9 +301,10 @@ class _SignalBubble extends StatelessWidget {
     final faint = mine
         ? Colors.white.withValues(alpha: 0.75)
         : (dark ? HarborDark.drift : HarborLight.drift);
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+    final time = bubbleTime(m['created_at']);
+    final timeStyle = TextStyle(
+        fontSize: 10, color: dark ? HarborDark.drift : HarborLight.drift);
+    final bubbleBody = Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         constraints: const BoxConstraints(maxWidth: 340),
         decoration: BoxDecoration(
@@ -245,6 +323,13 @@ class _SignalBubble extends StatelessWidget {
                 if (m['reply_to'] != null && '${m['reply_to']}'.isNotEmpty)
                   Text('↩ ${m['reply_preview'] ?? '답장'}',
                       style: TextStyle(fontSize: 10, color: faint)),
+                if (m['kind'] == 'image' && attachmentIdOf(m) != null)
+                  _ChatImage(
+                    url: attachmentContentUrl(
+                        session.api.baseUrl, attachmentIdOf(m)!),
+                    token: session.api.token ?? '',
+                    label: '${m['body']}',
+                  ),
                 Text('${m['body']}',
                     style: TextStyle(
                         color: ink,
@@ -272,15 +357,6 @@ class _SignalBubble extends StatelessWidget {
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text('[LUNO AI] ',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w800,
-                                              color: mine
-                                                  ? Colors.white
-                                                  : (dark
-                                                      ? HarborDark.harbor
-                                                      : HarborLight.harbor))),
                                       Text('${trans['target_lang']}'
                                           .toString()
                                           .toUpperCase()),
@@ -335,6 +411,25 @@ class _SignalBubble extends StatelessWidget {
             ),
           ),
         ),
+        );
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (mine && time.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 6, bottom: 6),
+              child: Text(time, style: timeStyle),
+            ),
+          Flexible(child: bubbleBody),
+          if (!mine && time.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, bottom: 6),
+              child: Text(time, style: timeStyle),
+            ),
+        ],
       ),
     );
   }
@@ -374,6 +469,36 @@ class _StickerDeck extends StatelessWidget {
   }
 }
 
+void _pickImageSource(BuildContext context) {
+  final session = SessionScope.of(context, listen: false);
+  showModalBottomSheet(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('갤러리에서 선택'),
+            onTap: () {
+              Navigator.of(sheet).pop();
+              session.sendImage(ImageSource.gallery);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined),
+            title: const Text('카메라로 촬영'),
+            onTap: () {
+              Navigator.of(sheet).pop();
+              session.sendImage(ImageSource.camera);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
@@ -392,6 +517,12 @@ class _Composer extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
+              tooltip: '사진',
+              icon: Icon(Icons.photo_outlined,
+                  color: dark ? HarborDark.harbor : HarborLight.harbor),
+              onPressed: () => _pickImageSource(context),
+            ),
+            IconButton(
               tooltip: '스티커',
               icon: Icon(Icons.stars_rounded,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
@@ -404,7 +535,7 @@ class _Composer extends StatelessWidget {
                 minLines: 1,
                 maxLines: dense ? 2 : 4,
                 decoration: const InputDecoration(
-                  hintText: '메시지를 입력하세요 (LUNO AI 실시간 연결)',
+                  hintText: '메시지를 입력하세요',
                   isDense: true,
                 ),
                 onSubmitted: (_) => onSend(),

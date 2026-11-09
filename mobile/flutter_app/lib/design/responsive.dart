@@ -385,8 +385,8 @@ class _MobileDesk extends StatelessWidget {
         title: const HarborWordmark(compact: false),
         actions: [
           IconButton(
-            tooltip: '더보기',
-            onPressed: () => context.go('/more'),
+            tooltip: '앱',
+            onPressed: () => context.go('/apps'),
             icon: const Icon(Icons.apps_outlined),
           ),
           IconButton(
@@ -438,8 +438,8 @@ class _CompactDesk extends StatelessWidget {
         title: const HarborWordmark(compact: true),
         actions: [
           IconButton(
-            tooltip: '더보기',
-            onPressed: () => context.go('/more'),
+            tooltip: '앱',
+            onPressed: () => context.go('/apps'),
             icon: const Icon(Icons.apps_outlined),
           ),
         ],

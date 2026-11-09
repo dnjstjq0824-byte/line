@@ -115,3 +115,44 @@ func TestRealMediaBytesRestartAndDeletion(t *testing.T) {
 		t.Fatalf("oversize: %d", st)
 	}
 }
+
+func TestUploadAttachmentConversationScope(t *testing.T) {
+	cfg := Config{DSN: "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "media_scope.db")), Secret: "0123456789abcdef0123456789abcdef", Service: "gateway"}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+	login := func(email string) *apiClient {
+		c := &apiClient{t: t, srv: srv}
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"email": email, "password": "MediaStrong#2026!", "display_name": email}); st != 201 {
+			t.Fatalf("register: %d %v", st, out)
+		}
+		st, out := c.req("POST", "/api/v1/auth/login", map[string]any{"email": email, "password": "MediaStrong#2026!"})
+		if st != 200 {
+			t.Fatalf("login: %d %v", st, out)
+		}
+		c.token = out["access_token"].(string)
+		c.userID = out["user_id"].(string)
+		return c
+	}
+	alice, bob, eve := login("scope-a@example.test"), login("scope-b@example.test"), login("scope-e@example.test")
+	st, conv := alice.req("POST", "/api/v1/conversations", map[string]any{"kind": "group", "title": "Scope", "member_ids": []string{bob.userID}})
+	if st != 201 {
+		t.Fatalf("conversation: %d %v", st, conv)
+	}
+	cid := conv["id"].(string)
+	data := []byte("scope check")
+	member := map[string]any{"conversation_id": cid, "original_name": "s.bin", "mime_type": "application/octet-stream", "size_bytes": len(data), "content_base64": base64.StdEncoding.EncodeToString(data)}
+	if st, out := alice.req("POST", "/api/v1/attachments", member); st != 201 {
+		t.Fatalf("member upload with conversation_id: %d %v", st, out)
+	}
+	if st, _ := eve.req("POST", "/api/v1/attachments", member); st != 404 {
+		t.Fatalf("outsider upload with conversation_id: %d", st)
+	}
+	member["conversation_id"] = "not-a-uuid"
+	if st, _ := alice.req("POST", "/api/v1/attachments", member); st != 404 {
+		t.Fatalf("invalid conversation_id: %d", st)
+	}
+}

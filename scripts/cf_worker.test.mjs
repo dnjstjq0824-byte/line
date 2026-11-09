@@ -257,3 +257,40 @@ test('standalone host allowlist matches exact names and requires the literal mas
     assert.equal((await hit(host, {})).status, 503, host);
   }
 });
+
+test('translate fails closed without an engine and e2ee flag stays off', async () => {
+  assert.equal((await api('translate', null, 'POST', { text: 'hello' })).status, 401);
+  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+  const res = await api('translate', alice, 'POST', { text: 'hello', target_lang: 'ko' });
+  assert.equal(res.status, 503);
+  assert.equal((await res.json()).code, 'TRANSLATE_NOT_CONFIGURED');
+  const admin = await login('admin@luno.local', 'LunoAdmin#2026!');
+  const flags = (await (await api('admin/feature-flags', admin)).json()).feature_flags;
+  assert.equal(flags.find(f => f.key === 'e2ee_letter_sealing').enabled, false);
+});
+
+test('attachments serve identical bytes at the content alias', async () => {
+  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+  const cid = '00000000-0000-0000-0000-000000000010';
+  const b64 = Buffer.from('hello-bytes').toString('base64');
+  const up = await api('attachments', alice, 'POST', { conversation_id: cid, content_base64: b64, mime_type: 'text/plain', original_name: 'hi.txt' });
+  assert.equal(up.status, 201);
+  const { id } = await up.json();
+  for (const path of [`attachments/${id}`, `attachments/${id}/content`]) {
+    const res = await api(path, alice, 'GET');
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), 'hello-bytes');
+  }
+});
+
+test('friends expose birthday_today and PATCH /me validates MM-DD', async () => {
+  const demo = await login('user@luno.local', 'LunoUser#2026!');
+  const friends = await (await api('friends', demo, 'GET')).json();
+  const aliceRow = friends.friends.find(f => (f.display_name || '').includes('Alice'));
+  assert.ok(aliceRow, 'seeded alice must be a demo friend');
+  assert.equal(aliceRow.birthday_today, true);
+  assert.equal((await api('me', demo, 'PATCH', { birthday: '13-99' })).status, 400);
+  const today = new Date().toISOString().slice(5, 10);
+  const patched = await (await api('me', demo, 'PATCH', { birthday: today })).json();
+  assert.equal(patched.birthday, today);
+});

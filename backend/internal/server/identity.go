@@ -331,11 +331,11 @@ func (a *App) qrPoll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) me(w http.ResponseWriter, r *http.Request) {
-	var id, email, name, role, handle, phone, avatar, bio, locale string
+	var id, email, name, role, handle, phone, avatar, bio, locale, birthday string
 	var emailVerified bool
 	e := a.db.QueryRowContext(r.Context(),
-		"SELECT id,email,display_name,role,COALESCE(handle,''),COALESCE(phone_e164,''),COALESCE(avatar_url,''),bio,locale,email_verified FROM identity.users WHERE id=$1",
-		claims(r).Subject).Scan(&id, &email, &name, &role, &handle, &phone, &avatar, &bio, &locale, &emailVerified)
+		"SELECT id,email,display_name,role,COALESCE(handle,''),COALESCE(phone_e164,''),COALESCE(avatar_url,''),bio,locale,email_verified,COALESCE(birthday,'') FROM identity.users WHERE id=$1",
+		claims(r).Subject).Scan(&id, &email, &name, &role, &handle, &phone, &avatar, &bio, &locale, &emailVerified, &birthday)
 	if e != nil {
 		fail(w, 404, "not found")
 		return
@@ -351,6 +351,7 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) {
 		"bio":            bio,
 		"locale":         locale,
 		"email_verified": emailVerified,
+		"birthday":       birthday,
 	})
 }
 
@@ -359,6 +360,7 @@ func (a *App) updateMe(w http.ResponseWriter, r *http.Request) {
 		DisplayName *string `json:"display_name"`
 		Handle      *string `json:"handle"`
 		Bio         *string `json:"bio"`
+		Birthday    *string `json:"birthday"`
 		AvatarURL   *string `json:"avatar_url"`
 		PhoneE164   *string `json:"phone_e164"`
 		Locale      *string `json:"locale"`
@@ -394,6 +396,14 @@ func (a *App) updateMe(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = a.db.ExecContext(r.Context(), "UPDATE identity.users SET bio=$2,updated_at=now() WHERE id=$1", uid, *in.Bio)
 	}
+	if in.Birthday != nil {
+		b := strings.TrimSpace(*in.Birthday)
+		if b != "" && !validBirthdayMMDD(b) {
+			fail(w, 400, "birthday must be MM-DD")
+			return
+		}
+		_, _ = a.db.ExecContext(r.Context(), "UPDATE identity.users SET birthday=$2,updated_at=now() WHERE id=$1", uid, b)
+	}
 	if in.AvatarURL != nil {
 		_, _ = a.db.ExecContext(r.Context(), "UPDATE identity.users SET avatar_url=$2,updated_at=now() WHERE id=$1", uid, *in.AvatarURL)
 	}
@@ -404,6 +414,21 @@ func (a *App) updateMe(w http.ResponseWriter, r *http.Request) {
 		_, _ = a.db.ExecContext(r.Context(), "UPDATE identity.users SET locale=$2,updated_at=now() WHERE id=$1", uid, *in.Locale)
 	}
 	a.me(w, r)
+}
+
+// validBirthdayMMDD accepts MM-DD birthdays (worker parity: empty clears).
+func validBirthdayMMDD(s string) bool {
+	if len(s) != 5 || s[2] != '-' {
+		return false
+	}
+	for _, i := range []int{0, 1, 3, 4} {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	m := int(s[0]-'0')*10 + int(s[1]-'0')
+	d := int(s[3]-'0')*10 + int(s[4]-'0')
+	return m >= 1 && m <= 12 && d >= 1 && d <= 31
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {

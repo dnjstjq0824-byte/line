@@ -152,6 +152,40 @@ class _HomePageState extends State<HomePage> {
             ),
             onTap: () => context.go('/channels'),
           ),
+          if (session.friends.any((u) => u['birthday_today'] == true))
+            Card(
+              color: dark ? HarborDark.surface : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(HarborRadius.card),
+                side: BorderSide(
+                    color: dark ? HarborDark.channel : HarborLight.channel),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.cake_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('오늘 생일인 친구',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      session.friends
+                          .where((u) => u['birthday_today'] == true)
+                          .map((u) => '${u['display_name']}')
+                          .join(', '),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           InkWell(
             onTap: () => setState(() => friendsOpen = !friendsOpen),
             child: Padding(

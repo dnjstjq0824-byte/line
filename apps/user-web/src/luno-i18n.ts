@@ -173,6 +173,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvFavFallback: 'LUNO 즐겨찾기 친구',
     mvGroupFallback: '그룹 대화방',
     mvFriendFallback: 'LUNO 친구',
+    mvBirthdayToday: '오늘 생일',
     mvOfficial: '공식',
     mvOfficialAccounts: '공식 계정 {n}',
     mvMe: '나',
@@ -704,6 +705,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvFavFallback: 'LUNO favorite friend',
     mvGroupFallback: 'Group chat',
     mvFriendFallback: 'LUNO friend',
+    mvBirthdayToday: 'Birthday today',
     mvOfficial: 'Official',
     mvOfficialAccounts: 'Official accounts {n}',
     mvMe: 'Me',
@@ -1235,6 +1237,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvFavFallback: 'เพื่อนโปรด LUNO',
     mvGroupFallback: 'ห้องแชทกลุ่ม',
     mvFriendFallback: 'เพื่อน LUNO',
+    mvBirthdayToday: 'วันเกิดวันนี้',
     mvOfficial: 'ทางการ',
     mvOfficialAccounts: 'บัญชีทางการ {n}',
     mvMe: 'ฉัน',
@@ -1766,6 +1769,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvFavFallback: 'LUNOお気に入りの友だち',
     mvGroupFallback: 'グループトーク',
     mvFriendFallback: 'LUNOの友だち',
+    mvBirthdayToday: '今日が誕生日',
     mvOfficial: '公式',
     mvOfficialAccounts: '公式アカウント {n}',
     mvMe: '自分',
@@ -2223,7 +2227,7 @@ export async function translateMessageText(
 ): Promise<{ translated: string; sourceLang: string; engine: string }> {
   const clean = text.trim();
   if (!clean) {
-    return { translated: '', sourceLang: 'auto', engine: 'luno-neural-edge' };
+    return { translated: '', sourceLang: 'auto', engine: 'luno-local-dictionary' };
   }
 
   // Detect approximate source script
@@ -2242,17 +2246,17 @@ export async function translateMessageText(
       return {
         translated: entry[targetLang],
         sourceLang,
-        engine: 'luno-ai-verified'
+        engine: 'luno-phrasebook'
       };
     }
   }
 
-  // Common keyword-level neural synthesis for arbitrary conversational input
+  // Local keyword substitution for input outside the phrasebook (not neural MT)
   const prefixMap: Record<LunoLocale, string> = {
-    ko: '[한국어 AI 번역]',
-    en: '[EN AI Translation]',
-    th: '[คำแปล AI ภาษาไทย]',
-    ja: '[日本語AI翻訳]'
+    ko: '[한국어 사전 번역]',
+    en: '[EN dictionary translation]',
+    th: '[พจนานุกรมไทย]',
+    ja: '[日本語辞書翻訳]'
   };
 
   const dictionaryReplacements: Record<LunoLocale, Array<[RegExp, string]>> = {
@@ -2302,7 +2306,7 @@ export async function translateMessageText(
   return {
     translated: finalOut,
     sourceLang,
-    engine: 'luno-neural-edge'
+    engine: 'luno-local-dictionary'
   };
 }
 

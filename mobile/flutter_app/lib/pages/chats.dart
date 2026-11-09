@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/chat_time.dart';
 
 /// Renders the list preview for a conversation's last message.
 /// The server sends an object ({id, kind, body, ...}); only the human
@@ -45,7 +46,7 @@ class ChatsPage extends StatelessWidget {
           PageColumn(
             children: [
               Masthead(
-                title: '대화',
+                title: '토크',
                 subtitle: '정박 중인 대화방 ${session.chats.length}곳',
               ),
               if (session.chats.isEmpty)
@@ -90,6 +91,12 @@ class _BerthCard extends StatelessWidget {
     final unread = (c['unread_count'] as num?)?.toInt() ?? 0;
     final raw = '${c['title'] ?? ''}';
     final title = raw.isEmpty ? '대화방' : raw;
+    final memberCount = (c['member_count'] as num?)?.toInt();
+    final countSuffix =
+        (c['kind'] == 'group' && memberCount != null) ? ' ($memberCount)' : '';
+    final last = c['last_message'];
+    final rowTime =
+        listTime(c['updated_at'] ?? (last is Map ? last['created_at'] : null));
     final session = SessionScope.of(context, listen: false);
     return Card(
       color: dark ? HarborDark.surface : Colors.white,
@@ -119,7 +126,7 @@ class _BerthCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
+                    Text('$title$countSuffix',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
@@ -131,22 +138,43 @@ class _BerthCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (unread > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: dark ? HarborDark.beacon : HarborLight.beacon,
-                    borderRadius: BorderRadius.circular(HarborRadius.lamp),
-                  ),
-                  child: Text('$unread',
-                      style: TextStyle(
-                          color: dark ? HarborDark.onBeacon : HarborLight.onBeacon,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800)),
-                )
-              else
-                Icon(Icons.chevron_right,
-                    size: 20, color: dark ? HarborDark.drift : HarborLight.drift),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (rowTime.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(rowTime,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: dark
+                                  ? HarborDark.drift
+                                  : HarborLight.drift)),
+                    ),
+                  if (unread > 0)
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: dark ? HarborDark.beacon : HarborLight.beacon,
+                        borderRadius: BorderRadius.circular(HarborRadius.lamp),
+                      ),
+                      child: Text('$unread',
+                          style: TextStyle(
+                              color: dark
+                                  ? HarborDark.onBeacon
+                                  : HarborLight.onBeacon,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800)),
+                    )
+                  else
+                    Icon(Icons.chevron_right,
+                        size: 20,
+                        color:
+                            dark ? HarborDark.drift : HarborLight.drift),
+                ],
+              ),
             ],
           ),
         ),

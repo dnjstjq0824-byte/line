@@ -468,13 +468,13 @@ async function loadAttachment(id) {
 const NEWS_SAMPLE = [
   {
     "id": "news-hero-01",
-    "title": "단독 \"SKY 학벌 중시하는 서울, 삶의 질은 세계 113위\"",
+    "title": "LUNO Pay로 시작하는 스마트한 더치페이",
     "press": "LUNO 에디토리얼(샘플)",
     "category": "경제",
     "published_at": "2026-10-31T08:50:00.000Z",
     "image_url": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80",
-    "summary": "서울의 글로벌 경쟁력과 정주 여건을 종합 평가한 결과, 교육열과 학벌 지표 대비 삶의 질 지수는 113위로 나타났다...",
-    "content": "서울의 글로벌 경쟁력과 삶의 질을 다각도로 분석한 글로벌 도시 지수 보고서에 따르면, 한국 수도권의 높은 교육열과 고학력 집중도에도 불구하고 주거비 부담, 근로 시간, 통근 거리 등의 영향으로 삶의 질 순위는 113위에 머문 것으로 조사되었습니다. 전문가들은 지속 가능한 도시 발전을 위해 주거 안정과 문화 공간 확충이 시급하다고 지적했습니다.",
+    "summary": "모임 뒤 정산은 대화방 송금으로 끝내세요.",
+    "content": "LUNO 지갑에서 대화 상대에게 바로 송금할 수 있습니다. 더치페이 내역은 대화방에서 바로 확인할 수 있으며, 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
     "sample": true
   },
   {
@@ -490,24 +490,24 @@ const NEWS_SAMPLE = [
   },
   {
     "id": "news-hero-03",
-    "title": "미 연준 금리 동결 시사… 아시아 증시 일제히 강세 출발",
+    "title": "LUNO 포인트 적립 가이드",
     "press": "LUNO 에디토리얼(샘플)",
     "category": "경제",
     "published_at": "2026-10-31T08:28:00.000Z",
     "image_url": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80",
-    "summary": "글로벌 인플레이션 둔화 지표가 확인되면서 코스피와 나스닥 선물 지수가 동반 상승세를 기록 중이다...",
-    "content": "주요국 물가 상승률이 안정권에 접어들면서 기술주와 반도체 섹터를 중심으로 외국인 매수세가 유입되고 있습니다.",
+    "summary": "송금할 때마다 쌓이는 포인트를 확인하세요.",
+    "content": "LUNO Pay 송금 금액의 0.1%가 포인트로 적립됩니다. 지갑 탭에서 잔액과 포인트를 함께 확인할 수 있으며, 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
     "sample": true
   },
   {
     "id": "news-hero-04",
-    "title": "K-콘텐츠 글로벌 열풍 지속… 신작 드라마 아시아 12개국 1위",
+    "title": "LUNO 스티커로 대화에 생기를",
     "press": "LUNO 에디토리얼(샘플)",
     "category": "엔터",
     "published_at": "2026-10-31T08:15:00.000Z",
     "image_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80",
-    "summary": "주말 첫 방송을 시작한 한국 드라마가 일본, 태국, 대만 등 아시아 주요 OTT 차트 정상을 석권했다...",
-    "content": "탄탄한 각본과 배우들의 열연이 어우러진 신작 드라마가 글로벌 팬들의 호평 속에 기록적인 시청 시간을 달성하고 있습니다.",
+    "summary": "감정을 전하는 스티커 팩을 만나보세요.",
+    "content": "채팅방 스티커 버튼에서 다양한 팩을 고를 수 있습니다. 자주 쓰는 스티커는 즐겨찾기에 담아두세요. 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
     "sample": true
   },
   {
@@ -524,13 +524,13 @@ const NEWS_SAMPLE = [
   {
     "id": "news-pop-01",
     "rank": 1,
-    "title": "시청자 콱 물었다...시청률 '12.9%' 인기→종영 20년 만에 다시 부활한 韓 드라마",
+    "title": "주말 모임 정산은 LUNO 송금으로",
     "press": "LUNO 에디토리얼(샘플)",
     "category": "엔터",
     "published_at": "2026-10-31T08:35:00.000Z",
     "image_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
-    "summary": "20년 만에 리메이크된 명작 드라마가 첫 방송부터 두 자릿수 시청률을 기록하며 화제의 중심에 섰다...",
-    "content": "20년 전 안방극장을 뜨겁게 달궜던 명작 드라마가 현대적 감각으로 재해석되어 돌아왔습니다. 첫 방송부터 최고 시청률 12.9%를 돌파하며 OTT 플랫폼과 방송가에서 뜨거운 반응을 이끌어내고 있습니다.",
+    "summary": "영수증 사진과 함께 정산 요청을 보내세요.",
+    "content": "모임 사진을 앨범에 올리고 정산은 대화방 송금으로 마무리하세요. 송금 완료 메시지가 대화방에 남습니다. 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
     "sample": true
   },
   {
@@ -560,13 +560,13 @@ const NEWS_SAMPLE = [
   {
     "id": "news-pop-04",
     "rank": 4,
-    "title": "한국은행 \"연내 디지털 화폐(CBDC) 실거래 테스트 본격화\"",
+    "title": "QR 로그인은 모바일에서 승인하세요",
     "press": "LUNO 에디토리얼(샘플)",
     "category": "경제",
     "published_at": "2026-10-31T07:00:00.000Z",
     "image_url": "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=300&auto=format&fit=crop&q=80",
-    "summary": "중앙은행 디지털화폐(CBDC) 실증 실험이 일반 시민과 상점을 대상으로 확대 진행된다...",
-    "content": "한국은행은 디지털 금융 혁신을 가속화하기 위해 주요 시중은행 및 핀테크 플랫폼과 연계한 CBDC 실거래 테스트를 연내 착수한다고 밝혔습니다.",
+    "summary": "PC 로그인은 언제나 내 손안에서 승인됩니다.",
+    "content": "PC/웹에서 로그인하면 모바일 설정의 QR 승인으로 직접 승인해야 로그인됩니다. 모르는 승인 요청은 무시하세요. 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
     "sample": true
   }
 ];
@@ -910,7 +910,7 @@ function seedExtras() {
 }
 
 const featureFlags = [
-  { key: 'e2ee_letter_sealing', enabled: true, description: 'Signal Letter-Sealing End-to-End Encryption' },
+  { key: 'e2ee_letter_sealing', enabled: false, description: 'Signal Letter-Sealing End-to-End Encryption (not implemented)' },
   { key: 'webrtc_group_calling', enabled: true, description: 'Multi-party Voice & Video Calling' },
   { key: 'ai_smart_replies', enabled: true, description: 'AI-assisted quick responses' },
   { key: 'openchat_live_streaming', enabled: true, description: 'Public community voice stages' }
@@ -2392,7 +2392,7 @@ async function extended(p, request, url, me, token) {
     attachmentStore.set(att.id, att);
     return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: size }, 201);
   }
-  if ((m = p.match(/^attachments\/([\w-]+)$/)) && method === 'GET') {
+  if ((m = p.match(/^attachments\/([\w-]+)(?:\/content)?$/)) && method === 'GET') {
     const att = await loadAttachment(m[1]);
     if (!att || !conversations.get(att.conversation_id)?.members.includes(myId)) return bad('파일을 찾을 수 없습니다', 404);
     const bin = atob(att.b64);
@@ -3196,15 +3196,7 @@ const workerCore = {
     if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
-      const b = await request.json().catch(() => ({}));
-      const text = String(b.text || '').trim();
-      const targetLang = String(b.target_lang || 'en');
-      return json({
-        original: text,
-        target_lang: targetLang,
-        translated: `[LUNO AI] ${text}`,
-        engine: 'luno-edge-ai-v1'
-      });
+      return json({ error: 'Translation engine is not configured', code: 'TRANSLATE_NOT_CONFIGURED' }, 503);
     }
     if (url.pathname === '/metrics') {
       return new Response('# HELP cf_edge_requests_total\ncf_edge_requests_total 1\n', {

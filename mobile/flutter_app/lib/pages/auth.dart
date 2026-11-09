@@ -134,8 +134,8 @@ class _GatePanel extends StatelessWidget {
                     color: dark ? HarborDark.ink : Colors.white.withValues(alpha: 0.85))),
             const SizedBox(height: 28),
             for (final row in const [
-              ('01', '종단간 암호화 대화', 'Letter Sealing'),
-              ('02', '실시간 AI 번역', '6개 언어'),
+              ('01', '빠르고 가벼운 대화', '실시간 동기화'),
+              ('02', '그룹 채팅과 모임', '투표·일정·앨범'),
               ('03', 'LUNO Pay 송금', '대화방에서 바로'),
             ])
               Padding(

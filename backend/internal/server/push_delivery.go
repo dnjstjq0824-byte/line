@@ -130,17 +130,13 @@ func (a *App) drainPushQueue(ctx context.Context) {
 			for _, pt := range tokens {
 				switch pt.provider {
 				case "fcm":
-					if fcm.Enabled {
-						token := fcm.AccessToken
-						if token == "" {
-							token = "simulated"
-						}
-						ok := a.sendFCM(ctx, fcm.ProjectID, token, pt.token, it.title.String, it.body.String, it.payload)
+					// Fail closed: without a configured provider the item stays
+					// queued and eventually fails instead of reading as delivered.
+					if fcm.Enabled && fcm.AccessToken != "" {
+						ok := a.sendFCM(ctx, fcm.ProjectID, fcm.AccessToken, pt.token, it.title.String, it.body.String, it.payload)
 						if ok {
 							delivered = true
 						}
-					} else {
-						delivered = true
 					}
 				case "apns":
 					if a.cfg.APNsKeyID != "" && a.cfg.APNsPrivateKey != "" {
@@ -148,15 +144,13 @@ func (a *App) drainPushQueue(ctx context.Context) {
 						if ok {
 							delivered = true
 						}
-					} else {
-						delivered = true
 					}
 				default:
-					delivered = true
+					// Unknown provider: never report a send that cannot happen.
 				}
 			}
 		} else {
-			delivered = true
+			// Token lookup failed: retry instead of reporting a phantom delivery.
 		}
 
 		if delivered {
@@ -170,8 +164,8 @@ func (a *App) drainPushQueue(ctx context.Context) {
 }
 
 func (a *App) sendFCM(ctx context.Context, projectID, accessToken, deviceToken, title, body, payload string) bool {
-	if projectID == "" {
-		return true // simulate success when not configured
+	if projectID == "" || accessToken == "" {
+		return false // fail closed when not configured
 	}
 	url := fmt.Sprintf("https://fcm.googleapis.com/v1/projects/%s/messages:send", projectID)
 
@@ -210,7 +204,7 @@ func (a *App) sendFCM(ctx context.Context, projectID, accessToken, deviceToken, 
 // sendAPNs sends a push notification via APNs HTTP/2 API.
 func (a *App) sendAPNs(ctx context.Context, cfg Config, deviceToken, title, body, payload string) bool {
 	if cfg.APNsKeyID == "" || cfg.APNsPrivateKey == "" || cfg.APNsTeamID == "" || cfg.APNsBundleID == "" {
-		return true // simulate success when not configured
+		return false // fail closed when not configured
 	}
 	host := "api.push.apple.com"
 	if !cfg.APNsProduction {

@@ -19,6 +19,7 @@ CREATE TABLE identity.users (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), email TEXT NOT NULL, password_hash TEXT NOT NULL,
  display_name TEXT NOT NULL CHECK(length(display_name) BETWEEN 1 AND 120),
  handle TEXT UNIQUE, phone_e164 TEXT UNIQUE, avatar_url TEXT, bio TEXT NOT NULL DEFAULT '',
+ birthday TEXT NOT NULL DEFAULT '',
  email_verified BOOLEAN NOT NULL DEFAULT false, phone_verified BOOLEAN NOT NULL DEFAULT false,
  role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','support','moderator','platform_admin')),
  state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','suspended','deleted')),

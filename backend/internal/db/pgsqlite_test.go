@@ -44,8 +44,8 @@ func TestAllMigrationTablesExistAndReplay(t *testing.T) {
 	defer conn.Close()
 	conn.SetMaxOpenConns(1)
 	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "database", "*.sql"))
-	if err != nil || len(paths) != 6 {
-		t.Fatalf("expected six migrations: %v %v", paths, err)
+	if err != nil || len(paths) != 7 {
+		t.Fatalf("expected seven migrations: %v %v", paths, err)
 	}
 	tables := map[string]bool{}
 	pattern := regexp.MustCompile(`(?i)CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-z_]+\.[a-z_]+)`)
