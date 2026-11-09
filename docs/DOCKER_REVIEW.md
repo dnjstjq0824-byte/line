@@ -18,10 +18,13 @@
 
 ### High
 
-1. **Dockerfile Go 버전이 go.mod보다 낮음**
+1. **Dockerfile Go 버전이 go.mod보다 낮음** — 빌드 실패 실증済, 수정済
    - `backend/Dockerfile`: `golang:1.23-bookworm` / `backend/go.mod`: `go 1.26.0`.
-   - 1.23 툴체인이 1.26 모듈을 만나면 툴체인 자동 다운로드 시도. 네트워크 제한 환경에서
-     빌드 실패 가능. 베이스를 `golang:1.26-bookworm`으로 올릴 것.
+   - 실증 (2026-11-09): `go mod download` 단계에서
+     `go.mod requires go >= 1.26.0 (running go 1.23.12; GOTOOLCHAIN=local)`로
+     빌드 실패. 네트워크와 무관한 확정 실패.
+   - 조치: 베이스를 `golang:1.26-bookworm`으로 변경 → 이미지 빌드 성공,
+     컨테이너 기동 후 `/healthz` ok·`/readyz` ready 확인 (sqlite).
 
 2. **full.yml의 coturn 설정이 무효**
    - `TURN_USERNAME`/`TURN_PASSWORD` 환경변수만 설정. 공식 `coturn/coturn` 이미지는
@@ -78,7 +81,11 @@
 4. nats 제거 여부 결정, `version` 키·verify 스크립트 정리.
 5. agent 상주 위치 확정 후 컨테이너 정의, k8s 이미지 파이프라인은 별도 결정.
 
-## 4. 한계
+## 4. 검증 결과 (2026-11-09, Docker Desktop 29.9.2)
 
-- 셸 장애로 빌드·기동 검증을 전혀 수행하지 못함. 위 내용은 코드·문서 대조 결과이며,
-  수정 후 `docker build` + `compose up` 실검증이 필요.
+- 이미지 빌드: 1.23 베이스 실패 실증 → 1.26으로 수정 후 빌드 성공.
+- 컨테이너 기동: `docker run` + `/healthz` ok·`/readyz` ready 확인.
+- 컴포즈 파일: `config` 렌더 정상 (JWT_SECRET 미설정 시 fail-closed 확인,
+  full.yml 구 `version` 키 경고로 Low-8도 실증).
+- 미수행: 컴포즈 멀티서비스 기동 (이미지 풀 + High-2 coturn 수정 선행 필요),
+  postgres 실DB 기동 (001+007 수동 적용 필요, 자동 마이그레이션 없음).
