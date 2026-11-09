@@ -405,7 +405,9 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   missing-module failure). 8 call keys x4 locales. Red drill broke mono
   (1 fail), restored byte-identical (sha256 match). Verification: flutter
   59/59 + analyze clean, worker 104/104, Go pass, 6 web builds,
-  pre_deploy_gate 6/6, i18n TOTAL 0.
+  pre_deploy_gate 6/6, i18n TOTAL 0. Follow-up fix 9eb6bd7 renamed the new callFilter ref to
+  callVideoFilter (collided with the pre-existing call-history filter and
+  broke the user-web build at deploy time); redeployed and live-verified.
 
 
 
