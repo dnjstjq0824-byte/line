@@ -17,6 +17,7 @@ import '../legacy_tokens.dart';
 import '../util/attachments.dart';
 import '../util/channel_slot.dart';
 import '../util/photo_effects.dart';
+import '../util/store_packs.dart';
 import '../util/error_report.dart';
 
 class SessionController extends ChangeNotifier {
@@ -65,6 +66,7 @@ class SessionController extends ChangeNotifier {
 
   // Smart-channel slot (GET /api/v1/channel/slot). Null hides the card.
   ChannelSlot? channelSlot;
+  List<StorePack> storePacks = [];
   final Set<String> dismissedChannelSlots = {};
 
   void dismissChannelSlot(String id) {
@@ -204,6 +206,7 @@ class SessionController extends ChangeNotifier {
       api.call('/api/v1/news').catchError((_) => <String, dynamic>{'hero': [], 'popular': [], 'sample': true}),
       api.call('/api/v1/calls').catchError((_) => <String, dynamic>{'calls': []}),
       api.call('/api/v1/channel/slot').catchError((_) => <String, dynamic>{}),
+      api.call('/api/v1/store/stickers').catchError((_) => <String, dynamic>{}),
     ]);
     chats = resultsList[0]['conversations'] ?? [];
     friends = resultsList[1]['friends'] ?? [];
@@ -220,6 +223,7 @@ class SessionController extends ChangeNotifier {
     newsIsSample = resultsList[8]['sample'] != false;
     callHistory = resultsList[9]['calls'] ?? [];
     channelSlot = channelSlotOf(resultsList[10]);
+    storePacks = storePacksOf(resultsList[11]);
     notifyListeners();
   }
 

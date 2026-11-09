@@ -419,6 +419,24 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   user-web build + debug APK native compile. Verification: flutter 59/59 +
   analyze clean, worker 104/104, Go pass, user-web build, pre_deploy_gate
   6/6, i18n TOTAL 0.
+## Continuation: 2026-11-09 — P4b-6 read-only storefront
+
+- No server change: both catalog reads already existed (worker memory
+  STICKER_CATALOG + owned flags, Go creator.sticker_packs rows) and are now
+  pinned by cf_store.test.mjs (2/2) and store_test.go. Initial D1-backed
+  expectations were wrong and corrected to the real contract. Checkout stays
+  503 fail-closed on both backends (pinned, untouched).
+- Mobile ShopPage renders the real catalog via session.storePacks (both
+  shapes parsed) with an honest payments-unavailable note; tab_parity shop
+  contract updated (placeholder retired — deliberate, surfaced). Web shop
+  surface deferred. Red drill broke owned mapping (1 fail), restored
+  byte-identical (sha256 match). Verification: flutter 65/65 + analyze
+  clean, worker 106/106, Go full pass, pre_deploy_gate 6/6, i18n TOTAL 0.
+- FINDING (untouched, needs owner direction): cf_worker.js ~4316 serves a
+  hardcoded 2-pack stub including "Brown & Cony" (third-party IP) for
+  non-GET store/stickers; extended() shadows it for GET. Removal would flip
+  POST/PUT/DELETE on that path from 200 to 404.
+
 
 
 
