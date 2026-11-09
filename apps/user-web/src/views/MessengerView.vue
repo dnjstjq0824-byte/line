@@ -904,7 +904,7 @@ const isCallMuted = ref(false)
 const isCallVideoOff = ref(false)
 const isCallSpeakerOn = ref(true)
 const callRecording = ref(false)
-const callFilter = ref<'none' | 'warm' | 'cool' | 'mono'>('none')
+const callVideoFilter = ref<'none' | 'warm' | 'cool' | 'mono'>('none')
 let callTimer: ReturnType<typeof setInterval> | null = null
 let callRemoteStream: MediaStream | null = null
 let callRecorder: { mr: MediaRecorder; ctx: AudioContext; chunks: BlobPart[]; callId: string } | null = null
@@ -4316,13 +4316,13 @@ onBeforeUnmount(() => {
         <template v-if="activeCall.kind === 'video'">
         <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
           <video ref="remoteVideoRef" autoplay playsinline style="width:180px;height:130px;background:#0f172a;border-radius:12px;object-fit:cover"></video>
-          <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover" :style="{ filter: CALL_VIDEO_FILTERS[callFilter] }"></video>
+          <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover" :style="{ filter: CALL_VIDEO_FILTERS[callVideoFilter] }"></video>
         </div>
         <div v-if="activeCall.kind === 'video'" class="call-filter-row" :title="t('callFilterTitle')">
-          <button :class="{ active: callFilter === 'none' }" @click="callFilter = 'none'">{{ t('callFilterNone') }}</button>
-          <button :class="{ active: callFilter === 'warm' }" @click="callFilter = 'warm'">{{ t('callFilterWarm') }}</button>
-          <button :class="{ active: callFilter === 'cool' }" @click="callFilter = 'cool'">{{ t('callFilterCool') }}</button>
-          <button :class="{ active: callFilter === 'mono' }" @click="callFilter = 'mono'">{{ t('callFilterMono') }}</button>
+          <button :class="{ active: callVideoFilter === 'none' }" @click="callVideoFilter = 'none'">{{ t('callFilterNone') }}</button>
+          <button :class="{ active: callVideoFilter === 'warm' }" @click="callVideoFilter = 'warm'">{{ t('callFilterWarm') }}</button>
+          <button :class="{ active: callVideoFilter === 'cool' }" @click="callVideoFilter = 'cool'">{{ t('callFilterCool') }}</button>
+          <button :class="{ active: callVideoFilter === 'mono' }" @click="callVideoFilter = 'mono'">{{ t('callFilterMono') }}</button>
         </div>
         </template>
         <div v-else class="call-avatar-pulse">
