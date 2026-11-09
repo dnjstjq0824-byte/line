@@ -146,7 +146,7 @@ const LUNO_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_luno_passkey_ch_user ON luno_passkey_challenges(user_id)`,
   `CREATE TABLE IF NOT EXISTS luno_passkey_credentials (
     credential_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, public_key TEXT NOT NULL,
-    counter INTEGER NOT NULL DEFAULT 0, transports TEXT, name TEXT DEFAULT '',
+    counter INTEGER NOT NULL DEFAULT 0, transports TEXT, name TEXT DEFAULT '', last_used_at TEXT,
     created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_passkey_cred_user ON luno_passkey_credentials(user_id)`,
 ];
@@ -380,12 +380,13 @@ async function pkConsumeChallenge(challenge, userId, purpose) {
 async function pkListCreds(userId) {
   if (dbOf()) {
     await ensureSchema();
+    await pkEnsureLastUsed();
     const res = await dbOf().prepare(
-      'SELECT credential_id,public_key,counter,transports,name,created_at FROM luno_passkey_credentials WHERE user_id=?'
+      'SELECT credential_id,public_key,counter,transports,name,created_at,last_used_at FROM luno_passkey_credentials WHERE user_id=?'
     ).bind(userId).all();
     return (res.results || []).map(r => ({
       credId: r.credential_id, jwk: JSON.parse(r.public_key),
-      counter: r.counter, transports: r.transports, name: r.name, createdAt: r.created_at,
+      counter: r.counter, transports: r.transports, name: r.name, createdAt: r.created_at, lastUsedAt: r.last_used_at,
     }));
   }
   return [...passkeyCreds.values()].filter(c => c.userId === userId);
@@ -442,6 +443,82 @@ async function pkVerifyRegistration({ rpId, origin, challengeB64, body, excludeI
     if (!ok) throw new Error('packed sig');
   }
   return { credIdB64: body.id, jwk, counter: parsed.counter, transports: body.response.transports };
+}
+
+async function pkChallengeOwner(challenge, purpose) {
+  if (dbOf()) {
+    await ensureSchema();
+    const row = await dbOf().prepare(
+      'SELECT user_id,expires_at FROM luno_passkey_challenges WHERE challenge=? AND purpose=?'
+    ).bind(challenge, purpose).first();
+    if (!row || row.expires_at <= Math.floor(Date.now() / 1000)) return null;
+    return row.user_id;
+  }
+  const c = passkeyChallenges.get(challenge);
+  if (!c || c.purpose !== purpose || c.expiresAt <= Date.now()) return null;
+  return c.userId;
+}
+
+let pkLastUsedEnsured = false;
+async function pkEnsureLastUsed() {
+  if (pkLastUsedEnsured || !dbOf()) return;
+  pkLastUsedEnsured = true;
+  try {
+    await dbOf().prepare('ALTER TABLE luno_passkey_credentials ADD COLUMN last_used_at TEXT').run();
+  } catch { /* column already exists */ }
+}
+
+async function pkUpdateCounter(userId, credIdB64, counter) {
+  const stamp = now();
+  if (dbOf()) {
+    await ensureSchema();
+    await pkEnsureLastUsed();
+    await dbOf().prepare('UPDATE luno_passkey_credentials SET counter=?,last_used_at=? WHERE credential_id=? AND user_id=?')
+      .bind(counter, stamp, credIdB64, userId).run();
+    return;
+  }
+  const c = passkeyCreds.get(credIdB64);
+  if (c && c.userId === userId) { c.counter = counter; c.lastUsedAt = stamp; }
+}
+
+async function pkDeleteCred(userId, credIdB64) {
+  if (dbOf()) {
+    await ensureSchema();
+    const res = await dbOf().prepare('DELETE FROM luno_passkey_credentials WHERE credential_id=? AND user_id=?')
+      .bind(credIdB64, userId).run();
+    return ((res.meta && res.meta.changes) || 0) > 0;
+  }
+  const c = passkeyCreds.get(credIdB64);
+  if (!c || c.userId !== userId) return false;
+  passkeyCreds.delete(credIdB64);
+  return true;
+}
+
+async function pkVerifyAssertion({ rpId, origin, challengeB64, body, cred }) {
+  if (!body || body.type !== 'public-key' || !body.response) throw new Error('shape');
+  if (body.id !== cred.credId) throw new Error('credId');
+  if (body.rawId !== undefined && body.rawId !== body.id) throw new Error('id mismatch');
+  const clientDataBytes = pkB64Decode(body.response.clientDataJSON);
+  const clientData = JSON.parse(new TextDecoder().decode(clientDataBytes));
+  if (clientData.type !== 'webauthn.get') throw new Error('type');
+  if (clientData.challenge !== challengeB64) throw new Error('challenge');
+  if (clientData.origin !== origin) throw new Error('origin');
+  const authData = pkB64Decode(body.response.authenticatorData);
+  const parsed = pkParseAuthData(authData);
+  if (!(parsed.flags & 0x01)) throw new Error('UP missing');
+  const rpHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rpId)));
+  if (!pkU8eq(rpHash, parsed.rpIdHash)) throw new Error('rpId');
+  const stored = cred.counter || 0;
+  if (parsed.counter <= stored && (parsed.counter !== 0 || stored !== 0)) throw new Error('counter');
+  const sig = pkB64Decode(body.response.signature);
+  const cdHash = new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataBytes));
+  const data = new Uint8Array(authData.length + cdHash.length);
+  data.set(authData, 0);
+  data.set(cdHash, authData.length);
+  const key = await crypto.subtle.importKey('jwk', cred.jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+  const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, pkDerToRaw(sig), data);
+  if (!ok) throw new Error('sig');
+  return parsed.counter;
 }
 function parsePbkdf2(stored) {
   if (typeof stored !== 'string' || !stored.startsWith('pbkdf2$')) return null;
@@ -2031,6 +2108,18 @@ async function extended(p, request, url, me, token) {
       return bad('패스키 검증에 실패했습니다', 400);
     }
   }
+  if (p === 'passkeys' && request.method === 'GET') {
+    const creds = await pkListCreds(myId);
+    return json({ passkeys: creds.map(c => ({
+      id: c.credId, name: c.name || '', created_at: c.createdAt, last_used_at: c.lastUsedAt || '',
+    })) });
+  }
+  const pkDel = p.match(/^passkeys\/([^/]+)$/);
+  if (pkDel && request.method === 'DELETE') {
+    const ok = await pkDeleteCred(myId, pkDel[1]);
+    if (!ok) return json({ error: 'not found' }, 404);
+    return json({ deleted: true });
+  }
   // ---------- Profile & settings ----------
   if (p === 'me') {
     if (dbOf()) {
@@ -3603,6 +3692,70 @@ const workerCore = {
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);
       }
 
+      // 1b. Passkey login (email-first, public)
+      if (p === 'passkeys/login/begin' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const email = typeof body.email === 'string' ? body.email.toLowerCase().trim() : '';
+        const user = email
+          ? (users.get(email) || Array.from(users.values()).find(u => u.email && u.email.toLowerCase() === email))
+          : null;
+        if (!user || user.state === 'suspended' || user.state === 'deleted') {
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        const creds = await pkListCreds(user.id);
+        if (creds.length === 0) {
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        const reqUrl = new URL(request.url);
+        const challenge = await pkIssueChallenge(user.id, 'authentication');
+        return json({ publicKey: {
+          challenge,
+          rpId: reqUrl.hostname.toLowerCase(),
+          allowCredentials: creds.map(c => ({ type: 'public-key', id: c.credId })),
+          timeout: 300000,
+          userVerification: 'preferred',
+        }});
+      }
+      if (p === 'passkeys/login/finish' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        let challenge = '';
+        try {
+          const cdBytes = pkB64Decode((body && body.response && body.response.clientDataJSON) || '');
+          challenge = JSON.parse(new TextDecoder().decode(cdBytes)).challenge || '';
+        } catch { return bad('invalid request', 400); }
+        if (!challenge) return bad('invalid request', 400);
+        const userId = await pkChallengeOwner(challenge, 'authentication');
+        if (!userId || !(await pkConsumeChallenge(challenge, userId, 'authentication'))) {
+          return bad('진행 중인 로그인 절차가 없거나 만료되었습니다', 400);
+        }
+        const user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId);
+        if (!user || user.state === 'suspended' || user.state === 'deleted') {
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        const creds = await pkListCreds(userId);
+        const cred = creds.find(c => c.credId === body.id);
+        if (!cred) return json({ error: 'invalid credentials' }, 401);
+        const reqUrl = new URL(request.url);
+        try {
+          const counter = await pkVerifyAssertion({
+            rpId: reqUrl.hostname.toLowerCase(), origin: reqUrl.origin,
+            challengeB64: challenge, body, cred,
+          });
+          await pkUpdateCounter(userId, cred.credId, counter);
+          const { token, deviceId } = await createSession(user, request);
+          return json({
+            access_token: token,
+            refresh_token: `cf-refresh-${crypto.randomUUID()}`,
+            token_type: 'Bearer',
+            expires_in: 86400,
+            user_id: user.id,
+            role: user.role,
+            device_id: deviceId,
+          });
+        } catch (e) {
+          return json({ error: 'invalid credentials' }, 401);
+        }
+      }
       // 2. Auth: Login
       if (p === 'auth/login' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));

@@ -911,9 +911,10 @@ const showAddFriendModal = ref(false)
 const addFriendHandleInput = ref('')
 const showSettingsModal = ref(false)
 const showContactPicker = ref(false)
-watch(showSettingsModal, () => {
+watch(showSettingsModal, (open) => {
   profileSaved.value = false
   profileSaveError.value = ''
+  if (open) void fetchPasskeys()
 })
 const showPollCreateModal = ref(false)
 const newPollQuestion = ref('')
@@ -2403,6 +2404,24 @@ onBeforeUnmount(() => {
 // Phase 1 to Phase 6 Extended Actions
 const passkeyBusy = ref(false)
 const passkeyNote = ref('')
+const passkeyList = ref<Array<{ id: string; name: string; created_at: string; last_used_at: string }>>([])
+const passkeyLoaded = ref(false)
+
+async function fetchPasskeys() {
+  await wrap(async () => {
+    const res = await api<{ passkeys: Array<{ id: string; name: string; created_at: string; last_used_at: string }> }>('/api/v1/passkeys', 'GET')
+    passkeyList.value = res?.passkeys || []
+    passkeyLoaded.value = true
+  })
+}
+
+async function deletePasskey(id: string) {
+  await wrap(async () => {
+    await api('/api/v1/passkeys/' + encodeURIComponent(id), 'DELETE')
+    passkeyNote.value = t('mvPasskeyDeleted')
+    await fetchPasskeys()
+  })
+}
 
 function b64ToBytes(s: string): Uint8Array {
   const bin = atob(s.replaceAll('-', '+').replaceAll('_', '/'))
@@ -2454,7 +2473,12 @@ async function registerPasskey() {
           transports: cred.response.getTransports ? cred.response.getTransports() : undefined,
         },
       })
-      passkeyNote.value = done?.verified ? t('mvPasskeyDone') : t('mvPasskeyFailed')
+      if (done?.verified) {
+        passkeyNote.value = t('mvPasskeyDone')
+        await fetchPasskeys()
+      } else {
+        passkeyNote.value = t('mvPasskeyFailed')
+      }
     })
   } finally {
     passkeyBusy.value = false
@@ -4457,6 +4481,13 @@ onBeforeUnmount(() => {
               <button class="btn-secondary" style="font-size:12px;padding:3px 8px" :disabled="passkeyBusy" @click="registerPasskey">{{ t('mvPasskeyRegister') }}</button>
             </div>
             <div v-if="passkeyNote" class="muted" style="font-size:12px;margin-top:4px" role="status">{{ passkeyNote }}</div>
+            <div v-if="passkeyList.length" style="margin-top:6px;display:flex;flex-direction:column;gap:4px">
+              <div v-for="k in passkeyList" :key="k.id" class="setting-toggle-row" style="font-size:12px">
+                <span class="muted">🔑 {{ k.id.slice(0, 8) }}… · {{ (k.created_at || '').slice(0, 10) }}</span>
+                <button class="btn-secondary" style="font-size:11px;padding:2px 8px" @click="deletePasskey(k.id)">{{ t('mvPasskeyDelete') }}</button>
+              </div>
+            </div>
+            <div v-else-if="passkeyLoaded" class="muted" style="font-size:12px;margin-top:4px">{{ t('mvPasskeyNoKeys') }}</div>
           </div>
 
           <!-- Phase 6: GDPR Data Portability & Deletion -->

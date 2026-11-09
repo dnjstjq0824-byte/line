@@ -450,6 +450,10 @@ func (a *App) Handler() http.Handler {
 		}))
 		mux.HandleFunc("POST /api/v1/passkeys/register/begin", a.withAuth(a.withRateLimit("passkey-register-begin", a.passkeyRegisterBegin)))
 		mux.HandleFunc("POST /api/v1/passkeys/register/finish", a.withAuth(a.withRateLimit("passkey-register-finish", a.passkeyRegisterFinish)))
+		mux.HandleFunc("POST /api/v1/passkeys/login/begin", a.withRateLimit("passkey-login-begin", a.passkeyLoginBegin))
+		mux.HandleFunc("POST /api/v1/passkeys/login/finish", a.withRateLimit("passkey-login-finish", a.passkeyLoginFinish))
+		mux.HandleFunc("GET /api/v1/passkeys", a.withAuth(a.passkeyList))
+		mux.HandleFunc("DELETE /api/v1/passkeys/{id}", a.withAuth(a.passkeyDelete))
 		mux.HandleFunc("POST /api/v1/wallet/send", a.withAuth(a.sendWalletMoney))
 		mux.HandleFunc("POST /api/v1/wallet/charge", a.withAuth(a.chargeWallet))
 	}

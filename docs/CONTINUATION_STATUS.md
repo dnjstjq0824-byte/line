@@ -327,3 +327,18 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   x4 locales. Verification: Go full, worker 98/98, user-web build, gate 6/6.
 - P3b (login ceremonies + management UI) and mobile remain. Worker has no
   rate limiter (pre-existing gap, same as login); Go wraps passkey routes.
+
+## Continuation: 2026-11-09 — P3b passkey login + management
+
+- Login ceremonies on both backends: POST /api/v1/passkeys/login
+  begin/finish (email-first, uniform 401, session mint mirrors password
+  login) + GET/DELETE /api/v1/passkeys (contract 161 -> 165).
+- Counter policy fail-closed on both: Go rejects CloneWarning, worker
+  enforces strictly-increasing (0/0 tolerated). Login challenges resolve
+  the user from the clientData challenge (random 256-bit lookup key).
+- Worker stores last_used_at via one-time guarded ALTER (fresh DBs carry
+  the column in LUNO_SCHEMA). No rate limiter on worker (pre-existing gap).
+- Web: AuthView passkey sign-in button, settings list + delete + register
+  refresh. Tests: Go login ceremony + replay/stale-counter/delete; worker
+  login + management in cf_passkey.test.mjs (4/4). Live prod ceremony
+  verified with residue cleanup. Mobile native deferred.

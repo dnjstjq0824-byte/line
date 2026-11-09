@@ -1,6 +1,6 @@
 {
  "frozen": "working-tree 2026-11-07, V3 renewal baseline",
- "count": 161,
+ "count": 165,
  "routes": [
   "DELETE /api/v1/attachments/{id}",
   "DELETE /api/v1/blocks/{id}",
@@ -12,6 +12,7 @@
   "DELETE /api/v1/friends/{id}",
   "DELETE /api/v1/me",
   "DELETE /api/v1/partner/accounts/{id}/bot-rules/{ruleId}",
+  "DELETE /api/v1/passkeys/{id}",
   "DELETE /api/v1/saved-messages/{id}",
   "GET /api/v1/admin/audit-logs",
   "GET /api/v1/admin/feature-flags",
@@ -56,6 +57,7 @@
   "GET /api/v1/partner/accounts/{id}/tickets",
   "GET /api/v1/partner/organizations",
   "GET /api/v1/partner/organizations/{id}/accounts",
+  "GET /api/v1/passkeys",
   "GET /api/v1/presence",
   "GET /api/v1/push/credentials",
   "GET /api/v1/push/health",
@@ -138,6 +140,8 @@
   "POST /api/v1/partner/accounts/{id}/tickets",
   "POST /api/v1/partner/organizations",
   "POST /api/v1/partner/organizations/{id}/accounts",
+  "POST /api/v1/passkeys/login/begin",
+  "POST /api/v1/passkeys/login/finish",
   "POST /api/v1/passkeys/register/begin",
   "POST /api/v1/passkeys/register/finish",
   "POST /api/v1/polls/{pollId}/close",

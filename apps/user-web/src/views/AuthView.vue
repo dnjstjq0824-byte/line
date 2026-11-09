@@ -185,6 +185,58 @@ async function verifyPhoneLogin() {
   })
 }
 
+function b64ToBytes(s: string): Uint8Array {
+  const bin = atob(s.replaceAll('-', '+').replaceAll('_', '/'))
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+function bytesToB64(b: ArrayBuffer | Uint8Array): string {
+  const u = b instanceof Uint8Array ? b : new Uint8Array(b)
+  let s = ''
+  for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i])
+  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}
+
+async function passkeyLogin() {
+  if (!email.value) return
+  if (!window.PublicKeyCredential || !navigator.credentials?.get) {
+    note.value = t('mvPasskeyUnsupported')
+    return
+  }
+  await wrap(async () => {
+    const begun = await request<{ publicKey: any }>('/api/v1/passkeys/login/begin', null, 'POST', { email: email.value })
+    const pk = begun.publicKey
+    pk.challenge = b64ToBytes(pk.challenge)
+    for (const c of pk.allowCredentials || []) c.id = b64ToBytes(c.id)
+    let cred: any = null
+    try {
+      cred = await navigator.credentials.get({ publicKey: pk })
+    } catch {
+      note.value = t('mvPasskeyCancelled')
+      return
+    }
+    if (!cred) {
+      note.value = t('mvPasskeyCancelled')
+      return
+    }
+    const data = await request<LoginResult>('/api/v1/passkeys/login/finish', null, 'POST', {
+      id: cred.id,
+      rawId: bytesToB64(cred.rawId),
+      type: cred.type,
+      response: {
+        clientDataJSON: bytesToB64(cred.response.clientDataJSON),
+        authenticatorData: bytesToB64(cred.response.authenticatorData),
+        signature: bytesToB64(cred.response.signature),
+        userHandle: cred.response.userHandle ? bytesToB64(cred.response.userHandle) : undefined,
+      },
+    })
+    storeSession(data, autoLoginCheck.value)
+    router.push('/chats')
+  })
+}
+
 async function quickDemoLogin(account: 'user' | 'alice') {
   await wrap(async () => {
     const data = await request<LoginResult>('/api/v1/auth/demo', null, 'POST', {
@@ -292,6 +344,12 @@ onBeforeUnmount(() => {
               <button class="btn-pc-submit-full" type="submit" :disabled="!email || !password">
                 {{ registerMode ? t('signUpBtn') : t('signInBtn') }}
               </button>
+
+              <div v-if="!registerMode" class="pc-login-bottom-switch">
+                <button type="button" class="btn-switch-auth-link" :disabled="!email" @click="passkeyLogin">
+                  🔑 {{ t('passkeyLoginBtn') }}
+                </button>
+              </div>
 
               <!-- Checkbox & Link Options (Matching Screenshot 2 & 3) -->
               <div class="pc-login-options-row">

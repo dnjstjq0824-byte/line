@@ -164,3 +164,62 @@ test('passkey registration rejects x5c and unknown formats', async () => {
   ]);
   assert.equal((await api('passkeys/register/finish', bob, 'POST', finishBody(cred2, cd2, tpm))).status, 400);
 });
+
+function makeAssertion(cred, challenge, origin = 'http://localhost', counter = 1) {
+  const rpHash = createHash('sha256').update('localhost').digest();
+  const authData = Buffer.concat([
+    rpHash,
+    Buffer.from([0x01, (counter >>> 24) & 255, (counter >> 16) & 255, (counter >> 8) & 255, counter & 255]),
+  ]);
+  const cd = new TextEncoder().encode(JSON.stringify({ type: 'webauthn.get', challenge, origin }));
+  const cdHash = createHash('sha256').update(cd).digest();
+  const sig = createSign('sha256').update(Buffer.concat([authData, cdHash])).sign(cred.privateKey);
+  return {
+    id: b64e(cred.credId),
+    rawId: b64e(cred.credId),
+    type: 'public-key',
+    response: {
+      clientDataJSON: b64e(cd),
+      authenticatorData: b64e(new Uint8Array(authData)),
+      signature: b64e(new Uint8Array(sig)),
+    },
+  };
+}
+
+test('passkey login ceremony mints a working session', async () => {
+  const demo = await login('user@luno.local', 'LunoUser#2026!');
+  const begun = await (await api('passkeys/register/begin', demo, 'POST')).json();
+  const cred = makeCredential();
+  const cd = clientData(begun.publicKey.challenge);
+  const fin = await api('passkeys/register/finish', demo, 'POST', finishBody(cred, cd, attestationNone(cred.authData)));
+  assert.equal(fin.status, 200);
+
+  const listed = await (await api('passkeys', demo, 'GET')).json();
+  assert.equal(listed.passkeys.length, 1);
+  assert.equal(listed.passkeys[0].id, b64e(cred.credId));
+
+  assert.equal((await api('passkeys/login/begin', null, 'POST', { email: 'nobody@luno.local' })).status, 401);
+  assert.equal((await api('passkeys/login/begin', null, 'POST', { email: 'admin@luno.local' })).status, 401);
+
+  const lbegun = await (await api('passkeys/login/begin', null, 'POST', { email: 'user@luno.local' })).json();
+  assert.ok(lbegun.publicKey.allowCredentials.some((e) => e.id === b64e(cred.credId)));
+  const lfin = await api('passkeys/login/finish', null, 'POST', makeAssertion(cred, lbegun.publicKey.challenge));
+  assert.equal(lfin.status, 200);
+  const sess = await lfin.json();
+  assert.ok(sess.access_token);
+  const me = await (await api('me', sess.access_token, 'GET')).json();
+  assert.equal(me.email, 'user@luno.local');
+
+  const lbegun2 = await (await api('passkeys/login/begin', null, 'POST', { email: 'user@luno.local' })).json();
+  const replay = await api('passkeys/login/finish', null, 'POST', makeAssertion(cred, lbegun.publicKey.challenge, 'http://localhost', 2));
+  assert.equal(replay.status, 400);
+
+  const stale = await api('passkeys/login/finish', null, 'POST', makeAssertion(cred, lbegun2.publicKey.challenge, 'http://localhost', 1));
+  assert.equal(stale.status, 401);
+
+  const del = await api(`passkeys/${b64e(cred.credId)}`, demo, 'DELETE');
+  assert.equal(del.status, 200);
+  assert.equal((await api(`passkeys/${b64e(cred.credId)}`, demo, 'DELETE')).status, 404);
+  assert.equal((await (await api('passkeys', demo, 'GET')).json()).passkeys.length, 0);
+  assert.equal((await api('passkeys/login/begin', null, 'POST', { email: 'user@luno.local' })).status, 401);
+});
