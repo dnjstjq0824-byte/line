@@ -391,3 +391,34 @@
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* Call overlay: self-view filter row, recording button state, indicator. */
+.call-filter-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.call-filter-row button {
+  border: 1px solid var(--ln-channel, #d9e1ec);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.call-filter-row button.active {
+  background: var(--ln-accent, #4f7cff);
+  border-color: transparent;
+  color: #ffffff;
+}
+.btn-call-circle.recording {
+  background: #ef4444;
+  color: #ffffff;
+}
+.rec-indicator {
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 12px;
+}

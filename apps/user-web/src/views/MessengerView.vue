@@ -4,6 +4,7 @@ import LunoIcon from '../components/LunoIcon.vue'
 import MessageAttachment from '../components/MessageAttachment.vue'
 import LunoContextMenu, { type ContextMenuItem } from '../components/LunoContextMenu.vue'
 import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
+import { CALL_VIDEO_FILTERS, callRecordingName } from '../../../shared/call-fx'
 import { playSendSound, playReceiveSound } from '../sound-effects'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -902,7 +903,11 @@ const callDuration = ref(0)
 const isCallMuted = ref(false)
 const isCallVideoOff = ref(false)
 const isCallSpeakerOn = ref(true)
+const callRecording = ref(false)
+const callFilter = ref<'none' | 'warm' | 'cool' | 'mono'>('none')
 let callTimer: ReturnType<typeof setInterval> | null = null
+let callRemoteStream: MediaStream | null = null
+let callRecorder: { mr: MediaRecorder; ctx: AudioContext; chunks: BlobPart[]; callId: string } | null = null
 
 // --- Modals & Popups ---
 const activeProfileUser = ref<User | null>(null)
@@ -1969,7 +1974,10 @@ async function initPeerSession(callId: string, kind: 'voice' | 'video') {
     } catch {}
   }
   pc.ontrack = (ev) => {
-    if (remoteVideoRef.value && ev.streams[0]) remoteVideoRef.value.srcObject = ev.streams[0]
+    if (ev.streams[0]) {
+      callRemoteStream = ev.streams[0]
+      if (remoteVideoRef.value) remoteVideoRef.value.srcObject = ev.streams[0]
+    }
   }
   pc.onicecandidate = (ev) => {
     if (ev.candidate) {
@@ -2111,7 +2119,66 @@ function startCallTimer() {
   callTimer = setInterval(() => { callDuration.value++ }, 1000)
 }
 
+function stopCallRecording(download: boolean) {
+  const rec = callRecorder
+  callRecorder = null
+  callRecording.value = false
+  if (!rec) return
+  try {
+    rec.mr.onstop = () => {
+      try { void rec.ctx.close().catch(() => {}) } catch {}
+      if (download && rec.chunks.length > 0) {
+        const url = URL.createObjectURL(new Blob(rec.chunks, { type: rec.mr.mimeType || 'video/webm' }))
+        const link = document.createElement('a')
+        link.href = url
+        link.download = callRecordingName(rec.callId)
+        link.click()
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }
+    }
+    if (rec.mr.state !== 'inactive') rec.mr.stop()
+    else { try { void rec.ctx.close().catch(() => {}) } catch {} }
+  } catch { try { void rec.ctx.close().catch(() => {}) } catch {} }
+}
+
+async function toggleCallRecording() {
+  if (callRecorder) { stopCallRecording(true); return }
+  const call = activeCall.value
+  const local = rtcSession?.stream
+  const remote = callRemoteStream
+  if (!call || call.state !== 'connected' || !local || !remote) { note.value = t('callRecordFailed'); return }
+  const hasAudio = local.getAudioTracks().length > 0 || remote.getAudioTracks().length > 0
+  const hasVideo = call.kind === 'video' && remote.getVideoTracks().length > 0
+  if (!hasAudio && !hasVideo) { note.value = t('callRecordFailed'); return }
+  let ctx: AudioContext | null = null
+  try {
+    ctx = new AudioContext()
+    if (ctx.state === 'suspended') await ctx.resume()
+    const dest = ctx.createMediaStreamDestination()
+    for (const s of [local, remote]) {
+      if (s.getAudioTracks().length === 0) continue
+      ctx.createMediaStreamSource(s).connect(dest)
+    }
+    const tracks: MediaStreamTrack[] = [...dest.stream.getAudioTracks()]
+    if (call.kind === 'video') tracks.push(...remote.getVideoTracks())
+    if (tracks.length === 0) throw new Error('no tracks')
+    const rec = new MediaRecorder(new MediaStream(tracks))
+    const chunks: BlobPart[] = []
+    rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
+    callRecorder = { mr: rec, ctx, chunks, callId: call.id }
+    rec.start()
+    callRecording.value = true
+  } catch {
+    if (ctx) { try { void ctx.close().catch(() => {}) } catch {} }
+    callRecorder = null
+    callRecording.value = false
+    note.value = t('callRecordFailed')
+  }
+}
+
 function endCallLocally() {
+  stopCallRecording(true)
+  callRemoteStream = null
   if (callTimer) {
     clearInterval(callTimer)
     callTimer = null
@@ -4246,10 +4313,18 @@ onBeforeUnmount(() => {
 <!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call with AI Live Captions) -->
     <div v-if="activeCall" class="call-overlay-modal">
       <div class="call-dialog-box">
-        <div v-if="activeCall.kind === 'video'" style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
+        <template v-if="activeCall.kind === 'video'">
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
           <video ref="remoteVideoRef" autoplay playsinline style="width:180px;height:130px;background:#0f172a;border-radius:12px;object-fit:cover"></video>
-          <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover"></video>
+          <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover" :style="{ filter: CALL_VIDEO_FILTERS[callFilter] }"></video>
         </div>
+        <div v-if="activeCall.kind === 'video'" class="call-filter-row" :title="t('callFilterTitle')">
+          <button :class="{ active: callFilter === 'none' }" @click="callFilter = 'none'">{{ t('callFilterNone') }}</button>
+          <button :class="{ active: callFilter === 'warm' }" @click="callFilter = 'warm'">{{ t('callFilterWarm') }}</button>
+          <button :class="{ active: callFilter === 'cool' }" @click="callFilter = 'cool'">{{ t('callFilterCool') }}</button>
+          <button :class="{ active: callFilter === 'mono' }" @click="callFilter = 'mono'">{{ t('callFilterMono') }}</button>
+        </div>
+        </template>
         <div v-else class="call-avatar-pulse">
           <div class="avatar-circle lg" style="background:#315BCD">{{ activeCall.title.slice(0, 1) }}</div>
         </div>
@@ -4258,6 +4333,7 @@ onBeforeUnmount(() => {
           {{ activeCall.kind === 'video' ? '📹 ' + t('callVideo') : '📞 ' + t('callVoice') }} ·
           <span v-if="activeCall.state === 'ringing'">{{ t('mvConnecting') }}</span>
           <span v-else-if="activeCall.state === 'connected'" class="timer-active">{{ formatDuration(callDuration) }}</span>
+          <span v-if="callRecording" class="rec-indicator">🔴 {{ t('callRecording') }}</span>
         </p>
 
         <!-- AI Live Translation Captions UX (Article 10.2) -->
@@ -4299,6 +4375,9 @@ onBeforeUnmount(() => {
             </button>
             <button class="btn-call-circle" :class="{ off: !isCallSpeakerOn }" :title="t('mvSpeaker')" @click="isCallSpeakerOn = !isCallSpeakerOn">
               🔊
+            </button>
+            <button class="btn-call-circle" :class="{ recording: callRecording }" :title="callRecording ? t('callRecording') : t('callRecord')" @click="toggleCallRecording">
+              {{ callRecording ? '⏹️' : '⏺️' }}
             </button>
           </template>
           <button v-if="activeCall.state === 'ringing'" class="btn-call-answer" @click="updateCallState('connected')">{{ t('mvAnswerCall') }}</button>

@@ -392,6 +392,21 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   grayscale (1 fail), restored byte-identical (sha256 match). Verification:
   flutter 59/59 + analyze clean, worker 102/102, Go full pass, 6 web
   builds, pre_deploy_gate 6/6, i18n TOTAL 0.
+## Continuation: 2026-11-09 — P4b-4 call recording + effects (web)
+
+- No server change; mobile untouched (signaling-only, no WebRTC stack, so
+  recording/effects are web-only by platform fact, not by deferral).
+- Web call overlay: record button mixes local + remote audio via AudioContext
+  (+ remote video track on video calls) to a .webm download; red REC state +
+  indicator; ending the call saves the partial file. Self-view filter row
+  (none/warm/cool/mono, preview-only) on the local video element.
+- Shared apps/shared/call-fx.ts (annotation-free, node-importable): CSS map
+  + safe filename builder, pinned by scripts/call_fx.test.mjs (test-first
+  missing-module failure). 8 call keys x4 locales. Red drill broke mono
+  (1 fail), restored byte-identical (sha256 match). Verification: flutter
+  59/59 + analyze clean, worker 104/104, Go pass, 6 web builds,
+  pre_deploy_gate 6/6, i18n TOTAL 0.
+
 
 
 
