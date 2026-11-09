@@ -1,0 +1,166 @@
+import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { generateKeyPairSync, createSign, createHash, randomBytes } from 'node:crypto';
+
+const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
+const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+
+async function api(path, token, method = 'GET', body) {
+  return worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
+    method,
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }), { ALLOW_LOCAL_DEMO: 'true' });
+}
+
+async function login(email, password) {
+  return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
+}
+
+// --- Virtual authenticator (mirrors the Go fixtures) ---
+const b64e = (b) => Buffer.from(b).toString('base64url');
+
+function cborHead(major, n) {
+  if (n < 24) return [major << 5 | n];
+  if (n < 256) return [major << 5 | 24, n];
+  if (n < 65536) return [major << 5 | 25, (n >> 8) & 255, n & 255];
+  return [major << 5 | 26, (n >>> 24) & 255, (n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+const cborInt = (n) => (n >= 0 ? cborHead(0, n) : cborHead(1, -1 - n));
+const cborBytes = (b) => [...cborHead(2, b.length), ...new Uint8Array(b)];
+const cborText = (s) => {
+  const b = new TextEncoder().encode(s);
+  return [...cborHead(3, b.length), ...b];
+};
+
+function makeCredential() {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const jwk = publicKey.export({ format: 'jwk' });
+  const x = new Uint8Array(Buffer.from(jwk.x, 'base64url'));
+  const y = new Uint8Array(Buffer.from(jwk.y, 'base64url'));
+  const credId = new Uint8Array(randomBytes(32));
+  const cose = Uint8Array.from([
+    ...cborHead(5, 5),
+    ...cborInt(1), ...cborInt(2),
+    ...cborInt(3), ...cborInt(-7),
+    ...cborInt(-1), ...cborInt(1),
+    ...cborInt(-2), ...cborBytes(x),
+    ...cborInt(-3), ...cborBytes(y),
+  ]);
+  const rpHash = createHash('sha256').update('localhost').digest();
+  const authData = Buffer.concat([
+    rpHash,
+    Buffer.from([0x41, 0, 0, 0, 0]),
+    Buffer.alloc(16),
+    Buffer.from([(credId.length >> 8) & 255, credId.length & 255]),
+    credId,
+    cose,
+  ]);
+  return { privateKey, credId, authData: new Uint8Array(authData) };
+}
+
+function clientData(challenge, origin = 'http://localhost') {
+  return new TextEncoder().encode(JSON.stringify({ type: 'webauthn.create', challenge, origin }));
+}
+
+function attestationNone(authData) {
+  return Uint8Array.from([
+    ...cborHead(5, 3),
+    ...cborText('fmt'), ...cborText('none'),
+    ...cborText('authData'), ...cborBytes(authData),
+    ...cborText('attStmt'), ...cborHead(5, 0),
+  ]);
+}
+
+function attestationPacked(cred, clientDataBytes, extraStmt = []) {
+  const cdHash = createHash('sha256').update(clientDataBytes).digest();
+  const sig = createSign('sha256').update(Buffer.concat([cred.authData, cdHash])).sign(cred.privateKey);
+  return Uint8Array.from([
+    ...cborHead(5, 3),
+    ...cborText('fmt'), ...cborText('packed'),
+    ...cborText('authData'), ...cborBytes(cred.authData),
+    ...cborText('attStmt'), ...cborHead(5, 2 + extraStmt.length / 2),
+    ...cborText('alg'), ...cborInt(-7),
+    ...cborText('sig'), ...cborBytes(new Uint8Array(sig)),
+    ...extraStmt,
+  ]);
+}
+
+function finishBody(cred, clientDataBytes, attObj) {
+  return {
+    id: b64e(cred.credId),
+    rawId: b64e(cred.credId),
+    type: 'public-key',
+    response: {
+      clientDataJSON: b64e(clientDataBytes),
+      attestationObject: b64e(attObj),
+    },
+  };
+}
+
+test('passkey registration with none attestation', async () => {
+  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+  const begun = await (await api('passkeys/register/begin', alice, 'POST')).json();
+  const pk = begun.publicKey;
+  assert.ok(pk.challenge);
+  assert.equal(pk.rp.id, 'localhost');
+  assert.equal(pk.attestation, 'none');
+  assert.ok(pk.pubKeyCredParams.some((p) => p.alg === -7));
+
+  const cred = makeCredential();
+  const cd = clientData(pk.challenge);
+  const done = await api('passkeys/register/finish', alice, 'POST', finishBody(cred, cd, attestationNone(cred.authData)));
+  assert.equal(done.status, 200);
+  const body = await done.json();
+  assert.equal(body.verified, true);
+  assert.equal(body.credential_id, b64e(cred.credId));
+
+  const begun2 = await (await api('passkeys/register/begin', alice, 'POST')).json();
+  assert.ok(begun2.publicKey.excludeCredentials.some((e) => e.id === b64e(cred.credId)));
+
+  const replay = await api('passkeys/register/finish', alice, 'POST', finishBody(cred, cd, attestationNone(cred.authData)));
+  assert.equal(replay.status, 400);
+
+  const begun3 = await (await api('passkeys/register/begin', alice, 'POST')).json();
+  const evil = makeCredential();
+  const cdEvil = clientData(begun3.publicKey.challenge, 'https://evil.test');
+  const tampered = await api('passkeys/register/finish', alice, 'POST', finishBody(evil, cdEvil, attestationNone(evil.authData)));
+  assert.equal(tampered.status, 400);
+
+  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
+  const lonely = makeCredential();
+  const cdLonely = clientData('unused-challenge', 'http://localhost');
+  const noCeremony = await api('passkeys/register/finish', bob, 'POST', finishBody(lonely, cdLonely, attestationNone(lonely.authData)));
+  assert.equal(noCeremony.status, 400);
+});
+
+test('passkey registration with packed self attestation', async () => {
+  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
+  const begun = await (await api('passkeys/register/begin', bob, 'POST')).json();
+  const cred = makeCredential();
+  const cd = clientData(begun.publicKey.challenge);
+  const done = await api('passkeys/register/finish', bob, 'POST', finishBody(cred, cd, attestationPacked(cred, cd)));
+  assert.equal(done.status, 200);
+  assert.equal((await done.json()).verified, true);
+});
+
+test('passkey registration rejects x5c and unknown formats', async () => {
+  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
+  const begun = await (await api('passkeys/register/begin', bob, 'POST')).json();
+  const cred = makeCredential();
+  const cd = clientData(begun.publicKey.challenge);
+  const withX5c = attestationPacked(cred, cd, [...cborText('x5c'), ...cborHead(4, 1), ...cborBytes(new Uint8Array([1, 2, 3]))]);
+  assert.equal((await api('passkeys/register/finish', bob, 'POST', finishBody(cred, cd, withX5c))).status, 400);
+
+  const begun2 = await (await api('passkeys/register/begin', bob, 'POST')).json();
+  const cred2 = makeCredential();
+  const cd2 = clientData(begun2.publicKey.challenge);
+  const tpm = Uint8Array.from([
+    ...cborHead(5, 3),
+    ...cborText('fmt'), ...cborText('tpm'),
+    ...cborText('authData'), ...cborBytes(cred2.authData),
+    ...cborText('attStmt'), ...cborHead(5, 0),
+  ]);
+  assert.equal((await api('passkeys/register/finish', bob, 'POST', finishBody(cred2, cd2, tpm))).status, 400);
+});

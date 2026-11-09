@@ -448,6 +448,8 @@ func (a *App) Handler() http.Handler {
 		mux.HandleFunc("POST /api/v1/translate", a.withAuth(func(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusServiceUnavailable, "translation unavailable: verified engine integration required")
 		}))
+		mux.HandleFunc("POST /api/v1/passkeys/register/begin", a.withAuth(a.withRateLimit("passkey-register-begin", a.passkeyRegisterBegin)))
+		mux.HandleFunc("POST /api/v1/passkeys/register/finish", a.withAuth(a.withRateLimit("passkey-register-finish", a.passkeyRegisterFinish)))
 		mux.HandleFunc("POST /api/v1/wallet/send", a.withAuth(a.sendWalletMoney))
 		mux.HandleFunc("POST /api/v1/wallet/charge", a.withAuth(a.chargeWallet))
 	}

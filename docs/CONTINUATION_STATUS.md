@@ -309,3 +309,21 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   messages, effect stickers, shopping/smart-channel backends) deferred with
   scope recorded in `docs/LINE_UX_SURVEY.md` §7: each needs native/crypto
   work beyond this increment.
+
+## Continuation: 2026-11-09 — P3a passkey registration
+
+- Registration ceremonies on both backends: POST /api/v1/passkeys/register
+  begin/finish (route contract 159 -> 161; golden refrozen).
+- Go verifies through go-webauthn v0.18.2 with per-request RP config derived
+  from the request host; format policy enforced to none+packed (worker parity).
+  Storage: 008 migration (identity.passkey_credentials JSON + challenges).
+- Worker verifies dependency-free (build copies the file verbatim): strict
+  definite-length CBOR, ES256 COSE, WebCrypto ECDSA over DER-decoded packed
+  self attestation, x5c rejected. Challenges single-use via D1
+  DELETE..RETURNING (D1-only authority when bound, memory otherwise).
+- Tests use hand-built virtual authenticators (real P-256 keys): Go none +
+  packed + replay/origin/no-ceremony negatives; worker none + packed + x5c
+  + unknown-format negatives. Web settings gained a register button + 7 keys
+  x4 locales. Verification: Go full, worker 98/98, user-web build, gate 6/6.
+- P3b (login ceremonies + management UI) and mobile remain. Worker has no
+  rate limiter (pre-existing gap, same as login); Go wraps passkey routes.

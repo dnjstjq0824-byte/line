@@ -14,6 +14,8 @@ const AUTH_CTX = new WeakMap();
 const qrChallenges = new Map();
 const phoneVerificationCodes = new Map();
 const friendships = new Map();
+const passkeyChallenges = new Map(); // challenge -> { userId, purpose, expiresAt }
+const passkeyCreds = new Map(); // credentialIdB64 -> { userId, jwk, counter, transports, name, createdAt }
 const conversations = new Map();
 const messages = new Map();
 const callSessions = new Map();
@@ -137,7 +139,16 @@ const LUNO_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_luno_ws_tickets_exp ON luno_ws_tickets(expires_at)`,
   `CREATE TABLE IF NOT EXISTS luno_attachments (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, owner_id TEXT NOT NULL, name TEXT NOT NULL,
-    mime TEXT NOT NULL, size INTEGER NOT NULL, b64 TEXT NOT NULL, created_at TEXT NOT NULL)`
+    mime TEXT NOT NULL, size INTEGER NOT NULL, b64 TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_passkey_challenges (
+    challenge TEXT PRIMARY KEY, user_id TEXT NOT NULL, purpose TEXT NOT NULL,
+    expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_passkey_ch_user ON luno_passkey_challenges(user_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_passkey_credentials (
+    credential_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, public_key TEXT NOT NULL,
+    counter INTEGER NOT NULL DEFAULT 0, transports TEXT, name TEXT DEFAULT '',
+    created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_passkey_cred_user ON luno_passkey_credentials(user_id)`,
 ];
 let schemaReady = null;
 function dbOf() { return CURRENT_ENV && CURRENT_ENV.DB ? CURRENT_ENV.DB : null; }
@@ -157,6 +168,280 @@ async function ensureSchema() {
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text)));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// ======================================================================
+// Passkey (WebAuthn) registration — no-dependency RP verification.
+// Policy (Go parity): attestation none + packed(self) only, ES256 only,
+// user presence required, user verification preferred. Challenges are
+// single-use with a 5-minute TTL; D1 is the only authority when bound
+// (same lesson as the ws tickets), memory Maps cover tests/local.
+// ======================================================================
+const PASSKEY_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+
+function pkB64Encode(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
+function pkB64Decode(s) {
+  if (typeof s !== 'string' || s.length === 0 || s.length > 32768 || !/^[A-Za-z0-9_-]*$/.test(s)) {
+    throw new Error('bad b64url');
+  }
+  const bin = atob(s.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - (s.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function pkU8eq(a, b) {
+  if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array) || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a[i] ^ b[i];
+  return d === 0;
+}
+
+// Minimal definite-length CBOR decoder. Maps decode with 's:'/'n:'
+// prefixed keys so string and int keys can coexist.
+function pkCborDecode(buf, o, depth) {
+  o = o || { off: 0 };
+  depth = depth || 0;
+  if (depth > 8) throw new Error('cbor depth');
+  if (o.off >= buf.length) throw new Error('cbor overrun');
+  const b = buf[o.off++];
+  const major = b >> 5;
+  let n = b & 31;
+  if (n === 31) throw new Error('cbor indefinite');
+  if (n === 24) {
+    if (o.off >= buf.length) throw new Error('cbor overrun');
+    n = buf[o.off++];
+  } else if (n === 25) {
+    if (o.off + 2 > buf.length) throw new Error('cbor overrun');
+    n = (buf[o.off] << 8) | buf[o.off + 1];
+    o.off += 2;
+  } else if (n === 26) {
+    if (o.off + 4 > buf.length) throw new Error('cbor overrun');
+    n = buf[o.off] * 16777216 + (buf[o.off + 1] << 16) + (buf[o.off + 2] << 8) + buf[o.off + 3];
+    o.off += 4;
+  } else if (n === 27) throw new Error('cbor u64');
+  if (major === 0) return n;
+  if (major === 1) return -1 - n;
+  if (major === 2 || major === 3) {
+    if (o.off + n > buf.length) throw new Error('cbor overrun');
+    const slice = buf.slice(o.off, o.off + n);
+    o.off += n;
+    return major === 2 ? slice : new TextDecoder().decode(slice);
+  }
+  if (major === 4) {
+    if (n > 64) throw new Error('cbor array');
+    const a = [];
+    for (let i = 0; i < n; i++) a.push(pkCborDecode(buf, o, depth + 1));
+    return a;
+  }
+  if (major === 5) {
+    if (n > 64) throw new Error('cbor map');
+    const m = {};
+    for (let i = 0; i < n; i++) {
+      const k = pkCborDecode(buf, o, depth + 1);
+      const v = pkCborDecode(buf, o, depth + 1);
+      m[typeof k === 'string' ? 's:' + k : 'n:' + k] = v;
+    }
+    return m;
+  }
+  if (major === 7) {
+    if (n === 20) return false;
+    if (n === 21) return true;
+    if (n === 22) return null;
+    throw new Error('cbor simple');
+  }
+  throw new Error('cbor tag');
+}
+
+function pkCborTop(buf) {
+  const o = { off: 0 };
+  const v = pkCborDecode(buf, o, 0);
+  if (o.off !== buf.length) throw new Error('cbor trailing');
+  return v;
+}
+
+function pkParseAuthData(ad) {
+  if (!(ad instanceof Uint8Array) || ad.length < 37) throw new Error('authData short');
+  const flags = ad[32];
+  const out = {
+    rpIdHash: ad.slice(0, 32),
+    flags,
+    counter: ad[33] * 16777216 + (ad[34] << 16) + (ad[35] << 8) + ad[36],
+    credId: null,
+    cose: null,
+  };
+  if (flags & 0x40) {
+    if (ad.length < 55) throw new Error('authData attested short');
+    const l = (ad[53] << 8) | ad[54];
+    if (55 + l > ad.length) throw new Error('authData cred overrun');
+    out.credId = ad.slice(55, 55 + l);
+    const o = { off: 55 + l };
+    out.cose = pkCborDecode(ad, o, 0);
+  }
+  return out;
+}
+
+function pkCoseToJwk(cose) {
+  if (!cose || cose['n:1'] !== 2 || cose['n:3'] !== -7 || cose['n:-1'] !== 1) {
+    throw new Error('cose not ES256');
+  }
+  const x = cose['n:-2'];
+  const y = cose['n:-3'];
+  if (!(x instanceof Uint8Array) || x.length !== 32 || !(y instanceof Uint8Array) || y.length !== 32) {
+    throw new Error('cose coords');
+  }
+  return { kty: 'EC', crv: 'P-256', x: pkB64Encode(x), y: pkB64Encode(y), ext: true };
+}
+
+// Strict minimal DER ECDSA signature to WebCrypto raw R||S (P-256).
+function pkDerToRaw(der) {
+  if (!(der instanceof Uint8Array)) throw new Error('der shape');
+  let o = 0;
+  const need = (n) => { if (o + n > der.length) throw new Error('der overrun'); };
+  need(2);
+  if (der[o++] !== 0x30) throw new Error('der seq');
+  let len = der[o++];
+  if (len & 0x80) {
+    const n = len & 0x7f;
+    if (n === 0 || n > 2) throw new Error('der len');
+    need(n);
+    len = 0;
+    for (let i = 0; i < n; i++) len = (len << 8) | der[o++];
+  }
+  if (len !== der.length - o) throw new Error('der trailing');
+  const out = new Uint8Array(64);
+  for (const half of [0, 32]) {
+    need(2);
+    if (der[o++] !== 0x02) throw new Error('der int');
+    let ilen = der[o++];
+    need(ilen);
+    if (ilen === 0 || ilen > 33) throw new Error('der intlen');
+    let start = o;
+    if (ilen === 33) {
+      if (der[o] !== 0) throw new Error('der pad');
+      start += 1;
+      ilen = 32;
+    }
+    out.set(der.slice(start, start + ilen), half + 32 - ilen);
+    o = start + ilen;
+  }
+  if (o !== der.length) throw new Error('der trailing2');
+  return out;
+}
+
+async function pkIssueChallenge(userId, purpose) {
+  const challenge = pkB64Encode(crypto.getRandomValues(new Uint8Array(32)));
+  const expiresAt = Date.now() + PASSKEY_CHALLENGE_TTL_MS;
+  if (dbOf()) {
+    await ensureSchema();
+    await dbOf().prepare(
+      'INSERT INTO luno_passkey_challenges(challenge,user_id,purpose,expires_at,created_at) VALUES (?,?,?,?,?) ON CONFLICT(challenge) DO UPDATE SET expires_at=excluded.expires_at,created_at=excluded.created_at'
+    ).bind(challenge, userId, purpose, Math.floor(expiresAt / 1000), now()).run();
+  } else {
+    passkeyChallenges.set(challenge, { userId, purpose, expiresAt });
+  }
+  return challenge;
+}
+
+async function pkLatestChallenge(userId, purpose) {
+  if (dbOf()) {
+    await ensureSchema();
+    const row = await dbOf().prepare(
+      'SELECT challenge FROM luno_passkey_challenges WHERE user_id=? AND purpose=? ORDER BY created_at DESC LIMIT 1'
+    ).bind(userId, purpose).first();
+    return row ? row.challenge : null;
+  }
+  let found = null;
+  for (const [ch, c] of passkeyChallenges) {
+    if (c.userId === userId && c.purpose === purpose) found = ch;
+  }
+  return found;
+}
+
+async function pkConsumeChallenge(challenge, userId, purpose) {
+  if (dbOf()) {
+    await ensureSchema();
+    const row = await dbOf().prepare(
+      'DELETE FROM luno_passkey_challenges WHERE challenge=? AND user_id=? AND purpose=? AND expires_at>? RETURNING challenge'
+    ).bind(challenge, userId, purpose, Math.floor(Date.now() / 1000)).first();
+    return !!row;
+  }
+  const c = passkeyChallenges.get(challenge);
+  if (!c || c.userId !== userId || c.purpose !== purpose || c.expiresAt <= Date.now()) return false;
+  passkeyChallenges.delete(challenge);
+  return true;
+}
+
+async function pkListCreds(userId) {
+  if (dbOf()) {
+    await ensureSchema();
+    const res = await dbOf().prepare(
+      'SELECT credential_id,public_key,counter,transports,name,created_at FROM luno_passkey_credentials WHERE user_id=?'
+    ).bind(userId).all();
+    return (res.results || []).map(r => ({
+      credId: r.credential_id, jwk: JSON.parse(r.public_key),
+      counter: r.counter, transports: r.transports, name: r.name, createdAt: r.created_at,
+    }));
+  }
+  return [...passkeyCreds.values()].filter(c => c.userId === userId);
+}
+
+async function pkStoreCred(userId, credIdB64, jwk, counter, transports) {
+  if (dbOf()) {
+    await ensureSchema();
+    await dbOf().prepare(
+      'INSERT INTO luno_passkey_credentials(credential_id,user_id,public_key,counter,transports,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(credential_id) DO NOTHING'
+    ).bind(credIdB64, userId, JSON.stringify(jwk), counter, transports ? JSON.stringify(transports) : null, now()).run();
+    return;
+  }
+  passkeyCreds.set(credIdB64, { userId, credId: credIdB64, jwk, counter, transports, createdAt: now() });
+}
+
+async function pkVerifyRegistration({ rpId, origin, challengeB64, body, excludeIds }) {
+  if (!body || body.type !== 'public-key' || !body.response) throw new Error('shape');
+  const credId = pkB64Decode(body.id);
+  if (body.rawId !== undefined && body.rawId !== body.id) throw new Error('id mismatch');
+  const clientDataBytes = pkB64Decode(body.response.clientDataJSON);
+  const clientData = JSON.parse(new TextDecoder().decode(clientDataBytes));
+  if (clientData.type !== 'webauthn.create') throw new Error('type');
+  if (clientData.challenge !== challengeB64) throw new Error('challenge');
+  if (clientData.origin !== origin) throw new Error('origin');
+  const attObj = pkCborTop(pkB64Decode(body.response.attestationObject));
+  const fmt = attObj['s:fmt'];
+  if (fmt !== 'none' && fmt !== 'packed') throw new Error('format');
+  const authData = attObj['s:authData'];
+  if (!(authData instanceof Uint8Array)) throw new Error('authData');
+  const parsed = pkParseAuthData(authData);
+  if (!(parsed.flags & 0x01)) throw new Error('UP missing');
+  if (!(parsed.flags & 0x40)) throw new Error('AT missing');
+  const rpHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rpId)));
+  if (!pkU8eq(rpHash, parsed.rpIdHash)) throw new Error('rpId');
+  if (!pkU8eq(credId, parsed.credId)) throw new Error('credId');
+  if (excludeIds.includes(body.id)) throw new Error('excluded');
+  const jwk = pkCoseToJwk(parsed.cose);
+  const attStmt = attObj['s:attStmt'];
+  if (typeof attStmt !== 'object' || attStmt === null) throw new Error('attStmt');
+  if (fmt === 'none') {
+    if (Object.keys(attStmt).length !== 0) throw new Error('none stmt');
+  } else {
+    if (attStmt['s:x5c'] !== undefined) throw new Error('x5c unsupported');
+    if (attStmt['s:alg'] !== -7) throw new Error('alg');
+    const sig = attStmt['s:sig'];
+    if (!(sig instanceof Uint8Array)) throw new Error('sig');
+    const cdHash = new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataBytes));
+    const data = new Uint8Array(authData.length + cdHash.length);
+    data.set(authData, 0);
+    data.set(cdHash, authData.length);
+    const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, pkDerToRaw(sig), data);
+    if (!ok) throw new Error('packed sig');
+  }
+  return { credIdB64: body.id, jwk, counter: parsed.counter, transports: body.response.transports };
 }
 function parsePbkdf2(stored) {
   if (typeof stored !== 'string' || !stored.startsWith('pbkdf2$')) return null;
@@ -1706,6 +1991,46 @@ async function extended(p, request, url, me, token) {
   const myId = me.id;
   ensureDefaultConversationsForUser(myId);
 
+  // ---------- Passkeys (WebAuthn registration) ----------
+  if (p === 'passkeys/register/begin' && request.method === 'POST') {
+    const reqUrl = new URL(request.url);
+    const rpId = reqUrl.hostname.toLowerCase();
+    const creds = await pkListCreds(myId);
+    const challenge = await pkIssueChallenge(myId, 'registration');
+    return json({ publicKey: {
+      challenge,
+      rp: { id: rpId, name: 'LUNO' },
+      user: {
+        id: pkB64Encode(new TextEncoder().encode(myId)),
+        name: me.email || me.handle || myId,
+        displayName: me.display_name || me.email || 'LUNO user',
+      },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      timeout: 300000,
+      attestation: 'none',
+      excludeCredentials: creds.map(c => ({ type: 'public-key', id: c.credId })),
+    }});
+  }
+  if (p === 'passkeys/register/finish' && request.method === 'POST') {
+    const b = await readJson(request);
+    const reqUrl = new URL(request.url);
+    const rpId = reqUrl.hostname.toLowerCase();
+    const stored = await pkLatestChallenge(myId, 'registration');
+    if (!stored || !(await pkConsumeChallenge(stored, myId, 'registration'))) {
+      return bad('진행 중인 등록 절차가 없거나 만료되었습니다', 400);
+    }
+    const creds = await pkListCreds(myId);
+    try {
+      const v = await pkVerifyRegistration({
+        rpId, origin: reqUrl.origin, challengeB64: stored, body: b,
+        excludeIds: creds.map(c => c.credId),
+      });
+      await pkStoreCred(myId, v.credIdB64, v.jwk, v.counter, v.transports);
+      return json({ verified: true, credential_id: v.credIdB64 });
+    } catch (e) {
+      return bad('패스키 검증에 실패했습니다', 400);
+    }
+  }
   // ---------- Profile & settings ----------
   if (p === 'me') {
     if (dbOf()) {

@@ -29,6 +29,24 @@ CREATE TABLE identity.users (
 );
 CREATE UNIQUE INDEX users_email_uq ON identity.users(lower(email));
 CREATE INDEX users_display_idx ON identity.users(lower(display_name));
+CREATE TABLE identity.passkey_credentials (
+ id TEXT PRIMARY KEY,
+ user_id UUID NOT NULL REFERENCES identity.users(id) ON DELETE CASCADE,
+ credential TEXT NOT NULL,
+ name TEXT NOT NULL DEFAULT '',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ last_used_at TIMESTAMPTZ
+);
+CREATE INDEX passkey_credentials_user_idx ON identity.passkey_credentials(user_id);
+CREATE TABLE identity.passkey_challenges (
+ challenge TEXT PRIMARY KEY,
+ user_id UUID NOT NULL REFERENCES identity.users(id) ON DELETE CASCADE,
+ purpose TEXT NOT NULL,
+ session TEXT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX passkey_challenges_user_idx ON identity.passkey_challenges(user_id);
 CREATE TABLE identity.devices (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES identity.users(id),
  name TEXT NOT NULL, platform TEXT NOT NULL, trusted BOOLEAN NOT NULL DEFAULT false,

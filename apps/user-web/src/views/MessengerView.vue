@@ -2401,6 +2401,66 @@ onBeforeUnmount(() => {
   }
 })
 // Phase 1 to Phase 6 Extended Actions
+const passkeyBusy = ref(false)
+const passkeyNote = ref('')
+
+function b64ToBytes(s: string): Uint8Array {
+  const bin = atob(s.replaceAll('-', '+').replaceAll('_', '/'))
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+function bytesToB64(b: ArrayBuffer | Uint8Array): string {
+  const u = b instanceof Uint8Array ? b : new Uint8Array(b)
+  let s = ''
+  for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i])
+  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}
+
+async function registerPasskey() {
+  if (passkeyBusy.value) return
+  if (!window.PublicKeyCredential || !navigator.credentials?.create) {
+    passkeyNote.value = t('mvPasskeyUnsupported')
+    return
+  }
+  passkeyBusy.value = true
+  passkeyNote.value = ''
+  try {
+    await wrap(async () => {
+      const begun = await api<{ publicKey: any }>('/api/v1/passkeys/register/begin', 'POST', {})
+      const pk = begun.publicKey
+      pk.challenge = b64ToBytes(pk.challenge)
+      pk.user.id = b64ToBytes(pk.user.id)
+      for (const e of pk.excludeCredentials || []) e.id = b64ToBytes(e.id)
+      let cred: any = null
+      try {
+        cred = await navigator.credentials.create({ publicKey: pk })
+      } catch {
+        passkeyNote.value = t('mvPasskeyCancelled')
+        return
+      }
+      if (!cred) {
+        passkeyNote.value = t('mvPasskeyCancelled')
+        return
+      }
+      const done = await api<{ verified: boolean }>('/api/v1/passkeys/register/finish', 'POST', {
+        id: cred.id,
+        rawId: bytesToB64(cred.rawId),
+        type: cred.type,
+        response: {
+          clientDataJSON: bytesToB64(cred.response.clientDataJSON),
+          attestationObject: bytesToB64(cred.response.attestationObject),
+          transports: cred.response.getTransports ? cred.response.getTransports() : undefined,
+        },
+      })
+      passkeyNote.value = done?.verified ? t('mvPasskeyDone') : t('mvPasskeyFailed')
+    })
+  } finally {
+    passkeyBusy.value = false
+  }
+}
+
 async function testPushNotification() {
   await wrap(async () => {
     const deviceId = devicesList.value[0]?.id
@@ -4387,6 +4447,16 @@ onBeforeUnmount(() => {
               <span>{{ t('mvKeyMgmt') }}</span>
               <span class="muted">{{ t('e2ee_preparing') }}</span>
             </div>
+          </div>
+
+          <!-- 5b. Passkey registration -->
+          <div class="setting-group" style="margin-top:8px">
+            <strong>🔑 {{ t('mvPasskeyTitle') }}</strong>
+            <div class="setting-toggle-row">
+              <span>{{ t('mvPasskeyDesc') }}</span>
+              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" :disabled="passkeyBusy" @click="registerPasskey">{{ t('mvPasskeyRegister') }}</button>
+            </div>
+            <div v-if="passkeyNote" class="muted" style="font-size:12px;margin-top:4px" role="status">{{ passkeyNote }}</div>
           </div>
 
           <!-- Phase 6: GDPR Data Portability & Deletion -->
