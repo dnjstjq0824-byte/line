@@ -355,4 +355,15 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   without duration); playback reuses MessageAttachment audio player.
 - Verification: flutter 43/43 + analyze clean, Go full pass, worker 100/100,
   6 web builds, pre_deploy_gate 6/6, i18n TOTAL 0.
+## Continuation: 2026-11-09 — P4b-1 effect stickers
+
+- No server change. Web sticker SVG pops in on arrival and replays on click
+  (128px art, key-remount replay, prefers-reduced-motion respected).
+- Mobile StickerBubble: 72px glyph with elastic pop-in, tap replays; new
+  web-id to emoji table (12 ids) so web-sent stickers never render as raw
+  ids; own "emoji [Character]" bodies resolve to the emoji part.
+- Verification: flutter 48/48 + analyze clean, sticker red drill (broken
+  entry fails 1 test, restored green), worker 100/100, Go pass, 6 web
+  builds, pre_deploy_gate 6/6, i18n TOTAL 0.
+
 

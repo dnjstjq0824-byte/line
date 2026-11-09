@@ -569,6 +569,7 @@ const newNoteBody = ref('')
 const newAlbumTitle = ref('')
 const editingMessageId = ref('')
 const editingMessageBody = ref('')
+const stickerReplay = ref<Record<string, number>>({})
 const openChatRooms = ref<Array<{ id: string; name: string; description: string; visibility: string }>>([])
 const selectedOpenChatRoom = ref<{ id: string; name: string; description: string } | null>(null)
 const openChatPosts = ref<Array<{ id: string; author_id: string; body: string; created_at: string }>>([])
@@ -3849,7 +3850,7 @@ onBeforeUnmount(() => {
                         <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="editingMessageId = ''">{{ t('mvCancel') }}</button>
                       </div>
                     </div>
-                    <div v-else-if="msg.kind === 'sticker' && getStickerSvg(String(msg.metadata?.sticker_id || msg.body))" class="bubble-sticker-svg" v-html="getStickerSvg(String(msg.metadata?.sticker_id || msg.body))"></div>
+                    <div v-else-if="msg.kind === 'sticker' && getStickerSvg(String(msg.metadata?.sticker_id || msg.body))" class="bubble-sticker-svg sticker-effect" :key="`sticker-${msg.id}-${stickerReplay[msg.id] || 0}`" @click="stickerReplay[msg.id] = (stickerReplay[msg.id] || 0) + 1" v-html="getStickerSvg(String(msg.metadata?.sticker_id || msg.body))"></div>
                     <div v-else-if="msg.kind === 'location'" class="bubble-location-card">
                       <div class="loc-card-top">{{ t('mvShareLocation') }}</div>
                       <strong class="loc-card-label">{{ msg.metadata?.label || msg.body }}</strong>

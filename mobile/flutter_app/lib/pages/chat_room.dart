@@ -10,6 +10,7 @@ import '../legacy_tokens.dart';
 import '../state/session.dart';
 import '../util/attachments.dart';
 import '../util/voice_recorder.dart';
+import '../util/stickers.dart';
 import '../util/chat_time.dart';
 
 class ChatRoomPage extends StatefulWidget {
@@ -339,11 +340,15 @@ class _SignalBubble extends StatelessWidget {
                     durationSec: voiceDurationOf(m) ?? 0,
                     foreground: ink,
                   ),
-                Text('${m['body']}',
-                    style: TextStyle(
-                        color: ink,
-                        fontSize: m['kind'] == 'sticker' ? 24 : 14,
-                        height: 1.35)),
+                if (m['kind'] == 'sticker')
+                  StickerBubble(
+                    glyph: stickerGlyph(
+                        body: '${m['body']}', stickerId: _stickerIdOf(m)),
+                  )
+                else
+                  Text('${m['body']}',
+                      style:
+                          TextStyle(color: ink, fontSize: 14, height: 1.35)),
                 if (trans != null) ...[
                   const SizedBox(height: 6),
                   Container(
@@ -476,6 +481,13 @@ class _StickerDeck extends StatelessWidget {
       ),
     );
   }
+}
+
+String? _stickerIdOf(dynamic m) {
+  final meta = m['metadata'];
+  if (meta is! Map) return null;
+  final id = meta['sticker_id'];
+  return id is String ? id : null;
 }
 
 void _recordVoice(BuildContext context) {
