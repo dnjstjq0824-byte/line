@@ -16,6 +16,7 @@ import '../api/client.dart';
 import '../legacy_tokens.dart';
 import '../util/attachments.dart';
 import '../util/channel_slot.dart';
+import '../util/photo_effects.dart';
 import '../util/error_report.dart';
 
 class SessionController extends ChangeNotifier {
@@ -431,20 +432,32 @@ class SessionController extends ChangeNotifier {
     });
   }
 
-  Future<void> sendImage(ImageSource source) {
+  Future<PickedImage?> pickChatImage(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(
+        source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 85);
+    if (picked == null) return null;
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > maxAttachmentBytes) {
+      throw Exception('파일이 너무 큽니다 (최대 512KB)');
+    }
+    return PickedImage(
+        bytes: bytes, name: picked.name, mime: picked.mimeType ?? 'image/jpeg');
+  }
+
+  Future<void> sendPickedImage(PickedImage pic, {String effect = 'none'}) {
     if (selectedId.isEmpty) return Future.value();
     return run(() async {
-      final picked = await ImagePicker().pickImage(
-          source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 85);
-      if (picked == null) return;
-      final bytes = await picked.readAsBytes();
+      final bytes = applyPhotoEffect(pic.bytes, effect);
       if (bytes.length > maxAttachmentBytes) {
         throw Exception('파일이 너무 큽니다 (최대 512KB)');
       }
-      final mime = picked.mimeType ?? 'image/jpeg';
+      // applyPhotoEffect returns the identical bytes when nothing applied.
+      final effected = !identical(bytes, pic.bytes);
+      final mime = effected ? 'image/jpeg' : pic.mime;
+      final name = effected ? photoEffectName(pic.name, effect) : pic.name;
       final att = await api.call('/api/v1/attachments', method: 'POST', data: {
         'conversation_id': selectedId,
-        'original_name': picked.name,
+        'original_name': name,
         'mime_type': mime,
         'size_bytes': bytes.length,
         'content_base64': base64Encode(bytes),
@@ -453,7 +466,7 @@ class SessionController extends ChangeNotifier {
           method: 'POST', data: {
         'client_id': uuid(),
         'kind': attachmentKindForMime(mime),
-        'body': att['original_name'] ?? picked.name,
+        'body': att['original_name'] ?? name,
         'metadata': attachmentMessageMetadata(
             id: att['id'], mime: mime, size: bytes.length),
       });

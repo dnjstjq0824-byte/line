@@ -11,6 +11,7 @@ import '../state/session.dart';
 import '../util/attachments.dart';
 import '../util/voice_recorder.dart';
 import '../util/stickers.dart';
+import '../util/photo_effects.dart';
 import '../util/chat_time.dart';
 
 class ChatRoomPage extends StatefulWidget {
@@ -501,8 +502,19 @@ void _recordVoice(BuildContext context) {
   });
 }
 
-void _pickImageSource(BuildContext context) {
+Future<void> _sendImageWithEffect(BuildContext context, ImageSource source) async {
   final session = SessionScope.of(context, listen: false);
+  final pic = await session.pickChatImage(source);
+  if (pic == null || !context.mounted) return;
+  final effect = await showModalBottomSheet<String>(
+    context: context,
+    builder: (_) => PhotoEffectSheet(bytes: pic.bytes),
+  );
+  if (effect == null) return;
+  await session.sendPickedImage(pic, effect: effect);
+}
+
+void _pickImageSource(BuildContext context) {
   showModalBottomSheet(
     context: context,
     builder: (sheet) => SafeArea(
@@ -514,7 +526,7 @@ void _pickImageSource(BuildContext context) {
             title: const Text('갤러리에서 선택'),
             onTap: () {
               Navigator.of(sheet).pop();
-              session.sendImage(ImageSource.gallery);
+              _sendImageWithEffect(context, ImageSource.gallery);
             },
           ),
           ListTile(
@@ -522,7 +534,7 @@ void _pickImageSource(BuildContext context) {
             title: const Text('카메라로 촬영'),
             onTap: () {
               Navigator.of(sheet).pop();
-              session.sendImage(ImageSource.camera);
+              _sendImageWithEffect(context, ImageSource.camera);
             },
           ),
         ],

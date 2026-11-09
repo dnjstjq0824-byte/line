@@ -379,6 +379,20 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   byte-identical (sha256 match). Verification: flutter 53/53 + analyze
   clean, worker 102/102, Go full pass, 6 web builds, pre_deploy_gate 6/6,
   i18n TOTAL 0.
+## Continuation: 2026-11-09 — P4b-3 photo effects
+
+- No server change. Image sends gain an effect step (none/gray/sepia ids
+  shared by both clients). Mobile: image package decode/filter/JPEG-q85 +
+  PhotoEffectSheet preview; sendImage split into pickChatImage +
+  sendPickedImage (identical-bytes guard keeps original mime on fallback).
+- Web: effect modal intercepts image picks (live CSS-filter preview), canvas
+  bakes the effect to JPEG on send; 5 fx keys x4 locales, mvSend left as
+  money-transfer label. Camera mode tabs (avatar/video/GIF) stay open.
+- Test-first (missing-module load failure), then green. Red drill broke
+  grayscale (1 fail), restored byte-identical (sha256 match). Verification:
+  flutter 59/59 + analyze clean, worker 102/102, Go full pass, 6 web
+  builds, pre_deploy_gate 6/6, i18n TOTAL 0.
+
 
 
 

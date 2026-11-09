@@ -1731,12 +1731,58 @@ function chooseAttachment(kind: 'image' | 'voice' | 'file') {
   }
 }
 
+const effectFile = ref<File | null>(null)
+const effectConversation = ref('')
+const effectChoice = ref<'none' | 'gray' | 'sepia'>('none')
+const effectPreviewUrl = ref('')
+const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grayscale(1)', sepia: 'sepia(1)' }
+function closeEffectModal() {
+  if (effectPreviewUrl.value) URL.revokeObjectURL(effectPreviewUrl.value)
+  effectFile.value = null
+  effectConversation.value = ''
+  effectChoice.value = 'none'
+  effectPreviewUrl.value = ''
+}
+async function sendEffectPhoto() {
+  const file = effectFile.value
+  const conversation = effectConversation.value
+  if (!file || !conversation || uploading.value) { closeEffectModal(); return }
+  const choice = effectChoice.value
+  const sessionToken = token.value
+  uploading.value = true
+  try {
+    let out = file
+    if (choice !== 'none') {
+      const bmp = await createImageBitmap(file)
+      const canvas = document.createElement('canvas')
+      canvas.width = bmp.width
+      canvas.height = bmp.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('canvas unavailable')
+      ctx.filter = PHOTO_EFFECT_FILTER[choice]
+      ctx.drawImage(bmp, 0, 0)
+      bmp.close()
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      if (!blob) throw new Error('encode failed')
+      const base = file.name.includes('.') ? file.name.slice(0, file.name.lastIndexOf('.')) : file.name
+      out = new File([blob], `${base}.jpg`, { type: 'image/jpeg' })
+    }
+    await wrap(() => sendAttachmentFile(out, conversation, sessionToken))
+  } finally { uploading.value = false; closeEffectModal() }
+}
 async function uploadSelectedFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
   const conversation = selectedChatId.value
   if (!file || !conversation || uploading.value) return
+  if (file.type.startsWith('image/')) {
+    closeEffectModal()
+    effectFile.value = file
+    effectConversation.value = conversation
+    effectPreviewUrl.value = URL.createObjectURL(file)
+    return
+  }
   uploading.value = true
   try { await wrap(() => sendAttachmentFile(file, conversation, token.value)) } finally { uploading.value = false }
 }
@@ -3973,6 +4019,21 @@ onBeforeUnmount(() => {
           <!-- Attachment Bar Icons -->
           <div class="pc-input-toolbar">
             <input ref="attachmentInput" type="file" hidden @change="uploadSelectedFile" />
+            <div v-if="effectFile" class="fx-modal-backdrop" @click.self="closeEffectModal">
+              <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
+                <h3>{{ t('fxTitle') }}</h3>
+                <img :src="effectPreviewUrl" class="fx-preview" :style="{ filter: PHOTO_EFFECT_FILTER[effectChoice] }" alt="" />
+                <div class="fx-options">
+                  <button :class="{ active: effectChoice === 'none' }" @click="effectChoice = 'none'">{{ t('fxOriginal') }}</button>
+                  <button :class="{ active: effectChoice === 'gray' }" @click="effectChoice = 'gray'">{{ t('fxGray') }}</button>
+                  <button :class="{ active: effectChoice === 'sepia' }" @click="effectChoice = 'sepia'">{{ t('fxSepia') }}</button>
+                </div>
+                <div class="fx-actions">
+                  <button class="btn-secondary" @click="closeEffectModal">{{ t('mvCancel') }}</button>
+                  <button class="btn-primary" :disabled="uploading" @click="sendEffectPhoto">{{ t('fxSend') }}</button>
+                </div>
+              </div>
+            </div>
             <button class="btn-tool-icon" :title="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker">😊</button>
             <button class="btn-tool-icon" :title="t('mvAttachPhoto')" :disabled="uploading" @click="chooseAttachment('image')">📷</button>
             <button class="btn-tool-icon" :title="t('mvAttachFile')" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
