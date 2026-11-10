@@ -5247,7 +5247,8 @@ export default {
     } catch (err) {
       if (err?.code === 'CONVERSATION_CONFLICT') return json({ error: err.message, code: err.code }, 409);
       console.error('[LUNO internal error]', err && err.stack ? err.stack : err);
-      return withCors(request, env, json({ error: 'internal_error' }, 500));
+      const diag = String((err && err.message) || err || 'unknown').slice(0, 160);
+      return withCors(request, env, json({ error: 'internal_error', diag }, 500));
     }
   }
 };
