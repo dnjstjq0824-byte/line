@@ -1,14 +1,34 @@
-# LUNO Final Production Readiness & Go/No-Go Assessment
+# LUNO Production Readiness & Go/No-Go Assessment
 
-## 1. Readiness Checklist
-| Gate | Criterion | Result |
-| :--- | :--- | :---: |
-| **G1. P0 Bug Resolution** | Conversation selection, Official Security Channel, Calls tab isolation, Call status bubbles | **GO (100% Fixed & Tested)** |
-| **G2. UI/UX & CSS Integrity** | 462/462 template classes styled, 0 readonly computed write errors, full PC & Mobile responsive layout | **GO (100% Verified)** |
-| **G3. Real API & DB Backing** | Conversations, messages, reactions, pins, notes, albums, events, polls, Keep, Wallet, Admin consoles | **GO (100% Connected)** |
-| **G4. Automated Test Suites** | 10/10 Worker E2E tests PASS, Go backend test suites PASS, TypeScript `vue-tsc --noEmit` PASS | **GO (0 Errors)** |
-| **G5. Production Governance** | Staging build (`./dist_cf`) ready; production deploy held for PO sign-off | **READY FOR PO APPROVAL** |
+> 상태 기준: B1 보안 배치(데모 제거·PBKDF2-310k·15분 토큰·refresh rotation·로그인 잠금·탈퇴 삭제) 커밋 시점.
+> 이전 판의 "100% 상용화 준비 완료" 문구는 실제 구현 상태와 맞지 않아 삭제한다.
 
-## 2. Final Recommendation
-- **Technical Status**: **GO FOR PRODUCTION** (100% commercial-ready implementation verified in staging).
-- **Next Action**: Awaiting PO approval to execute production deployment (`npx wrangler deploy`) to `https://line-messenger.dnjstjqppk.workers.dev/`.
+## 1. 구현 상태 (검증됨)
+
+| 영역 | 상태 | 근거 |
+| :--- | :--- | :--- |
+| P0 버그 (대화 선택·보안 채널·통화 탭·통화 말풍선) | DONE | node 155/155, lv A-01..A-13 |
+| UI/UX·반응형 (표준 브레이크포인트·§7 토큰·타이포) | DONE | §7-2/7-3/7-4 적용, vue-tsc 통과 |
+| 인증 (PBKDF2-310k·15분 access·refresh rotation·재사용 탐지) | DONE | auth_hardening 6/6 |
+| 로그인 잠금 (5회 실패→15분) · 분당 rate limit | DONE | D1 테이블 기반, 테스트 통과 |
+| 탈퇴 (단일 경로·자격증명 파기·연관행 삭제) | DONE | D-01..D-05 + batch wipe 테스트 |
+| 데모/시드 제거·CORS allowlist·admin metrics | DONE | s2_security 3/3 |
+| Flutter (analyze 무결함·105/105) | DONE | 매 커밋 검증 |
+
+## 2. 남은 인프라·구현 과제 (출시 전 필수)
+
+- [ ] D1 전면 전환: 인증·세션·친구·대화·메시지의 요청별 D1 조회 (A-2) + 콜드스타트 통합 테스트 (§5.2)
+- [ ] 메시징 권한 검증: 양방향 차단·시스템메시지 위조 차단·미디어 URL 검증·통화 멤버십·D1 검색 (A-3/4/5/6/12/19)
+- [ ] 인메모리 저장소 0개 증명 (§5.1) — 영속성 대상 전역 Map/Set 제거, 소켓 등 휘발성만 유지
+- [ ] R2 첨부파일 전환 + 버킷 생성 (A-20/B-3) — 현재 D1 Base64
+- [ ] E2EE 전면 연결 또는 허위 배지 제거 (A-24)
+- [ ] WebRTC 누수 수정·MessengerView 분리·모바일 재연결/델타 (A-14/I-4/A-23)
+- [ ] 보안 헤더(CSP/HSTS/nosniff/DENY) + refresh httpOnly 쿠키 (I-2/I-3)
+- [ ] 푸시(FCM/APNs)·PG·SMS 실제 연동 — 현재 전부 fail-closed 501/503
+- [ ] 실기기 검증 (에뮬레이터 터치 주입 불가 상태)
+
+## 3. 판정
+
+- **판정: NO-GO (조건부)** — B1까지의 보안 배치는 완료·검증됐으나, §2 체크리스트가 끝나기 전에는 상용 출시 불가.
+- **다음 단계**: B2 메시징 권한 검증 → B3 D1 전면 전환 → B4 Phase 2 클라이언트/R2 순으로 진행.
+- 배포는 main 푸시 시 자동 반영되며, 프로덕션 자격증명은 절대 생성하지 않는다 (데모/테스트 비밀번호만 사용).

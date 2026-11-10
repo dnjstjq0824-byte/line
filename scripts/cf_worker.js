@@ -113,7 +113,8 @@ function uid() { return crypto.randomUUID(); }
 // per-isolate cache; every read path re-hydrates from D1 first.
 // Raw access tokens are never stored: only their SHA-256 digest.
 // ======================================================================
-const SESSION_TTL_MS = 86400 * 1000;
+const SESSION_TTL_MS = 15 * 60 * 1000; // A-15: access tokens live 15 minutes.
+const REFRESH_TTL_MS = 30 * 86400 * 1000; // Refresh tokens live 30 days, single-use (rotation).
 const LUNO_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS luno_sessions (
     token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT,
@@ -768,13 +769,15 @@ async function createSession(user, request) {
   const info = clientInfo(request);
   sessions.set(token, { user_id: user.id, role: user.role, device_id: sessionId, created_at: created, device_name: info.device_name, platform: info.platform, ip: info.ip });
   const db = dbOf();
+  let refreshToken = null;
   if (db) {
     await ensureSchema();
     await db.prepare('INSERT INTO luno_sessions (token_hash, session_id, user_id, role, device_name, platform, ip, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(await sha256Hex(token), sessionId, user.id, user.role || 'user', info.device_name, info.platform, info.ip, created, created).run();
+    refreshToken = await issueRefreshToken(user.id, sessionId);
   }
   await recordLoginEvent(user, sessionId, info);
-  return { token, deviceId: sessionId };
+  return { token, deviceId: sessionId, refreshToken };
 }
 async function findSessionById(sid) {
   const db = dbOf();
@@ -791,18 +794,142 @@ async function revokeSessionById(sid, by) {
   if (db) {
     await ensureSchema();
     await db.prepare('UPDATE luno_sessions SET revoked_at = ?, revoked_by = ? WHERE session_id = ? AND revoked_at IS NULL').bind(now(), by, sid).run();
+    await revokeRefreshForSession(sid);
   }
   for (const [tok, s] of Array.from(sessions)) if (s.device_id === sid) { sessions.delete(tok); revokedTokens.add(tok); }
+}
+// ---------- Refresh rotation (A-15) ----------
+async function issueRefreshToken(userId, sessionId) {
+  const db = dbOf();
+  if (!db) return null;
+  const refresh = `cf-refresh-${crypto.randomUUID()}`;
+  await ensureSchema();
+  await db.prepare('INSERT INTO refresh_tokens (token_hash, user_id, device_id, expires_at, revoked, created_at) VALUES (?, ?, ?, ?, 0, ?)')
+    .bind(await sha256Hex(refresh), userId, sessionId, Date.now() + REFRESH_TTL_MS, Date.now()).run();
+  return refresh;
+}
+async function revokeRefreshForSession(sessionId) {
+  const db = dbOf();
+  if (!db || !sessionId) return;
+  await ensureSchema();
+  await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE device_id = ? AND revoked = 0').bind(sessionId).run();
+}
+async function revokeAllRefresh(userId, exceptSessionId) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  if (exceptSessionId) {
+    await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ? AND device_id <> ? AND revoked = 0').bind(userId, exceptSessionId).run();
+  } else {
+    await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ? AND revoked = 0').bind(userId).run();
+  }
+}
+// ---------- Login throttle + rate limits (A-8, D1-backed) ----------
+const LOGIN_LOCKOUT_THRESHOLD = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const RATE_WINDOW_MS = 60 * 1000;
+function throttleKeys(identifier, ip) {
+  const keys = [];
+  if (identifier) keys.push('acct:' + identifier);
+  if (ip) keys.push('ip:' + ip);
+  return keys;
+}
+async function loginThrottleBlocked(identifier, ip) {
+  const db = dbOf();
+  if (!db) return false;
+  await ensureSchema();
+  const since = Date.now() - LOGIN_LOCKOUT_MS;
+  for (const key of throttleKeys(identifier, ip)) {
+    const row = await db.prepare('SELECT COUNT(*) AS n FROM login_attempts WHERE key = ? AND success = 0 AND created_at >= ?').bind(key, since).first();
+    if (Number(row?.n || 0) >= LOGIN_LOCKOUT_THRESHOLD) return true;
+  }
+  return false;
+}
+async function recordLoginFailure(identifier, ip) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  const at = Date.now();
+  for (const key of throttleKeys(identifier, ip)) {
+    await db.prepare('INSERT INTO login_attempts (key, success, created_at) VALUES (?, 0, ?)').bind(key, at).run();
+  }
+}
+async function clearLoginFailures(identifier, ip) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  for (const key of throttleKeys(identifier, ip)) {
+    await db.prepare('DELETE FROM login_attempts WHERE key = ?').bind(key).run();
+  }
+}
+async function rateLimit(key, limit) {
+  const db = dbOf();
+  if (!db) return true; // single-node dev without D1: nothing to coordinate.
+  await ensureSchema();
+  const windowStart = Math.floor(Date.now() / RATE_WINDOW_MS);
+  const row = await db.prepare('SELECT count FROM rate_limits WHERE key = ? AND window_start = ?').bind(key, windowStart).first();
+  if (row && Number(row.count) >= limit) return false;
+  await db.prepare('INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(key, window_start) DO UPDATE SET count = count + 1').bind(key, windowStart).run();
+  return true;
 }
 async function revokeOtherSessions(userId, keepSid, by) {
   const db = dbOf();
   if (db) {
     await ensureSchema();
     await db.prepare('UPDATE luno_sessions SET revoked_at = ?, revoked_by = ? WHERE user_id = ? AND session_id <> ? AND revoked_at IS NULL').bind(now(), by, userId, keepSid || '').run();
+    await revokeAllRefresh(userId, keepSid || null);
   }
   for (const [tok, s] of Array.from(sessions)) {
     if (s.user_id === userId && s.device_id !== keepSid) { sessions.delete(tok); revokedTokens.add(tok); }
   }
+}
+async function d1Batch(db, stmts) {
+  if (typeof db.batch === 'function') {
+    await db.batch(stmts.map(([sql, ...params]) => db.prepare(sql).bind(...params)));
+    return;
+  }
+  for (const [sql, ...params] of stmts) await db.prepare(sql).bind(...params).run();
+}
+// A-10: one deletion path for DELETE /me and POST /me/delete-account.
+// The users row is retained in anonymized form (state='deleted', credentials
+// and profile PII wiped) so audit trails and unique constraints stay intact;
+// every other user-owned row is removed in a single batch.
+async function deleteAccountData(userId) {
+  const gone = usersById.get(userId);
+  if (gone) {
+    gone.state = 'deleted';
+    gone.display_name = '탈퇴한 사용자';
+    delete gone.pw_hash; delete gone.pw_salt; delete gone.pw_iter; delete gone.legacy_plain;
+    gone.bio = ''; gone.status_message = ''; gone.avatar_url = ''; gone.phone = ''; gone.birthday = '';
+  }
+  for (const [email, u] of Array.from(users)) if (u.id === userId) users.delete(email);
+  for (const [tok, sess] of Array.from(sessions)) {
+    if (sess.user_id === userId) { sessions.delete(tok); revokedTokens.add(tok); }
+  }
+  for (const key of Array.from(friendships.keys())) {
+    if (key.startsWith(userId + ':') || key.endsWith(':' + userId)) friendships.delete(key);
+  }
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  const at = now();
+  await d1Batch(db, [
+    ["UPDATE users SET state = 'deleted', display_name = ?, password_hash = 'pbkdf2$deleted', bio = '', status_message = '', avatar_url = '', phone_number = '', birthday = '', updated_at = ? WHERE id = ?", '탈퇴한 사용자', at, userId],
+    ['DELETE FROM luno_sessions WHERE user_id = ?', userId],
+    ['DELETE FROM refresh_tokens WHERE user_id = ?', userId],
+    ['DELETE FROM friends WHERE user_id = ? OR friend_id = ?', userId, userId],
+    ['DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?', userId, userId],
+    ['DELETE FROM push_tokens WHERE user_id = ?', userId],
+    ['DELETE FROM e2ee_keys WHERE user_id = ?', userId],
+    ['DELETE FROM luno_messages WHERE sender_id = ?', userId],
+    ['DELETE FROM luno_attachments WHERE owner_id = ?', userId],
+    ['DELETE FROM luno_read_cursors WHERE user_id = ?', userId],
+    ['DELETE FROM luno_ws_tickets WHERE user_id = ?', userId],
+    ['DELETE FROM conversation_notes WHERE author_id = ?', userId],
+    ['DELETE FROM event_rsvps WHERE user_id = ?', userId],
+    ['DELETE FROM poll_votes WHERE user_id = ?', userId],
+    ['DELETE FROM reactions WHERE user_id = ?', userId],
+  ]);
 }
 async function listSessionsFor(userId, currentSid) {
   const db = dbOf();
@@ -1107,11 +1234,11 @@ const NEWS_SAMPLE = [
 // Stored form: pbkdf2$<iterations>$<salt>$<hash>. The older pbkdf2$<salt>$<hash>
 // form used 1,000 iterations and is upgraded on the next successful login.
 const PBKDF2_LEGACY_ITERATIONS = 1000;
-const PBKDF2_DEFAULT_ITERATIONS = 100000; // Workers Web Crypto refuses more than 100,000.
+const PBKDF2_DEFAULT_ITERATIONS = 310000; // A-15: matches the privacy policy; verified feasible on workerd.
 const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK', 'LunoAdmin#2026!', 'LunoUser#2026!', 'Alice#Rotated$48wT', 'Bob#Rotated$31qR']);
 function pbkdf2Iterations() {
   const configured = Number(CURRENT_ENV?.PBKDF2_ITERATIONS);
-  return Number.isInteger(configured) && configured >= 10000 && configured <= 100000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
+  return Number.isInteger(configured) && configured >= 10000 && configured <= 310000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
 }
 async function pbkdf2(password, saltHex, iterations = PBKDF2_LEGACY_ITERATIONS) {
   try {
@@ -2254,23 +2381,16 @@ async function extended(p, request, url, me, token) {
       return json({ ...publicUser(me), email: me.email, role: me.role });
     }
     if (method === 'DELETE') {
-      // Parity with Go deleteAccount: password confirmation, soft-delete,
-      // every session revoked. Login already rejects state='deleted'.
+      // A-10 canonical route: password confirmation, then the shared
+      // deleteAccountData() wipe. POST /me/delete-account is a
+      // compatibility alias into the same path.
       const b = await readJson(request);
       if (!b.password) return json({ error: 'password required for account deletion' }, 400);
       if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
       if (['user@luno.local'].includes((me.email || '').toLowerCase())) {
         return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
       }
-      me.state = 'deleted';
-      if (dbOf()) {
-        await ensureSchema();
-        const cols = await dbOf().prepare('PRAGMA table_info(users)').all();
-        if (!(cols.results || []).some((c) => c.name === 'state')) {
-          await dbOf().prepare("ALTER TABLE users ADD COLUMN state TEXT DEFAULT 'active'").run();
-        }
-        await dbOf().prepare('UPDATE users SET state = ?, updated_at = ? WHERE id = ?').bind('deleted', now(), myId).run();
-      }
+      await deleteAccountData(myId);
       await revokeOtherSessions(myId, '', myId);
       await persistAudit(myId, 'account.delete', myId, {});
       return json({ status: 'account_deleted' });
@@ -2342,6 +2462,7 @@ async function extended(p, request, url, me, token) {
       return json({ friends: list });
     }
     if (method === 'POST') {
+      if (!await rateLimit('rl:friend:' + myId, 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
       const b = await readJson(request);
       let target = null;
       if (b.friend_id || b.target_user_id) target = usersById.get(b.friend_id || b.target_user_id);
@@ -2568,6 +2689,7 @@ async function extended(p, request, url, me, token) {
       return json({ messages: list.slice(-limit).map(x => decorateMessage(x, myId, cid)), has_more: list.length > limit });
     }
     if (method === 'POST') {
+      if (!await rateLimit('rl:msg:' + myId, 300)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
       const b = await readJson(request);
       const kind = b.kind || 'text';
       await hydrateConversation(cid);
@@ -3521,9 +3643,15 @@ async function extended(p, request, url, me, token) {
     });
   }
   if (p === 'me/delete-account' && method === 'POST') {
-    me.state = 'deleted';
-    me.display_name = '탈퇴한 사용자';
+    const b = await readJson(request);
+    if (!b.password) return json({ error: 'password required for account deletion' }, 400);
+    if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
+    if (['user@luno.local'].includes((me.email || '').toLowerCase())) {
+      return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
+    }
+    await deleteAccountData(myId);
     await revokeOtherSessions(myId, '', myId);
+    await persistAudit(myId, 'account.delete', myId, {});
     return json({ status: 'account_deleted', message: '계정이 영구 삭제 처리되었습니다.' });
   }
 
@@ -3610,7 +3738,6 @@ function boot(env) {
   }
   return booted;
 }
-const loginFailures = new Map();
 
 const workerCore = {
   async fetch(request, env, ctx) {
@@ -3808,6 +3935,7 @@ const workerCore = {
 
       // 1. Auth: Register
       if (p === 'auth/register' && request.method === 'POST') {
+        if (!await rateLimit('rl:register:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
         const email = (body.email || '').toLowerCase().trim();
         if (!email || !body.password) return json({ error: 'invalid email or password' }, 400);
@@ -3887,15 +4015,15 @@ const workerCore = {
             challengeB64: challenge, body, cred,
           });
           await pkUpdateCounter(userId, cred.credId, counter);
-          const { token, deviceId } = await createSession(user, request);
+          const { token: ptoken, deviceId: pdevice, refreshToken: pre } = await createSession(user, request);
           return json({
-            access_token: token,
-            refresh_token: `cf-refresh-${crypto.randomUUID()}`,
+            access_token: ptoken,
+            ...(pre ? { refresh_token: pre } : {}),
             token_type: 'Bearer',
-            expires_in: 86400,
+            expires_in: 900,
             user_id: user.id,
             role: user.role,
-            device_id: deviceId,
+            device_id: pdevice,
           });
         } catch (e) {
           return json({ error: 'invalid credentials' }, 401);
@@ -3905,30 +4033,89 @@ const workerCore = {
       if (p === 'auth/login' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
         const identifier = (body.email || body.email_or_phone || body.username || '').toLowerCase().trim();
+        const loginIp = request.headers.get('CF-Connecting-IP') || '';
+        if (!await rateLimit('rl:auth:' + (loginIp || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        if (await loginThrottleBlocked(identifier, loginIp)) return json({ error: 'account temporarily locked after repeated failures', code: 'LOGIN_LOCKED' }, 429, { 'Retry-After': '900' });
         const user = users.get(identifier) || Array.from(users.values()).find(u =>
           (u.email && u.email.toLowerCase() === identifier) ||
           (u.handle && u.handle.toLowerCase() === identifier) ||
           (u.phone && u.phone === identifier)
         );
         if (!user || user.state === 'suspended' || user.state === 'deleted') {
+          await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
         if (REVOKED_LEGACY_PASSWORDS.has(body.password)) {
+          await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
         const valid = await checkPassword(user, body.password);
         if (!valid) {
+          await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
-        const { token, deviceId } = await createSession(user, request);
+        await clearLoginFailures(identifier, loginIp);
+        const { token, deviceId, refreshToken } = await createSession(user, request);
         return json({
           access_token: token,
-          refresh_token: `cf-refresh-${crypto.randomUUID()}`,
+          ...(refreshToken ? { refresh_token: refreshToken } : {}),
           token_type: 'Bearer',
-          expires_in: 86400,
+          expires_in: 900,
           user_id: user.id,
           role: user.role,
           device_id: deviceId
+        });
+      }
+      // 2b. Auth: Refresh rotation (A-15). Single-use refresh tokens: each
+      // successful call burns the presented token and mints a fresh pair on
+      // the same session. Presenting an already-rotated token signals theft:
+      // the whole grant (all sessions + refresh tokens) is revoked.
+      if (p === 'auth/refresh' && request.method === 'POST') {
+        if (!await rateLimit('rl:refresh:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        const rbody = await request.json().catch(() => ({}));
+        const presented = String(rbody.refresh_token || '');
+        const rdb = dbOf();
+        if (!rdb) return json({ error: 'token refresh requires a configured database' }, 501);
+        if (!presented.startsWith('cf-refresh-')) return json({ error: 'invalid credentials' }, 401);
+        await ensureSchema();
+        const rhash = await sha256Hex(presented);
+        const rrow = await rdb.prepare('SELECT token_hash, user_id, device_id, expires_at, revoked FROM refresh_tokens WHERE token_hash = ?').bind(rhash).first();
+        if (!rrow) return json({ error: 'invalid credentials' }, 401);
+        if (rrow.revoked) {
+          await revokeAllRefresh(rrow.user_id, null);
+          await revokeOtherSessions(rrow.user_id, '', rrow.user_id);
+          await persistAudit(rrow.user_id, 'refresh.reuse_detected', rrow.device_id || '', {});
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        if (Number(rrow.expires_at) <= Date.now()) {
+          await rdb.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?').bind(rhash).run();
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        const srow = rrow.device_id ? await rdb.prepare('SELECT session_id, revoked_at FROM luno_sessions WHERE session_id = ?').bind(rrow.device_id).first() : null;
+        if (!srow || srow.revoked_at) {
+          await rdb.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?').bind(rhash).run();
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        const ruser = usersById.get(rrow.user_id) || await loadUserFromD1(rrow.user_id);
+        if (!ruser || ruser.state === 'suspended' || ruser.state === 'deleted') return json({ error: 'invalid credentials' }, 401);
+        const rcreated = now();
+        const newAccess = `cf-token-${ruser.id}.${crypto.randomUUID()}`;
+        await rdb.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?').bind(rhash).run();
+        const newRefresh = await issueRefreshToken(ruser.id, rrow.device_id);
+        await rdb.prepare('UPDATE luno_sessions SET token_hash = ?, created_at = ?, last_seen_at = ? WHERE session_id = ? AND revoked_at IS NULL')
+          .bind(await sha256Hex(newAccess), rcreated, rcreated, rrow.device_id).run();
+        for (const [tok, sess] of Array.from(sessions)) {
+          if (sess.device_id === rrow.device_id) { sessions.delete(tok); revokedTokens.add(tok); }
+        }
+        sessions.set(newAccess, { user_id: ruser.id, role: ruser.role, device_id: rrow.device_id, created_at: rcreated });
+        return json({
+          access_token: newAccess,
+          refresh_token: newRefresh,
+          token_type: 'Bearer',
+          expires_in: 900,
+          user_id: ruser.id,
+          role: ruser.role,
+          device_id: rrow.device_id
         });
       }
 
