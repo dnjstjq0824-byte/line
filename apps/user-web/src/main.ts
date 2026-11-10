@@ -9,5 +9,6 @@ import './styles/open-messenger-tokens.css'
 import '../../shared/design-v2.css'
 import '../../shared/design-v3.css'
 import './styles/luno-v2.css'
+import './styles/design-tokens.css'
 
 createApp(App).use(router).mount('#app')

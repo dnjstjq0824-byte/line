@@ -1,0 +1,108 @@
+/* ==========================================================================
+   LUNO BRAND DESIGN TOKENS — mandatory spec (§7 directive).
+   Every component must reference var(--*) tokens only; no hardcoded colors.
+   Imported LAST in main.ts so these values win on name collisions.
+   ========================================================================== */
+:root,
+[data-theme="light"] {
+  /* Brand & Accent (LUNO Royal Blue) */
+  --luno-primary: #2563EB;
+  --luno-primary-hover: #1D4ED8;
+  --luno-primary-active: #1E40AF;
+  --luno-primary-soft: #EFF6FF;
+  --luno-unread-accent: #F59E0B; /* 읽음 카운트 '1' 전용 고시인성 앰버 */
+
+  /* Backgrounds & Surfaces */
+  --bg-app: #F8FAFC;             /* 전체 앱 배경 */
+  --bg-rail: #0F172A;            /* 좌측 글로벌 네비게이션 레일 (고정 다크 톤) */
+  --bg-panel: #FFFFFF;           /* 대화방/친구 리스트 패널 */
+  --bg-chat-room: #F1F5F9;       /* 대화방 메시지 스트림 배경 */
+  --surface-elevated: #FFFFFF;   /* 모달, 드로어, 바텀시트, 헤더 */
+  --surface-hover: #F1F5F9;      /* 리스트 아이템 호버 */
+  --surface-active: #E2E8F0;     /* 현재 선택된 대화방 */
+  --surface-input: #F8FAFC;      /* 메시지 입력창 배경 */
+
+  /* Chat Bubbles */
+  --bubble-mine-bg: #2563EB;
+  --bubble-mine-text: #FFFFFF;
+  --bubble-theirs-bg: #FFFFFF;
+  --bubble-theirs-text: #0F172A;
+  --bubble-system-bg: rgba(15, 23, 42, 0.06);
+  --bubble-system-text: #475569;
+
+  /* Typography Colors */
+  --text-primary: #0F172A;       /* 본문, 이름, 대화방 타이틀 */
+  --text-secondary: #475569;     /* 최근 메시지 미리보기, 부가 설명 */
+  --text-muted: #94A3B8;         /* 타임스탬프, 비활성 텍스트 */
+  --text-on-brand: #FFFFFF;
+
+  /* Semantic Status */
+  --status-online: #10B981;      /* 접속 중 (에메랄드 그린) */
+  --status-busy: #EF4444;        /* 통화 중 / 방해금지 / 오류 / 미읽음 배지 */
+  --status-away: #F59E0B;        /* 자리비움 / 재연결 중 */
+
+  /* Borders & Dividers */
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --border-focus: #2563EB;
+
+  /* Radii & Shadows */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-bubble: 18px;
+  --radius-bubble-tail: 4px;     /* 연속 메시지 및 말풍선 끝단 포인트 */
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.14);
+
+  /* Layout Fixed Dimensions */
+  --nav-rail-width: 64px;
+  --list-pane-width: 340px;
+  --drawer-width: 320px;
+  --header-height: 60px;
+  --bottom-nav-height: 56px;
+}
+
+[data-theme="dark"] {
+  /* Brand & Accent */
+  --luno-primary: #3B82F6;
+  --luno-primary-hover: #60A5FA;
+  --luno-primary-active: #2563EB;
+  --luno-primary-soft: rgba(59, 130, 246, 0.15);
+  --luno-unread-accent: #FBBF24;
+
+  /* Backgrounds & Surfaces (OLED 친화적 딥 슬레이트) */
+  --bg-app: #090D16;
+  --bg-rail: #05080F;
+  --bg-panel: #0F172A;
+  --bg-chat-room: #090D16;
+  --surface-elevated: #1E293B;
+  --surface-hover: #1E293B;
+  --surface-active: #334155;
+  --surface-input: #1E293B;
+
+  /* Chat Bubbles */
+  --bubble-mine-bg: #2563EB;
+  --bubble-mine-text: #FFFFFF;
+  --bubble-theirs-bg: #1E293B;
+  --bubble-theirs-text: #F8FAFC;
+  --bubble-system-bg: rgba(255, 255, 255, 0.08);
+  --bubble-system-text: #94A3B8;
+
+  /* Typography Colors */
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-on-brand: #FFFFFF;
+
+  /* Borders & Dividers */
+  --border-subtle: #1E293B;
+  --border-strong: #334155;
+  --border-focus: #3B82F6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.65);
+}
