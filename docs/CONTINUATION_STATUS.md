@@ -516,3 +516,11 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   key (1 fail), restored byte-identical (sha256 match).
 - Verification: flutter 95/95 + analyze clean, node 140/140,
   pre_deploy_gate 6/6. file_picker added (pubspec.lock updated).
+## Continuation: 2026-11-10 — APK Build 4 (2.0.0+4)
+
+- Release-signed per-ABI splits from P1 source (same LUNO cert as
+  Build 3, versionCode 2004, apksigner + aapt verified).
+  arm64 22,682,768 B / arm32 20,535,038 B / x86_64 24,288,401 B.
+- download.html refreshed (Build 4, sizes, SHA-256). Push to main
+  triggers the Cloudflare deploy workflow; live APK bytes verified
+  after deploy.
