@@ -92,9 +92,13 @@ test('metrics requires admin and reports real D1 counts', async () => {
   assert.equal(noDb.status, 503);
   const raw = new DatabaseSync(':memory:');
   const fsMod = await import('node:fs');
+  const cryptoMod = await import('node:crypto');
   raw.exec(fsMod.readFileSync(new URL('./schema_d1.sql', import.meta.url), 'utf8'));
   raw.exec(fsMod.readFileSync(new URL('./migrations/20261105_explicit_user_roles.sql', import.meta.url), 'utf8'));
-  raw.exec(`INSERT OR IGNORE INTO users (id, email, handle, password_hash, display_name, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000001', 'admin@luno.local', 'admin', 'seeded-memory', 'System Administrator', datetime('now'), datetime('now'))`);
+  // D1 is authoritative at login (A-2): the fixture row carries a real digest.
+  const salt = cryptoMod.randomBytes(16).toString('hex');
+  const dk = cryptoMod.pbkdf2Sync('S2#Admin2026!', Buffer.from(salt, 'hex'), 310000, 32, 'sha256').toString('hex');
+  raw.exec(`INSERT OR IGNORE INTO users (id, email, handle, password_hash, display_name, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000001', 'admin@luno.local', 'admin', 'pbkdf2$310000$${salt}$${dk}', 'System Administrator', datetime('now'), datetime('now'))`);
   raw.exec(`INSERT OR REPLACE INTO luno_user_roles (user_id, role, approved_by, approved_at) VALUES ('00000000-0000-0000-0000-000000000001', 'admin', 's2-test', datetime('now'))`);
   const db = {
     prepare(sql) {

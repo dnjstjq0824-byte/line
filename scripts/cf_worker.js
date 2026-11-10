@@ -1727,6 +1727,27 @@ async function loadUserFromD1(id, knownRole) {
   usersById.set(u.id, u);
   return u;
 }
+// A-2: login-time D1 lookup by any identifier (email/handle/phone). The D1
+// row is authoritative: password changes, bans and deletions made on another
+// isolate are visible to this login. Returns null when D1 has no such user,
+// in which case the caller keeps its memory result (bootstrap seeds).
+async function loadUserFromD1ByLogin(identifier) {
+  const db = dbOf();
+  if (!db || !identifier) return null;
+  const row = await db.prepare('SELECT id FROM users WHERE email = ? OR LOWER(handle) = ? OR phone_number = ?').bind(identifier, identifier, identifier).first().catch(() => null);
+  if (!row) return null;
+  return loadUserFromD1(row.id, undefined);
+}
+// A-2: a ban is live in D1 (user_bans row, unexpired). expires_at = 0 means
+// an indefinite ban.
+async function isBanned(userId) {
+  const db = dbOf();
+  if (!db || !userId) return false;
+  const row = await db.prepare('SELECT expires_at FROM user_bans WHERE user_id = ?').bind(userId).first().catch(() => null);
+  if (!row) return false;
+  const exp = Number(row.expires_at || 0);
+  return exp === 0 || exp > Date.now();
+}
 // Privilege assignments are provisioned separately by an authorized operator.
 // Email, demo seed data and the role copied into an old session are not grants.
 const GRANTABLE_ROLES = ['user', 'admin', 'partner', 'developer', 'creator', 'ads'];
@@ -1786,7 +1807,19 @@ async function getAuthUser(request) {
   const userId = session.user_id;
   let user = usersById.get(userId) || Array.from(users.values()).find(u => u.id === userId) || null;
   if (!user) user = await loadUserFromD1(userId, db ? grantedRoleFromSession : undefined);
-  if (!user || user.state === 'suspended' || user.state === 'deleted') return null;
+  if (db) {
+    // A-2: account standing is re-read from D1 on every request, so a ban,
+    // suspension or deletion on another isolate takes effect immediately.
+    const standing = await db.prepare('SELECT state FROM users WHERE id = ?').bind(userId).first().catch(() => null);
+    const state = standing?.state || user?.state || 'active';
+    if (user) user.state = state;
+    if (!user || state === 'suspended' || state === 'deleted' || await isBanned(userId)) {
+      sessions.delete(token);
+      return null;
+    }
+  } else if (!user || user.state === 'suspended' || user.state === 'deleted') {
+    return null;
+  }
   if (db) user.role = grantedRoleFromSession;
   AUTH_CTX.set(request, { token, session_id: session.device_id });
   return user;
@@ -3484,7 +3517,19 @@ async function extended(p, request, url, me, token) {
       if (b.action === 'suspend') {
         target.state = 'suspended';
         await revokeOtherSessions(target.id, '', myId);
-      } else if (b.action === 'activate') target.state = 'active';
+        if (dbOf()) {
+          await ensureSchema();
+          await dbOf().prepare("UPDATE users SET state = 'suspended' WHERE id = ?").bind(target.id).run();
+          await dbOf().prepare('INSERT OR REPLACE INTO user_bans (user_id, reason, banned_by, expires_at, created_at) VALUES (?, ?, ?, 0, ?)').bind(target.id, clip(b.reason, 300), myId, now()).run();
+        }
+      } else if (b.action === 'activate') {
+        target.state = 'active';
+        if (dbOf()) {
+          await ensureSchema();
+          await dbOf().prepare("UPDATE users SET state = 'active' WHERE id = ?").bind(target.id).run();
+          await dbOf().prepare('DELETE FROM user_bans WHERE user_id = ?').bind(target.id).run();
+        }
+      }
       if (b.report_id) {
         const rep = adminReports.find(r => r.id === b.report_id);
         if (rep) rep.state = b.action === 'dismiss' ? 'dismissed' : 'resolved';
@@ -4129,12 +4174,24 @@ const workerCore = {
         const loginIp = request.headers.get('CF-Connecting-IP') || '';
         if (!await rateLimit('rl:auth:' + (loginIp || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         if (await loginThrottleBlocked(identifier, loginIp)) return json({ error: 'account temporarily locked after repeated failures', code: 'LOGIN_LOCKED' }, 429, { 'Retry-After': '900' });
-        const user = users.get(identifier) || Array.from(users.values()).find(u =>
+        let user = users.get(identifier) || Array.from(users.values()).find(u =>
           (u.email && u.email.toLowerCase() === identifier) ||
           (u.handle && u.handle.toLowerCase() === identifier) ||
           (u.phone && u.phone === identifier)
         );
+        // A-2: D1 is authoritative when present — a password change, ban or
+        // deletion on another isolate is visible to this login. Memory-only
+        // bootstrap seeds still authenticate via the lookup above.
+        if (dbOf()) {
+          await ensureSchema();
+          const fresh = await loadUserFromD1ByLogin(identifier);
+          if (fresh) user = fresh;
+        }
         if (!user || user.state === 'suspended' || user.state === 'deleted') {
+          await recordLoginFailure(identifier, loginIp);
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        if (dbOf() && await isBanned(user.id)) {
           await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
@@ -4899,8 +4956,21 @@ const workerCore = {
         const uid = body.subject_user_id || body.user_id;
         const target = Array.from(users.values()).find(u => u.id === uid);
         if (target) {
-          if (body.action === 'suspend') target.state = 'suspended';
-          else if (body.action === 'activate') target.state = 'active';
+          if (body.action === 'suspend') {
+            target.state = 'suspended';
+            if (dbOf()) {
+              await ensureSchema();
+              await dbOf().prepare("UPDATE users SET state = 'suspended' WHERE id = ?").bind(target.id).run();
+              await dbOf().prepare('INSERT OR REPLACE INTO user_bans (user_id, reason, banned_by, expires_at, created_at) VALUES (?, ?, ?, 0, ?)').bind(target.id, clip(body.reason, 300), authUser.id, now()).run();
+            }
+          } else if (body.action === 'activate') {
+            target.state = 'active';
+            if (dbOf()) {
+              await ensureSchema();
+              await dbOf().prepare("UPDATE users SET state = 'active' WHERE id = ?").bind(target.id).run();
+              await dbOf().prepare('DELETE FROM user_bans WHERE user_id = ?').bind(target.id).run();
+            }
+          }
         }
         if (body.report_id) {
           const rep = adminReports.find(r => r.id === body.report_id);
