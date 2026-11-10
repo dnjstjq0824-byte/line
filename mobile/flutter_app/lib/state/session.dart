@@ -55,6 +55,16 @@ List<dynamic> mergeDeltaMessages(List<dynamic> existing, List<dynamic> delta) {
 class SessionController extends ChangeNotifier {
   final Api api = Api();
 
+  SessionController() {
+    api.onTokensRefreshed = (access, refresh) async {
+      await storage.write(key: 'access_token', value: access);
+      if (refresh != null) {
+        await storage.write(key: 'refresh_token', value: refresh);
+      }
+    };
+    api.onRefreshFailed = () => logout();
+  }
+
   bool busy = false;
   bool registerMode = false;
   bool showStickerPicker = false;
@@ -163,6 +173,7 @@ class SessionController extends ChangeNotifier {
     final saved = await storage.read(key: 'access_token');
     if (saved == null) return;
     api.token = saved;
+    api.refreshToken = await storage.read(key: 'refresh_token');
     deviceId = await storage.read(key: 'device_id') ?? '';
     try {
       final me = await api.call('/api/v1/me');
@@ -178,7 +189,9 @@ class SessionController extends ChangeNotifier {
     } catch (_) {
       await storage.delete(key: 'access_token');
       await storage.delete(key: 'device_id');
+      await storage.delete(key: 'refresh_token');
       api.token = null;
+      api.refreshToken = null;
       deviceId = '';
     }
   }
@@ -212,6 +225,10 @@ class SessionController extends ChangeNotifier {
         'device_name': 'LUNO Android Client',
       });
       api.token = result['access_token'];
+      api.refreshToken = result['refresh_token'] as String?;
+      if (api.refreshToken != null) {
+        await storage.write(key: 'refresh_token', value: api.refreshToken!);
+      }
       deviceId = result['device_id'] ?? '';
       await storage.write(key: 'access_token', value: api.token);
       await storage.write(key: 'device_id', value: deviceId);
@@ -1119,7 +1136,9 @@ class SessionController extends ChangeNotifier {
     await socket?.sink.close();
     await storage.delete(key: 'access_token');
     await storage.delete(key: 'device_id');
+      await storage.delete(key: 'refresh_token');
     api.token = null;
+      api.refreshToken = null;
     deviceId = '';
     selfId = '';
     chats = [];
