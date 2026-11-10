@@ -38,5 +38,9 @@
     // All other public hosts still fail closed. Demo-account policy is unchanged.
     "STANDALONE_HOSTS": "luno-messenger.dnjstjqppk.workers.dev",
     "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,http://localhost:5173,http://localhost:8080"
+    // Item 1: set DURABLE_CONVERSATIONS to true here ONLY after
+    // scripts/migrations/20261105_durable_conversations.sql is applied to
+    // prod D1; without those tables every conversation read/write 500s.
+    // Pinned off by scripts/direct_chat.test.mjs until then.
   }
 }

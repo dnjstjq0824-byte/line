@@ -38,7 +38,7 @@
           @click="selectChat(c.id)"
         >
           <div class="avatar chat-avatar" :class="{ 'group-avatar': c.kind === 'group' }">
-            {{ c.title ? c.title.slice(0, 1) : 'L' }}
+            {{ initialOf(c.title, 'L') }}
           </div>
           <div class="list-item-content">
             <div class="chat-title-line">
@@ -72,6 +72,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import LunoIcons from './LunoIcons.vue'
+import { initialOf } from '../../../shared/avatar_initial'
 
 const props = {
   chats: { type: Array, default: () => [] },

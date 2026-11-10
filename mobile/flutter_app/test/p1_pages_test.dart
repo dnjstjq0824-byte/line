@@ -201,8 +201,11 @@ void main() {
     expect(find.text('새 라운지'), findsOneWidget);
   });
 
-  testWidgets('profile shows birthday and opens the edit dialog',
+  testWidgets('profile shows birthday row and opens the edit dialog',
       (WidgetTester tester) async {
+    // Item 12 redesign: the combined '생일 01-02' label and the single
+    // '프로필 편집' dialog are gone; each row edits in place and photos
+    // live in the photo sheet (see profile_page_test.dart).
     final session = SessionController()
       ..selfName = '나'
       ..selfHandle = 'me'
@@ -210,11 +213,13 @@ void main() {
     addTearDown(session.disposeAll);
     await tester.pumpWidget(_wrap(session, const ProfilePage()));
     await tester.pumpAndSettle();
-    expect(find.text('생일 01-02'), findsOneWidget);
-    await tester.tap(find.text('프로필 편집'));
+    expect(find.text('생일'), findsOneWidget);
+    expect(find.text('01-02'), findsOneWidget);
+    await tester.ensureVisible(find.text('01-02'));
     await tester.pumpAndSettle();
-    expect(find.text('이름 (필수)'), findsOneWidget);
-    expect(find.text('사진 바꾸기'), findsOneWidget);
+    await tester.tap(find.text('01-02'));
+    await tester.pumpAndSettle();
+    expect(find.text('저장'), findsOneWidget);
   });
 
   testWidgets('home friend rows star favorites and offer manage menu',

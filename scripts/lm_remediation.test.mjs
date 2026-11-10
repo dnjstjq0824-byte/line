@@ -98,11 +98,11 @@ test('LM-04 & A-06 & A-07: Badge Invariant and read-all idempotency', async () =
   const convRes = await api('conversations', 'GET', null, token);
   const { conversations } = await convRes.json();
 
-  // Dodo has badge_n, unread_count must be 0
+  // Item 9: N derives from unread — fresh Dodo shows N with one unread.
   const dodo = conversations.find(c => c.id.includes('conv-dodo'));
   assert.ok(dodo);
   assert.equal(dodo.badge_n, true);
-  assert.equal(dodo.unread_count, 0, 'Dodo with badge_n must not have numeric unread count');
+  assert.equal(dodo.unread_count, 1, 'Fresh Dodo carries one unread behind its N badge');
 
   // read-all
   const readAll1 = await api('conversations/read-all', 'POST', null, token);
@@ -113,6 +113,7 @@ test('LM-04 & A-06 & A-07: Badge Invariant and read-all idempotency', async () =
   for (const c of afterList) {
     assert.equal(c.unread_count, 0, `Conversation ${c.title} must have unread 0 after read-all`);
   }
+  assert.equal(afterList.find(x => x.id.includes('conv-dodo')).badge_n, false, 'N clears once read');
 
   // Idempotency: 2nd call must succeed cleanly
   const readAll2 = await api('conversations/read-all', 'POST', null, token);

@@ -434,11 +434,11 @@ func validBirthdayMMDD(s string) bool {
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 	uid := claims(r).Subject
 	_, _ = a.db.ExecContext(r.Context(), "INSERT INTO identity.user_settings(user_id) VALUES ($1) ON CONFLICT DO NOTHING", uid)
-	var byEmail, byPhone, receipts, allowReq bool
+	var byEmail, byPhone, receipts, allowReq, byID bool
 	var theme string
 	e := a.db.QueryRowContext(r.Context(),
-		"SELECT searchable_by_email,searchable_by_phone,show_read_receipts,allow_friend_requests,theme FROM identity.user_settings WHERE user_id=$1",
-		uid).Scan(&byEmail, &byPhone, &receipts, &allowReq, &theme)
+		"SELECT searchable_by_email,searchable_by_phone,show_read_receipts,allow_friend_requests,theme,searchable_by_id FROM identity.user_settings WHERE user_id=$1",
+		uid).Scan(&byEmail, &byPhone, &receipts, &allowReq, &theme, &byID)
 	if e != nil {
 		fail(w, 500, "settings unavailable")
 		return
@@ -449,6 +449,7 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 		"show_read_receipts":    receipts,
 		"allow_friend_requests": allowReq,
 		"theme":                 theme,
+		"searchable_by_id":      byID,
 	})
 }
 
@@ -459,6 +460,7 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) {
 		ShowReadReceipts    bool   `json:"show_read_receipts"`
 		AllowFriendRequests bool   `json:"allow_friend_requests"`
 		Theme               string `json:"theme"`
+		SearchableByID      *bool  `json:"searchable_by_id"`
 	}
 	if decode(r, &in) != nil {
 		fail(w, 400, "invalid settings")
@@ -468,11 +470,18 @@ func (a *App) updateSettings(w http.ResponseWriter, r *http.Request) {
 		in.Theme = "system"
 	}
 	uid := claims(r).Subject
+	byID := true
+	if in.SearchableByID != nil {
+		byID = *in.SearchableByID
+	} else {
+		_ = a.db.QueryRowContext(r.Context(),
+			"SELECT searchable_by_id FROM identity.user_settings WHERE user_id=$1", uid).Scan(&byID)
+	}
 	_, e := a.db.ExecContext(r.Context(),
-		`INSERT INTO identity.user_settings(user_id,searchable_by_email,searchable_by_phone,show_read_receipts,allow_friend_requests,theme,updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,now())
-		 ON CONFLICT(user_id) DO UPDATE SET searchable_by_email=$2,searchable_by_phone=$3,show_read_receipts=$4,allow_friend_requests=$5,theme=$6,updated_at=now()`,
-		uid, in.SearchableByEmail, in.SearchableByPhone, in.ShowReadReceipts, in.AllowFriendRequests, in.Theme)
+		`INSERT INTO identity.user_settings(user_id,searchable_by_email,searchable_by_phone,show_read_receipts,allow_friend_requests,theme,searchable_by_id,updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+		 ON CONFLICT(user_id) DO UPDATE SET searchable_by_email=$2,searchable_by_phone=$3,show_read_receipts=$4,allow_friend_requests=$5,theme=$6,searchable_by_id=$7,updated_at=now()`,
+		uid, in.SearchableByEmail, in.SearchableByPhone, in.ShowReadReceipts, in.AllowFriendRequests, in.Theme, byID)
 	if e != nil {
 		fail(w, 500, "settings update failed")
 		return

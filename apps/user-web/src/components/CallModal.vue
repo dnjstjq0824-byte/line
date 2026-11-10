@@ -5,12 +5,14 @@
 import { ref, type Ref } from 'vue'
 
 import { CALL_VIDEO_FILTERS } from '../../../shared/call-fx'
+import { initialOf } from '../../../shared/avatar_initial'
 import { currentLocale, t } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import type { ActiveCallState } from '../composables/useWebRTC'
 
 defineProps<{
   activeCall: ActiveCallState
+  callMediaIssue: boolean
   callDuration: number
   formatDuration: (sec: number) => string
   callRecording: boolean
@@ -44,8 +46,8 @@ const callSubtitles = ref(t('mvLiveCaptionsOn'))
     <div class="call-dialog-box">
       <template v-if="activeCall.kind === 'video'">
       <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
-        <video ref="remoteVideoRef" autoplay playsinline style="width:180px;height:130px;background:#0f172a;border-radius:12px;object-fit:cover"></video>
-        <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover" :style="{ filter: CALL_VIDEO_FILTERS[callVideoFilter] }"></video>
+        <video :ref="remoteVideoRef" autoplay playsinline style="width:180px;height:130px;background:#0f172a;border-radius:12px;object-fit:cover"></video>
+        <video :ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover" :style="{ filter: CALL_VIDEO_FILTERS[callVideoFilter] }"></video>
       </div>
       <div v-if="activeCall.kind === 'video'" class="call-filter-row" :title="t('callFilterTitle')">
         <button :class="{ active: callVideoFilter === 'none' }" @click="callVideoFilter = 'none'">{{ t('callFilterNone') }}</button>
@@ -55,7 +57,7 @@ const callSubtitles = ref(t('mvLiveCaptionsOn'))
       </div>
       </template>
       <div v-else class="call-avatar-pulse">
-        <div class="avatar-circle lg" style="background:#315BCD">{{ activeCall.title.slice(0, 1) }}</div>
+        <div class="avatar-circle lg" style="background:#315BCD">{{ initialOf(activeCall.title) }}</div>
       </div>
       <h3>{{ activeCall.title }}</h3>
       <p class="call-type-status">
@@ -64,6 +66,7 @@ const callSubtitles = ref(t('mvLiveCaptionsOn'))
         <span v-else-if="activeCall.state === 'connected'" class="timer-active">{{ formatDuration(callDuration) }}</span>
         <span v-if="callRecording" class="rec-indicator">🔴 {{ t('callRecording') }}</span>
       </p>
+      <p v-if="callMediaIssue" class="caption-notice">⚠️ {{ t('callMediaFailed') }}</p>
 
       <!-- AI Live Translation Captions UX (Article 10.2) -->
       <div class="live-captions-control">

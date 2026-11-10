@@ -550,6 +550,17 @@ import { activeTheme, darkMode, error, note } from './store/session'
   gap: 6px;
   width: 100%;
 }
+/* Item 11: 20 rail buttons overflow short viewports — the nav section scrolls
+   internally while the bottom actions stay pinned. */
+.pc-rail-top {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.pc-rail-bottom {
+  flex-shrink: 0;
+}
 .pc-user-avatar-trigger {
   position: relative;
   cursor: pointer;
@@ -1202,12 +1213,15 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .profile-preview-subactions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   margin-top: 16px;
 }
 
 .btn-subaction-pill {
   padding: 6px 12px;
+  white-space: nowrap;
   background: #f1f5f9;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -1249,7 +1263,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .ecosystem-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 10px;
   max-height: 480px;
   overflow-y: auto;
@@ -1295,12 +1309,12 @@ import { activeTheme, darkMode, error, note } from './store/session'
   min-width: 0;
 }
 .svc-names strong {
-  display: block;
+  display: -webkit-box;
   font-size: 13px;
   color: var(--om-text, #111827);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 .svc-ko {
   font-size: 10px;
@@ -1313,6 +1327,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
   padding: 2px 6px;
   border-radius: 10px;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .svc-status-pill.active { background: #dcfce7; color: #15803d; }
 .svc-status-pill.beta { background: #e0f2fe; color: #0369a1; }
@@ -1430,6 +1448,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .e2ee-tag { font-size: 10px; color: #16a34a; font-weight: 600; display: block; }
 .chat-topbar-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
 }
 .btn-chat-action {
@@ -1481,6 +1500,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .pc-msg-bubble-group {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 .pc-msg-row.mine .pc-msg-bubble-group {
   align-items: flex-end;
@@ -1587,6 +1607,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   border-top: 1px solid #e9edf1;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 .pc-input-toolbar {
   height: 36px;
@@ -2027,11 +2048,15 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .ai-translate-tool-pill {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   background: #f1f5f9;
   border-radius: 20px;
   padding: 2px 4px 2px 8px;
   gap: 6px;
   border: 1px solid #e2e8f0;
+}
+.ai-translate-tool-pill span {
+  white-space: nowrap;
 }
 .btn-translate-switch {
   display: flex;
@@ -2251,12 +2276,18 @@ import { activeTheme, darkMode, error, note } from './store/session'
   }
   .pc-rail-top {
     flex-direction: row;
-    justify-content: space-around;
+    justify-content: flex-start;
     width: 100%;
     gap: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: none;
   }
   .pc-rail-bottom {
     display: none;
+  }
+  .pc-rail-top .pc-rail-btn {
+    flex-shrink: 0;
   }
   .pc-side-pane {
     width: 100vw;
@@ -2940,7 +2971,12 @@ import { activeTheme, darkMode, error, note } from './store/session'
     gap: 8px;
     align-items: center;
     width: auto;
-    max-width: 90vw;
+    max-width: 94vw;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .luno-mobile-floating-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .mobile-nav-item {
@@ -2950,12 +2986,13 @@ import { activeTheme, darkMode, error, note } from './store/session'
     justify-content: center;
     background: transparent;
     border: none;
-    padding: 6px 18px;
+    padding: 6px 12px;
     border-radius: 28px;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     color: #475569;
+    flex-shrink: 0;
   }
 
   .mobile-nav-item.active {
@@ -3114,6 +3151,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   color: #64748b;
 }
 .bubble-text-content { word-break: break-word; line-height: 1.45; }
+.bubble-unsent { color: #94a3b8; font-style: italic; font-size: 12px; line-height: 1.45; }
 .profile-preview-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; margin-top: 8px; }
 .pc-modal-backdrop { position: fixed; inset: 0; z-index: 3000; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; }
 .pc-modal-card { background: #ffffff; border-radius: 14px; }
@@ -3201,7 +3239,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .bubble-reactions-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .reaction-chip { font-size: 11px; background: rgba(255,255,255,0.85); color: #0f172a; padding: 1px 6px; border-radius: 10px; border: 1px solid #cbd5e1; cursor: pointer; }
 .reply-composer-bar { display: flex; justify-content: space-between; align-items: center; padding: 6px 14px; background: #eff6ff; border-bottom: 1px solid #bfdbfe; font-size: 12px; color: #1e3a8a; }
-.sticker-picker-popover { background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 10px 14px; max-height: 210px; overflow-y: auto; }
+.sticker-picker-popover { background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 10px 14px; max-height: 260px; overflow-y: auto; position: absolute; bottom: 100%; left: 0; right: 0; z-index: 60; box-shadow: 0 -8px 24px rgba(0,0,0,0.12); }
 .sticker-cat-tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .sticker-cat-tabs button { background: #f1f5f9; border: none; padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
 .sticker-cat-tabs button.active { background: #2563eb; color: #ffffff; }

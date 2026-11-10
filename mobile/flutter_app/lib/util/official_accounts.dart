@@ -14,7 +14,7 @@ Map<String, dynamic> officialAccountCardOf(Map<dynamic, dynamic> o) {
     'id': '${o['id'] ?? ''}',
     'display_name': name,
     'status_message': '${o['status_message'] ?? o['description'] ?? ''}',
-    'badge': name.isEmpty ? 'L' : name.substring(0, 1),
+    'badge': name.isEmpty ? 'L' : String.fromCharCode(name.runes.first),
     'handle': '${o['handle'] ?? ''}',
     'color': '${o['color'] ?? ''}',
     'followed': o['followed'] == true,

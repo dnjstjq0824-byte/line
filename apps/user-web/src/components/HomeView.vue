@@ -12,7 +12,7 @@
       <div class="profile-section">
         <div class="profile-header">
           <div class="avatar avatar-lg">
-            {{ currentUser?.display_name?.slice(0, 1) || 'L' }}
+            {{ initialOf(currentUser?.display_name, 'L') }}
           </div>
           <div class="profile-info">
             <h1 class="profile-name">{{ currentUser?.display_name || '내 프로필' }}</h1>
@@ -49,7 +49,7 @@
         <div class="friends-list">
           <div v-for="f in favoriteFriends" :key="f.id" class="list-item friend-item" @click="openChat(f.id)">
             <div class="avatar">
-              {{ f.display_name?.slice(0, 1) || 'F' }}
+              {{ initialOf(f.display_name, 'F') }}
             </div>
             <div class="list-item-content">
               <div class="list-item-title">{{ f.display_name }}</div>
@@ -72,6 +72,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import LunoIcons from './LunoIcons.vue'
+import { initialOf } from '../../../shared/avatar_initial'
 
 const props = defineProps({
   currentUser: { type: Object, default: null },

@@ -77,6 +77,7 @@ export type Message = {
   sequence: number
   kind: string
   body: string
+  sender_name?: string
   reply_to?: string
   metadata?: Record<string, unknown>
   created_at: string

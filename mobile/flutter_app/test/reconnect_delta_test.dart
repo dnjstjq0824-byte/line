@@ -32,6 +32,40 @@ void main() {
       final merged = mergeDeltaMessages(existing, delta);
       expect(merged.map((m) => m['id']).toList(), ['a', 'b', 'c']);
     });
+
+    test('drops unsent rows from existing and delta', () {
+      final existing = [
+        {'id': 'a', 'sequence': 1},
+        {'id': 'gone', 'sequence': 2, 'unsent': true, 'body': ''},
+      ];
+      final delta = [
+        {'id': 'c', 'sequence': 3},
+        {'id': 'tomb', 'sequence': 4, 'unsent': true, 'body': ''},
+      ];
+      final merged = mergeDeltaMessages(existing, delta);
+      expect(merged.map((m) => m['id']).toList(), ['a', 'c']);
+    });
+
+    test('unsent delta removes the matching existing message', () {
+      final existing = [
+        {'id': 'a', 'sequence': 1, 'body': 'hi'},
+      ];
+      final delta = [
+        {'id': 'a', 'sequence': 1, 'unsent': true, 'body': ''},
+      ];
+      expect(mergeDeltaMessages(existing, delta), isEmpty);
+    });
+  });
+
+  group('withoutUnsent', () {
+    test('keeps every message without the recall flag', () {
+      final rows = [
+        {'id': 'a', 'body': 'hi'},
+        {'id': 'b', 'unsent': false, 'body': 'yo'},
+        {'id': 'c', 'unsent': true, 'body': ''},
+      ];
+      expect(withoutUnsent(rows).map((m) => m['id']).toList(), ['a', 'b']);
+    });
   });
 
   group('applyMessageCreated', () {

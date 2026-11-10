@@ -10,6 +10,10 @@ import MessagePane from '../components/MessagePane.vue'
 import SettingsModal from '../components/SettingsModal.vue'
 import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
 import { parseStorePacks } from '../../../shared/shop'
+import { findDirectChatId } from '../../../shared/direct_chat'
+import { makeFriendQrSvg } from '../../../shared/friend_qr'
+import { listRowTime } from '../../../shared/list_time'
+import { initialOf } from '../../../shared/avatar_initial'
 import { playSendSound } from '../sound-effects'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -156,6 +160,7 @@ export interface NewsArticle {
 }
 
 const showQrModal = ref(false)
+const myQrSvg = computed(() => makeFriendQrSvg(currentUser.value?.handle || ''))
 
 // News categories use stable IDs; labels resolve via t() (server sample feed still carries ko labels).
 const NEWS_CATEGORY_IDS = ['all', 'popular', 'economy', 'science', 'global', 'ent', 'bookmark']
@@ -650,7 +655,7 @@ function openMessageContextMenu(e: MouseEvent, msg: Message) {
     }
   ]
 
-  if (currentUser.value && msg.sender_id === currentUser.value.id) {
+  if (currentUser.value && msg.sender_id === currentUser.value.id && !msg.unsent) {
     items.push({
       label: t('mvCtxUnsend'),
       danger: true,
@@ -879,6 +884,13 @@ function formatTime(iso: string) {
   return formatLocalizedTime(iso, currentLocale.value)
 }
 
+// Item 9: day-aware list rows — a 23:20 message from yesterday must not read
+// as "today 11:20 PM". Bubbles keep time-only (dividers disambiguate).
+function formatListTime(iso: string) {
+  if (!iso) return ''
+  return listRowTime(iso, { tag: RTF_LOCALE[currentLocale.value] || 'ko-KR', yesterday: t('mvYesterday') })
+}
+
 // Compute total unread count (Numeric badge invariant: exclude non-numeric 'N' badges)
 const totalUnreadCount = computed(() => chats.value.reduce((sum, c) => sum + (c.badge_n ? 0 : (c.unread_count || 0)), 0))
 
@@ -1011,6 +1023,7 @@ async function loadChats() {
 // I-4: calling state machine (names unchanged; template and socket untouched).
 const {
   activeCall,
+  callMediaIssue,
   callDuration,
   isCallMuted,
   isCallVideoOff,
@@ -1394,6 +1407,7 @@ async function toggleVoiceRecording() {
   }
   if (uploading.value || !selectedChatId.value) return
   if (!navigator.mediaDevices?.getUserMedia) {
+    note.value = t('mvVoiceRecordFailed')
     chooseAttachment('voice')
     return
   }
@@ -1421,6 +1435,7 @@ async function toggleVoiceRecording() {
     isRecordingVoice.value = true
     note.value = t('mvRecordingVoice')
   } catch {
+    note.value = t('mvVoiceRecordFailed')
     chooseAttachment('voice')
   }
 }
@@ -1783,8 +1798,11 @@ async function unsendMessage(msgId: string) {
     await api(`/api/v1/conversations/${selectedChatId.value}/messages/${msgId}`, 'DELETE')
     const target = messages.value.find(m => m.id === msgId)
     if (target) {
+      // Mirror the server: flag set, body and metadata cleared. The renderers
+      // show the marker from msg.unsent; stale metadata would re-render art.
       target.unsent = true
-      target.body = t('mvMsgUnsent')
+      target.body = ''
+      target.metadata = undefined
     }
     note.value = t('mvUnsendOk')
   })
@@ -1934,12 +1952,22 @@ async function executeChargeMoney(amount: number) {
 // --- Friends & Direct Chat ---
 async function startDirectChat(friend: User) {
   await wrap(async () => {
+    const existingId = findDirectChatId(chats.value, currentUser.value?.id || '', friend.id)
+    if (existingId) {
+      activeNav.value = 'chats'
+      await selectChat(existingId)
+      return
+    }
     const c = await api<{ id: string }>('/api/v1/conversations', 'POST', {
       kind: 'direct',
       member_ids: [friend.id],
       title: friend.display_name
     })
     await loadChats()
+    if (!chats.value.some(chat => chat.id === c.id)) {
+      error.value = t('mvDirectOpenFailed')
+      return
+    }
     activeNav.value = 'chats'
     await selectChat(c.id)
   })
@@ -2408,7 +2436,7 @@ onBeforeUnmount(() => {
         <div class="pc-rail-top">
           <!-- 1. My Profile Avatar with Online Dot -->
           <button type="button" class="pc-user-avatar-trigger" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
-            <div class="pc-avatar circle-36" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #2563EB)' }"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser?.display_name?.slice(0, 1) }}</span>
+            <div class="pc-avatar circle-36" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #2563EB)' }"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(currentUser?.display_name) }}</span>
             </div>
             <span v-if="realtimeState === 'connected'" class="pc-dot-online" :title="t('connection_connected')"></span>
           </button>
@@ -2657,7 +2685,7 @@ onBeforeUnmount(() => {
           :filtered-chats="filteredChats"
           :selected-chat-id="selectedChatId"
           :channel-slot="channelSlot"
-          :format-time="formatTime"
+          :format-time="formatListTime"
           v-model:chat-filter="chatFilter"
           v-model:search-keyword="searchKeyword"
           v-model:chat-sort-asc="chatSortAsc"
@@ -2803,7 +2831,7 @@ onBeforeUnmount(() => {
             >
               <!-- Peer Avatar -->
               <div class="pc-avatar circle-40" :style="{ background: log.peer_avatar_color || '#315BCD' }">
-                {{ log.peer_name.slice(0, 1) }}
+                {{ initialOf(log.peer_name) }}
               </div>
 
               <!-- Meta: Name, Direction Arrow, Date -->
@@ -2843,7 +2871,7 @@ onBeforeUnmount(() => {
               <small>{{ t('mvAddStory') }}</small>
             </div>
             <div v-for="s in stories" :key="s.id" class="story-item">
-              <div class="story-ring" :style="{ background: s.bg || 'var(--om-primary, #2563EB)' }">{{ (s.author_name || 'L').slice(0, 1) }}</div>
+              <div class="story-ring" :style="{ background: s.bg || 'var(--om-primary, #2563EB)' }">{{ initialOf(s.author_name, 'L') }}</div>
               <small>{{ s.author_name || t('navFriends') }}</small>
             </div>
           </div>
@@ -2939,7 +2967,7 @@ onBeforeUnmount(() => {
       <section v-if="activeNav === 'calls'" class="pc-calls-viewport">
         <div v-if="selectedCallRecord" class="pc-call-detail-card">
           <div class="profile-preview-avatar" :style="{ background: selectedCallRecord.peer_avatar_color || '#315BCD' }">
-            {{ selectedCallRecord.peer_name.slice(0, 1) }}
+            {{ initialOf(selectedCallRecord.peer_name) }}
           </div>
           <h2 class="profile-preview-name">{{ selectedCallRecord.peer_name }}</h2>
           <p class="profile-preview-bio">
@@ -3121,7 +3149,7 @@ onBeforeUnmount(() => {
       <section v-else-if="selectedFriendProfile" class="pc-friend-profile-viewport">
         <div class="pc-profile-preview-card">
           <div class="profile-preview-avatar" :style="{ background: selectedFriendProfile.avatar_color || 'var(--om-primary, #2563EB)' }">
-            {{ selectedFriendProfile.display_name.slice(0, 1) }}
+            {{ initialOf(selectedFriendProfile.display_name) }}
           </div>
           <h2 class="profile-preview-name">{{ selectedFriendProfile.display_name }}</h2>
           <p v-if="selectedFriendProfile.status_message || selectedFriendProfile.bio" class="profile-preview-bio">
@@ -3226,7 +3254,7 @@ onBeforeUnmount(() => {
           </div>
           <span class="nav-label">{{ t('mvWallet') }}</span>
         </button>
-        <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser?.display_name?.slice(0, 1) }}</span></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
+        <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(currentUser?.display_name) }}</span></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
       </nav>
     </main>
 
@@ -3239,9 +3267,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="modal-body-form" style="align-items:center;text-align:center;">
           <p class="modal-subtext">{{ t('mvQrDesc') }}</p>
-          <div class="pc-qr-matrix-card" style="margin:12px auto;">
-            <LunoIcon name="scan" :size="96" />
-          </div>
+          <div class="pc-qr-matrix-card" style="margin:12px auto;" v-html="myQrSvg"></div>
           <p class="muted">@{{ currentUser?.handle || 'luno_user' }}</p>
           <div class="modal-actions-right" style="width:100%;justify-content:center;">
             <button class="btn-primary" @click="showQrModal = false; showAddFriendModal = true">{{ t('mvSearchById') }}</button>
@@ -3300,6 +3326,7 @@ onBeforeUnmount(() => {
     <CallModal
       v-if="activeCall"
       :active-call="activeCall"
+      :call-media-issue="callMediaIssue"
       :call-duration="callDuration"
       :format-duration="formatDuration"
       :call-recording="callRecording"
@@ -3326,7 +3353,7 @@ onBeforeUnmount(() => {
           <button class="btn-modal-close" @click="activeProfileUser = null">✕</button>
         </div>
         <div class="profile-avatar-center">
-          <div class="avatar-circle xl"><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ activeProfileUser.display_name.slice(0, 1) }}</span></div>
+          <div class="avatar-circle xl"><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(activeProfileUser.display_name) }}</span></div>
         </div>
         <div v-if="activeProfileUser.id === currentUser?.id" class="profile-photo-controls" :aria-busy="photoSaving">
           <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="changeProfilePhoto" />
@@ -3634,7 +3661,7 @@ onBeforeUnmount(() => {
               @click="addFriendById(u.id)"
             >
               <div class="pc-avatar circle-34" :style="{ background: u.avatar_color || 'var(--om-primary, #2563EB)' }">
-                {{ (u.display_name || '?').slice(0, 1) }}
+                {{ initialOf(u.display_name, '?') }}
               </div>
               <div class="friend-pick-meta">
                 <strong>{{ u.display_name }}</strong>
@@ -3697,7 +3724,7 @@ onBeforeUnmount(() => {
               @click="startDirectChat(f); showNewChatModal = false"
             >
               <div class="pc-avatar circle-34" :style="{ background: f.avatar_color || 'var(--om-primary, #2563EB)' }">
-                {{ f.display_name.slice(0, 1) }}
+                {{ initialOf(f.display_name) }}
               </div>
               <div class="friend-pick-meta">
                 <strong>{{ f.display_name }}</strong>
@@ -3737,7 +3764,7 @@ onBeforeUnmount(() => {
                   <strong>{{ svc.name }}</strong>
                   <span class="svc-ko">{{ svc.nameKo }}</span>
                 </div>
-                <span class="svc-status-pill" :class="svc.status">{{ svc.statusText }}</span>
+                <span class="svc-status-pill" :class="svc.status" :title="svc.statusText">{{ svc.statusText }}</span>
               </div>
               <p class="svc-desc">{{ svc.description }}</p>
               <div class="svc-card-footer">

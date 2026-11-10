@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { reportError } from '../../../shared/monitor'
 import { handoffText } from '../../../shared/handoff-i18n'
 import { UI_DICTIONARY, detectInitialLocale, type LunoLocale } from '../luno-i18n'
@@ -29,6 +29,18 @@ export const token = ref('')
 export const currentUser = ref<User | null>(null)
 export const error = ref('')
 export const note = ref('')
+// Item 5: info toasts dismiss themselves; errors stay until acknowledged.
+export const NOTE_TTL_MS = 4000
+let noteTimer: ReturnType<typeof setTimeout> | null = null
+watch(note, (text) => {
+  if (noteTimer) clearTimeout(noteTimer)
+  noteTimer = null
+  if (!text) return
+  noteTimer = setTimeout(() => {
+    noteTimer = null
+    if (note.value === text) note.value = ''
+  }, NOTE_TTL_MS)
+})
 export const activeTheme = ref<'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight'>('midnight')
 export const darkMode = ref(false)
 

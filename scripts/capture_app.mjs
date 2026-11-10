@@ -147,7 +147,7 @@ for (const [device, width, height] of [['mobile', 390, 844], ['tablet', 768, 102
   for (const [device, width, height] of [['mobile', 390, 844], ['tablet', 768, 1024], ['tablet_landscape', 1024, 768]]) {
     await page.setViewportSize({ width, height });
     await page.waitForTimeout(800);
-    for (const route of ['home', 'chats', 'keep', 'wallet', 'settings', 'news']) {
+    for (const route of ['home', 'chats', 'profile', 'calls', 'keep', 'wallet', 'settings', 'news']) {
       await page.goto(`${BASE}/#/${route}`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(1500);
       await shot(page, bucket, route, device, width, height);

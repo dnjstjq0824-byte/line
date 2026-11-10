@@ -18,6 +18,7 @@ type Message struct {
 	ID             string         `json:"id"`
 	ConversationID string         `json:"conversation_id"`
 	SenderID       string         `json:"sender_id"`
+	SenderName     string         `json:"sender_name,omitempty"`
 	ClientID       string         `json:"client_id"`
 	Sequence       int64          `json:"sequence"`
 	Kind           string         `json:"kind"`
@@ -311,6 +312,17 @@ func (a *App) enrichMessages(ctx context.Context, convID string, msgs []Message)
 		seq int64
 	}
 	var reads []memberRead
+	names := map[string]string{}
+	nRows, nErr := a.db.QueryContext(ctx, "SELECT u.id, u.display_name FROM identity.users u JOIN chat.conversation_members cm ON cm.user_id=u.id WHERE cm.conversation_id=$1 AND cm.left_at IS NULL", convID)
+	if nErr == nil {
+		for nRows.Next() {
+			var uid, name string
+			if nRows.Scan(&uid, &name) == nil {
+				names[uid] = name
+			}
+		}
+		nRows.Close()
+	}
 	rRows, rErr := a.db.QueryContext(ctx, "SELECT user_id, last_read_sequence FROM chat.conversation_members WHERE conversation_id=$1 AND left_at IS NULL", convID)
 	if rErr == nil {
 		for rRows.Next() {
@@ -329,6 +341,7 @@ func (a *App) enrichMessages(ctx context.Context, convID string, msgs []Message)
 			}
 		}
 		msgs[i].ReadCount = rc
+		msgs[i].SenderName = names[msgs[i].SenderID]
 		if msgs[i].ReplyTo != "" {
 			var rSender, rKind, rBody string
 			var rDel any

@@ -14,7 +14,7 @@
         <div v-for="room in communityRooms" :key="room.id" class="room-item" @click="enterRoom(room.id)">
           <div class="room-avatar">
             <div class="badge" :style="{ background: room.color }">
-              {{ room.name.slice(0, 1) }}
+              {{ initialOf(room.name) }}
             </div>
           </div>
           <div class="room-info">
@@ -50,6 +50,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import LunoIcons from './LunoIcons.vue'
+import { initialOf } from '../../../shared/avatar_initial'
 
 const props = {
   communityRooms: { type: Array, default: () => [] },

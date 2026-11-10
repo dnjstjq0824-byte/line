@@ -7,7 +7,7 @@
         </button>
         <div class="chat-header-info">
           <div class="avatar chat-avatar" :class="{ 'group-avatar': selectedChat?.kind === 'group' }">
-            {{ selectedChat?.title ? selectedChat.title.slice(0, 1) : 'L' }}
+            {{ initialOf(selectedChat?.title, 'L') }}
           </div>
           <div class="chat-header-text">
             <div class="chat-header-name">{{ selectedChat?.title || '대화방' }}</div>
@@ -81,6 +81,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import LunoIcons from './LunoIcons.vue'
+import { initialOf } from '../../../shared/avatar_initial'
 
 const props = {
   selectedChat: { type: Object, default: null },

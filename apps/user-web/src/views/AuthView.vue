@@ -67,6 +67,49 @@ const formattedQrCountdown = computed(() => {
 // demo endpoint by design, so the demo chips stay hidden when API_URL is Go.
 const demoLoginAvailable = computed(() => !appVersion.value.worker_version.startsWith('go-'))
 
+const showRecoverModal = ref(false)
+const recoverEmail = ref('')
+const recoverChallengeId = ref('')
+const recoverCodeShown = ref('')
+const recoverCodeInput = ref('')
+const recoverNewPassword = ref('')
+const recoverSent = ref(false)
+
+function openRecoverModal() {
+  showRecoverModal.value = true
+  recoverEmail.value = email.value
+  recoverSent.value = false
+  recoverChallengeId.value = ''
+  recoverCodeShown.value = ''
+  recoverCodeInput.value = ''
+  recoverNewPassword.value = ''
+}
+
+async function sendRecoverCode() {
+  await wrap(async () => {
+    const res = await request<{ challenge_id?: string; recovery_code?: string }>('/api/v1/auth/recover', null, 'POST', {
+      email: recoverEmail.value.trim()
+    })
+    recoverSent.value = true
+    recoverChallengeId.value = res.challenge_id || ''
+    recoverCodeShown.value = res.recovery_code || ''
+  })
+}
+
+async function verifyRecoverCode() {
+  await wrap(async () => {
+    await request('/api/v1/auth/recover/verify', null, 'POST', {
+      challenge_id: recoverChallengeId.value,
+      recovery_code: recoverCodeInput.value.trim(),
+      new_password: recoverNewPassword.value
+    })
+    note.value = t('mvRecoverDone')
+    email.value = recoverEmail.value
+    password.value = ''
+    showRecoverModal.value = false
+  })
+}
+
 async function authAction() {
   await wrap(async () => {
     if (registerMode.value) {
@@ -357,7 +400,7 @@ onBeforeUnmount(() => {
                   <input type="checkbox" v-model="autoLoginCheck" />
                   <span>{{ t('rememberMe') }}</span>
                 </label>
-                <button type="button" class="btn-subtle-link" @click="note = t('soon_tag')">
+                <button type="button" class="btn-subtle-link" @click="openRecoverModal">
                   {{ t('findPassword') }}
                 </button>
               </div>
@@ -464,6 +507,42 @@ onBeforeUnmount(() => {
                 <small>LUNO v2.0.0 (commit: <code>{{ appVersion.short_commit || t('checkingText') }}</code>)</small>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Password recovery dialog -->
+      <div v-if="showRecoverModal" class="modal-backdrop" @click.self="showRecoverModal = false">
+        <div class="standard-modal-box" role="dialog" :aria-label="t('mvRecoverTitle')">
+          <div class="modal-header">
+            <h3>{{ t('mvRecoverTitle') }}</h3>
+            <button class="btn-modal-close" @click="showRecoverModal = false">✕</button>
+          </div>
+          <div class="modal-body-form">
+            <label class="pc-input-row">
+              <span>{{ t('mvRecoverEmail') }}</span>
+              <input v-model="recoverEmail" type="email" class="pc-login-input" :disabled="recoverSent" />
+            </label>
+            <button v-if="!recoverSent" class="btn-pc-submit-full" type="button" :disabled="!recoverEmail.includes('@')" @click="sendRecoverCode">
+              {{ t('mvRecoverSend') }}
+            </button>
+            <template v-else>
+              <p v-if="recoverCodeShown" class="ln-charge-notice" role="note">
+                {{ t('mvRecoverCodeHint') }} <code>{{ recoverCodeShown }}</code>
+              </p>
+              <label class="pc-input-row">
+                <span>{{ t('mvRecoverCode') }}</span>
+                <input v-model="recoverCodeInput" type="text" class="pc-login-input" autocomplete="one-time-code" />
+              </label>
+              <label class="pc-input-row">
+                <span>{{ t('mvRecoverNewPw') }}</span>
+                <input v-model="recoverNewPassword" type="password" class="pc-login-input" autocomplete="new-password" />
+              </label>
+              <button class="btn-pc-submit-full" type="button" :disabled="!recoverCodeInput.trim() || recoverNewPassword.length < 10" @click="verifyRecoverCode">
+                {{ t('mvRecoverReset') }}
+              </button>
+            </template>
+            <button class="btn-secondary" type="button" @click="showRecoverModal = false">{{ t('mvRecoverCancel') }}</button>
           </div>
         </div>
       </div>

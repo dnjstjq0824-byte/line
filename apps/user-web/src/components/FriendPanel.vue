@@ -5,6 +5,7 @@
 import { ref } from 'vue'
 
 import type { Chat, User } from '../../../shared/api'
+import { initialOf } from '../../../shared/avatar_initial'
 import { currentUser, t } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import type { DrawerTab } from './ChatList.vue'
@@ -123,7 +124,7 @@ function clearAllSearchKeywords() {
       <!-- My Profile Card with Keep & Album Buttons (Screenshot 4 & 5) -->
       <div class="pc-my-profile-card">
         <div class="my-profile-top-row" @click="emit('profile')">
-          <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #4F7CFF)' }"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser?.display_name?.slice(0, 1) }}</span>
+          <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #4F7CFF)' }"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(currentUser?.display_name) }}</span>
           </div>
           <div class="my-profile-meta">
             <div class="my-name-text">{{ currentUser?.display_name }}</div>
@@ -162,7 +163,7 @@ function clearAllSearchKeywords() {
             @contextmenu.prevent="emit('friend-menu', $event, fav)"
           >
             <div class="pc-avatar circle-38" :style="{ background: fav.avatar_color || 'var(--om-primary, #4F7CFF)' }">
-              {{ fav.display_name.slice(0, 1) }}
+              {{ initialOf(fav.display_name) }}
             </div>
             <div class="friend-item-meta">
               <div class="friend-item-name">★ {{ fav.display_name }}</div>
@@ -187,7 +188,7 @@ function clearAllSearchKeywords() {
             @click="emit('select-chat', grp.id)"
           >
             <div class="pc-avatar circle-38 group-avatar" style="background: var(--om-cyan, #8EC5FF);">
-              {{ grp.title ? grp.title.slice(0, 1) : 'G' }}
+              {{ initialOf(grp.title, 'G') }}
             </div>
             <div class="friend-item-meta">
               <div class="friend-item-name">
@@ -241,7 +242,7 @@ function clearAllSearchKeywords() {
             @contextmenu.prevent="emit('friend-menu', $event, f)"
           >
             <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || 'var(--om-primary, #4F7CFF)' }">
-              {{ f.display_name.slice(0, 1) }}
+              {{ initialOf(f.display_name) }}
             </div>
             <div class="friend-item-meta">
               <div class="friend-item-name">

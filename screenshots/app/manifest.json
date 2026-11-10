@@ -50,6 +50,26 @@
   "errors": []
  },
  {
+  "file": "profile_mobile_390.png",
+  "page": "profile",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/profile",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "calls_mobile_390.png",
+  "page": "calls",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/calls",
+  "scrollX": false,
+  "errors": []
+ },
+ {
   "file": "keep_mobile_390.png",
   "page": "keep",
   "device": "mobile",
@@ -110,6 +130,26 @@
   "errors": []
  },
  {
+  "file": "profile_tablet_768.png",
+  "page": "profile",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/profile",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "calls_tablet_768.png",
+  "page": "calls",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/calls",
+  "scrollX": false,
+  "errors": []
+ },
+ {
   "file": "keep_tablet_768.png",
   "page": "keep",
   "device": "tablet",
@@ -166,6 +206,26 @@
   "width": 1024,
   "ok": true,
   "url": "#/chats",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "profile_tablet_landscape_1024.png",
+  "page": "profile",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/profile",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "calls_tablet_landscape_1024.png",
+  "page": "calls",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/calls",
   "scrollX": false,
   "errors": []
  },

@@ -17,7 +17,7 @@
         </div>
         <div v-for="s in stories" :key="s.id" class="story-item">
           <div class="story-ring" :style="{ background: s.bg }">
-            {{ s.author?.display_name?.slice(0, 1) || 'L' }}
+            {{ initialOf(s.author?.display_name, 'L') }}
           </div>
           <small>{{ s.author?.display_name || '친구' }}</small>
         </div>
@@ -52,6 +52,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import LunoIcons from './LunoIcons.vue'
+import { initialOf } from '../../../shared/avatar_initial'
 
 const props = {
   stories: { type: Array, default: () => [] },

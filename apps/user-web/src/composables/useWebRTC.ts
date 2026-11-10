@@ -46,6 +46,7 @@ export function useWebRTC(deps: WebRTCDeps) {
 
   // --- Calling Simulation ---
   const activeCall = ref<ActiveCallState | null>(null)
+  const callMediaIssue = ref(false)
   const callDuration = ref(0)
   const isCallMuted = ref(false)
   const isCallVideoOff = ref(false)
@@ -97,13 +98,23 @@ export function useWebRTC(deps: WebRTCDeps) {
     selectedChatId.value = targetConvId
     const convTitle = overrideTitle || selectedChat.value?.title || t('mvCall')
     await wrap(async () => {
+      // Outgoing screen first: a mic/camera failure must never strand the
+      // caller on a bare toast with no call UI. Media is opportunistic; only
+      // a server session failure aborts the call.
+      activeCall.value = { id: '', kind, state: 'ringing', title: convTitle, direction: 'outgoing' }
+      callDuration.value = 0
+      callMediaIssue.value = false
       // Single media acquisition: the util returns the live session, so the
       // microphone is opened once and endCallLocally owns its teardown.
       const webrtc = await startWebRTCCall(targetConvId, kind, token.value, request)
       if (!webrtc) {
-        note.value = t('callMediaFailed')
+        endCallLocally()
+        note.value = t('mvCallStartFailed')
         return
       }
+      activeCall.value!.id = webrtc.id
+      callMediaIssue.value = webrtc.mediaFailed
+      if (webrtc.mediaFailed) note.value = t('callMediaFailed')
       rtcSession = { pc: webrtc.pc, stream: webrtc.stream }
       if (localVideoRef.value) localVideoRef.value.srcObject = webrtc.stream
       webrtc.pc.ontrack = (ev) => {
@@ -120,8 +131,6 @@ export function useWebRTC(deps: WebRTCDeps) {
           }).catch(() => {})
         }
       }
-      activeCall.value = { id: webrtc.id, kind, state: 'ringing', title: convTitle, direction: 'outgoing' }
-      callDuration.value = 0
       await api(`/api/v1/calls/${webrtc.id}/signal`, 'POST', {
         signal_type: 'offer',
         sdp: webrtc.pc.localDescription?.sdp || ''
@@ -193,7 +202,7 @@ export function useWebRTC(deps: WebRTCDeps) {
           peer_name: prevCall.title,
           peer_avatar_color: '#315BCD',
           call_type: prevCall.kind,
-          direction: wasConnected ? 'outgoing' : 'missed',
+          direction: prevCall.direction === 'incoming' && !wasConnected ? 'missed' : 'outgoing',
           timestamp_text: t('mvJustNow'),
           duration_text: durText
         })
@@ -287,6 +296,7 @@ export function useWebRTC(deps: WebRTCDeps) {
     rtcSession = null
     isScreenSharing.value = false
     activeCall.value = null
+    callMediaIssue.value = false
     callDuration.value = 0
   }
 
@@ -296,6 +306,7 @@ export function useWebRTC(deps: WebRTCDeps) {
 
   return {
     activeCall,
+    callMediaIssue,
     callDuration,
     isCallMuted,
     isCallVideoOff,

@@ -26,6 +26,7 @@ import '../util/official_accounts.dart';
 import '../util/photo_effects.dart';
 import '../util/poll_options.dart';
 import '../util/send_peer.dart';
+import '../util/sender_name.dart';
 import '../util/store_packs.dart';
 import '../util/story_cards.dart';
 import '../util/sync_delta.dart';
@@ -42,10 +43,20 @@ double _defaultJitter() => Random().nextDouble();
 
 /// A-23: merge a GET .../sync delta page into the cached message list.
 /// Dedupes by message id and restores ascending sequence order.
+/// Item 3: recalled messages never render — the server keeps the tombstone
+/// row (unsent=true, empty body) while clients drop it, matching unsend().
+List<dynamic> withoutUnsent(List<dynamic> messages) =>
+    messages.where((m) => m['unsent'] != true).toList();
+
 List<dynamic> mergeDeltaMessages(List<dynamic> existing, List<dynamic> delta) {
-  final seen = <String>{for (final m in existing) '${m['id']}'};
-  final out = List<dynamic>.from(existing);
+  final out = List<dynamic>.from(withoutUnsent(existing));
+  final seen = <String>{for (final m in out) '${m['id']}'};
   for (final m in delta) {
+    if (m['unsent'] == true) {
+      out.removeWhere((x) => '${x['id']}' == '${m['id']}');
+      seen.remove('${m['id']}');
+      continue;
+    }
     if (seen.add('${m['id']}')) out.add(m);
   }
   out.sort((a, b) => ((a['sequence'] ?? 0) as num).compareTo((b['sequence'] ?? 0) as num));
@@ -79,7 +90,10 @@ class SessionController extends ChangeNotifier {
   String selfHandle = '';
   String selfStatusMessage = '';
   String selfAvatarUrl = '';
+  String selfCoverUrl = '';
   String selfBirthday = '';
+  Map<String, dynamic> myPrefs = {};
+  bool prefsLoaded = false;
 
   // null means "not loaded / unavailable" and renders as a dash. A payments
   // surface must never substitute a placeholder figure for a real balance.
@@ -182,8 +196,10 @@ class SessionController extends ChangeNotifier {
       selfHandle = me['handle'] ?? '';
       selfStatusMessage = me['status_message'] ?? '';
       selfAvatarUrl = me['avatar_url'] ?? '';
+      selfCoverUrl = me['cover_url'] ?? '';
       selfBirthday = me['birthday'] ?? '';
       notifyListeners();
+      await loadPrefs();
       await reload();
       await connect();
     } catch (_) {
@@ -238,8 +254,10 @@ class SessionController extends ChangeNotifier {
       selfHandle = me['handle'] ?? '';
       selfStatusMessage = me['status_message'] ?? '';
       selfAvatarUrl = me['avatar_url'] ?? '';
+      selfCoverUrl = me['cover_url'] ?? '';
       selfBirthday = me['birthday'] ?? '';
       notifyListeners();
+      await loadPrefs();
       await reload();
       await connect();
     });
@@ -437,6 +455,25 @@ class SessionController extends ChangeNotifier {
     return '대화방';
   }
 
+  /// Item 6: per-message sender label. Group rooms resolve the sender;
+  /// direct rooms keep the (nickname-aware) room title.
+  String senderLabel(String conversationId, dynamic message) {
+    Map<String, dynamic>? room;
+    for (final c in chats) {
+      if (c is Map && '${c['id']}' == conversationId) {
+        room = Map<String, dynamic>.from(c);
+        break;
+      }
+    }
+    if (room == null || '${room['kind']}' != 'group') {
+      return selectedTitle.isEmpty ? titleOf(conversationId) : selectedTitle;
+    }
+    final rawMembers = room['members'];
+    final members =
+        rawMembers is List ? List<dynamic>.from(rawMembers) : <dynamic>[];
+    return senderNameOf(message, members);
+  }
+
   Future<void> openChat(String id, [String? title]) {
     return run(() async {
       selectedId = id;
@@ -452,7 +489,7 @@ class SessionController extends ChangeNotifier {
         api.call('/api/v1/conversations/$id/polls').catchError((_) => <String, dynamic>{'polls': []}),
         api.call('/api/v1/conversations/$id/albums').catchError((_) => <String, dynamic>{'albums': []}),
       ]);
-      messages = resultsList[0]['messages'] ?? [];
+      messages = withoutUnsent(List<dynamic>.from(resultsList[0]['messages'] ?? []));
       pins = resultsList[1]['pins'] ?? [];
       notes = resultsList[2]['notes'] ?? [];
       events = resultsList[3]['events'] ?? [];
@@ -481,7 +518,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       final lastSeq = messages.isNotEmpty ? messages.last['sequence'] : 0;
       final x = await api.call('/api/v1/conversations/$selectedId/sync?after_sequence=$lastSeq');
-      final list = syncDeltaOf(x);
+      final list = withoutUnsent(syncDeltaOf(x));
       for (final m in list) {
         if (!messages.any((old) => old['id'] == m['id'])) messages.add(m);
       }
@@ -857,10 +894,11 @@ class SessionController extends ChangeNotifier {
     return null;
   }
 
-  Future<void> updateAvatarFromPicker() {
+  Future<void> updateAvatarFromPicker(
+      {ImageSource source = ImageSource.gallery}) {
     return run(() async {
       final picked = await ImagePicker().pickImage(
-          source: ImageSource.gallery,
+          source: source,
           maxWidth: 512,
           maxHeight: 512,
           imageQuality: 70);
@@ -887,12 +925,14 @@ class SessionController extends ChangeNotifier {
       {String? displayName,
       String? statusMessage,
       String? avatarUrl,
+      String? coverUrl,
       String? birthday}) {
     return run(() async {
       final data = <String, dynamic>{};
       if (displayName != null) data['display_name'] = displayName.trim();
       if (statusMessage != null) data['status_message'] = statusMessage.trim();
       if (avatarUrl != null) data['avatar_url'] = avatarUrl.trim();
+      if (coverUrl != null) data['cover_url'] = coverUrl.trim();
       if (birthday != null) data['birthday'] = birthday.trim();
       if (data.isEmpty) return;
       await api.call('/api/v1/me', method: 'PATCH', data: data);
@@ -901,9 +941,62 @@ class SessionController extends ChangeNotifier {
       selfHandle = me['handle'] ?? selfHandle;
       selfStatusMessage = me['status_message'] ?? selfStatusMessage;
       selfAvatarUrl = me['avatar_url'] ?? selfAvatarUrl;
+      selfCoverUrl = me['cover_url'] ?? selfCoverUrl;
       selfBirthday = me['birthday'] ?? selfBirthday;
       notice = '프로필을 저장했습니다.';
       await reload();
+    });
+  }
+
+  Future<void> updateCoverFromPicker(
+      {ImageSource source = ImageSource.gallery}) {
+    return run(() async {
+      final picked = await ImagePicker().pickImage(
+          source: source,
+          maxWidth: 1024,
+          maxHeight: 512,
+          imageQuality: 70);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.length > 262144) {
+        throw Exception('커버 사진이 너무 큽니다 (최대 256KB)');
+      }
+      final kind = _avatarKindOf(bytes);
+      if (kind == null) {
+        throw Exception('지원하지 않는 사진 형식입니다 (JPEG/PNG/WebP).');
+      }
+      await api.call('/api/v1/me', method: 'PATCH', data: {
+        'cover_url': 'data:image/$kind;base64,${base64Encode(bytes)}',
+      });
+      final me = await api.call('/api/v1/me');
+      selfCoverUrl = me['cover_url'] ?? selfCoverUrl;
+      notice = '커버 사진을 바꿨습니다.';
+      await reload();
+    });
+  }
+
+  /// Raw load (no run()): login/restore call it nested under their own run().
+  Future<void> loadPrefs() async {
+    try {
+      final res = await api.call('/api/v1/me/settings');
+      myPrefs = Map<String, dynamic>.from(res);
+      prefsLoaded = true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> setSearchableById(bool value) {
+    return run(() async {
+      if (!prefsLoaded) {
+        await loadPrefs();
+        if (!prefsLoaded) throw Exception('설정을 불러오지 못했습니다.');
+      }
+      final data = Map<String, dynamic>.from(myPrefs)
+        ..['searchable_by_id'] = value;
+      final res = await api.call('/api/v1/me/settings', method: 'PUT', data: data);
+      myPrefs = Map<String, dynamic>.from(res);
+      myPrefs['searchable_by_id'] = value;
+      notice = value ? 'ID 검색을 허용했습니다.' : 'ID 검색을 차단했습니다.';
     });
   }
 

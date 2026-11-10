@@ -209,7 +209,7 @@ test('A-06: read state is server-side across sessions; nav badge === sum of nume
   const none = await list(other, s3.access_token);
   assert.equal(none.conversations.filter(c => !c.badge_n).every(c => c.unread_count === 0), true);
   assert.equal(none.unread_total, 0);
-  assert.ok(none.conversations.some(c => c.badge_n), "'N' rooms stay outside the numeric sum");
+  assert.ok(!none.conversations.some(c => c.badge_n), "item 9: 'N' clears once read instead of sticking forever");
 });
 
 test('A-07: reading the security room never creates or rewrites notices; only a real login adds one', async () => {
@@ -300,7 +300,7 @@ test('A-13: regression matrix (auth gates, RBAC, official accounts, friends, enu
   const by = n => conv.conversations.find(c => c.id.startsWith(n))?.unread_count;
   assert.equal(by('conv-k-'), 4); assert.equal(by('conv-care-'), 1);
   assert.equal(conv.conversations.find(c => c.id.startsWith('conv-dodo-')).badge_n, true);
-  assert.equal(conv.conversations.find(c => c.id.startsWith('conv-dodo-')).unread_count, 0);
+  assert.equal(conv.conversations.find(c => c.id.startsWith('conv-dodo-')).unread_count, 1);
   const secUnread = by('conv-oa-notice-');
   console.log(`A-13 baseline badge after one real login: security=${secUnread} (2 sample + ${secUnread - 2} real) K=4 care=1 total=${conv.unread_total}`);
   assert.equal(conv.unread_total, secUnread + 4 + 1);

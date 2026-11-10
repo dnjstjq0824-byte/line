@@ -15,6 +15,7 @@ const qrChallenges = new Map();
 const phoneVerificationCodes = new Map();
 const friendships = new Map();
 const passkeyChallenges = new Map(); // challenge -> { userId, purpose, expiresAt }
+const recoveryChallenges = new Map(); // id -> { userId, codeHash, expiresAt, consumedAt } (no-DB fallback; D1 otherwise)
 const passkeyCreds = new Map(); // credentialIdB64 -> { userId, jwk, counter, transports, name, createdAt }
 const conversations = new Map();
 const messages = new Map();
@@ -158,11 +159,16 @@ const LUNO_SCHEMA = [
     counter INTEGER NOT NULL DEFAULT 0, transports TEXT, name TEXT DEFAULT '', last_used_at TEXT,
     created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_passkey_cred_user ON luno_passkey_credentials(user_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_recovery_challenges (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL, consumed_at INTEGER, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_recovery_user ON luno_recovery_challenges(user_id)`,
 ];
 const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, handle TEXT UNIQUE,
     password_hash TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '',
+    cover_url TEXT DEFAULT '', prefs_json TEXT DEFAULT '',
     status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
     birthday TEXT DEFAULT '', state TEXT DEFAULT 'active',
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
@@ -290,6 +296,8 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'handle', 'TEXT'],
   ['users', 'birthday', "TEXT DEFAULT ''"],
   ['users', 'avatar_url', "TEXT DEFAULT ''"],
+  ['users', 'cover_url', "TEXT DEFAULT ''"],
+  ['users', 'prefs_json', "TEXT DEFAULT ''"],
   ['users', 'status_message', "TEXT DEFAULT ''"],
   ['users', 'bio', "TEXT DEFAULT ''"],
   ['users', 'phone_number', "TEXT DEFAULT ''"],
@@ -1379,7 +1387,7 @@ function publicUser(u) {
   return {
     id: u.id, display_name: u.display_name, handle: u.handle, bio: u.bio || '',
     status_message: u.status_message || '', avatar_color: u.avatar_color || '#4F7CFF',
-    birthday: u.birthday || '', avatar_url: u.avatar_url || ''
+    birthday: u.birthday || '', avatar_url: u.avatar_url || '', cover_url: u.cover_url || ''
   };
 }
 function userBrief(id) {
@@ -1389,6 +1397,15 @@ function userBrief(id) {
 function prefsOf(userId) {
   if (!userPrefs.has(userId)) userPrefs.set(userId, { ...DEFAULT_PREFS });
   return userPrefs.get(userId);
+}
+// Item 12: prefs ride the users row (prefs_json) so toggles survive isolates.
+// The Map stays the sync read cache; D1 is the source of truth.
+function hydrateUserPrefs(userId, prefsJson) {
+  if (!prefsJson) return;
+  try {
+    const parsed = JSON.parse(prefsJson);
+    if (parsed && typeof parsed === 'object') userPrefs.set(userId, { ...DEFAULT_PREFS, ...parsed });
+  } catch {}
 }
 function walletOf(userId) {
   if (!wallets.has(userId)) wallets.set(userId, { balance: 0, tx: [] }); // new wallets start empty: no phantom seed money
@@ -1447,6 +1464,7 @@ function decorateMessage(msg, viewerId, cid) {
   const cursorSeqs = (conv ? conv.members : []).filter(m => m !== msg.sender_id && !officialAccounts.has(m))
     .map(m => readCursors.get(`${cid}:${m}`) || 0);
   const out = { ...msg, reactions: reactionCounts(msg.id), read_count: cursorSeqs.filter(s => s >= msg.sequence).length };
+  out.sender_name = userBrief(msg.sender_id)?.display_name || '';
   const mine = [];
   const r = reactionStore.get(msg.id);
   if (r) for (const [emoji, set] of r) if (set.has(viewerId)) mine.push(emoji);
@@ -1497,11 +1515,14 @@ function chatSummary(conv, viewerId) {
     const o = userBrief(other);
     if (o) title = fMeta(viewerId, other).nickname || o.display_name;
   }
+  // Item 9: 'N' derives from the persisted read cursor — a read room never
+  // shows N on any isolate. Rooms flagged badge_n stay out of numeric sums.
+  const unread = unreadFor(conv.id, viewerId);
   return {
     id: conv.id, kind: conv.kind, title, last_sequence: conv.last_sequence || 0,
-    unread_count: unreadFor(conv.id, viewerId), mentioned: mentionedIn(conv.id, viewerId),
+    unread_count: unread, mentioned: mentionedIn(conv.id, viewerId),
     updated_at: conv.updated_at, owner_id: conv.owner_id || null, notice: conv.notice || '',
-    pinned: meta.pinned, muted: meta.muted, hidden: meta.hidden, badge_n: !!conv.badge_n,
+    pinned: meta.pinned, muted: meta.muted, hidden: meta.hidden, badge_n: !!conv.badge_n && unread > 0,
     member_count: conv.members.length, members: memberBriefs, official: !!conv.official,
     last_message: last ? { id: last.id, kind: last.kind, body: last.unsent ? '' : String(last.body).slice(0, 120), unsent: !!last.unsent, sender_id: last.sender_id, created_at: last.created_at } : null
   };
@@ -1796,13 +1817,14 @@ async function loadUserFromD1(id, knownRole) {
   const row = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
   if (!row) return null;
   const u = applyStoredPassword({
-    id: row.id, email: row.email,
+    id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
-    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', created_at: row.created_at,
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
     state: row.state || undefined
   }, row.password_hash);
   users.set(row.email.toLowerCase(), u);
   usersById.set(u.id, u);
+  hydrateUserPrefs(u.id, row.prefs_json);
   return u;
 }
 // A-2: login-time D1 lookup by any identifier (email/handle/phone). The D1
@@ -1922,6 +1944,19 @@ function bad(message, status = 400) { return json({ error: message }, status); }
 function intIn(v, min, max) {
   const n = Number(v);
   return Number.isInteger(n) && n >= min && n <= max ? n : null;
+}
+// Shared data-URL photo validation (avatar + cover). Returns [message, code]
+// or null; '' clears. Byte-identical to the original avatar checks.
+function validatePhotoDataUrl(value, label, code) {
+  if (typeof value !== 'string' || value.length > 350000) return [`${label} must be smaller than 256 KB`, code];
+  if (value === '') return null;
+  const match = value.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match) return ['Only JPEG, PNG and WebP photos are supported', code];
+  let raw;
+  try { raw = atob(match[2]); } catch { return ['Invalid photo encoding', null]; }
+  const valid = match[1] === 'jpeg' ? raw.startsWith('\xff\xd8\xff') : match[1] === 'png' ? raw.startsWith('\x89PNG\r\n\x1a\n') : raw.startsWith('RIFF') && raw.slice(8, 12) === 'WEBP';
+  if (!valid || raw.length > 262144) return [`Invalid or oversized ${label.toLowerCase()}`, code];
+  return null;
 }
 function findDirect(a, b) {
   for (const c of conversations.values()) {
@@ -2190,11 +2225,11 @@ function ensureDefaultConversationsForUser(userId) {
     messages.set(kCid, [
       { id: `m-k-${userId}-1`, conversation_id: kCid, sender_id: userId, client_id: 'k-1', sequence: 1, kind: 'text', body: '이제 탔음', read_count: 1, created_at: '2026-10-23T16:30:00Z' },
       { id: `m-k-${userId}-2`, conversation_id: kCid, sender_id: userId, client_id: 'k-2', sequence: 2, kind: 'text', body: '범계 도착임', read_count: 1, created_at: '2026-10-23T17:15:00Z' },
-      { id: `m-k-${userId}-3`, conversation_id: kCid, sender_id: userId, client_id: 'k-3', sequence: 3, kind: 'call_status', body: '음성통화', metadata: { duration: '1:35', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-23T17:16:00Z' },
-      { id: `m-k-${userId}-4`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-4', sequence: 4, kind: 'call_status', body: '음성통화', metadata: { duration: '0:29', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-23T22:23:00Z' },
+      { id: `m-k-${userId}-3`, conversation_id: kCid, sender_id: userId, client_id: 'k-3', sequence: 3, kind: 'call_status', body: '음성통화', metadata: { duration: '01:35', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-23T17:16:00Z' },
+      { id: `m-k-${userId}-4`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-4', sequence: 4, kind: 'call_status', body: '음성통화', metadata: { duration: '00:29', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-23T22:23:00Z' },
       { id: `m-k-${userId}-5`, conversation_id: kCid, sender_id: userId, client_id: 'k-5', sequence: 5, kind: 'call_status', body: '취소', metadata: { call_type: 'voice', call_status: 'cancelled' }, created_at: '2026-10-24T20:58:00Z' },
       { id: `m-k-${userId}-6`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-6', sequence: 6, kind: 'call_status', body: '부재중 전화', metadata: { call_type: 'voice', call_status: 'missed' }, created_at: '2026-10-24T17:34:00Z' },
-      { id: `m-k-${userId}-7`, conversation_id: kCid, sender_id: userId, client_id: 'k-7', sequence: 7, kind: 'call_status', body: '음성통화', metadata: { duration: '9:24', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-27T17:52:00Z' },
+      { id: `m-k-${userId}-7`, conversation_id: kCid, sender_id: userId, client_id: 'k-7', sequence: 7, kind: 'call_status', body: '음성통화', metadata: { duration: '09:24', call_type: 'voice', call_status: 'completed' }, created_at: '2026-10-27T17:52:00Z' },
       { id: `m-k-${userId}-8`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-8', sequence: 8, kind: 'call_status', body: '부재중 전화', metadata: { call_type: 'voice', call_status: 'missed' }, created_at: '2026-10-27T13:55:00Z' },
       { id: `m-k-${userId}-9`, conversation_id: kCid, sender_id: 'peer-k', client_id: 'k-9', sequence: 9, kind: 'text', body: '바쁘십니까', created_at: '2026-10-27T13:55:30Z' }
     ]);
@@ -2215,7 +2250,7 @@ function ensureDefaultConversationsForUser(userId) {
     messages.set(dodoCid, [
       { id: `m-dodo-${userId}-1`, conversation_id: dodoCid, sender_id: 'peer-dodo', client_id: 'dodo-1', sequence: 1, kind: 'text', body: '새 친구와 지금 대화를 시작해보세요!', created_at: '2026-10-30T10:00:00Z' }
     ]);
-    readCursors.set(`${dodoCid}:${userId}`, 1);
+    // No cursor preset: the room shows N until actually read (item 9).
   }
 
   // 4. 😸care😸 (Screenshot 1 & 8)
@@ -2474,16 +2509,10 @@ async function extended(p, request, url, me, token) {
     if (method === 'GET') return json({ ...publicUser(me), email: me.email, role: me.role });
     if (method === 'PATCH') {
       const b = await readJson(request);
-      if (b.avatar_url !== undefined) {
-        if (typeof b.avatar_url !== 'string' || b.avatar_url.length > 350000) return json({ error: 'Profile photo must be smaller than 256 KB', code: 'INVALID_AVATAR' }, 400);
-        if (b.avatar_url !== '') {
-          const match = b.avatar_url.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
-          if (!match) return json({ error: 'Only JPEG, PNG and WebP photos are supported', code: 'INVALID_AVATAR' }, 400);
-          let raw;
-          try { raw = atob(match[2]); } catch { return json({ error: 'Invalid photo encoding' }, 400); }
-          const valid = match[1] === 'jpeg' ? raw.startsWith('\xff\xd8\xff') : match[1] === 'png' ? raw.startsWith('\x89PNG\r\n\x1a\n') : raw.startsWith('RIFF') && raw.slice(8, 12) === 'WEBP';
-          if (!valid || raw.length > 262144) return json({ error: 'Invalid or oversized profile photo', code: 'INVALID_AVATAR' }, 400);
-        }
+      for (const [key, label, code] of [['avatar_url', 'Profile photo', 'INVALID_AVATAR'], ['cover_url', 'Cover photo', 'INVALID_COVER']]) {
+        if (b[key] === undefined) continue;
+        const err = validatePhotoDataUrl(b[key], label, code);
+        if (err) return json(err[1] ? { error: err[0], code: err[1] } : { error: err[0] }, 400);
       }
       if (b.display_name !== undefined) {
         const v = clip(b.display_name, 40);
@@ -2506,8 +2535,9 @@ async function extended(p, request, url, me, token) {
         if (h !== me.handle && Array.from(users.values()).some(u => u.handle === h)) return bad('이미 사용 중인 ID입니다', 409);
         me.handle = h;
       }
-      if (dbOf()) await dbOf().prepare("UPDATE users SET display_name = ?, bio = ?, status_message = ?, avatar_url = ?, updated_at = ? WHERE id = ?").bind(me.display_name, me.bio || '', me.status_message || '', b.avatar_url === undefined ? (me.avatar_url || '') : b.avatar_url, now(), myId).run();
+      if (dbOf()) await dbOf().prepare("UPDATE users SET display_name = ?, bio = ?, status_message = ?, avatar_url = ?, cover_url = ?, handle = ?, birthday = ?, updated_at = ? WHERE id = ?").bind(me.display_name, me.bio || '', me.status_message || '', b.avatar_url === undefined ? (me.avatar_url || '') : b.avatar_url, b.cover_url === undefined ? (me.cover_url || '') : b.cover_url, me.handle || '', me.birthday || '', now(), myId).run();
       if (b.avatar_url !== undefined) me.avatar_url = b.avatar_url;
+      if (b.cover_url !== undefined) me.cover_url = b.cover_url;
       return json({ ...publicUser(me), email: me.email, role: me.role });
     }
     if (method === 'DELETE') {
@@ -2539,6 +2569,10 @@ async function extended(p, request, url, me, token) {
         if (k === 'theme' && !themesOf(myId).has(b[k])) return bad('보유하지 않은 테마입니다', 403);
         if (k === 'wallpaper' && !['default', 'dots', 'waves', 'grid'].includes(b[k])) return bad('배경 값 오류');
         prefs[k] = b[k];
+      }
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare("UPDATE users SET prefs_json = ? WHERE id = ?").bind(JSON.stringify(prefs), myId).run();
       }
       return json({ ...prefs });
     }
@@ -3950,16 +3984,20 @@ async function syncFromD1(db) {
       const u = applyStoredPassword({
         id: row.id,
         email: row.email,
+        handle: row.handle || '',
+        birthday: row.birthday || '',
         display_name: dName,
         role: grantedRole(row.granted_role),
         bio: (row.bio && !row.bio.includes('LINE')) ? row.bio : 'LUNO Global Messenger User',
         status_message: row.status_message || '',
         avatar_url: row.avatar_url || '',
+        cover_url: row.cover_url || '',
         created_at: row.created_at,
         state: row.state || undefined
       }, row.password_hash);
       users.set(row.email.toLowerCase(), u);
       usersById.set(u.id, u);
+      hydrateUserPrefs(u.id, row.prefs_json);
     }
     const friendRows = await db.prepare("SELECT * FROM friends").all();
     if (friendRows && friendRows.results) {
@@ -4408,6 +4446,70 @@ const workerCore = {
         }, 200, { 'Set-Cookie': refreshCookie(newRefresh, request) });
       }
 
+
+      // 2c. Auth: password recovery (Go parity). No email sender is
+      // configured, so the single-use code is returned inline like Go's
+      // dev-mode response; challenges live in D1 when bound, memory otherwise.
+      if (p === 'auth/recover' && request.method === 'POST') {
+        if (!await rateLimit('rl:recover:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        const body = await request.json().catch(() => ({}));
+        const email = typeof body.email === 'string' ? body.email.toLowerCase().trim() : '';
+        if (!email.includes('@')) return json({ error: 'invalid email' }, 400);
+        const quiet = () => json({ status: 'recovery_token_sent_if_account_exists' });
+        let user = users.get(email) || Array.from(users.values()).find(u => u.email && u.email.toLowerCase() === email);
+        if (dbOf()) {
+          await ensureSchema();
+          const fresh = await loadUserFromD1ByLogin(email);
+          if (fresh) user = fresh;
+        }
+        if (!user || user.state === 'suspended' || user.state === 'deleted') return quiet();
+        const challengeId = crypto.randomUUID();
+        const code = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().slice(0, 8);
+        const codeHash = await sha256Hex(code);
+        const expiresAt = Date.now() + 15 * 60 * 1000;
+        if (dbOf()) {
+          await dbOf().prepare('INSERT INTO luno_recovery_challenges (id, user_id, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)').bind(challengeId, user.id, codeHash, expiresAt, now()).run();
+        } else {
+          recoveryChallenges.set(challengeId, { userId: user.id, codeHash, expiresAt, consumedAt: 0 });
+        }
+        return json({ status: 'recovery_token_sent_if_account_exists', challenge_id: challengeId, recovery_code: code });
+      }
+      if (p === 'auth/recover/verify' && request.method === 'POST') {
+        if (!await rateLimit('rl:recoverv:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        const body = await request.json().catch(() => ({}));
+        const challengeId = typeof body.challenge_id === 'string' ? body.challenge_id : '';
+        const code = typeof body.recovery_code === 'string' ? body.recovery_code : '';
+        const next = typeof body.new_password === 'string' ? body.new_password : '';
+        if (!challengeId || code.length < 16 || next.length < 10) return json({ error: 'invalid recovery request' }, 400);
+        const hash = await sha256Hex(code);
+        let userId = '';
+        if (dbOf()) {
+          await ensureSchema();
+          const row = await dbOf().prepare('SELECT user_id, code_hash, expires_at, consumed_at FROM luno_recovery_challenges WHERE id = ?').bind(challengeId).first();
+          if (!row || row.code_hash !== hash || Number(row.expires_at) <= Date.now()) return json({ error: 'invalid or expired recovery challenge' }, 401);
+          if (row.consumed_at) return json({ error: 'recovery challenge already consumed' }, 409);
+          userId = row.user_id;
+        } else {
+          const entry = recoveryChallenges.get(challengeId);
+          if (!entry || entry.codeHash !== hash || entry.expiresAt <= Date.now()) return json({ error: 'invalid or expired recovery challenge' }, 401);
+          if (entry.consumedAt) return json({ error: 'recovery challenge already consumed' }, 409);
+          userId = entry.userId;
+        }
+        const user = usersById.get(userId) || await loadUserFromD1(userId);
+        if (!user || user.state === 'suspended' || user.state === 'deleted') return json({ error: 'invalid or expired recovery challenge' }, 401);
+        await setPassword(user, next);
+        await persistPassword(user);
+        if (dbOf()) {
+          const done = await dbOf().prepare('UPDATE luno_recovery_challenges SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL').bind(Date.now(), challengeId).run();
+          if (!done.meta.changes) return json({ error: 'recovery challenge already consumed' }, 409);
+        } else {
+          recoveryChallenges.get(challengeId).consumedAt = Date.now();
+        }
+        await revokeOtherSessions(userId, '', userId);
+        await revokeAllRefresh(userId, null);
+        await persistAudit(userId, 'password.recover', userId, {});
+        return json({ status: 'password_reset' });
+      }
 
       // 2.5 Auth: Phone Login
       if (p === 'auth/phone/send-code' && request.method === 'POST') {

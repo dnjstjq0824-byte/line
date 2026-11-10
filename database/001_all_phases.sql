@@ -71,7 +71,8 @@ CREATE TABLE identity.consents (
 CREATE TABLE identity.user_settings (
  user_id UUID PRIMARY KEY REFERENCES identity.users(id), searchable_by_email BOOLEAN NOT NULL DEFAULT false,
  searchable_by_phone BOOLEAN NOT NULL DEFAULT false, show_read_receipts BOOLEAN NOT NULL DEFAULT true,
- allow_friend_requests BOOLEAN NOT NULL DEFAULT true, theme TEXT NOT NULL DEFAULT 'system', updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+ allow_friend_requests BOOLEAN NOT NULL DEFAULT true, theme TEXT NOT NULL DEFAULT 'system', updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ searchable_by_id BOOLEAN NOT NULL DEFAULT true
 );
 
 CREATE TABLE social.friendships (

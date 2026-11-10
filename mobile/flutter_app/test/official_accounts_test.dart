@@ -38,4 +38,13 @@ void main() {
     expect(legacy.first['display_name'], equals('구형'));
     expect(legacy.first['status_message'], equals('설명'));
   });
+
+  test('badge keeps emoji initials intact (no lone surrogates)', () {
+    final list = officialAccountsOf({
+      'accounts': [
+        {'id': 'oa2', 'name': '😸care😸'}
+      ]
+    });
+    expect(list.first['badge'], equals('😸'));
+  });
 }

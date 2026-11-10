@@ -6,6 +6,8 @@
 import { ref, type Ref } from 'vue'
 
 import type { Chat, Message, User } from '../../../shared/api'
+import { initialOf } from '../../../shared/avatar_initial'
+import { senderDisplayName } from '../../../shared/sender_name'
 import type { LunoSticker } from '../luno-stickers'
 import type { LunoLocale } from '../luno-i18n'
 import { currentUser, t, token } from '../store/session'
@@ -23,7 +25,7 @@ export interface SearchHit { id: string; body: string; created_at: string }
 export type RealtimeState = 'connecting' | 'connected' | 'reconnecting' | 'offline'
 export type ChatWallpaper = 'skyblue' | 'slate' | 'mint' | 'dark'
 
-defineProps<{
+const props = defineProps<{
   selectedChat: Chat
   selectedChatId: string
   chats: Chat[]
@@ -129,6 +131,11 @@ const editingMessageBody = defineModel<string>('editingMessageBody', { required:
 const effectChoice = defineModel<'none' | 'gray' | 'sepia'>('effectChoice', { required: true })
 
 const pinnedExpanded = ref(false)
+// Group rooms show the sender; direct rooms keep the (nickname-aware) title.
+function headerName(msg: Message): string {
+  if (props.selectedChat.kind === 'group') return senderDisplayName(msg, props.selectedChat.members || [])
+  return props.selectedChat.title || ''
+}
 // Twin of the view's preview map (the view twin feeds the canvas renderer).
 const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grayscale(1)', sepia: 'sepia(1)' }
 </script>
@@ -142,7 +149,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           <LunoIcon name="back" :size="18" />
         </button>
         <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : selectedChat.official ? '#4F7CFF' : '#315BCD' }">
-          {{ selectedChat.official ? 'L' : selectedChat.title ? selectedChat.title.slice(0, 1) : 'L' }}
+          {{ selectedChat.official ? 'L' : initialOf(selectedChat.title, 'L') }}
         </div>
         <div class="chat-topbar-info">
           <div class="title-row">
@@ -285,7 +292,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
     </div>
 
     <!-- Message History Canvas -->
-    <div ref="messagesCanvasRef" class="pc-chat-messages-canvas" :class="'wallpaper-' + chatWallpaper">
+    <div :ref="messagesCanvasRef" class="pc-chat-messages-canvas" :class="'wallpaper-' + chatWallpaper">
       <div v-if="!isLoadingMessages && hasEarlierMessages" class="ln-history-control">
         <button type="button" class="btn-secondary" :disabled="earlierMessagesLoading" @click="emit('load-earlier')">{{ t(earlierMessagesLoading ? 'history_loading' : 'history_earlier') }}</button>
         <p v-if="earlierMessagesError" role="alert">{{ earlierMessagesError }}</p>
@@ -359,12 +366,12 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index) }"
           >
             <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
-              {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
+              {{ initialOf(headerName(msg), 'U') }}
             </div>
             <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
             <div class="pc-msg-bubble-group">
               <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
-                {{ selectedChat.title }}
+                {{ headerName(msg) }}
               </div>
               <div
                 class="pc-call-status-bubble"
@@ -400,26 +407,27 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           >
             <!-- Other User Avatar (group lead only; continuations keep a 44px indent) -->
             <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
-              {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
+              {{ initialOf(headerName(msg), 'U') }}
             </div>
             <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
 
             <div class="pc-msg-bubble-group">
               <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
-                {{ selectedChat.title }}
+                {{ headerName(msg) }}
               </div>
 
               <!-- Speech Bubble -->
               <div
                 class="pc-speech-bubble"
-                :class="{ 'is-sticker': msg.kind === 'sticker' }"
+                :class="{ 'is-sticker': msg.kind === 'sticker' && !msg.unsent }"
                 @contextmenu.prevent="emit('message-menu', $event, msg)"
               >
                 <div v-if="msg.reply_to" class="bubble-reply-preview">
                   <LunoIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || t('mvRepliedMsg') }}
                 </div>
 
-                <div v-if="editingMessageId === msg.id" class="inline-edit-box">
+                <div v-if="msg.unsent" class="bubble-unsent">{{ t('mvMsgUnsent') }}</div>
+                <div v-else-if="editingMessageId === msg.id" class="inline-edit-box">
                   <input v-model="editingMessageBody" class="inline-edit-input" @keydown.enter.prevent="emit('save-edit')" />
                   <div class="flex-row" style="margin-top:4px;gap:4px">
                     <button class="btn-primary" style="padding:2px 8px;font-size:11px" @click="emit('save-edit')">{{ t('mvSave') }}</button>
@@ -478,10 +486,10 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
               <button :title="t('mvReactHeart')" @click="emit('react', msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
               <button :title="t('mvReactLike')" @click="emit('react', msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
               <button :title="t('mvReply')" @click="emit('reply', msg)"><LunoIcon name="reply" :size="14" /></button>
-              <button v-if="msg.sender_id === currentUser?.id" :title="t('mvEdit')" @click="emit('edit-start', msg)">✎</button>
+              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvEdit')" @click="emit('edit-start', msg)">✎</button>
               <button :title="t('mvCtxKeep')" @click="emit('keep', msg)"><LunoIcon name="keep" :size="14" /></button>
               <button :title="t('mvNoticeRegister')" @click="emit('pin', msg.id)"><LunoIcon name="pin" :size="14" /></button>
-              <button v-if="msg.sender_id === currentUser?.id" :title="t('mvCtxUnsend')" @click="emit('unsend', msg.id)"><LunoIcon name="close" :size="14" /></button>
+              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvCtxUnsend')" @click="emit('unsend', msg.id)"><LunoIcon name="close" :size="14" /></button>
             </div>
           </div>
         </template>
@@ -526,7 +534,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
 
       <!-- Attachment Bar Icons -->
       <div class="pc-input-toolbar">
-        <input ref="attachmentInput" type="file" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="emit('file-change', $event)" />
+        <input :ref="attachmentInput" type="file" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="emit('file-change', $event)" />
         <div v-if="effectFile" class="fx-modal-backdrop" @click.self="emit('effect-close')">
           <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
             <h3>{{ t('fxTitle') }}</h3>
@@ -550,7 +558,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
               <button :class="{ active: cameraMode === 'photo' }" :disabled="videoRecording" @click="emit('camera-mode', 'photo')">{{ t('camPhoto') }}</button>
               <button :class="{ active: cameraMode === 'video' }" :disabled="videoRecording" @click="emit('camera-mode', 'video')">{{ t('camVideo') }}</button>
             </div>
-            <video v-show="!cameraError" ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
+            <video v-show="!cameraError" :ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
             <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
             <p v-if="videoRecording" class="rec-indicator">🔴 {{ videoElapsed }}s / 8s</p>
             <div class="fx-actions">

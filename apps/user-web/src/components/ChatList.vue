@@ -6,6 +6,7 @@ import { ref } from 'vue'
 
 import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
 import type { Chat } from '../../../shared/api'
+import { initialOf } from '../../../shared/avatar_initial'
 import { t } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 
@@ -119,7 +120,7 @@ const channelSlotDismissed = ref(false)
       >
         <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #8EC5FF)' : c.official ? '#4F7CFF' : 'var(--om-primary, #4F7CFF)' }">
           <span v-if="c.official">🛡️</span>
-          <span v-else>{{ c.title ? c.title.slice(0, 1) : 'L' }}</span>
+          <span v-else>{{ initialOf(c.title, 'L') }}</span>
         </div>
         <div class="pc-chat-item-meta">
           <div class="chat-row-top">
@@ -132,7 +133,7 @@ const channelSlotDismissed = ref(false)
             <span class="chat-row-time">{{ formatTime(c.updated_at || '') }}</span>
           </div>
           <div class="chat-row-bottom">
-            <span class="chat-row-preview">{{ c.last_message?.body || t('mvNoMessages') }}</span>
+            <span class="chat-row-preview">{{ c.last_message?.unsent ? t('mvMsgUnsent') : (c.last_message?.body || t('mvNoMessages')) }}</span>
             <div class="chat-row-badges">
               <span v-if="c.badge_n" class="badge-luno-n">N</span>
               <span v-else-if="c.unread_count && c.unread_count > 0" class="chat-unread-pill">{{ c.unread_count }}</span>

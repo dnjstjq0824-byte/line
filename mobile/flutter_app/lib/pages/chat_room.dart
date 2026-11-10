@@ -122,9 +122,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               entry: msg,
                               groupLead: lead,
                               groupTail: isGroupTail(msg, next),
-                              peerName: session.selectedTitle.isEmpty
-                                  ? session.titleOf(widget.conversationId)
-                                  : session.selectedTitle,
+                              peerName: session.senderLabel(
+                                  widget.conversationId, msg),
                             ),
                           ),
                         ],
