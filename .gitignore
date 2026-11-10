@@ -28,6 +28,9 @@ dist_worker/
 **/.gradle/
 **/.kotlin/
 **/local.properties
+*.zip
+*.sqlite
+*.sqlite3
 
 *.apk
 
