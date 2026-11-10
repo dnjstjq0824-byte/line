@@ -818,6 +818,42 @@ import { activeTheme, darkMode, error, note } from './store/session'
   color: var(--om-text, #111827);
 }
 
+/* Expand handle shown only while the side pane is collapsed (the in-flow
+   collapse buttons are clipped by overflow, so collapsing must stay reversible). */
+.btn-pane-expand {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 5;
+  width: 28px;
+  height: 28px;
+  background: var(--om-surface, #ffffff);
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #64748b;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.btn-pane-expand:hover {
+  background: #f1f5f9;
+  color: var(--om-text, #111827);
+}
+
+/* File inputs stay rendered (1px, transparent) so programmatic .click() opens
+   the picker on Safari and mobile webviews, which ignore hidden inputs. */
+.file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
 .btn-pane-sort.active {
   background: #eff6ff;
   border-color: var(--om-primary, #2563EB);

@@ -1417,6 +1417,7 @@ async function loadEvents(convId: string) {
 }
 
 function toggleDrawer(tab: 'notes' | 'albums' | 'events' | 'media') {
+  if (!selectedChatId.value) { note.value = t('mvDrawerNeedChat'); return }
   if (activeDrawer.value === tab) {
     activeDrawer.value = 'none'
   } else {
@@ -3234,6 +3235,7 @@ onBeforeUnmount(() => {
 
       <!-- (Column 2) Second Sidebar List Pane (~305px) -->
       <aside class="pc-side-pane" :class="{ 'is-collapsed': isPanelCollapsed }">
+        <button v-if="isPanelCollapsed" class="btn-pane-expand" :title="t('mvCollapse')" @click="isPanelCollapsed = false">&gt;</button>
         <!-- VIEW 1: FRIENDS / HOME (홈 및 친구 관리 - Section 3 & Screenshot 1) -->
         <div v-if="activeNav === 'home'" class="pc-pane-body">
           <!-- Top Search Header with Collapse Toggle -->
@@ -4267,7 +4269,7 @@ onBeforeUnmount(() => {
 
           <!-- Attachment Bar Icons -->
           <div class="pc-input-toolbar">
-            <input ref="attachmentInput" type="file" hidden @change="uploadSelectedFile" />
+            <input ref="attachmentInput" type="file" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="uploadSelectedFile" />
             <div v-if="effectFile" class="fx-modal-backdrop" @click.self="closeEffectModal">
               <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
                 <h3>{{ t('fxTitle') }}</h3>
@@ -4597,7 +4599,7 @@ onBeforeUnmount(() => {
           <div class="avatar-circle xl"><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ activeProfileUser.display_name.slice(0, 1) }}</span></div>
         </div>
         <div v-if="activeProfileUser.id === currentUser?.id" class="profile-photo-controls" :aria-busy="photoSaving">
-          <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden @change="changeProfilePhoto" />
+          <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="changeProfilePhoto" />
           <button class="btn-secondary" :disabled="photoSaving" @click="photoInput?.click()">{{ photoSaving ? t('profile_saving') : t('profile_photo_change') }}</button>
           <button v-if="currentUser?.avatar_url" class="btn-secondary" :disabled="photoSaving" @click="removeProfilePhoto">{{ t('profile_photo_remove') }}</button>
           <small>{{ t('profile_photo_hint') }}</small>

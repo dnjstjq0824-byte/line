@@ -73,6 +73,7 @@
 .luno-desktop-app .pc-rail-bottom .pc-rail-btn{height:34px!important;margin:1px auto!important}
 .luno-desktop-app :is(.pc-side-pane,.pc-pane-body){background:var(--ln-surface)!important;color:var(--ln-text)!important;border-color:var(--ln-line)!important}
 .luno-desktop-app .pc-side-pane{width:340px!important;min-width:280px;max-width:42vw}
+.luno-desktop-app .pc-side-pane.is-collapsed{width:52px!important;min-width:0!important;max-width:52px!important}
 .luno-desktop-app :is(.pc-empty-canvas,.pc-friend-profile-viewport){background:var(--ln-bg)!important;color:var(--ln-text)!important}
 .luno-desktop-app :is(.pc-friend-item-row,.pc-my-profile-card,.home-services-grid,.chat-ad-banner-card,.pc-call-item-row){background:var(--ln-surface)!important;color:var(--ln-text)!important;border-color:var(--ln-line)!important}
 .luno-desktop-app :is(.friend-item-name,.my-name-text,.pc-empty-title){color:var(--ln-text)!important}

@@ -464,12 +464,27 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   match). Verification: flutter 69/69 + analyze clean, debug APK native
   compile, worker 110/110, Go full pass, user-web build, pre_deploy_gate
   6/6, i18n TOTAL 0.
+## Continuation: 2026-11-10 — QA P0-4 attachment unresponsiveness
 
-
-
-
-
-
-
-
-
+- Live click repro (Chromium 1920px, demo user) of all 7 QA items: camera
+  modal, file chooser, voice start, drawers (chat selected), and the
+  favorite pill all work at HEAD; 3 real defects fixed, no server change.
+- Collapse: luno-v2.css 340px!important beat the 52px rule (class toggled,
+  width stuck) — added a winning .is-collapsed override plus a floating
+  expand button (in-flow buttons clip when collapsed). Local browser:
+  340->52->340.
+- Drawer buttons with no chat selected were a silent no-op (drawer lives
+  in the chat viewport) — toggleDrawer now shows mvDrawerNeedChat x4
+  locales instead. File input dropped the `hidden` attribute for a
+  rendered-but-invisible class (Safari/mobile webviews ignore programmatic
+  clicks on hidden inputs); profile photo input got the same fix.
+- Pinned by scripts/qa_attachment.test.mjs (5/5: worker fav contract +
+  4 source tripwires). Test-first red (2/5), consolidated red drill (3
+  breaks fail), restored byte-identical (sha256 match). Verification:
+  node suite 130/130, user-web build, pre_deploy_gate 6/6, i18n TOTAL 0,
+  local dev+worker-shim browser pass (collapse/drawer-guard/chooser/fav).
+- Found, not fixed (out of scope): Keep-memo chip hardcodes 'keep-memo'
+  but the list carries per-user conv ids (worker aliases only the fetch
+  path), so it lands on an empty canvas. Friend context menu could not be
+  driven by the harness (QA-passed message menu fails identically there);
+  same component/mechanism as the verified paths. Uncommitted, undeployed.
