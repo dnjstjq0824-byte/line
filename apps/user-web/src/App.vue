@@ -42,7 +42,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   width: 100vw;
   overflow: hidden;
   background: var(--line-rail-bg);
-  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", "Noto Sans KR", sans-serif;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", "Noto Sans KR", sans-serif);
   color: var(--line-text-dark);
   user-select: none;
 }
@@ -977,8 +977,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .friend-item-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-list-name-size, 0.9375rem);
+  font-weight: var(--text-list-name-weight, 600);
+  line-height: var(--text-list-name-leading, 1.4);
   color: var(--om-text, #111827);
   white-space: nowrap;
   overflow: hidden;
@@ -1032,8 +1033,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .chat-row-title {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--text-list-name-size, 0.9375rem);
+  font-weight: var(--text-list-name-weight, 600);
+  line-height: var(--text-list-name-leading, 1.4);
   color: var(--om-text, #111827);
   white-space: nowrap;
   overflow: hidden;
@@ -1050,7 +1052,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .chat-row-time {
-  font-size: 10px;
+  font-size: var(--text-stamp-size, 0.6875rem);
+  font-weight: var(--text-stamp-weight, 500);
+  line-height: var(--text-stamp-leading, 1.2);
+  font-variant-numeric: tabular-nums;
   color: #94a3b8;
   flex-shrink: 0;
 }
@@ -1063,11 +1068,13 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .chat-row-preview {
-  font-size: 12px;
-  color: #64748b;
-  white-space: nowrap;
+  font-size: var(--text-sub-size, 0.8125rem);
+  font-weight: var(--text-sub-weight, 400);
+  color: var(--text-secondary, #64748b);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 180px;
 }
 
@@ -1076,6 +1083,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   min-width: 18px;
   height: 18px;
   line-height: 18px;
@@ -1413,8 +1421,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
   gap: 10px;
 }
 .chat-header-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--text-title-size, 1rem);
+  font-weight: var(--text-title-weight, 600);
+  line-height: var(--text-title-leading, 1.35);
   color: #111827;
 }
 .member-tag { font-size: 11px; color: #64748b; margin-left: 6px; }
@@ -1484,22 +1493,37 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .pc-speech-bubble {
   padding: 8px 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--text-bubble-size, 0.9375rem);
+  font-weight: var(--text-bubble-weight, 400);
+  line-height: var(--text-bubble-leading, 1.48);
   word-break: break-word;
   position: relative;
   box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  max-width: var(--bubble-max-mobile, 76%);
+}
+@media (min-width: 701px) {
+  .pc-msg-row .pc-speech-bubble { max-width: var(--bubble-max-desktop, 520px); }
 }
 .pc-msg-row.other .pc-speech-bubble {
   background: #ffffff;
   color: #191919;
-  border-top-left-radius: 2px;
+  border-radius: var(--radius-bubble-tail, 4px) var(--radius-bubble, 18px) var(--radius-bubble, 18px) var(--radius-bubble, 18px);
 }
 .pc-msg-row.mine .pc-speech-bubble {
   background: var(--om-primary, #2563EB);
   color: #ffffff;
-  border-top-right-radius: 2px;
+  border-radius: var(--radius-bubble, 18px) var(--radius-bubble, 18px) var(--radius-bubble-tail, 4px) var(--radius-bubble, 18px);
+}
+/* Burst grouping (§7-3): 3px inside a burst, 12px when the sender changes. */
+.pc-chat-messages-canvas { gap: var(--bubble-gap-break, 12px); }
+.pc-msg-row.group-inner { margin-top: calc(var(--bubble-gap-inner, 3px) - var(--bubble-gap-break, 12px)); }
+.pc-continued-indent {
+  flex-shrink: 0;
+  width: var(--bubble-continued-indent, 44px);
+}
+.other-avatar.is-group-lead {
+  width: var(--bubble-avatar-size, 36px);
+  height: var(--bubble-avatar-size, 36px);
 }
 .pc-speech-bubble.sticker {
   background: none !important;
@@ -1523,7 +1547,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
   margin-top: 2px;
 }
 .pc-read-receipt {
-  font-weight: 700;
+  font-size: var(--text-stamp-size, 0.6875rem);
+  font-weight: var(--text-stamp-weight, 500);
+  line-height: var(--text-stamp-leading, 1.2);
+  font-variant-numeric: tabular-nums;
   color: #ffffff;
 }
 
@@ -1591,7 +1618,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   border: none;
   resize: none;
   outline: none;
-  font-size: 13px;
+  font-size: var(--text-input-size, 1rem);
   line-height: 1.4;
   font-family: inherit;
 }
@@ -3079,7 +3106,13 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .pin-icon, .pin-toggle { font-size: 12px; }
 .btn-unpin-inline { background: none; border: none; color: #94a3b8; cursor: pointer; margin-left: auto; font-size: 11px; }
 .other-avatar, .luno-official-avatar { flex-shrink: 0; }
-.security-meta, .pc-timestamp { font-size: 10.5px; color: #64748b; }
+.security-meta, .pc-timestamp {
+  font-size: var(--text-stamp-size, 0.6875rem);
+  font-weight: var(--text-stamp-weight, 500);
+  line-height: var(--text-stamp-leading, 1.2);
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
 .bubble-text-content { word-break: break-word; line-height: 1.45; }
 .profile-preview-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; margin-top: 8px; }
 .pc-modal-backdrop { position: fixed; inset: 0; z-index: 3000; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; }
@@ -3088,7 +3121,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .lg { width: 72px; height: 72px; font-size: 26px; }
 .xl { width: 84px; height: 84px; font-size: 30px; background: #315BCD; border: 3px solid #ffffff; }
 .call-type-status { font-size: 13px; color: #cbd5e1; margin: 4px 0 10px; }
-.timer-active { color: #4ade80; font-weight: 700; }
+.timer-active { color: #4ade80; font-weight: 700; font-variant-numeric: tabular-nums; }
 .caption-stream { margin-top: 4px; }
 .profile-modal-card { width: 340px; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.25); }
 .profile-avatar-center { display: flex; justify-content: center; margin-top: -42px; }

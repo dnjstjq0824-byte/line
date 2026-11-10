@@ -1,5 +1,7 @@
 // Route: /chats/:cid — the vessel deck. Messages only; pins, notes,
 // events and polls each have their own sub-route below this one.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +10,7 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../legacy_tokens.dart';
 import '../state/session.dart';
+import '../theme/luno_theme.dart';
 import '../util/attachments.dart';
 import '../util/voice_recorder.dart';
 import '../util/stickers.dart';
@@ -90,7 +93,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           ),
         Expanded(
           child: Container(
-            color: dark ? HarborDark.fog : lunoLightBlue,
+            color: LunoTheme.chatRoomBackgroundColor(
+                dark ? Brightness.dark : Brightness.light),
             child: loading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
@@ -99,13 +103,30 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     itemBuilder: (_, i) {
                       final msg = session.messages[i];
                       final prev = i > 0 ? session.messages[i - 1] : null;
+                      final next = i + 1 < session.messages.length
+                          ? session.messages[i + 1]
+                          : null;
                       final prevIso = prev == null ? null : prev['created_at'];
+                      final lead = isGroupLead(prev, msg);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (showDateDivider(prevIso, msg['created_at']))
                             _DateDivider(iso: msg['created_at']),
-                          _SignalBubble(entry: msg),
+                          Padding(
+                            padding: EdgeInsets.only(
+                                top: lead
+                                    ? LunoBubble.gapBreak
+                                    : LunoBubble.gapInner),
+                            child: _SignalBubble(
+                              entry: msg,
+                              groupLead: lead,
+                              groupTail: isGroupTail(msg, next),
+                              peerName: session.selectedTitle.isEmpty
+                                  ? session.titleOf(widget.conversationId)
+                                  : session.selectedTitle,
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -179,8 +200,9 @@ class _DeckHeader extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             color: dark ? HarborDark.ink : Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15),
+                            fontWeight: LunoType.titleWeight,
+                            fontSize: LunoType.titleSize,
+                            height: LunoType.titleHeight),
                       ),
                     ),
                   ],
@@ -299,7 +321,14 @@ class _DateDivider extends StatelessWidget {
 
 class _SignalBubble extends StatelessWidget {
   final dynamic entry;
-  const _SignalBubble({required this.entry});
+  final bool groupLead;
+  final bool groupTail;
+  final String peerName;
+  const _SignalBubble(
+      {required this.entry,
+      this.groupLead = true,
+      this.groupTail = true,
+      this.peerName = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -311,21 +340,32 @@ class _SignalBubble extends StatelessWidget {
     final msgId = '${m['id'] ?? ''}';
     final trans = session.translations[msgId];
     final bubble = mine
-        ? (dark ? HarborDark.mine : HarborLight.mine)
-        : (dark ? HarborDark.theirs : HarborLight.theirs);
-    final ink = mine ? Colors.white : (dark ? HarborDark.ink : HarborLight.ink);
+        ? (dark ? LunoDark.bubbleMineBg : LunoLight.bubbleMineBg)
+        : (dark ? LunoDark.bubbleTheirsBg : LunoLight.bubbleTheirsBg);
+    final ink = mine
+        ? (dark ? LunoDark.bubbleMineText : LunoLight.bubbleMineText)
+        : (dark ? LunoDark.bubbleTheirsText : LunoLight.bubbleTheirsText);
     final faint = mine
         ? Colors.white.withValues(alpha: 0.75)
         : (dark ? HarborDark.drift : HarborLight.drift);
-    final time = bubbleTime(m['created_at']);
+    final time = groupTail ? bubbleTime(m['created_at']) : '';
+    final screenW = MediaQuery.sizeOf(context).width;
+    final kind = DeviceScope.of(context);
+    final wide = kind == DeviceKind.tablet || kind == DeviceKind.desktop;
+    final maxW = math.min(screenW * LunoBubble.maxWidthMobileFraction,
+        wide ? LunoBubble.maxWidthDesktop : double.infinity);
+    final muted = dark ? LunoDark.textMuted : LunoLight.textMuted;
     final timeStyle = TextStyle(
-        fontSize: 10, color: dark ? HarborDark.drift : HarborLight.drift);
+        fontSize: LunoType.stampSize,
+        fontWeight: LunoType.stampWeight,
+        height: LunoType.stampHeight,
+        fontFeatures: const [LunoType.tabular],
+        color: muted);
     final bubbleBody = Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        constraints: const BoxConstraints(maxWidth: 340),
+        constraints: BoxConstraints(maxWidth: maxW),
         decoration: BoxDecoration(
           color: bubble,
-          borderRadius: mine ? HarborRadius.mine : HarborRadius.theirs,
+          borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
         ),
         child: InkWell(
           onLongPress: () =>
@@ -375,8 +415,11 @@ class _SignalBubble extends StatelessWidget {
                   )
                 else
                   Text('${m['body']}',
-                      style:
-                          TextStyle(color: ink, fontSize: 14, height: 1.35)),
+                      style: TextStyle(
+                          color: ink,
+                          fontSize: LunoType.bubbleSize,
+                          fontWeight: LunoType.bubbleWeight,
+                          height: LunoType.bubbleHeight)),
                 if (trans != null) ...[
                   const SizedBox(height: 6),
                   Container(
@@ -419,10 +462,13 @@ class _SignalBubble extends StatelessWidget {
                   spacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (readCount > 0)
+                    if (groupTail && readCount > 0)
                       Text('읽음 $readCount',
                           style: TextStyle(
-                              fontSize: 10, fontWeight: FontWeight.w700, color: faint)),
+                              fontSize: LunoType.stampSize,
+                              fontWeight: LunoType.stampWeight,
+                              fontFeatures: const [LunoType.tabular],
+                              color: faint)),
                     if (m['edited_at'] != null && '${m['edited_at']}'.isNotEmpty)
                       Text('(수정됨)', style: TextStyle(fontSize: 9, color: faint)),
                     for (final emo in lunoReactions.take(3))
@@ -454,18 +500,56 @@ class _SignalBubble extends StatelessWidget {
           ),
         ),
         );
+    final avatar = !mine && groupLead
+        ? Container(
+            width: LunoBubble.avatarSize,
+            height: LunoBubble.avatarSize,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark ? HarborDark.harbor : HarborLight.harbor,
+            ),
+            child: Text(peerName.isEmpty ? '?' : peerName.characters.first,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+          )
+        : const SizedBox(width: LunoBubble.continuedIndent);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          if (!mine) ...[
+            avatar,
+            const SizedBox(width: 8),
+          ],
           if (mine && time.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 6, bottom: 6),
               child: Text(time, style: timeStyle),
             ),
-          Flexible(child: bubbleBody),
+          Flexible(
+              child: Column(
+            crossAxisAlignment:
+                mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              if (!mine && groupLead && peerName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, bottom: 2),
+                  child: Text(peerName,
+                      style: TextStyle(
+                          fontSize: LunoType.stampSize,
+                          fontWeight: LunoType.stampWeight,
+                          color: dark
+                              ? LunoDark.textSecondary
+                              : LunoLight.textSecondary)),
+                ),
+              bubbleBody,
+            ],
+          )),
           if (!mine && time.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 6, bottom: 6),
@@ -634,6 +718,7 @@ class _Composer extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: controller,
+                style: const TextStyle(fontSize: LunoType.inputSize),
                 minLines: 1,
                 maxLines: dense ? 2 : 4,
                 decoration: const InputDecoration(

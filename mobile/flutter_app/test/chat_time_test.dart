@@ -47,4 +47,42 @@ void main() {
     expect(showDateDivider('not-a-date', 'also-bad'), isFalse);
     expect(showDateDivider('2026-11-09T09:00:00', 'not-a-date'), isFalse);
   });
+
+  test('sameBurst groups one sender within 60s on one day', () {
+    Map<String, Object?> msg(String sender, String at) =>
+        {'sender_id': sender, 'created_at': at};
+    expect(
+        sameBurst(msg('u1', '2026-11-09T09:00:00'),
+            msg('u1', '2026-11-09T09:00:59')),
+        isTrue);
+    expect(
+        sameBurst(msg('u1', '2026-11-09T09:00:00'),
+            msg('u1', '2026-11-09T09:01:00')),
+        isFalse);
+    expect(
+        sameBurst(msg('u1', '2026-11-09T09:00:00'),
+            msg('u2', '2026-11-09T09:00:10')),
+        isFalse);
+    expect(
+        sameBurst(msg('u1', '2026-11-09T23:59:30'),
+            msg('u1', '2026-11-10T00:00:10')),
+        isFalse);
+    expect(sameBurst(msg('u1', 'not-a-date'), msg('u1', 'not-a-date')),
+        isFalse);
+    expect(sameBurst(null, msg('u1', '2026-11-09T09:00:00')), isFalse);
+  });
+
+  test('group lead/tail mark burst edges', () {
+    Map<String, Object?> msg(String sender, String at) =>
+        {'sender_id': sender, 'created_at': at};
+    final a = msg('u1', '2026-11-09T09:00:00');
+    final b = msg('u1', '2026-11-09T09:00:30');
+    final c = msg('u1', '2026-11-09T09:05:00');
+    expect(isGroupLead(null, a), isTrue);
+    expect(isGroupLead(a, b), isFalse);
+    expect(isGroupLead(b, c), isTrue);
+    expect(isGroupTail(a, b), isFalse);
+    expect(isGroupTail(b, c), isTrue);
+    expect(isGroupTail(c, null), isTrue);
+  });
 }

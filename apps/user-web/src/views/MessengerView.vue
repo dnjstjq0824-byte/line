@@ -443,6 +443,26 @@ function shouldShowDateDivider(msg: any, index: number) {
   return d1 !== d2
 }
 
+// --- Burst Grouping (§7-3): same sender within 60s stays in one visual group.
+// Group lead shows avatar + name (theirs); group tail shows timestamp + read.
+function isSameBurst(a: any, b: any) {
+  if (!a || !b) return false
+  if (a.sender_id !== b.sender_id) return false
+  const ta = new Date(a.created_at).getTime()
+  const tb = new Date(b.created_at).getTime()
+  if (isNaN(ta) || isNaN(tb)) return false
+  if (new Date(a.created_at).toDateString() !== new Date(b.created_at).toDateString()) return false
+  return Math.abs(ta - tb) < 60000
+}
+function isGroupLead(msg: any, index: number) {
+  if (index === 0) return true
+  return !isSameBurst(messages.value[index - 1], msg)
+}
+function isGroupTail(msg: any, index: number) {
+  if (index >= messages.value.length - 1) return true
+  return !isSameBurst(msg, messages.value[index + 1])
+}
+
 async function handleSecurityNoticeLogout(msg: any) {
   const sessionId = msg.metadata?.session_id
   if (!sessionId) {
@@ -4101,13 +4121,14 @@ onBeforeUnmount(() => {
               <div
                 v-else-if="msg.kind === 'call_status' || msg.kind === 'call'"
                 class="pc-msg-row"
-                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id }"
+                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index) }"
               >
-                <div v-if="msg.sender_id !== currentUser?.id" class="pc-avatar circle-34 other-avatar" style="background:#315BCD">
+                <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
                   {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
                 </div>
+                <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
                 <div class="pc-msg-bubble-group">
-                  <div v-if="msg.sender_id !== currentUser?.id" class="pc-sender-header">
+                  <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
                     {{ selectedChat.title }}
                   </div>
                   <div
@@ -4129,7 +4150,7 @@ onBeforeUnmount(() => {
                       </div>
                     </div>
                   </div>
-                  <div class="pc-msg-meta">
+                  <div v-if="isGroupTail(msg, index)" class="pc-msg-meta">
                     <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
                     <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
                   </div>
@@ -4140,15 +4161,16 @@ onBeforeUnmount(() => {
               <div
                 v-else
                 class="pc-msg-row"
-                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id }"
+                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index) }"
               >
-                <!-- Other User Avatar -->
-                <div v-if="msg.sender_id !== currentUser?.id" class="pc-avatar circle-34 other-avatar" style="background:#315BCD">
+                <!-- Other User Avatar (group lead only; continuations keep a 44px indent) -->
+                <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
                   {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
                 </div>
+                <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
 
                 <div class="pc-msg-bubble-group">
-                  <div v-if="msg.sender_id !== currentUser?.id" class="pc-sender-header">
+                  <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
                     {{ selectedChat.title }}
                   </div>
 
@@ -4208,8 +4230,8 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
 
-                  <!-- Status Info: Read receipt & Time -->
-                  <div class="pc-msg-meta">
+                  <!-- Status Info: Read receipt & Time (group tail only) -->
+                  <div v-if="isGroupTail(msg, index)" class="pc-msg-meta">
                     <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
                     <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
                   </div>

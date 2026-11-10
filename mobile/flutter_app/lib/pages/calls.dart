@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../theme/luno_theme.dart';
 
 class CallsPage extends StatelessWidget {
   const CallsPage({super.key});
@@ -107,7 +108,7 @@ class _CallRow extends StatelessWidget {
               parts.join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: lineColor),
+              style: TextStyle(fontSize: 12, color: lineColor, fontFeatures: const [LunoType.tabular]),
             ),
           ),
         ],

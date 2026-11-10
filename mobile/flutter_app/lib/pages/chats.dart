@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../theme/luno_theme.dart';
 import '../util/chat_time.dart';
 import '../util/channel_slot.dart';
 
@@ -223,12 +224,20 @@ class _BerthCard extends StatelessWidget {
                     Text('$title$countSuffix',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                        style: const TextStyle(
+                            fontWeight: LunoType.listNameWeight,
+                            fontSize: LunoType.listNameSize,
+                            height: LunoType.listNameHeight)),
                     const SizedBox(height: 2),
                     Text(previewOfLastMessage(c['last_message']),
-                        maxLines: 1,
+                        maxLines: LunoType.subMaxLines,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall),
+                        style: TextStyle(
+                            fontWeight: LunoType.subWeight,
+                            fontSize: LunoType.subSize,
+                            color: dark
+                                ? LunoDark.textSecondary
+                                : LunoLight.textSecondary)),
                   ],
                 ),
               ),
@@ -241,10 +250,13 @@ class _BerthCard extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(rowTime,
                           style: TextStyle(
-                              fontSize: 11,
+                              fontSize: LunoType.stampSize,
+                              fontWeight: LunoType.stampWeight,
+                              height: LunoType.stampHeight,
+                              fontFeatures: const [LunoType.tabular],
                               color: dark
-                                  ? HarborDark.drift
-                                  : HarborLight.drift)),
+                                  ? LunoDark.textMuted
+                                  : LunoLight.textMuted)),
                     ),
                   if (unread > 0)
                     Container(
@@ -259,8 +271,9 @@ class _BerthCard extends StatelessWidget {
                               color: dark
                                   ? HarborDark.onBeacon
                                   : HarborLight.onBeacon,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800)),
+                              fontSize: LunoType.stampSize,
+                              fontWeight: LunoType.stampWeight,
+                              fontFeatures: const [LunoType.tabular])),
                     )
                   else
                     Icon(Icons.chevron_right,

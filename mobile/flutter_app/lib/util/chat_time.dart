@@ -62,3 +62,21 @@ bool showDateDivider(dynamic prevIso, dynamic iso) {
   if (key.isEmpty) return false;
   return dayKey(prevIso) != key;
 }
+
+/// §7-3 burst rule: two adjacent messages share one visual group when they
+/// come from the same sender on the same day less than 60s apart.
+bool sameBurst(dynamic a, dynamic b) {
+  if (a is! Map || b is! Map) return false;
+  if ('${a['sender_id']}' != '${b['sender_id']}') return false;
+  final ta = _parse(a['created_at']);
+  final tb = _parse(b['created_at']);
+  if (ta == null || tb == null) return false;
+  if (!_sameDay(ta, tb)) return false;
+  return ta.difference(tb).abs() < const Duration(seconds: 60);
+}
+
+/// True when [msg] leads its burst (avatar + name shown for theirs).
+bool isGroupLead(dynamic prev, dynamic msg) => !sameBurst(prev, msg);
+
+/// True when [msg] ends its burst (timestamp + read count shown).
+bool isGroupTail(dynamic msg, dynamic next) => !sameBurst(msg, next);

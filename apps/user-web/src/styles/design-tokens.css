@@ -62,6 +62,38 @@
   --drawer-width: 320px;
   --header-height: 60px;
   --bottom-nav-height: 56px;
+
+  /* Typography (§7-2) — sizes/weights/leading are fixed; colors reuse --text-* */
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Noto Sans KR', sans-serif;
+  --text-title-size: 1rem;            /* 16px: room title / header title */
+  --text-title-weight: 600;
+  --text-title-leading: 1.35;
+  --text-list-name-size: 0.9375rem;   /* 15px: friend / chat-room name */
+  --text-list-name-weight: 600;
+  --text-list-name-leading: 1.4;
+  --text-bubble-size: 0.9375rem;      /* 15px: message bubble body */
+  --text-bubble-weight: 400;
+  --text-bubble-leading: 1.48;
+  --text-input-size: 1rem;            /* 16px FIXED: below 16px iOS Safari force-zooms on focus */
+  --text-sub-size: 0.8125rem;         /* 13px: recent-message preview */
+  --text-sub-weight: 400;
+  --text-stamp-size: 0.6875rem;       /* 11px: timestamps, read count '1' */
+  --text-stamp-weight: 500;
+  --text-stamp-leading: 1.2;
+
+  /* Bubble Grouping (§7-3) */
+  --bubble-gap-inner: 3px;            /* same-sender burst spacing */
+  --bubble-gap-break: 12px;           /* spacing when the sender changes */
+  --bubble-avatar-size: 36px;
+  --bubble-continued-indent: 44px;    /* avatar slot kept on continued rows */
+  --bubble-max-mobile: 76%;
+  --bubble-max-desktop: 520px;
+}
+
+/* Fixed-width numerals (§7-2): chat-list times, unread badges, read counts,
+   call timers must never wobble as digits change. */
+.ln-tnum {
+  font-variant-numeric: tabular-nums;
 }
 
 [data-theme="dark"] {

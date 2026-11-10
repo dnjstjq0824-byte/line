@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:luno_messenger/theme/luno_theme.dart';
 
@@ -67,5 +68,83 @@ void main() {
     final dark = LunoTheme.theme(Brightness.dark);
     expect(dark.colorScheme.primary, const Color(0xFF3B82F6));
     expect(dark.scaffoldBackgroundColor, const Color(0xFF090D16));
+  });
+
+  test('type scale matches §7-2 exactly', () {
+    expect(LunoType.titleSize, 16.0);
+    expect(LunoType.titleWeight, FontWeight.w600);
+    expect(LunoType.titleHeight, 1.35);
+    expect(LunoType.listNameSize, 15.0);
+    expect(LunoType.listNameWeight, FontWeight.w600);
+    expect(LunoType.listNameHeight, 1.4);
+    expect(LunoType.bubbleSize, 15.0);
+    expect(LunoType.bubbleWeight, FontWeight.w400);
+    expect(LunoType.bubbleHeight, 1.48);
+    expect(LunoType.inputSize, 16.0);
+    expect(LunoType.subSize, 13.0);
+    expect(LunoType.subWeight, FontWeight.w400);
+    expect(LunoType.subMaxLines, 2);
+    expect(LunoType.stampSize, 11.0);
+    expect(LunoType.stampWeight, FontWeight.w500);
+    expect(LunoType.stampHeight, 1.2);
+    expect(LunoType.tabular, const FontFeature.tabularFigures());
+  });
+
+  test('bubble geometry matches §7-3 exactly', () {
+    expect(
+        LunoBubble.mine,
+        const BorderRadius.only(
+          topLeft: Radius.circular(18),
+          topRight: Radius.circular(18),
+          bottomRight: Radius.circular(4),
+          bottomLeft: Radius.circular(18),
+        ));
+    expect(
+        LunoBubble.theirs,
+        const BorderRadius.only(
+          topLeft: Radius.circular(4),
+          topRight: Radius.circular(18),
+          bottomRight: Radius.circular(18),
+          bottomLeft: Radius.circular(18),
+        ));
+    expect(LunoBubble.gapInner, 3.0);
+    expect(LunoBubble.gapBreak, 12.0);
+    expect(LunoBubble.avatarSize, 36.0);
+    expect(LunoBubble.continuedIndent, 44.0);
+    expect(LunoBubble.maxWidthMobileFraction, 0.76);
+    expect(LunoBubble.maxWidthDesktop, 520.0);
+    expect(LunoBubble.burstWindow, const Duration(seconds: 60));
+  });
+
+  test('theme factory maps §7-4 surfaces', () {
+    final light = LunoTheme.theme(Brightness.light);
+    expect(light.primaryColor, const Color(0xFF2563EB));
+    expect(light.cardColor, const Color(0xFFFFFFFF));
+    expect(light.appBarTheme.elevation, 0);
+    expect(light.appBarTheme.scrolledUnderElevation, 0.5);
+    expect(light.appBarTheme.backgroundColor, const Color(0xFFFFFFFF));
+    expect(light.appBarTheme.systemOverlayStyle,
+        SystemUiOverlayStyle.dark);
+    expect(light.textTheme.titleLarge?.fontSize, 16.0);
+    expect(light.textTheme.titleMedium?.fontSize, 15.0);
+    expect(light.textTheme.bodyLarge?.fontSize, 15.0);
+    expect(light.textTheme.bodyLarge?.height, 1.48);
+    expect(light.textTheme.bodyMedium?.fontSize, 13.0);
+    expect(light.textTheme.bodyMedium?.color, const Color(0xFF475569));
+    expect(light.textTheme.labelSmall?.fontSize, 11.0);
+    expect(LunoTheme.chatRoomBackgroundColor(Brightness.light),
+        const Color(0xFFF1F5F9));
+    expect(LunoTheme.unreadAccentColor(Brightness.light),
+        const Color(0xFFF59E0B));
+    final dark = LunoTheme.theme(Brightness.dark);
+    expect(dark.primaryColor, const Color(0xFF3B82F6));
+    expect(dark.cardColor, const Color(0xFF1E293B));
+    expect(dark.appBarTheme.backgroundColor, const Color(0xFF1E293B));
+    expect(dark.appBarTheme.systemOverlayStyle,
+        SystemUiOverlayStyle.light);
+    expect(LunoTheme.chatRoomBackgroundColor(Brightness.dark),
+        const Color(0xFF090D16));
+    expect(LunoTheme.unreadAccentColor(Brightness.dark),
+        const Color(0xFFFBBF24));
   });
 }
