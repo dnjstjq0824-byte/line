@@ -150,6 +150,166 @@ const LUNO_SCHEMA = [
     created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_passkey_cred_user ON luno_passkey_credentials(user_id)`,
 ];
+const LUNO_SCHEMA_BASE = [
+  `CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, handle TEXT UNIQUE,
+    password_hash TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '',
+    status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
+    birthday TEXT DEFAULT '', state TEXT DEFAULT 'active',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
+    avatar_url TEXT DEFAULT '', official INTEGER DEFAULT 0, owner_id TEXT DEFAULT '',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS conversation_members (
+    conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT DEFAULT 'member',
+    last_read_message_id TEXT DEFAULT '', joined_at TEXT NOT NULL,
+    is_pinned INTEGER DEFAULT 0, is_muted INTEGER DEFAULT 0, is_hidden INTEGER DEFAULT 0,
+    PRIMARY KEY (conversation_id, user_id))`,
+  `CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL,
+    body TEXT NOT NULL, kind TEXT DEFAULT 'text', media_url TEXT DEFAULT '',
+    sticker_id TEXT DEFAULT '', reply_to_id TEXT DEFAULT '',
+    is_pinned INTEGER DEFAULT 0, is_unsent INTEGER DEFAULT 0, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS message_reactions (
+    message_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY (message_id, user_id, emoji))`,
+  `CREATE TABLE IF NOT EXISTS friends (
+    user_id TEXT NOT NULL, friend_id TEXT NOT NULL, status TEXT DEFAULT 'accepted',
+    is_favorite INTEGER DEFAULT 0, created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, friend_id))`,
+  `CREATE TABLE IF NOT EXISTS wallets (
+    user_id TEXT PRIMARY KEY, balance INTEGER DEFAULT 0, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id TEXT PRIMARY KEY, from_user_id TEXT NOT NULL, to_user_id TEXT NOT NULL,
+    amount INTEGER NOT NULL, note TEXT DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS keep_items (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
+    category TEXT DEFAULT 'text', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS openchat_rooms (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL,
+    category TEXT DEFAULT 'general', cover_url TEXT DEFAULT '',
+    member_count INTEGER DEFAULT 1, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS notes (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, author_id TEXT NOT NULL,
+    body TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS albums (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, title TEXT NOT NULL,
+    image_urls TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, title TEXT NOT NULL,
+    event_date TEXT NOT NULL, location TEXT DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS polls (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, question TEXT NOT NULL,
+    option1 TEXT NOT NULL, option2 TEXT NOT NULL, votes1 INTEGER DEFAULT 0, votes2 INTEGER DEFAULT 0,
+    multiple INTEGER DEFAULT 0, closed INTEGER DEFAULT 0, created_by TEXT DEFAULT '',
+    options_json TEXT DEFAULT '[]', created_at TEXT NOT NULL)`
+];
+const LUNO_SCHEMA_PHASE1 = [
+  `CREATE TABLE IF NOT EXISTS refresh_tokens (
+    token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT,
+    expires_at INTEGER NOT NULL, revoked INTEGER DEFAULT 0, created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id)`,
+  `CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL,
+    success INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_login_attempts_key ON login_attempts(key, created_at)`,
+  `CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT NOT NULL, window_start INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (key, window_start))`,
+  `CREATE TABLE IF NOT EXISTS blocks (
+    blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY (blocker_id, blocked_id))`,
+  `CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks(blocked_id)`,
+  `CREATE TABLE IF NOT EXISTS reports (
+    id TEXT PRIMARY KEY, reporter_id TEXT NOT NULL, target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_reports_target ON reports(target_type, target_id)`,
+  `CREATE TABLE IF NOT EXISTS user_bans (
+    user_id TEXT PRIMARY KEY, reason TEXT NOT NULL DEFAULT '',
+    banned_by TEXT NOT NULL DEFAULT '', expires_at INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL,
+    target TEXT, detail TEXT, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor)`,
+  `CREATE TABLE IF NOT EXISTS e2ee_keys (
+    user_id TEXT NOT NULL, device_id TEXT NOT NULL, identity_key TEXT NOT NULL DEFAULT '',
+    signed_prekey TEXT NOT NULL DEFAULT '', prekeys_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL, PRIMARY KEY (user_id, device_id))`,
+  `CREATE TABLE IF NOT EXISTS push_tokens (
+    user_id TEXT NOT NULL, device_id TEXT NOT NULL, platform TEXT NOT NULL DEFAULT '',
+    token TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, device_id))`,
+  `CREATE TABLE IF NOT EXISTS conversation_notes (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, author_id TEXT NOT NULL,
+    title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_conversation_notes_conv ON conversation_notes(conversation_id)`,
+  `CREATE TABLE IF NOT EXISTS conversation_events (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, title TEXT NOT NULL,
+    starts_at TEXT NOT NULL, location TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_conversation_events_conv ON conversation_events(conversation_id)`,
+  `CREATE TABLE IF NOT EXISTS event_rsvps (
+    event_id TEXT NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL,
+    updated_at TEXT NOT NULL, PRIMARY KEY (event_id, user_id))`,
+  `CREATE TABLE IF NOT EXISTS poll_votes (
+    poll_id TEXT NOT NULL, option_id TEXT NOT NULL, user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL, PRIMARY KEY (poll_id, option_id, user_id))`,
+  `CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id)`,
+  `CREATE TABLE IF NOT EXISTS reactions (
+    message_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL,
+    created_at TEXT NOT NULL, PRIMARY KEY (message_id, user_id, emoji))`,
+  `CREATE TABLE IF NOT EXISTS call_logs (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, caller_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'voice', started_at TEXT NOT NULL,
+    ended_at TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'ended')`,
+  `CREATE INDEX IF NOT EXISTS idx_call_logs_conv ON call_logs(conversation_id)`,
+  `CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, object_key TEXT NOT NULL DEFAULT '',
+    mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0,
+    sha256 TEXT NOT NULL DEFAULT '', uploader_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_attachments_conv ON attachments(conversation_id)`
+];
+// Additive columns for tables that predate Phase 1. Applied with a
+// PRAGMA guard because SQLite has no idempotent ADD COLUMN.
+const LUNO_SCHEMA_PHASE1_COLS = [
+  ['users', 'handle', 'TEXT'],
+  ['users', 'birthday', "TEXT DEFAULT ''"],
+  ['users', 'avatar_url', "TEXT DEFAULT ''"],
+  ['users', 'status_message', "TEXT DEFAULT ''"],
+  ['users', 'bio', "TEXT DEFAULT ''"],
+  ['users', 'phone_number', "TEXT DEFAULT ''"],
+  ['users', 'state', "TEXT DEFAULT 'active'"],
+  ['friends', 'is_favorite', 'INTEGER DEFAULT 0'],
+  ['conversations', 'owner_id', "TEXT DEFAULT ''"],
+  ['conversation_members', 'is_pinned', 'INTEGER DEFAULT 0'],
+  ['conversation_members', 'is_muted', 'INTEGER DEFAULT 0'],
+  ['conversation_members', 'is_hidden', 'INTEGER DEFAULT 0'],
+  ['polls', 'multiple', 'INTEGER DEFAULT 0'],
+  ['polls', 'closed', 'INTEGER DEFAULT 0'],
+  ['polls', 'created_by', "TEXT DEFAULT ''"],
+  ['polls', 'options_json', "TEXT DEFAULT '[]'"],
+];
+async function ensurePhase1Columns(db) {
+  for (const [table, column, ddl] of LUNO_SCHEMA_PHASE1_COLS) {
+    let cols = [];
+    try {
+      const res = await db.prepare(`PRAGMA table_info(${table})`).all();
+      cols = (res.results || []).map(r => r.name);
+    } catch (_) { continue; }
+    if (!cols.includes(column)) {
+      await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`).run();
+    }
+  }
+  // Backfill + uniqueness for the new users.handle (A-18).
+  try {
+    await db.prepare(`UPDATE users SET handle = 'user_' || substr(id, 1, 8) WHERE handle IS NULL`).run();
+    await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users(handle)`).run();
+  } catch (_) { /* pre-existing duplicates stay; register enforces going forward */ }
+}
+
 let schemaReady = null;
 function dbOf() { return CURRENT_ENV && CURRENT_ENV.DB ? CURRENT_ENV.DB : null; }
 async function ensureSchema() {
@@ -160,6 +320,10 @@ async function ensureSchema() {
       // Every new isolate runs this once; one batch is one round trip instead of one per statement.
       if (typeof db.batch === 'function') await db.batch(LUNO_SCHEMA.map(sql => db.prepare(sql)));
       else for (const sql of LUNO_SCHEMA) await db.prepare(sql).run();
+      const phase1 = [...LUNO_SCHEMA_BASE, ...LUNO_SCHEMA_PHASE1];
+      if (typeof db.batch === 'function') await db.batch(phase1.map(sql => db.prepare(sql)));
+      else for (const sql of phase1) await db.prepare(sql).run();
+      await ensurePhase1Columns(db);
       return true;
     })().catch(err => { schemaReady = null; throw err; });
   }
@@ -3706,8 +3870,8 @@ const workerCore = {
         if (env.DB) {
           // Passwords are persisted only as PBKDF2 digests; writes are awaited so a redeploy never loses the account.
           await ensureSchema();
-          await env.DB.prepare("INSERT OR REPLACE INTO users (id, email, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
-            .bind(newUser.id, newUser.email, encodePasswordHash(newUser), newUser.display_name, newUser.bio).run();
+          await env.DB.prepare("INSERT OR REPLACE INTO users (id, email, handle, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
+            .bind(newUser.id, newUser.email, newUser.handle, encodePasswordHash(newUser), newUser.display_name, newUser.bio).run();
           await d1Run(env.DB, "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, datetime('now'))", newUser.id);
         }
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);

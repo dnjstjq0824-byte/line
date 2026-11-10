@@ -524,3 +524,24 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
 - download.html refreshed (Build 4, sizes, SHA-256). Push to main
   triggers the Cloudflare deploy workflow; live APK bytes verified
   after deploy.
+## Continuation: 2026-11-10 — Emergency directive audit + S0/S1/S7
+
+- Verified the audit directive with a 3-agent read-only sweep + critic:
+  in-memory stores (~55 globals), prod passwordless demo, plaintext login
+  fallback, 100k PBKDF2 vs 310k policy claim, no refresh rotation,
+  wallet charge-503/spend-live split confirmed. localStorage-refresh and
+  error_report-PII claims refuted. Test recount: 36 files / 149 test(.
+- S0 (A-26): APKs moved to GitHub release v2.0.0-build4 on origin;
+  download page + QR point at release URLs (bytes verified); 5 binaries
+  removed from git; .gitignore += zip/sqlite.
+- S1 (§2 schema): users.handle UNIQUE + birthday, friends.is_favorite,
+  conversations.owner_id, member pin/mute/hide, polls N-option cols;
+  15 new tables (refresh_tokens, login_attempts, rate_limits, blocks,
+  reports, user_bans, audit_logs, e2ee_keys, push_tokens,
+  conversation_notes/events, event_rsvps, poll_votes, reactions,
+  call_logs, attachments); dummy seeds deleted. Runtime ensure applies
+  them (direct D1/R2 CLI blocked: OAuth lacks account access).
+- S7: design-tokens.css (exact spec, imported last, 0 consumers today) +
+  luno_theme.dart 1:1 + 5 pin tests. Component migration (web 869 hits,
+  mobile 206 hits) deferred to Phase 2.
+- Verification: node 142/142, pre_deploy_gate 6/6, flutter 100/100.

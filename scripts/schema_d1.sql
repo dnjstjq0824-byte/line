@@ -3,6 +3,8 @@
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
+  handle TEXT UNIQUE NOT NULL,
+  birthday TEXT DEFAULT '',
   password_hash TEXT NOT NULL,
   display_name TEXT NOT NULL,
   avatar_url TEXT DEFAULT '',
@@ -21,7 +23,8 @@ CREATE TABLE IF NOT EXISTS conversations (
   avatar_url TEXT DEFAULT '',
   official INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  owner_id TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS conversation_members (
@@ -30,6 +33,9 @@ CREATE TABLE IF NOT EXISTS conversation_members (
   role TEXT DEFAULT 'member',
   last_read_message_id TEXT DEFAULT '',
   joined_at TEXT NOT NULL,
+  is_pinned INTEGER DEFAULT 0,
+  is_muted INTEGER DEFAULT 0,
+  is_hidden INTEGER DEFAULT 0,
   PRIMARY KEY (conversation_id, user_id)
 );
 
@@ -59,6 +65,7 @@ CREATE TABLE IF NOT EXISTS friends (
   user_id TEXT NOT NULL,
   friend_id TEXT NOT NULL,
   status TEXT DEFAULT 'accepted',
+  is_favorite INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,
   PRIMARY KEY (user_id, friend_id)
 );
@@ -130,31 +137,9 @@ CREATE TABLE IF NOT EXISTS polls (
   option2 TEXT NOT NULL,
   votes1 INTEGER DEFAULT 0,
   votes2 INTEGER DEFAULT 0,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  multiple INTEGER DEFAULT 0,
+  closed INTEGER DEFAULT 0,
+  created_by TEXT DEFAULT '',
+  options_json TEXT DEFAULT '[]'
 );
-
--- Seed initial test users and official accounts if not present
-INSERT OR IGNORE INTO users (id, email, password_hash, display_name, status_message, bio, created_at, updated_at)
-VALUES 
-  ('00000000-0000-0000-0000-000000000001', 'user@luno.local', 'sha256:LunoUser#2026!', 'LUNO Demo User', '오늘도 행복한 하루 🍀', 'LUNO 공식 데모 계정입니다.', datetime('now'), datetime('now')),
-  ('00000000-0000-0000-0000-000000000002', 'admin@luno.local', 'sha256:LunoAdmin#2026!', 'LUNO Admin', '메신저 시스템 관리자 🛡️', 'System Administrator', datetime('now'), datetime('now')),
-  ('00000000-0000-0000-0000-000000000003', 'alice@luno-test.local', 'sha256:AliceStrongPass#2026', 'Alice Kim', '커피 한 잔의 여유 ☕', 'Developer & Designer', datetime('now'), datetime('now')),
-  ('00000000-0000-0000-0000-000000000004', 'bob@luno-test.local', 'sha256:BobStrongPass#2026', 'Bob Lee', '열심히 코딩 중 💻', 'Software Engineer', datetime('now'), datetime('now'));
-
-INSERT OR IGNORE INTO wallets (user_id, balance, updated_at)
-VALUES 
-  ('00000000-0000-0000-0000-000000000001', 250000, datetime('now')),
-  ('00000000-0000-0000-0000-000000000003', 180000, datetime('now')),
-  ('00000000-0000-0000-0000-000000000004', 90000, datetime('now'));
-
-INSERT OR IGNORE INTO friends (user_id, friend_id, status, created_at)
-VALUES
-  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003', 'accepted', datetime('now')),
-  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000004', 'accepted', datetime('now'));
-
-INSERT OR IGNORE INTO openchat_rooms (id, name, description, category, member_count, created_at)
-VALUES
-  ('oc_tech_01', '💻 개발자들의 대화방 (Tech & Code)', '프론트엔드/백엔드/인프라 기술 잡담 및 질의응답', 'it', 1284, datetime('now')),
-  ('oc_crypto_02', '📈 글로벌 경제 & 재테크 토론', '국내외 주식, 암호화폐, 환율 실시간 정보 공유', 'finance', 3420, datetime('now')),
-  ('oc_cafe_03', '☕ 전국 감성 카페 & 디저트 탐방', '주말 데이트 및 핫플레이스 카페 공유방', 'lifestyle', 890, datetime('now'));
-
