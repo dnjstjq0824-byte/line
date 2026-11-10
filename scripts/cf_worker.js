@@ -3969,6 +3969,16 @@ async function syncFromD1(db) {
   }
 }
 
+// Latest Android build served from the LUNO URL (/download). Bumped on every
+// APK release (release checklist in memory); routes below stay unchanged.
+const LATEST_ANDROID_BUILD = {
+  platform: 'android',
+  version: '2.0.0',
+  build: 5,
+  size_bytes: 63283179,
+  url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build5/luno-v2.0.0-build5.apk',
+};
+
 const READY_TABLES = ['users', 'wallets', 'luno_sessions', 'luno_messages', 'attachments', 'luno_read_cursors', 'luno_attachments', 'luno_ws_tickets', 'luno_audit'];
 let booted = null;
 function boot(env) {
@@ -4037,6 +4047,24 @@ const workerCore = {
     if (url.pathname === '/healthz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
       return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
     }
+    if (url.pathname === '/download') {
+      const b = LATEST_ANDROID_BUILD;
+      const mb = (b.size_bytes / 1048576).toFixed(1);
+      const html = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+        '<title>LUNO Android 앱 다운로드</title>' +
+        '<style>body{font-family:system-ui,sans-serif;background:#0F172A;color:#F8FAFC;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}' +
+        'main{padding:32px}a{display:inline-block;margin-top:16px;padding:14px 28px;background:#2563EB;color:#fff;text-decoration:none;border-radius:12px;font-weight:700}' +
+        '.meta{color:#94A3B8;font-size:14px;margin-top:16px}</style></head><body><main>' +
+        '<h1>LUNO</h1><p>Android ' + b.version + ' (build ' + b.build + ') · ' + mb + 'MB</p>' +
+        '<a href="/download/apk">APK 다운로드</a>' +
+        '<p class="meta">설치 시 알 수 없는 출처의 앱 허용이 필요할 수 있습니다.</p>' +
+        '</main></body></html>';
+      return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
+    }
+    if (url.pathname === '/download/apk') {
+      return new Response(null, { status: 302, headers: { Location: LATEST_ANDROID_BUILD.url, 'Cache-Control': 'no-store' } });
+    }
     if (url.pathname === '/readyz') {
       if (!env.DB) return json({ status: 'not_ready', checks: { database: 'not_configured' } }, 503);
       try {
@@ -4075,6 +4103,10 @@ const workerCore = {
     // Health / Readyz / Metrics / Version
     if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
       return json(BUILD_INFO);
+    }
+    if (url.pathname === '/api/v1/app/latest' && request.method === 'GET') {
+      const b = LATEST_ANDROID_BUILD;
+      return json({ platform: b.platform, version: b.version, build: b.build, size_bytes: b.size_bytes, url: b.url });
     }
     if (url.pathname === '/api/v1/channel/slot' && request.method === 'GET') {
       const auth = await getAuthUser(request);
