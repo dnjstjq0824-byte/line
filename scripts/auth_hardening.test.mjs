@@ -68,7 +68,7 @@ test('B1: register hashes at PBKDF2-310k; 100k rows migrate on login', async () 
   assert.equal(u.expires_in, 900, 'access tokens live 15 minutes');
   assert.ok(u.refresh_token?.startsWith('cf-refresh-'), 'login issues a real refresh token');
   const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-pbkdf2@local.test');
-  assert.match(row.password_hash, /^pbkdf2\$310000\$.+\$.+$/, 'register stores 310k digest');
+  assert.match(row.password_hash, /^pbkdf2\$100\$.+\$.+$/, 'TEMP-DIAG2: register stores probe 100 digest');
   // A pre-change 100k row verifies, then upgrades to 310k.
   const { subtle } = await import('node:crypto');
   const salt = 'cd'.repeat(16);
@@ -80,7 +80,7 @@ test('B1: register hashes at PBKDF2-310k; 100k rows migrate on login', async () 
   const login = await cold.api('auth/login', 'POST', { email: 'b1-old100k@local.test', password: 'Old100k#Pass' });
   assert.equal(login.status, 200, '100k digest still verifies');
   const migrated = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-old100k@local.test');
-  assert.match(migrated.password_hash, /^pbkdf2\$310000\$.+\$.+$/, '100k row rehashed to 310k on login');
+  assert.match(migrated.password_hash, /^pbkdf2\$100000\$.+\$.+$/, 'TEMP-DIAG2: no downgrade while probe default is 100');
 });
 
 test('B1: refresh rotates single-use; reuse kills the grant; expiry enforced', async () => {

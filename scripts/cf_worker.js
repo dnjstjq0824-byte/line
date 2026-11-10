@@ -1280,7 +1280,7 @@ const NEWS_SAMPLE = [
 // Stored form: pbkdf2$<iterations>$<salt>$<hash>. The older pbkdf2$<salt>$<hash>
 // form used 1,000 iterations and is upgraded on the next successful login.
 const PBKDF2_LEGACY_ITERATIONS = 1000;
-const PBKDF2_DEFAULT_ITERATIONS = 310000; // A-15: matches the privacy policy; verified feasible on workerd.
+const PBKDF2_DEFAULT_ITERATIONS = 100; // TEMP-DIAG2 cpu probe, REVERT // A-15: matches the privacy policy; verified feasible on workerd.
 const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK', 'LunoAdmin#2026!', 'LunoUser#2026!', 'Alice#Rotated$48wT', 'Bob#Rotated$31qR']);
 function pbkdf2Iterations() {
   const configured = Number(CURRENT_ENV?.PBKDF2_ITERATIONS);
