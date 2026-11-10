@@ -93,7 +93,7 @@ check('go_router map is 1 route = 1 page', () => {
 // 6. API contract: every Flutter endpoint exists on the backend.
 check('flutter endpoints all exist in backend route table', () => {
   // Legacy-known 404s (no backend route; behaviour preserved, never rewired).
-  const allowlist = new Set(['/api/v1/me/export-data', '/api/v1/bookmarks']);
+  const allowlist = new Set(['/api/v1/me/export-data', '/api/v1/bookmarks', '/api/v1/auth/']); // '/api/v1/auth/' = mobile route-prefix filter, never requested
   const lib = join(root, 'mobile', 'flutter_app', 'lib');
   const dart = [];
   const walk = (d) => {
