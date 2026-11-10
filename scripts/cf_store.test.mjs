@@ -14,15 +14,21 @@ async function api(path, token, method = 'GET', body) {
     method,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { ALLOW_LOCAL_DEMO: 'true' });
+  }), {});
 }
 
-async function login(email, password) {
-  return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
+async function signup(email, handle) {
+  const reg = await api('auth/register', null, 'POST', {
+    email, password: 'Str0ng!Passw0rd', display_name: handle, handle,
+  });
+  assert.equal(reg.status, 201);
+  const login = await api('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' });
+  assert.equal(login.status, 200);
+  return (await login.json()).access_token;
 }
 
 test('S-01: catalog lists original packs with owned flags', async () => {
-  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+  const alice = await signup('store-user@luno-test.local', 'storeuser');
   const res = await api('store/stickers', alice);
   assert.equal(res.status, 200);
   const { packs } = await res.json();

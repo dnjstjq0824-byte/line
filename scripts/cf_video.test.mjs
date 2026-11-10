@@ -10,16 +10,26 @@ async function api(path, token, method = 'GET', body) {
     method,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { ALLOW_LOCAL_DEMO: 'true' });
+  }), {});
 }
 
-async function login(email, password) {
-  return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
+async function signup(email, handle) {
+  const res = await api('auth/register', null, 'POST', {
+    email, password: 'Str0ng!Passw0rd', display_name: handle, handle,
+  });
+  assert.equal(res.status, 201);
+  const login = await api('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' });
+  assert.equal(login.status, 200);
+  return (await login.json()).access_token;
 }
 
 test('video messages link attachments without duration', async () => {
-  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
-  const cid = '00000000-0000-0000-0000-000000000010';
+  const alice = await signup('video-user@luno-test.local', 'videouser');
+  const bob = await signup('video-peer@luno-test.local', 'videopeer');
+  const bobId = (await (await api('me', bob, 'GET')).json()).id;
+  const room = await api('conversations', alice, 'POST', { title: 'video drill room', member_ids: [bobId] });
+  assert.equal(room.status, 201);
+  const cid = (await room.json()).id;
   const up = await api('attachments', alice, 'POST', {
     conversation_id: cid,
     original_name: 'clip.mp4',

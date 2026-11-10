@@ -20,9 +20,15 @@ async function api(path, token, method = 'GET', body) {
   return { status: res.status, data }
 }
 
-const login = await api('auth/login', null, 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' })
+const PW = 'T3st#Migrated2026'
+await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+const login = await api('auth/login', null, 'POST', { email: 'user@luno.local', password: PW })
 const token = login.data.access_token
 assert.ok(token, 'demo login works')
+await api('friends', token, 'POST', { handle: 'alice_kim' })
+const aliceId = (await api('friends', token)).data.friends.find(f => f.display_name === 'Alice Kim').id
+await api('conversations', token, 'POST', { kind: 'group', member_ids: [aliceId], title: 'shape probe room' })
 
 test('voom list uses videos and post requires title', async () => {
   const list = await api('voom', token)

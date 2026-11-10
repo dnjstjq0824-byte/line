@@ -70,14 +70,15 @@ test('D-01: DELETE /me requires the password and kills the account on every surf
 });
 
 test('D-02: shared demo accounts cannot self-delete', async () => {
-  const api = await isolate();
-  const demo = await api('auth/demo', 'POST', { account: 'user' });
-  assert.equal(demo.status, 200);
-  const { access_token } = await demo.json();
-  // The demo session authenticates, but the account row has no user password;
-  // use the known-absent password path: any wrong password is 401 first.
+  const api = await isolate({ DEMO_INITIAL_PASSWORD: 'D2#Demo2026!' });
+  const login = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'D2#Demo2026!' });
+  assert.equal(login.status, 200);
+  const { access_token } = await login.json();
   const wrong = await api('me', 'DELETE', { password: 'Wrong#2026!' }, access_token);
   assert.equal(wrong.status, 401);
+  const del = await api('me', 'DELETE', { password: 'D2#Demo2026!' }, access_token);
+  assert.equal(del.status, 403);
+  assert.equal((await del.json()).code, 'DEMO_PROTECTED');
 });
 
 test('D-03: deletion survives a redeploy (fresh isolate, same D1)', async () => {

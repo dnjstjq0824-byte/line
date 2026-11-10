@@ -30,7 +30,7 @@ async function api(path, token, method = 'GET', body, extraHeaders = {}) {
   return worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { ALLOW_LOCAL_DEMO: 'true' });
+  }), { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' });
 }
 
 test('public hosts cannot enable demo credentials or synthetic payment success', async () => {
@@ -42,12 +42,25 @@ test('public hosts cannot enable demo credentials or synthetic payment success',
 async function login(email, password) {
   return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
 }
+async function signup(email, handle) {
+  const reg = await api('auth/register', null, 'POST', {
+    email, password: 'Str0ng!Passw0rd', display_name: handle, handle,
+  });
+  assert.equal(reg.status, 201, `register ${email}`);
+  const id = (await reg.json()).id;
+  const token = await login(email, 'Str0ng!Passw0rd');
+  assert.ok(token, `login ${email}`);
+  return { id, token };
+}
 
 test('private chat access and one-use realtime tickets', async () => {
-  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
-  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
-  const outsider = await login('user@luno.local', 'LunoUser#2026!');
-  const cid = '00000000-0000-0000-0000-000000000010';
+  const a = await signup('priv-alice@luno-test.local', 'privalice');
+  const b = await signup('priv-bob@luno-test.local', 'privbob');
+  const o = await signup('priv-outsider@luno-test.local', 'privoutsider');
+  const alice = a.token, bob = b.token, outsider = o.token;
+  const convRoom = await api('conversations', alice, 'POST', { kind: 'group', title: 'private drill room', member_ids: [b.id] });
+  assert.equal(convRoom.status, 201);
+  const cid = (await convRoom.json()).id;
   assert.equal((await api('ws-ticket', null, 'POST')).status, 401);
   assert.equal((await api('ws', null, 'GET', undefined, { Upgrade: 'websocket' })).status, 401);
   for (const token of [alice, bob, outsider]) {
@@ -185,20 +198,18 @@ test('private chat access and one-use realtime tickets', async () => {
   assert.equal(likes, 1);
 
   // Admin Moderation test
-  const adminToken = await login('admin@luno.local', 'LunoAdmin#2026!');
+  const adminToken = await login('admin@luno.local', 'Worker#Admin1');
   const modRes = await api('admin/moderation/actions', adminToken, 'POST', {
-    subject_user_id: '00000000-0000-0000-0000-000000000003',
+    subject_user_id: a.id,
     action: 'warn',
     reason: 'Spam warning'
   });
   assert.equal(modRes.status, 200);
 });
 
-// Regression: the host gate used to be defeated by the very env vars that were deployed in
-// wrangler.jsonc. ALLOW_EDGE_STANDALONE='true' forced the in-memory standalone backend on for
-// EVERY hostname, so a production custom domain served POST /auth/demo -- which mints a real
-// session for a seeded account with no password. The suite only probed {} and
-// { ALLOW_LOCAL_DEMO } and so never saw it. These cases pin the deployed combination.
+// The API surface is gated on the hostname: loopback and explicitly named
+// STANDALONE_HOSTS pass; every other host gets 503 before any routing runs,
+// so no credential or demo path is reachable from a public host.
 test('the standalone demo backend is gated on the hostname, whatever the env vars say', async () => {
   const hit = (host, env, path = 'auth/login') => worker.fetch(new Request(`https://${host}/api/v1/${path}`, {
     method: 'POST', body: JSON.stringify({ email: 'user@luno.local', password: 'LunoUser#2026!' }),
@@ -216,7 +227,7 @@ test('the standalone demo backend is gated on the hostname, whatever the env var
   ]) {
     const why = `env ${JSON.stringify(env)} must not open ${publicHost}`;
     assert.equal((await hit(publicHost, env)).status, 503, why);
-    // /auth/demo is the dangerous one: no password at all.
+    // the gate fires before routing, so even the removed demo route is 503 here
     const demo = await hit(publicHost, env, 'auth/demo');
     assert.equal(demo.status, 503, `${why} (auth/demo)`);
     assert.equal((await demo.json().catch(() => ({}))).access_token, undefined, 'no token on a public host');
@@ -227,70 +238,78 @@ test('the standalone demo backend is gated on the hostname, whatever the env var
     const env = { ALLOW_LOCAL_DEMO: 'true', ENABLE_DEMO_ACCOUNTS: 'true' };
     assert.equal((await hit(host, env)).status, 503);
     assert.equal((await hit(host, env, 'auth/demo')).status, 503);
-    assert.equal((await hit(host, { ...env, STANDALONE_HOSTS: host })).status, 200);
+    // a named host passes the gate; the revoked password then yields 401, not 503
+    assert.equal((await hit(host, { ...env, STANDALONE_HOSTS: host })).status, 401);
+    // ...and the removed passwordless demo route mints nothing past the gate
+    assert.equal((await hit(host, { ...env, STANDALONE_HOSTS: host }, 'auth/demo')).status, 401);
   }
-  assert.equal((await hit('localhost', { ALLOW_LOCAL_DEMO: 'true' })).status, 200);
-  // A custom host is reachable only by being named explicitly.
-  assert.equal((await hit('staging.luno.example', { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: 'staging.luno.example' })).status, 200);
-  // ...and naming it is still not enough without the master switch.
-  assert.equal((await hit('staging.luno.example', { STANDALONE_HOSTS: 'staging.luno.example' })).status, 503);
+  // loopback passes the gate with no env at all; bad credentials yield 401
+  assert.equal((await hit('localhost', {})).status, 401);
+  assert.equal((await hit('localhost', {}, 'auth/demo')).status, 401);
+  // a custom host is reachable only by being named explicitly
+  assert.equal((await hit('staging.luno.example', { STANDALONE_HOSTS: 'staging.luno.example' })).status, 401);
+  assert.equal((await hit('staging.luno.example', {})).status, 503);
 });
 
-test('standalone host allowlist matches exact names and requires the literal master switch', async () => {
+test('standalone host allowlist matches exact names; loopback needs no env', async () => {
   const hit = (host, env) => worker.fetch(new Request(`https://${host}/api/v1/auth/login`, {
     method: 'POST',
     body: JSON.stringify({ email: 'user@luno.local', password: 'LunoUser#2026!' }),
   }), env);
-  const env = { ALLOW_LOCAL_DEMO: 'true', STANDALONE_HOSTS: ' other.example, STAGING.LUNO.EXAMPLE , ' };
-  assert.equal((await hit('staging.luno.example', env)).status, 200);
+  // gate passes (bad credentials -> 401, not 503) only on exact allowlisted names
+  const env = { STANDALONE_HOSTS: ' other.example, STAGING.LUNO.EXAMPLE , ' };
+  assert.equal((await hit('staging.luno.example', env)).status, 401);
   for (const host of ['staging.luno.example.evil.test', 'evil-staging.luno.example', 'child.staging.luno.example']) {
     assert.equal((await hit(host, env)).status, 503, host);
   }
   for (const entry of ['*', '*.luno.example', 'https://staging.luno.example', 'staging.luno.example:443']) {
     assert.equal((await hit('staging.luno.example', { ...env, STANDALONE_HOSTS: entry })).status, 503, entry);
   }
-  for (const enabled of [undefined, false, true, 'false', 'TRUE', '1']) {
-    assert.equal((await hit('staging.luno.example', { ...env, ALLOW_LOCAL_DEMO: enabled })).status, 503);
-  }
   for (const host of ['localhost', '127.0.0.1', '[::1]']) {
-    assert.equal((await hit(host, { ALLOW_LOCAL_DEMO: 'true' })).status, 200, host);
-    assert.equal((await hit(host, {})).status, 503, host);
+    assert.equal((await hit(host, {})).status, 401, host);
+    assert.equal((await hit(host, { ALLOW_LOCAL_DEMO: 'true' })).status, 401, host);
   }
 });
 
 test('translate fails closed without an engine and e2ee flag stays off', async () => {
   assert.equal((await api('translate', null, 'POST', { text: 'hello' })).status, 401);
-  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
-  const res = await api('translate', alice, 'POST', { text: 'hello', target_lang: 'ko' });
+  const alice = await signup('tr-alice@luno-test.local', 'tralice');
+  const res = await api('translate', alice.token, 'POST', { text: 'hello', target_lang: 'ko' });
   assert.equal(res.status, 503);
   assert.equal((await res.json()).code, 'TRANSLATE_NOT_CONFIGURED');
-  const admin = await login('admin@luno.local', 'LunoAdmin#2026!');
+  const admin = await login('admin@luno.local', 'Worker#Admin1');
   const flags = (await (await api('admin/feature-flags', admin)).json()).feature_flags;
   assert.equal(flags.find(f => f.key === 'e2ee_letter_sealing').enabled, false);
 });
 
 test('attachments serve identical bytes at the content alias', async () => {
-  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
-  const cid = '00000000-0000-0000-0000-000000000010';
+  const alice = await signup('att-alice@luno-test.local', 'attallice');
+  const peer = await signup('att-peer@luno-test.local', 'attpeer');
+  const convRoom = await api('conversations', alice.token, 'POST', { title: 'attachment room', member_ids: [peer.id] });
+  assert.equal(convRoom.status, 201);
+  const cid = (await convRoom.json()).id;
   const b64 = Buffer.from('hello-bytes').toString('base64');
-  const up = await api('attachments', alice, 'POST', { conversation_id: cid, content_base64: b64, mime_type: 'text/plain', original_name: 'hi.txt' });
+  const up = await api('attachments', alice.token, 'POST', { conversation_id: cid, content_base64: b64, mime_type: 'text/plain', original_name: 'hi.txt' });
   assert.equal(up.status, 201);
   const { id } = await up.json();
   for (const path of [`attachments/${id}`, `attachments/${id}/content`]) {
-    const res = await api(path, alice, 'GET');
+    const res = await api(path, alice.token, 'GET');
     assert.equal(res.status, 200);
     assert.equal(await res.text(), 'hello-bytes');
   }
 });
 
 test('friends expose birthday_today and PATCH /me validates MM-DD', async () => {
-  const demo = await login('user@luno.local', 'LunoUser#2026!');
-  const friends = await (await api('friends', demo, 'GET')).json();
-  const aliceRow = friends.friends.find(f => (f.display_name || '').includes('Alice'));
-  assert.ok(aliceRow, 'seeded alice must be a demo friend');
-  assert.equal(aliceRow.birthday_today, true);
-  assert.equal((await api('me', demo, 'PATCH', { birthday: '13-99' })).status, 400);
+  const demo = await signup('bday-user@luno-test.local', 'bdayuser');
+  const friend = await signup('bday-friend@luno-test.local', 'bdayfriend');
   const today = new Date().toISOString().slice(5, 10);
-  const patched = await (await api('me', demo, 'PATCH', { birthday: today })).json();
+  assert.equal((await api('me', friend.token, 'PATCH', { birthday: today })).status, 200);
+  assert.equal((await api('friends', demo.token, 'POST', { friend_id: friend.id })).status, 201);
+  const friends = await (await api('friends', demo.token, 'GET')).json();
+  const row = friends.friends.find(f => f.id === friend.id);
+  assert.ok(row, 'added friend must be listed');
+  assert.equal(row.birthday_today, true);
+  assert.equal((await api('me', demo.token, 'PATCH', { birthday: '13-99' })).status, 400);
+  const patched = await (await api('me', demo.token, 'PATCH', { birthday: today })).json();
   assert.equal(patched.birthday, today);
 });

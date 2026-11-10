@@ -26,8 +26,12 @@ async function api(path, token, method = 'GET', body) {
   return { status: res.status, data }
 }
 
-const me = (await api('auth/login', null, 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' })).data || {}
+const PW = 'T3st#Migrated2026'
+await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+const me = (await api('auth/login', null, 'POST', { email: 'user@luno.local', password: PW })).data || {}
 assert.ok(me.access_token, 'demo login works')
+await api('friends', me.access_token, 'POST', { handle: 'alice_kim' })
 
 async function aliceFavorite() {
   const r = await api('friends', me.access_token)

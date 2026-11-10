@@ -14,7 +14,7 @@ async function api(path, token, method = 'GET', body, extraHeaders = {}) {
       ...extraHeaders
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { ALLOW_LOCAL_DEMO: 'true' });
+  }), { DEMO_INITIAL_PASSWORD: 'Bugfix#Demo12' });
 }
 
 async function login(email, password) {
@@ -29,7 +29,7 @@ test('P0-1 & P0-2: Verify official security channel and sample conversations res
   assert.equal(oldLogin.status, 401, 'Old password must be rejected with 401');
 
   // Test with current password
-  const { token, user_id } = await login('user@luno.local', 'LunoUser#2026!');
+  const { token, user_id } = await login('user@luno.local', 'Bugfix#Demo12');
   assert.ok(token, 'Login should succeed');
 
   // Test A-03: Version endpoint check
@@ -38,11 +38,11 @@ test('P0-1 & P0-2: Verify official security channel and sample conversations res
   const verData = await verRes.json();
   assert.ok(verData.commit, 'Commit hash must be present');
 
-  // Test A-05: Official Accounts unique 3 accounts (no duplicates)
+  // Test A-05: Official Accounts (oa-notice only; dummy OAs removed)
   const oaRes = await api('official-accounts', token);
   assert.equal(oaRes.status, 200);
   const { accounts: oas } = await oaRes.json();
-  assert.equal(oas.length, 3, 'Must have exactly 3 unique official accounts');
+  assert.equal(oas.length, 1, 'Must have exactly 1 official account (oa-notice)');
 
   // 1. GET /api/v1/conversations
   const convsRes = await api('conversations', token);

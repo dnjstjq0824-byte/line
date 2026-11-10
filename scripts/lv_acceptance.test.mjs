@@ -1,14 +1,14 @@
 // LV-01..LV-10 acceptance tests (A-01..A-13, A-15 in-process; A-09/10/14/16 run against artifacts / live in scripts/verify_*.mjs).
 // D1 is emulated with node:sqlite (same SQL dialect). A fresh module instance (?iso=N) emulates a different
 // Worker isolate / a redeploy: it has empty in-memory state and may only see what D1 persisted.
+// S2: passwordless auth/demo is removed; every test provisions its own accounts via auth/register + auth/login.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const BASE = 'https://localhost';
-const DEMO = '00000000-0000-0000-0000-000000000002';
-const ALICE = '00000000-0000-0000-0000-000000000003';
+const PW = 'Str0ng!Passw0rd';
 
 function makeD1() {
   const raw = new DatabaseSync(':memory:');
@@ -31,7 +31,7 @@ function makeD1() {
 }
 
 const db = makeD1();
-const env = { ALLOW_LOCAL_DEMO: 'true', ALLOW_EDGE_STANDALONE: 'true', ENABLE_DEMO_ACCOUNTS: 'true', DB: db };
+const env = { DB: db };
 let isoCounter = 0;
 async function isolate(extraEnv = {}, database = db) {
   const mod = await import(`./cf_worker.js?iso=${++isoCounter}`);
@@ -43,16 +43,26 @@ async function isolate(extraEnv = {}, database = db) {
   api.raw = (path, method = 'GET') => mod.default.fetch(new Request(`${BASE}${path}`, { method }), e);
   return api;
 }
-async function demo(api, account = 'user') {
-  const res = await api('auth/demo', 'POST', { account });
-  assert.equal(res.status, 200, `demo ${account} login`);
-  return res.json();
+async function signup(api, email, handle) {
+  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: handle, handle });
+  assert.equal(reg.status, 201, `register ${email}`);
+  const { id } = await reg.json();
+  const login = await api('auth/login', 'POST', { email, password: PW });
+  assert.equal(login.status, 200, `login ${email}`);
+  const body = await login.json();
+  return { id, access_token: body.access_token, device_id: body.device_id };
+}
+async function signin(api, email) {
+  const login = await api('auth/login', 'POST', { email, password: PW });
+  assert.equal(login.status, 200, `login ${email}`);
+  const body = await login.json();
+  return { id: body.user_id, access_token: body.access_token, device_id: body.device_id };
 }
 const keepId = uid => `conv-keep-${uid}`;
 
 test('A-01: revoking another session makes exactly that token 401 on every route; revoker stays valid', async () => {
   const api = await isolate();
-  const t1 = await demo(api), t2 = await demo(api);
+  const t1 = await signup(api, 'lv-a01@lv.test', 'lva01'), t2 = await signin(api, 'lv-a01@lv.test');
   assert.notEqual(t1.device_id, t2.device_id);
   assert.equal((await api('me', 'GET', null, t2.access_token)).status, 200);
   const rev = await api('auth/sessions/revoke', 'POST', { session_id: t2.device_id }, t1.access_token);
@@ -71,7 +81,7 @@ test('A-01: revoking another session makes exactly that token 401 on every route
 
 test('A-02: revoke never claims success without a concrete, owned, live session', async () => {
   const api = await isolate();
-  const u = await demo(api, 'user'), a = await demo(api, 'alice');
+  const u = await signup(api, 'lv-a02u@lv.test', 'lva02u'), a = await signup(api, 'lv-a02a@lv.test', 'lva02a');
   for (const body of [{}, { session_id: '' }, { session_token: u.access_token }]) {
     const r = await api('auth/sessions/revoke', 'POST', body, u.access_token);
     assert.equal(r.status, 400, `body ${JSON.stringify(body).slice(0, 30)} must be 400`);
@@ -87,9 +97,9 @@ test('A-02: revoke never claims success without a concrete, owned, live session'
 
 test('A-03: login creates a real security notice carrying an opaque session_id that the revoke API honours', async () => {
   const api = await isolate();
-  const victim = await demo(api);                        // "other device"
-  const me = await demo(api);                            // device that reads the notice
-  const msgs = await (await api(`conversations/${keepId(DEMO).replace('keep', 'oa-notice')}/messages`, 'GET', null, me.access_token)).json();
+  const victim = await signup(api, 'lv-a03@lv.test', 'lva03');  // "other device"
+  const me = await signin(api, 'lv-a03@lv.test');               // device that reads the notice
+  const msgs = await (await api(`conversations/${keepId(victim.id).replace('keep', 'oa-notice')}/messages`, 'GET', null, me.access_token)).json();
   const real = msgs.messages.filter(m => m.kind === 'security_notice' && m.metadata?.session_id);
   assert.ok(real.length >= 2, 'real login events produced notices');
   const notice = real.find(m => m.metadata.session_id === victim.device_id);
@@ -105,8 +115,8 @@ test('A-03: login creates a real security notice carrying an opaque session_id t
 
 test('A-04: text message round-trip: POST -> GET same token -> GET other token -> GET after redeploy', async () => {
   const api = await isolate();
-  const a = await demo(api), b = await demo(api);
-  const cid = keepId(DEMO);
+  const a = await signup(api, 'lv-a04@lv.test', 'lva04'), b = await signin(api, 'lv-a04@lv.test');
+  const cid = keepId(a.id);
   const sent = await api(`conversations/${cid}/messages`, 'POST', { kind: 'text', body: `A04-${Date.now()}`, client_id: `a04-${Date.now()}` }, a.access_token);
   assert.equal(sent.status, 201);
   const m = await sent.json();
@@ -114,7 +124,7 @@ test('A-04: text message round-trip: POST -> GET same token -> GET other token -
   assert.ok(await has(api, a.access_token), 'same token');
   assert.ok(await has(api, b.access_token), 'second session');
   const redeployed = await isolate();
-  const c = await demo(redeployed);
+  const c = await signin(redeployed, 'lv-a04@lv.test');
   assert.ok(await has(redeployed, c.access_token), 'after redeploy (fresh isolate, same D1)');
   const row = db.raw.prepare('SELECT COUNT(*) n FROM luno_messages WHERE id = ?').get(m.id);
   assert.equal(Number(row.n), 1, 'message row exists in D1');
@@ -122,8 +132,8 @@ test('A-04: text message round-trip: POST -> GET same token -> GET other token -
 
 test('A-05: all 13 message kinds persist and are visible to a second session and after redeploy', async () => {
   const api = await isolate();
-  const a = await demo(api), b = await demo(api);
-  const cid = keepId(DEMO);
+  const a = await signup(api, 'lv-a05@lv.test', 'lva05'), b = await signin(api, 'lv-a05@lv.test');
+  const cid = keepId(a.id);
   const kinds = [
     { kind: 'text', body: '텍스트' }, { kind: 'sticker', body: '🐻', metadata: { sticker_id: 'pack-1' } },
     { kind: 'image', body: 'https://example.test/a.png', metadata: { url: 'https://example.test/a.png' } },
@@ -146,7 +156,7 @@ test('A-05: all 13 message kinds persist and are visible to a second session and
     ids[k.kind] = j.message.id;
   }
   const redeployed = await isolate();
-  const c = await demo(redeployed);
+  const c = await signin(redeployed, 'lv-a05@lv.test');
   for (const [name, call, token] of [['same token', api, a.access_token], ['second session', api, b.access_token], ['after redeploy', redeployed, c.access_token]]) {
     const list = (await (await call(`conversations/${cid}/messages?limit=100`, 'GET', null, token)).json()).messages;
     for (const [kind, id] of Object.entries(ids)) assert.ok(list.some(x => x.id === id && x.kind === kind), `${kind} missing for ${name}`);
@@ -156,8 +166,8 @@ test('A-05: all 13 message kinds persist and are visible to a second session and
 
 test('A-05b: attachments are durable and linked to the message record', async () => {
   const api = await isolate();
-  const a = await demo(api);
-  const cid = keepId(DEMO);
+  const a = await signup(api, 'lv-a05b@lv.test', 'lva05b');
+  const cid = keepId(a.id);
   const b64 = Buffer.from('hello-luno-file').toString('base64');
   const up = await api('attachments', 'POST', { conversation_id: cid, content_base64: b64, mime_type: 'text/plain', original_name: 'hi.txt' }, a.access_token);
   assert.equal(up.status, 201);
@@ -166,7 +176,7 @@ test('A-05b: attachments are durable and linked to the message record', async ()
   assert.equal(msg.status, 201);
   assert.equal((await msg.json()).message.metadata.attachment_id, att.id);
   const redeployed = await isolate();
-  const c = await demo(redeployed);
+  const c = await signin(redeployed, 'lv-a05b@lv.test');
   const dl = await redeployed(`attachments/${att.id}`, 'GET', null, c.access_token);
   assert.equal(dl.status, 200);
   assert.equal(Buffer.from(await dl.arrayBuffer()).toString(), 'hello-luno-file');
@@ -174,7 +184,7 @@ test('A-05b: attachments are durable and linked to the message record', async ()
 
 test('A-06: read state is server-side across sessions; nav badge === sum of numeric room unread', async () => {
   const api = await isolate();
-  const s1 = await demo(api), s2 = await demo(api);
+  const s1 = await signup(api, 'lv-a06@lv.test', 'lva06'), s2 = await signin(api, 'lv-a06@lv.test');
   const list = async (call, token) => (await call('conversations', 'GET', null, token)).json();
   const before = await list(api, s2.access_token);
   const room = before.conversations.find(c => !c.badge_n && c.unread_count > 0 && !c.id.startsWith('conv-oa-notice-'));
@@ -183,7 +193,7 @@ test('A-06: read state is server-side across sessions; nav badge === sum of nume
   assert.equal(before.unread_total, sum(before));
   assert.equal((await api(`conversations/${room.id}/read`, 'POST', {}, s1.access_token)).status, 200);
   const other = await isolate();                        // fresh isolate, other session
-  const s3 = await demo(other);
+  const s3 = await signin(other, 'lv-a06@lv.test');
   const after = await list(other, s3.access_token);
   assert.equal(after.conversations.find(c => c.id === room.id).unread_count, 0, 'read state visible to another isolate');
   assert.equal(after.unread_total, sum(after));
@@ -197,8 +207,8 @@ test('A-06: read state is server-side across sessions; nav badge === sum of nume
 
 test('A-07: reading the security room never creates or rewrites notices; only a real login adds one', async () => {
   const api = await isolate();
-  const t = await demo(api);
-  const sec = `conv-oa-notice-${DEMO}`;
+  const t = await signup(api, 'lv-a07@lv.test', 'lva07');
+  const sec = `conv-oa-notice-${t.id}`;
   const snap = async (call, token) => (await (await call(`conversations/${sec}/messages`, 'GET', null, token)).json()).messages;
   const key = m => `${m.id}|${m.created_at}|${m.body}`;
   const one = await snap(api, t.access_token);
@@ -207,7 +217,7 @@ test('A-07: reading the security room never creates or rewrites notices; only a 
   const two = await snap(api, t.access_token);
   assert.deepEqual(two.map(key), one.map(key), 'identical ids and created_at on repeated reads');
   const redeployed = await isolate();
-  const t2 = await demo(redeployed);                       // exactly one real login event
+  const t2 = await signin(redeployed, 'lv-a07@lv.test');       // exactly one real login event
   const three = await snap(redeployed, t2.access_token);
   const sample = l => l.filter(m => m.metadata?.sample).map(key);
   assert.deepEqual(sample(three), sample(one), 'sample notices byte-identical after redeploy');
@@ -219,7 +229,7 @@ test('A-07: reading the security room never creates or rewrites notices; only a 
 });
 test('A-08: no placeholder endpoints; news/devices/calls follow their contracts', async () => {
   const api = await isolate();
-  const t = await demo(api);
+  const t = await signup(api, 'lv-a08@lv.test', 'lva08');
   const news = await (await api('news', 'GET', null, t.access_token)).json();
   assert.equal(news.sample, true); assert.ok(news.hero.length === 5 && news.popular.length === 4);
   assert.ok(news.hero.concat(news.popular).every(a => a.sample === true && a.press.includes('샘플') && !Number.isNaN(Date.parse(a.published_at))));
@@ -227,8 +237,8 @@ test('A-08: no placeholder endpoints; news/devices/calls follow their contracts'
   assert.ok(devices.devices.some(d => d.id === t.device_id && d.current === true));
   const calls = await (await api('calls', 'GET', null, t.access_token)).json();
   assert.ok(calls.calls.length >= 5 && calls.calls.every(c => c.source && c.started_at));
-  const sampleCallMsgs = (await (await api(`conversations/conv-k-${DEMO}/messages`, 'GET', null, t.access_token)).json()).messages.filter(m => m.kind === 'call_status');
-  assert.equal(calls.calls.filter(c => c.source === 'message' && c.conversation_id === `conv-k-${DEMO}`).length, sampleCallMsgs.length, 'calls list agrees with call_status bubbles');
+  const sampleCallMsgs = (await (await api(`conversations/conv-k-${t.id}/messages`, 'GET', null, t.access_token)).json()).messages.filter(m => m.kind === 'call_status');
+  assert.equal(calls.calls.filter(c => c.source === 'message' && c.conversation_id === `conv-k-${t.id}`).length, sampleCallMsgs.length, 'calls list agrees with call_status bubbles');
   for (const p of ['bookmarks', 'totally/unknown', 'auth/nothing']) {
     const r = await api(p, 'GET', null, t.access_token);
     const text = await r.text();
@@ -251,19 +261,12 @@ test('A-11 (static): single source of truth for version; no legacy commit string
   assert.deepEqual(await (await api.raw('/api/version')).json(), v);
 });
 
-test('A-12: demo login is a strict allow-list', async () => {
+test('A-12: passwordless demo login is removed (fail closed)', async () => {
   const api = await isolate();
-  const post = body => api('auth/demo', 'POST', body);
-  assert.equal((await post({ account: 'admin' })).status, 403);
-  assert.equal((await post({ role: 'admin' })).status, 403);
-  assert.equal((await post({ account: 'administrator' })).status, 400);
-  assert.equal((await post({})).status, 400);
-  assert.equal((await post({ account: '' })).status, 400);
-  assert.equal((await post({ account: 42 })).status, 400);
-  for (const account of ['user', 'alice']) {
-    const r = await post({ account });
-    assert.equal(r.status, 200);
-    assert.equal((await r.json()).role, 'user');
+  assert.equal((await api('auth/demo', 'POST', { account: 'user' })).status, 401, 'anonymous demo attempt hits the auth gate');
+  const t = await signup(api, 'lv-a12@lv.test', 'lva12');
+  for (const body of [{ account: 'user' }, { account: 'alice' }, { account: 'admin' }, { role: 'admin' }, {}, { account: '' }, { account: 42 }]) {
+    assert.equal((await api('auth/demo', 'POST', body, t.access_token)).status, 404, `demo ${JSON.stringify(body)} must be 404`);
   }
 });
 
@@ -272,20 +275,19 @@ test('A-13: regression matrix (auth gates, RBAC, official accounts, friends, enu
   for (const p of ['me', 'conversations', 'friends', 'official-accounts', 'admin/stats', 'devices', 'news']) {
     assert.equal((await api(p)).status, 401, `unauthenticated ${p}`);
   }
-  const wrong = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'wrong-password' });
-  const ghost = await api('auth/login', 'POST', { email: 'nobody@luno.local', password: 'wrong-password' });
+  const wrong = await api('auth/login', 'POST', { email: 'ghost-a@luno.local', password: 'wrong-password' });
+  const ghost = await api('auth/login', 'POST', { email: 'ghost-b@luno.local', password: 'wrong-password' });
   assert.equal(wrong.status, 401); assert.equal(ghost.status, 401);
   assert.deepEqual(await wrong.json(), await ghost.json(), 'identical error body: no account enumeration');
-  assert.equal((await api('auth/login', 'POST', { email: 'user@luno.local', password: 'LineUser#2026!' })).status, 401, 'legacy password');
-  const t = await demo(api);
+  const t = await signup(api, 'lv-a13@lv.test', 'lva13');
   for (const p of ['admin/stats', 'admin/users', 'admin/reports', 'admin/audit-logs', 'admin/feature-flags']) {
     assert.equal((await api(p, 'GET', null, t.access_token)).status, 403, `RBAC ${p}`);
   }
   const oa = (await (await api('official-accounts', 'GET', null, t.access_token)).json()).accounts;
-  assert.deepEqual(oa.map(o => o.id).sort(), ['oa-deals', 'oa-notice', 'oa-weather']);
-  assert.equal((await (await api('friends', 'GET', null, t.access_token)).json()).friends.length, 20);
+  assert.deepEqual(oa.map(o => o.id).sort(), ['oa-notice']);
+  assert.equal((await (await api('friends', 'GET', null, t.access_token)).json()).friends.length, 18);
   // forged / legacy stateless tokens must no longer authenticate
-  assert.equal((await api('me', 'GET', null, `cf-token-${DEMO}.forged`)).status, 401);
+  assert.equal((await api('me', 'GET', null, `cf-token-${t.id}.forged`)).status, 401);
   assert.equal((await api('me', 'GET', null, `cf-token-00000000-0000-0000-0000-000000000001.forged`)).status, 401);
   const conv = await (await api('conversations', 'GET', null, t.access_token)).json();
   const by = n => conv.conversations.find(c => c.id.startsWith(n))?.unread_count;
@@ -330,7 +332,7 @@ test('LV-01 policy: password change keeps current session, revokes all others, s
 
 test('LV-01: logout and device-list revoke are real; audit trail records session revocations', async () => {
   const api = await isolate();
-  const a = await demo(api), b = await demo(api);
+  const a = await signup(api, 'lv-a01b@lv.test', 'lva01b'), b = await signin(api, 'lv-a01b@lv.test');
   assert.equal((await api('auth/logout', 'POST', {}, a.access_token)).status, 200);
   assert.equal((await api('me', 'GET', null, a.access_token)).status, 401, 'logout really kills the session');
   const del = await api(`devices/${b.device_id}`, 'DELETE', null, b.access_token);
@@ -339,4 +341,3 @@ test('LV-01: logout and device-list revoke are real; audit trail records session
   const n = db.raw.prepare("SELECT COUNT(*) n FROM luno_audit WHERE action LIKE 'session.%'").get().n;
   assert.ok(Number(n) >= 2, 'audit rows written to D1');
 });
-

@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.ALLOW_LOCAL_DEMO = 'true';
+process.env.ADMIN_INITIAL_PASSWORD = 'Track4#Admin1';
 process.env.STANDALONE_HOSTS = '127.0.0.1,localhost,luno-messenger.dnjstjqppk.workers.dev';
-process.env.ENABLE_DEMO_ACCOUNTS = 'true';
 
 const { default: worker } = await import('./cf_worker.js');
 
@@ -25,8 +24,15 @@ async function api(path, token, method = 'GET', body = null) {
 }
 
 test('Track 4: Official Account Rich Menu & Chatbot CRM engine', async () => {
-  // 1. Login user
-  const loginRes = await api('/api/v1/auth/demo', null, 'POST', { account: 'user' });
+  // 1. Register + login user
+  const regRes = await api('/api/v1/auth/register', null, 'POST', {
+    email: 'track4-user@luno-test.local', password: 'Str0ng!Passw0rd',
+    display_name: 'track4user', handle: 'track4user',
+  });
+  assert.equal(regRes.status, 201);
+  const loginRes = await api('/api/v1/auth/login', null, 'POST', {
+    email: 'track4-user@luno-test.local', password: 'Str0ng!Passw0rd',
+  });
   assert.equal(loginRes.status, 200);
   const { access_token: token, user_id: userId } = await loginRes.json();
 
@@ -62,7 +68,7 @@ test('Track 4: Official Account Rich Menu & Chatbot CRM engine', async () => {
   assert.ok(latestReply.body.includes('[LUNO 공지]'), 'Bot reply should match configured keyword rule');
 
   // 6. Test Partner Bot Rules CRUD
-  const adminLogin = await api('/api/v1/auth/login', null, 'POST', { email: 'admin@luno.local', password: 'LunoAdmin#2026!' });
+  const adminLogin = await api('/api/v1/auth/login', null, 'POST', { email: 'admin@luno.local', password: 'Track4#Admin1' });
   const adminToken = (await adminLogin.json()).access_token;
   assert.equal((await api('/api/v1/partner/accounts/oa-notice/bot-rules', token)).status, 403);
   const rulesListRes = await api('/api/v1/partner/accounts/oa-notice/bot-rules', adminToken);

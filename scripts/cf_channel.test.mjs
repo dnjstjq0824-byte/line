@@ -10,25 +10,24 @@ async function api(path, token, method = 'GET', body) {
     method,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { ALLOW_LOCAL_DEMO: 'true' });
+  }), {});
 }
 
-async function login(email, password) {
-  return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
+async function signup(email, handle) {
+  const res = await api('auth/register', null, 'POST', {
+    email, password: 'Str0ng!Passw0rd', display_name: handle, handle,
+  });
+  assert.equal(res.status, 201);
+  const login = await api('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' });
+  assert.equal(login.status, 200);
+  return (await login.json()).access_token;
 }
 
-test('smart-channel slot serves the active notice to members', async () => {
-  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+test('smart-channel slot is empty without curated notices', async () => {
+  const alice = await signup('slot-user@luno-test.local', 'slotuser');
   const res = await api('channel/slot', alice);
   assert.equal(res.status, 200);
-  const { slot } = await res.json();
-  assert.ok(slot && typeof slot === 'object');
-  assert.equal(typeof slot.id, 'string');
-  assert.ok(slot.id.length > 0);
-  assert.equal(typeof slot.title, 'string');
-  assert.ok(slot.title.length > 0);
-  assert.equal(typeof slot.body, 'string');
-  assert.ok(slot.body.length > 0);
+  assert.deepEqual(await res.json(), { slot: null });
 });
 
 test('smart-channel slot rejects anonymous callers', async () => {

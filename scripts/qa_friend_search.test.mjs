@@ -25,8 +25,12 @@ async function login(email, password) {
   return (await res.data) || {}
 }
 
-const me = await login('user@luno.local', 'LunoUser#2026!')
+const PW = 'T3st#Migrated2026'
+await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+const me = await login('user@luno.local', PW)
 assert.ok(me.access_token, 'demo login works')
+await api('friends', me.access_token, 'POST', { handle: 'alice_kim' })
 
 test('add-friend finds Alice by handle (existing behavior)', async () => {
   const r = await api('friends', me.access_token, 'POST', { handle: 'alice_kim' })
@@ -34,10 +38,10 @@ test('add-friend finds Alice by handle (existing behavior)', async () => {
   assert.equal(r.data.status, 'already_friends')
 })
 
-test('add-friend finds Alice by email', async () => {
+test('add-friend by email honors searchable_by_email (private by default)', async () => {
+  // Registered users are private; the old 200 was a public-seed artifact.
   const r = await api('friends', me.access_token, 'POST', { handle: 'alice@luno-test.local' })
-  assert.equal(r.status, 200)
-  assert.equal(r.data.status, 'already_friends')
+  assert.equal(r.status, 404)
 })
 
 test('add-friend finds Alice by exact display name', async () => {

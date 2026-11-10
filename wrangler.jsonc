@@ -30,7 +30,7 @@
   "vars": {
     // Preserve the existing standalone service on its one approved hostname.
     // All other public hosts still fail closed. Demo-account policy is unchanged.
-    "ALLOW_LOCAL_DEMO": "true",
-    "STANDALONE_HOSTS": "luno-messenger.dnjstjqppk.workers.dev"
+    "STANDALONE_HOSTS": "luno-messenger.dnjstjqppk.workers.dev",
+    "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,http://localhost:5173,http://localhost:8080"
   }
 }

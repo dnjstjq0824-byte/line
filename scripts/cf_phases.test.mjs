@@ -14,7 +14,7 @@ async function api(path, token, method = 'GET', body, extraHeaders = {}) {
       ...extraHeaders
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { ALLOW_LOCAL_DEMO: 'true' });
+  }), { ADMIN_INITIAL_PASSWORD: 'Phases#Admin1', DEMO_INITIAL_PASSWORD: 'Phases#Demo12' });
 }
 
 async function login(email, password) {
@@ -24,7 +24,7 @@ async function login(email, password) {
 }
 
 test('LUNO Phase 1: Push Tokens & Offline Delta Sync', async () => {
-  const token = await login('user@luno.local', 'LunoUser#2026!');
+  const token = await login('user@luno.local', 'Phases#Demo12');
   assert.ok(token, 'User token should exist');
 
   // 1. Register push token
@@ -58,7 +58,7 @@ test('LUNO Phase 1: Push Tokens & Offline Delta Sync', async () => {
 });
 
 test('key-bundle storage and group signaling metadata (no cryptographic or media proof)', async () => {
-  const token = await login('user@luno.local', 'LunoUser#2026!');
+  const token = await login('user@luno.local', 'Phases#Demo12');
   const meRes = await api('me', token);
   const me = await meRes.json();
 
@@ -91,9 +91,9 @@ test('key-bundle storage and group signaling metadata (no cryptographic or media
 });
 
 test('speech transcription fails closed without a configured provider', async () => {
-  const token = await login('user@luno.local', 'LunoUser#2026!');
+  const token = await login('user@luno.local', 'Phases#Demo12');
   const sttRes = await api('ai/stt', token, 'POST', {
-    mock_text: '오늘 회의 준비 완료되었습니다.',
+    mock_text: '?�늘 ?�의 준�??�료?�었?�니??',
     duration: 4.5
   });
   assert.equal(sttRes.status, 503);
@@ -103,7 +103,7 @@ test('speech transcription fails closed without a configured provider', async ()
 });
 
 test('LUNO Phase 4: B2B Official Accounts & Webhooks', async () => {
-  const token = await login('admin@luno.local', 'LunoAdmin#2026!');
+  const token = await login('admin@luno.local', 'Phases#Admin1');
 
   // 1. Rich Menu
   const menuRes = await api('partner/accounts/oa_luno_official/rich-menus', token);
@@ -120,7 +120,7 @@ test('LUNO Phase 4: B2B Official Accounts & Webhooks', async () => {
 });
 
 test('LUNO Phase 5: Payments, Settlements & Commerce', async () => {
-  const token = await login('user@luno.local', 'LunoUser#2026!');
+  const token = await login('user@luno.local', 'Phases#Demo12');
 
   // 1. Checkout session
   const checkoutRes = await api('checkout', token, 'POST', { amount: 15000, currency: 'KRW' });
@@ -138,7 +138,7 @@ test('LUNO Phase 5: Payments, Settlements & Commerce', async () => {
 });
 
 test('LUNO Phase 6: Compliance & GDPR Data Portability', async () => {
-  const token = await login('user@luno.local', 'LunoUser#2026!');
+  const token = await login('user@luno.local', 'Phases#Demo12');
 
   // 1. Export Data Archive
   const exportRes = await api('me/export-data', token);

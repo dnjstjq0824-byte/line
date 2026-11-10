@@ -15,6 +15,7 @@ async function api(path, token, method = 'GET', body) {
 }
 
 async function login(email, password) {
+  await api('auth/register', null, 'POST', { email, password, display_name: email.split('@')[0] });
   return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
 }
 
@@ -100,7 +101,7 @@ function finishBody(cred, clientDataBytes, attObj) {
 }
 
 test('passkey registration with none attestation', async () => {
-  const alice = await login('alice@luno-test.local', 'Alice#Rotated$48wT');
+  const alice = await login('alice@luno-test.local', 'Alice#Migrated2026!');
   const begun = await (await api('passkeys/register/begin', alice, 'POST')).json();
   const pk = begun.publicKey;
   assert.ok(pk.challenge);
@@ -128,7 +129,7 @@ test('passkey registration with none attestation', async () => {
   const tampered = await api('passkeys/register/finish', alice, 'POST', finishBody(evil, cdEvil, attestationNone(evil.authData)));
   assert.equal(tampered.status, 400);
 
-  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
+  const bob = await login('bob@luno-test.local', 'Bob#Migrated2026!');
   const lonely = makeCredential();
   const cdLonely = clientData('unused-challenge', 'http://localhost');
   const noCeremony = await api('passkeys/register/finish', bob, 'POST', finishBody(lonely, cdLonely, attestationNone(lonely.authData)));
@@ -136,7 +137,7 @@ test('passkey registration with none attestation', async () => {
 });
 
 test('passkey registration with packed self attestation', async () => {
-  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
+  const bob = await login('bob@luno-test.local', 'Bob#Migrated2026!');
   const begun = await (await api('passkeys/register/begin', bob, 'POST')).json();
   const cred = makeCredential();
   const cd = clientData(begun.publicKey.challenge);
@@ -146,7 +147,7 @@ test('passkey registration with packed self attestation', async () => {
 });
 
 test('passkey registration rejects x5c and unknown formats', async () => {
-  const bob = await login('bob@luno-test.local', 'Bob#Rotated$31qR');
+  const bob = await login('bob@luno-test.local', 'Bob#Migrated2026!');
   const begun = await (await api('passkeys/register/begin', bob, 'POST')).json();
   const cred = makeCredential();
   const cd = clientData(begun.publicKey.challenge);
@@ -187,7 +188,7 @@ function makeAssertion(cred, challenge, origin = 'http://localhost', counter = 1
 }
 
 test('passkey login ceremony mints a working session', async () => {
-  const demo = await login('user@luno.local', 'LunoUser#2026!');
+  const demo = await login('user@luno.local', 'User#Migrated2026!');
   const begun = await (await api('passkeys/register/begin', demo, 'POST')).json();
   const cred = makeCredential();
   const cd = clientData(begun.publicKey.challenge);

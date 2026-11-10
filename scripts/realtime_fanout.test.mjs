@@ -13,13 +13,15 @@
 //
 // A fresh module instance (?iso=N) is a different isolate: empty in-memory state,
 // seeing only what D1 and the shared hub namespace carry between them.
+//
+// S2: seeded demo credentials are removed; each test provisions accounts via register.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
 const BASE = 'https://localhost';
-const ALICE_CONVERSATION = '00000000-0000-0000-0000-000000000010';
+const PW = 'Str0ng!Passw0rd';
 
 // --- Cloudflare runtime shims ----------------------------------------------
 // A 101 response carries no body in undici, so keep the status observable.
@@ -120,7 +122,6 @@ let isoCounter = 0;
 async function isolate({ db, hub, extraEnv = {} } = {}) {
   const mod = await import(`./cf_worker.js?rt=${++isoCounter}`);
   const env = {
-    ALLOW_LOCAL_DEMO: 'true',
     ...(db ? { DB: db } : {}),
     ...(hub ? { USER_HUB: hub } : {}),
     ...extraEnv,
@@ -140,8 +141,13 @@ async function isolate({ db, hub, extraEnv = {} } = {}) {
     mod,
     api,
     settle: async () => { while (pending.length) await pending.shift(); },
-    async login(email, password) {
-      const res = await api('auth/login', 'POST', { email, password });
+    async signup(email, handle) {
+      const reg = await api('auth/register', 'POST', { email, password: PW, display_name: handle, handle });
+      assert.equal(reg.status, 201, `register failed for ${email}`);
+      return { id: (await reg.json()).id, email };
+    },
+    async login(email) {
+      const res = await api('auth/login', 'POST', { email, password: PW });
       assert.equal(res.status, 200, `login failed for ${email}`);
       return (await res.json()).access_token;
     },
@@ -155,11 +161,11 @@ async function isolate({ db, hub, extraEnv = {} } = {}) {
   };
 }
 
-const CREDS = {
-  alice: ['alice@luno-test.local', 'Alice#Rotated$48wT'],
-  bob: ['bob@luno-test.local', 'Bob#Rotated$31qR'],
-  outsider: ['user@luno.local', 'LunoUser#2026!'],
-};
+async function makeRoom(node, token, peerId, title) {
+  const room = await node.api('conversations', 'POST', { title, member_ids: [peerId] }, token);
+  assert.equal(room.status, 201, 'room creation failed');
+  return (await room.json()).id;
+}
 
 // ===========================================================================
 
@@ -222,20 +228,23 @@ test('a message reaches a recipient whose socket is held by a DIFFERENT isolate'
   const isolateA = await isolate({ db, hub });
   const isolateB = await isolate({ db, hub });
 
-  const aliceOnA = await isolateA.login(...CREDS.alice);
-  const bobOnB = await isolateB.login(...CREDS.bob);
+  const alice = await isolateA.signup('rt-alice@luno-test.local', 'rtalice');
+  const bob = await isolateA.signup('rt-bob@luno-test.local', 'rtbob');
+  const aliceOnA = await isolateA.login(alice.email);
+  const bobOnB = await isolateB.login(bob.email);
+  const cid = await makeRoom(isolateA, aliceOnA, bob.id, 'cross-isolate room');
 
   // Bob connects through isolate B.
   const connected = await isolateB.connect(bobOnB);
   assert.equal(connected.status, 101, 'the upgrade should be handed to the hub');
-  assert.ok(hub.socketsOf('00000000-0000-0000-0000-000000000004').length > 0 ||
+  assert.ok(hub.socketsOf(bob.id).length > 0 ||
             hub.objects.size > 0, 'the hub should now hold a socket');
 
   const before = hub.objects.size;
   assert.ok(before > 0, 'connecting must create a hub object for the user');
 
   // Alice sends through isolate A.
-  const sent = await isolateA.api(`conversations/${ALICE_CONVERSATION}/messages`, 'POST', { body: 'across isolates' }, aliceOnA);
+  const sent = await isolateA.api(`conversations/${cid}/messages`, 'POST', { body: 'across isolates' }, aliceOnA);
   assert.equal(sent.status, 201, 'the message should be accepted');
   await isolateA.settle();
 
@@ -248,10 +257,7 @@ test('a message reaches a recipient whose socket is held by a DIFFERENT isolate'
     'the recipient on another isolate received nothing: cross-isolate fan-out is not working');
 
   // ...and it went to a conversation member, not to anyone else.
-  const members = new Set([
-    '00000000-0000-0000-0000-000000000003', // alice
-    '00000000-0000-0000-0000-000000000004', // bob
-  ]);
+  const members = new Set([alice.id, bob.id]);
   for (const { userId } of delivered) {
     assert.ok(members.has(userId), `delivered to a non-member: ${userId}`);
   }
@@ -263,20 +269,22 @@ test('fan-out targets conversation members only, never an outsider', async () =>
   const hub = makeHubNamespace(probe.mod.UserSocketHub);
   const node = await isolate({ db, hub });
 
-  const alice = await node.login(...CREDS.alice);
-  const outsider = await node.login(...CREDS.outsider);
+  const alice = await node.signup('rt-alice2@luno-test.local', 'rtalice2');
+  const outsiderAcct = await node.signup('rt-outsider@luno-test.local', 'rtoutsider');
+  const aliceTok = await node.login(alice.email);
+  const outsider = await node.login(outsiderAcct.email);
 
   // The outsider connects, so a hub object exists for them and silence is meaningful.
   const outsiderConn = await node.connect(outsider);
   assert.equal(outsiderConn.status, 101);
-  const outsiderId = '00000000-0000-0000-0000-000000000002';
-  const outsiderBefore = hub.deliveredTo(outsiderId).length;
+  const outsiderBefore = hub.deliveredTo(outsiderAcct.id).length;
 
-  const sent = await node.api(`conversations/${ALICE_CONVERSATION}/messages`, 'POST', { body: 'members only' }, alice);
+  // Alice's keep room has exactly one member: Alice.
+  const sent = await node.api(`conversations/conv-keep-${alice.id}/messages`, 'POST', { body: 'members only' }, aliceTok);
   assert.equal(sent.status, 201);
   await node.settle();
 
-  const outsiderAfter = hub.deliveredTo(outsiderId);
+  const outsiderAfter = hub.deliveredTo(outsiderAcct.id);
   const leaked = outsiderAfter.slice(outsiderBefore).filter(e => e?.message?.body === 'members only');
   assert.deepEqual(leaked, [], 'a private message was pushed to a non-member');
 });
@@ -291,7 +299,8 @@ test('a ws-ticket minted on one isolate can be redeemed on another', async () =>
   const minting = await isolate({ db, hub });
   const upgrading = await isolate({ db, hub });
 
-  const token = await minting.login(...CREDS.alice);
+  const alice = await minting.signup('rt-alice3@luno-test.local', 'rtalice3');
+  const token = await minting.login(alice.email);
   const res = await minting.api('ws-ticket', 'POST', null, token);
   assert.equal(res.status, 200);
   const { ticket } = await res.json();
@@ -314,11 +323,12 @@ test('without the USER_HUB binding the worker still serves sockets per-isolate',
   // Deployments that have not enabled Durable Objects must keep working.
   const db = makeD1();
   const node = await isolate({ db });
-  const token = await node.login(...CREDS.alice);
+  const alice = await node.signup('rt-alice4@luno-test.local', 'rtalice4');
+  const token = await node.login(alice.email);
   const connected = await node.connect(token);
   assert.equal(connected.status, 101, 'the in-isolate upgrade path must still work');
 
-  const sent = await node.api(`conversations/${ALICE_CONVERSATION}/messages`, 'POST', { body: 'local only' }, token);
+  const sent = await node.api(`conversations/conv-keep-${alice.id}/messages`, 'POST', { body: 'local only' }, token);
   assert.equal(sent.status, 201);
   await node.settle();
 

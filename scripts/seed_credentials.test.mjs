@@ -1,11 +1,9 @@
-// Seeded-credential configuration.
+// Bootstrap-credential configuration (S2: fail closed).
 //
-// ensureSeed() runs at module scope. It used to read the override as
-// `typeof env !== 'undefined' && env?.ADMIN_INITIAL_PASSWORD`, but `env` is never
-// bound at module scope, so that guard was always false: ADMIN_INITIAL_PASSWORD and
-// DEMO_INITIAL_PASSWORD were silently ignored and the password written in
-// cf_worker.js was the only admin credential there was. An operator who set the
-// documented variable had every reason to believe they had rotated it.
+// ensureSeed() seeds the admin/demo bootstrap accounts ONLY from operator-provided
+// env secrets (ADMIN_INITIAL_PASSWORD / DEMO_INITIAL_PASSWORD, min 8 chars).
+// There is no fallback password written in the source: without the env vars the
+// accounts do not exist at all, and an empty/non-string override seeds nothing.
 //
 // boot() memoizes the seed, so each case needs its own module instance. Node caches
 // module imports by URL, and a base64 data: URL of the same source is the same URL,
@@ -34,53 +32,56 @@ function login(worker, env, email, password) {
   }), env);
 }
 
-// The passwords that cf_worker.js falls back to when nothing is configured.
-const SOURCE_ADMIN_PASSWORD = 'LunoAdmin#2026!';
-const SOURCE_DEMO_PASSWORD = 'LunoUser#2026!';
+// The passwords that used to be written in cf_worker.js. They must never work now.
+const REVOKED_ADMIN_PASSWORD = 'LunoAdmin#2026!';
+const REVOKED_DEMO_PASSWORD = 'LunoUser#2026!';
 
-test('a configured ADMIN_INITIAL_PASSWORD replaces the one written in the source', async () => {
+test('a configured ADMIN_INITIAL_PASSWORD seeds the admin account', async () => {
   const worker = await freshWorker();
   const configured = 'OperatorChosen#Admin$2026';
-  const env = { ALLOW_LOCAL_DEMO: 'true', ADMIN_INITIAL_PASSWORD: configured };
+  const env = { ADMIN_INITIAL_PASSWORD: configured };
 
   const accepted = await login(worker, env, 'admin@luno.local', configured);
   assert.equal(accepted.status, 200, 'the configured admin password must be accepted');
   assert.ok((await accepted.json()).access_token, 'a session should be issued');
 
-  const rejected = await login(worker, env, 'admin@luno.local', SOURCE_ADMIN_PASSWORD);
+  const rejected = await login(worker, env, 'admin@luno.local', REVOKED_ADMIN_PASSWORD);
   assert.equal(rejected.status, 401,
-    'once overridden, the password written in cf_worker.js must no longer work');
+    'the old source password must no longer work');
 });
 
-test('a configured DEMO_INITIAL_PASSWORD replaces the one written in the source', async () => {
+test('a configured DEMO_INITIAL_PASSWORD seeds the demo account', async () => {
   const worker = await freshWorker();
   const configured = 'OperatorChosen#Demo$2026';
-  const env = { ALLOW_LOCAL_DEMO: 'true', DEMO_INITIAL_PASSWORD: configured };
+  const env = { DEMO_INITIAL_PASSWORD: configured };
 
   const accepted = await login(worker, env, 'user@luno.local', configured);
   assert.equal(accepted.status, 200, 'the configured demo password must be accepted');
 
-  const rejected = await login(worker, env, 'user@luno.local', SOURCE_DEMO_PASSWORD);
+  const rejected = await login(worker, env, 'user@luno.local', REVOKED_DEMO_PASSWORD);
   assert.equal(rejected.status, 401,
-    'once overridden, the password written in cf_worker.js must no longer work');
+    'the old source password must no longer work');
 });
 
-test('the source fallback applies only when nothing is configured', async () => {
+test('with nothing configured, bootstrap accounts do not exist (fail closed)', async () => {
+  // S2: there is no source fallback anymore. With nothing configured the
+  // bootstrap accounts do not exist, so every password is rejected.
   const worker = await freshWorker();
-  const env = { ALLOW_LOCAL_DEMO: 'true' };
-  assert.equal((await login(worker, env, 'admin@luno.local', SOURCE_ADMIN_PASSWORD)).status, 200);
-  assert.equal((await login(worker, env, 'user@luno.local', SOURCE_DEMO_PASSWORD)).status, 200);
+  const env = {};
+  assert.equal((await login(worker, env, 'admin@luno.local', REVOKED_ADMIN_PASSWORD)).status, 401);
+  assert.equal((await login(worker, env, 'user@luno.local', REVOKED_DEMO_PASSWORD)).status, 401);
+  assert.equal((await login(worker, env, 'admin@luno.local', 'anything-at-all')).status, 401);
 });
 
-test('an empty or non-string override does not silently lock the account out', async () => {
-  // An unset Cloudflare variable can arrive as '' rather than undefined. Falling
-  // through to the documented fallback is right; seeding an empty password is not.
+test('an empty or non-string override seeds nothing', async () => {
+  // An unset Cloudflare variable can arrive as '' rather than undefined.
+  // It must seed nothing: neither the empty password nor any fallback works.
   for (const value of ['', null, undefined, 0]) {
     const worker = await freshWorker();
-    const env = { ALLOW_LOCAL_DEMO: 'true', ADMIN_INITIAL_PASSWORD: value };
+    const env = { ADMIN_INITIAL_PASSWORD: value };
     assert.equal(
-      (await login(worker, env, 'admin@luno.local', SOURCE_ADMIN_PASSWORD)).status, 200,
-      `ADMIN_INITIAL_PASSWORD=${JSON.stringify(value)} should fall back to the source password`,
+      (await login(worker, env, 'admin@luno.local', REVOKED_ADMIN_PASSWORD)).status, 401,
+      `ADMIN_INITIAL_PASSWORD=${JSON.stringify(value)} must not fall back to a source password`,
     );
     assert.equal(
       (await login(worker, env, 'admin@luno.local', '')).status, 401,

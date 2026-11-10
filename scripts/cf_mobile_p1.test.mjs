@@ -20,12 +20,18 @@ async function api(path, token, method = 'GET', body) {
   return { status: res.status, data }
 }
 
-const login = await api('auth/login', null, 'POST', { email: 'user@luno.local', password: 'LunoUser#2026!' })
+const PW = 'T3st#Migrated2026'
+await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+const login = await api('auth/login', null, 'POST', { email: 'user@luno.local', password: PW })
 const token = login.data.access_token
 assert.ok(token, 'demo login works')
 const me = login.data.user_id
-const convs = (await api('conversations', token)).data.conversations
-const dm = convs.find(c => c.kind === 'direct') || convs[0]
+await api('friends', token, 'POST', { handle: 'alice_kim' })
+const aliceId = (await api('friends', token)).data.friends.find(f => f.display_name === 'Alice Kim').id
+const dmRes = await api('conversations', token, 'POST', { kind: 'group', member_ids: [aliceId], title: 'probe room' })
+assert.equal(dmRes.status, 201)
+const dm = dmRes.data
 
 test('archive writes: notes events polls albums', async () => {
   const note = await api(`conversations/${dm.id}/notes`, token, 'POST', { title: 't', body: 'b' })

@@ -203,7 +203,10 @@ const LUNO_SCHEMA_BASE = [
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, question TEXT NOT NULL,
     option1 TEXT NOT NULL, option2 TEXT NOT NULL, votes1 INTEGER DEFAULT 0, votes2 INTEGER DEFAULT 0,
     multiple INTEGER DEFAULT 0, closed INTEGER DEFAULT 0, created_by TEXT DEFAULT '',
-    options_json TEXT DEFAULT '[]', created_at TEXT NOT NULL)`
+    options_json TEXT DEFAULT '[]', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_notices (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL,
+    starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, created_at TEXT NOT NULL)`
 ];
 const LUNO_SCHEMA_PHASE1 = [
   `CREATE TABLE IF NOT EXISTS refresh_tokens (
@@ -1105,7 +1108,7 @@ const NEWS_SAMPLE = [
 // form used 1,000 iterations and is upgraded on the next successful login.
 const PBKDF2_LEGACY_ITERATIONS = 1000;
 const PBKDF2_DEFAULT_ITERATIONS = 100000; // Workers Web Crypto refuses more than 100,000.
-const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK']);
+const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK', 'LunoAdmin#2026!', 'LunoUser#2026!', 'Alice#Rotated$48wT', 'Bob#Rotated$31qR']);
 function pbkdf2Iterations() {
   const configured = Number(CURRENT_ENV?.PBKDF2_ITERATIONS);
   return Number.isInteger(configured) && configured >= 10000 && configured <= 100000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
@@ -1324,32 +1327,21 @@ function botReply(text, account) {
   }
   if (/안녕|hello|hi\b/.test(t)) return `안녕하세요! ${account.name} 공식계정입니다. 👋 하단 리치 메뉴를 누르시거나 '도움말'을 입력해 보세요.`;
   if (/도움|help/.test(t)) return '사용 가능한 안내: 공지사항, 고객센터, 보안 안내, 이벤트, 날씨, 쿠폰, 특가, 페이 혜택';
-  if (/날씨|weather/.test(t)) return '오늘 서울은 맑음 ☀️ 최고 21°C / 최저 12°C 입니다.';
-  if (/쿠폰|coupon/.test(t)) return '🎟️ 신규 친구 10% 할인 쿠폰: WELCOME10';
   if (/공지|notice/.test(t)) return '📢 이번 주 업데이트: 타임라인·VOOM·Pay 기능 및 공식계정 리치메뉴가 추가되었습니다.';
   return '메시지를 전달받았습니다. 하단 리치 메뉴 버튼을 누르시거나 "도움말"을 입력해 보세요. 🤖';
 }
 function seedExtras() {
-  const alice = users.get('alice@luno-test.local');
-  const bob = users.get('bob@luno-test.local');
   const demo = users.get('user@luno.local');
-  const colors = { 'admin@luno.local': '#6366f1', 'user@luno.local': '#4F7CFF', 'alice@luno-test.local': '#f97316', 'bob@luno-test.local': '#0ea5e9' };
-  const status = { 'admin@luno.local': '운영 중 🛠️', 'user@luno.local': '오늘도 좋은 하루 ☀️', 'alice@luno-test.local': '커피 한 잔의 여유 ☕', 'bob@luno-test.local': '코딩 중... 💻' };
+  const colors = { 'admin@luno.local': '#6366f1', 'user@luno.local': '#4F7CFF' };
+  const status = { 'admin@luno.local': '운영 중 🛠️', 'user@luno.local': '오늘도 좋은 하루 ☀️' };
   for (const [email, u] of users) {
     u.avatar_color = colors[email] || '#4F7CFF';
     u.status_message = status[email] || '';
     usersById.set(u.id, u);
   }
-  friendships.set(`${demo.id}:${alice.id}`, true);
-  friendships.set(`${alice.id}:${demo.id}`, true);
-  friendships.set(`${demo.id}:${bob.id}`, true);
-  friendships.set(`${bob.id}:${demo.id}`, true);
-  alice.birthday = new Date().toISOString().slice(5, 10);
 
   for (const [id, name, handle, description, color] of [
-    ['oa-notice', 'LUNO 공식 안내', '@luno_notice', 'LUNO 서비스 소식과 업데이트를 전해드립니다.', '#315BCD'],
-    ['oa-weather', '날씨 알리미', '@weather', '매일 아침 날씨를 알려드립니다.', '#0ea5e9'],
-    ['oa-deals', '오늘의 특가', '@deals', '친구 전용 쿠폰과 특가 소식', '#f43f5e']
+    ['oa-notice', 'LUNO 공식 안내', '@luno_notice', 'LUNO 서비스 소식과 업데이트를 전해드립니다.', '#315BCD']
   ]) officialAccounts.set(id, { id, name, handle, description, color });
 
   // Default Rich Menus for Official Accounts
@@ -1368,29 +1360,7 @@ function seedExtras() {
     ]
   });
 
-  richMenus.set('oa-weather', {
-    id: 'menu_oa-weather',
-    account_id: 'oa-weather',
-    title: '날씨 알리미 퀵 메뉴',
-    layout: 'grid_1x3',
-    tiles: [
-      { id: 'tw1', label: '☀️ 오늘 날씨', icon: '☀️', action: { type: 'message', text: '오늘 날씨' } },
-      { id: 'tw2', label: '🌧️ 주간 예보', icon: '🌧️', action: { type: 'message', text: '주간 예보' } },
-      { id: 'tw3', label: '😷 미세먼지', icon: '😷', action: { type: 'message', text: '미세먼지' } }
-    ]
-  });
 
-  richMenus.set('oa-deals', {
-    id: 'menu_oa-deals',
-    account_id: 'oa-deals',
-    title: '특가 & 혜택 퀵 메뉴',
-    layout: 'grid_1x3',
-    tiles: [
-      { id: 'td1', label: '🎟️ 할인 쿠폰', icon: '🎟️', action: { type: 'message', text: '쿠폰' } },
-      { id: 'td2', label: '🔥 오늘의 특가', icon: '🔥', action: { type: 'message', text: '특가' } },
-      { id: 'td3', label: '💳 페이 혜택', icon: '💳', action: { type: 'message', text: '페이 혜택' } }
-    ]
-  });
 
   // Default Chatbot Keyword Auto-Reply Rules
   oaBotRules.set('oa-notice', [
@@ -1401,45 +1371,15 @@ function seedExtras() {
     { id: 'r_n5', keywords: ['신규', '기능', '업데이트'], reply: '⚡ [신규 기능] 6개 웹 포털(Admin, Partner, Developer, Creator, Ads), 공식 계정 인터랙티브 리치 메뉴가 활성화되었습니다.' }
   ]);
 
-  oaBotRules.set('oa-weather', [
-    { id: 'r_w1', keywords: ['오늘', '날씨'], reply: '☀️ [오늘 날씨] 서울: 맑음 21°C / 부산: 구름조금 23°C / 제주: 맑음 22°C (강수확률 10%). 기분 좋은 화창한 하루입니다.' },
-    { id: 'r_w2', keywords: ['주간', '예보'], reply: '🌧️ [주간 예보] 이번 주 목요일 오후 전국 비 소식이 있습니다. 외출 시 우산을 준비하세요!' },
-    { id: 'r_w3', keywords: ['미세먼지', '공기', '황사'], reply: '😷 [대기질 예보] 미세먼지: 좋음 (18㎍/㎥) / 초미세먼지: 좋음 (9㎍/㎥). 환기와 야외 활동에 적합합니다.' }
-  ]);
 
-  oaBotRules.set('oa-deals', [
-    { id: 'r_d1', keywords: ['쿠폰', '할인'], reply: '🎟️ [전용 쿠폰 발급] 코드: LUNO-SUPER-2026 (결제 시 15% 즉시 할인 적용)' },
-    { id: 'r_d2', keywords: ['특가', '상품', '쇼핑'], reply: '🔥 [오늘의 특가] 프리미엄 무선 노이즈캔슬링 헤드폰 45% 파격 할인 진행 중! (선착순 100명)' },
-    { id: 'r_d3', keywords: ['페이', '혜택'], reply: '💳 [LUNO Pay 혜택] LUNO Pay로 결제 시 전 가맹점 3% 무제한 캐시백 적립 혜택을 드립니다.' }
-  ]);
 
-  const bg = ['linear-gradient(135deg,#4F7CFF,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
-  timelinePosts.push(
-    { id: uid(), author_id: alice.id, body: '오늘 한강 노을이 너무 예뻐요 🌇', bg: bg[1], visibility: 'friends', created_at: now(), likes: [bob.id], comments: [] },
-    { id: uid(), author_id: bob.id, body: '새 프로젝트 배포 완료! 🚀', bg: bg[0], visibility: 'friends', created_at: now(), likes: [], comments: [] }
-  );
-  storyStore.push(
-    { id: uid(), author_id: alice.id, body: '☕ 카페 투어', bg: bg[1], created_at: now(), viewers: [] },
-    { id: uid(), author_id: bob.id, body: '🏃 러닝 5km', bg: bg[3], created_at: now(), viewers: [] }
-  );
-  [
-    ['고양이의 하루 🐱', '🐱', alice.id], ['주말 브런치 레시피 🍳', '🍳', bob.id], ['한강 러닝 vlog 🏃', '🏃', alice.id],
-    ['코딩 ASMR ⌨️', '⌨️', bob.id], ['도쿄 야경 🌃', '🌃', alice.id], ['홈카페 라떼아트 ☕', '☕', bob.id]
-  ].forEach(([title, emoji, author], i) => voomPosts.push({
-    id: uid(), title, emoji, author_id: author, bg: bg[i % bg.length], likes: i * 3, liked_by: [], comments: [], created_at: now()
-  }));
-  noteStore.set('00000000-0000-0000-0000-000000000010', []);
-  eventStore.set('00000000-0000-0000-0000-000000000010', []);
-  const conv = conversations.get('00000000-0000-0000-0000-000000000010');
-  conv.owner_id = alice.id;
-  readCursors.set(`${conv.id}:${alice.id}`, 1);
 }
 
 const featureFlags = [
   { key: 'e2ee_letter_sealing', enabled: false, description: 'Signal Letter-Sealing End-to-End Encryption (not implemented)' },
   { key: 'webrtc_group_calling', enabled: true, description: 'Multi-party Voice & Video Calling' },
   { key: 'ai_smart_replies', enabled: true, description: 'AI-assisted quick responses' },
-  { key: 'openchat_live_streaming', enabled: true, description: 'Public community voice stages' }
+  { key: 'openchat_live_streaming', enabled: false, description: 'Public community voice stages' }
 ];
 
 // =====================================================================
@@ -1539,49 +1479,34 @@ function broadcast(payload) {
 // Helper: Seed default accounts and base data if empty
 function ensureSeed(env) {
   if (users.size > 0) return;
-  const seedPassword = (name, fallback) => {
+  const seedPassword = (name) => {
     const configured = env && env[name];
-    return typeof configured === 'string' && configured.length > 0 ? configured : fallback;
+    return typeof configured === 'string' && configured.length >= 8 ? configured : null;
   };
 
-  const seeds = [
-    {
-      id: '00000000-0000-0000-0000-000000000001',
-      email: 'admin@luno.local',
-      password: seedPassword('ADMIN_INITIAL_PASSWORD', 'LunoAdmin#2026!'),
-      display_name: 'System Administrator',
-      role: 'admin',
-      handle: 'admin',
-      bio: 'Cloudflare Edge Master Admin'
-    },
-    {
-      id: '00000000-0000-0000-0000-000000000002',
-      email: 'user@luno.local',
-      password: seedPassword('DEMO_INITIAL_PASSWORD', 'LunoUser#2026!'),
-      display_name: 'LUNO Demo User',
-      role: 'user',
-      handle: 'luno_user',
-      bio: 'LUNO Global Messenger User'
-    },
-    {
-      id: '00000000-0000-0000-0000-000000000003',
-      email: 'alice@luno-test.local',
-      password: 'Alice#Rotated$48wT',
-      display_name: 'Alice Kim',
-      role: 'user',
-      handle: 'alice_kim',
-      bio: 'Alice in Cloudflare'
-    },
-    {
-      id: '00000000-0000-0000-0000-000000000004',
-      email: 'bob@luno-test.local',
-      password: 'Bob#Rotated$31qR',
-      display_name: 'Bob Lee',
-      role: 'user',
-      handle: 'bob_lee',
-      bio: 'Bob in Cloudflare'
-    }
-  ];
+  // Bootstrap accounts come ONLY from operator-provided env secrets. No
+  // fallback passwords: without the env vars these accounts do not exist.
+  const seeds = [];
+  const adminPw = seedPassword('ADMIN_INITIAL_PASSWORD');
+  if (adminPw) seeds.push({
+    id: '00000000-0000-0000-0000-000000000001',
+    email: 'admin@luno.local',
+    password: adminPw,
+    display_name: 'System Administrator',
+    role: 'admin',
+    handle: 'admin',
+    bio: 'Cloudflare Edge Master Admin'
+  });
+  const demoPw = seedPassword('DEMO_INITIAL_PASSWORD');
+  if (demoPw) seeds.push({
+    id: '00000000-0000-0000-0000-000000000002',
+    email: 'user@luno.local',
+    password: demoPw,
+    display_name: 'LUNO Demo User',
+    role: 'user',
+    handle: 'luno_user',
+    bio: 'LUNO Global Messenger User'
+  });
 
   for (const s of seeds) {
     users.set(s.email.toLowerCase(), s);
@@ -1592,34 +1517,6 @@ function ensureSeed(env) {
     if (s.role !== 'admin') userPrefs.set(s.id, { ...DEFAULT_PREFS, searchable_by_email: true });
   }
 
-  // Pre-seed friendship between Alice and Bob
-  const alice = users.get('alice@luno-test.local');
-  const bob = users.get('bob@luno-test.local');
-  friendships.set(`${alice.id}:${bob.id}`, true);
-  friendships.set(`${bob.id}:${alice.id}`, true);
-
-  // Pre-seed default direct conversation
-  const convId = '00000000-0000-0000-0000-000000000010';
-  conversations.set(convId, {
-    id: convId,
-    kind: 'direct',
-    title: 'Alice & Bob',
-    members: [alice.id, bob.id],
-    last_sequence: 1,
-    updated_at: new Date().toISOString()
-  });
-  messages.set(convId, [
-    {
-      id: '00000000-0000-0000-0000-000000000100',
-      conversation_id: convId,
-      sender_id: alice.id,
-      client_id: 'welcome-msg-1',
-      sequence: 1,
-      kind: 'text',
-      body: 'Welcome to Cloudflare Global Messenger!',
-      created_at: new Date().toISOString()
-    }
-  ]);
 
   // Pre-seed OpenChat room
   communityRooms.set('room-1', {
@@ -1640,12 +1537,32 @@ function json(data, status = 200, headers = {}) {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       ...headers
     }
   });
+}
+
+function requestOrigin(request) {
+  try { return new URL(request.url).origin; } catch { return ''; }
+}
+// CORS is allowlisted: same-origin requests plus env.ALLOWED_ORIGINS.
+// Anything else gets no ACAO header, so browsers block the read.
+function corsOrigin(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  if (!origin) return '';
+  if (origin === requestOrigin(request)) return origin;
+  const list = String((env && env.ALLOWED_ORIGINS) || '').split(',').map(s => s.trim()).filter(Boolean);
+  return list.includes(origin) ? origin : '';
+}
+async function withCors(request, env, res) {
+  if (!res || res.webSocket) return res;
+  const origin = corsOrigin(request, env);
+  if (!origin || res.headers.has('Access-Control-Allow-Origin')) return res;
+  const headers = new Headers(res.headers);
+  headers.set('Access-Control-Allow-Origin', origin);
+  headers.set('Vary', 'Origin');
+  const nullBody = res.status === 204 || res.status === 304 || res.status === 101;
+  return new Response(nullBody ? null : res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
 // Authentication is session-backed only: a token is valid iff its digest exists in D1 (or the
@@ -1865,11 +1782,8 @@ const groupCallRooms = new Map();
 const richMenus = new Map();
 const creatorSettlements = new Map();
 const REACTIONS = ['❤️', '😍', '😂', '😮', '😢', '👍'];
-// Smart-channel slot: curated LUNO announcements only (no ad network).
-const CHANNEL_NOTICES = [
-  { id: 'luno-voice-launch', title: '음성 메시지 출시', body: '대화방 마이크 버튼으로 최대 2분까지 녹음해 보세요.', starts_at: '2026-11-09T00:00:00Z', ends_at: '2027-02-09T00:00:00Z' },
-  { id: 'luno-passkey-login', title: '패스키 로그인 지원', body: '비밀번호 없이 지문·얼굴로 로그인할 수 있습니다.', starts_at: '2026-11-09T00:00:00Z', ends_at: '2027-02-09T00:00:00Z' },
-];
+// Smart-channel slot: served from D1 luno_notices (no hardcoded content).
+
 
 const INLINE_MIME = /^(image\/(png|jpeg|gif|webp)|audio\/(webm|ogg|mp4|mpeg|wav)|video\/(mp4|webm))$/;
 
@@ -2345,7 +2259,7 @@ async function extended(p, request, url, me, token) {
       const b = await readJson(request);
       if (!b.password) return json({ error: 'password required for account deletion' }, 400);
       if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
-      if (['user@luno.local', 'alice@luno-test.local'].includes((me.email || '').toLowerCase())) {
+      if (['user@luno.local'].includes((me.email || '').toLowerCase())) {
         return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
       }
       me.state = 'deleted';
@@ -2990,13 +2904,14 @@ async function extended(p, request, url, me, token) {
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const inline = INLINE_MIME.test(att.mime);
+    const acao = corsOrigin(request, typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null);
     return new Response(bytes, {
       status: 200,
       headers: {
         'Content-Type': inline ? att.mime : 'application/octet-stream',
         'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(att.name)}`,
         'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox",
-        'Cache-Control': 'private, max-age=3600', 'Access-Control-Allow-Origin': '*'
+        'Cache-Control': 'private, max-age=3600', ...(acao ? { 'Access-Control-Allow-Origin': acao, 'Vary': 'Origin' } : {})
       }
     });
   }
@@ -3730,20 +3645,18 @@ const workerCore = {
     const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     // Cloudflare hostnames can serve production traffic. Public standalone hosts
     // require explicit opt-in just like custom domains.
-    // Any further standalone host must be named explicitly. A blanket "allow every host"
-    // switch is deliberately not supported: it would serve the in-memory demo backend --
-    // including POST /auth/demo, which mints a real session for a seeded account with no
-    // password -- on a production custom domain.
+    // Any further standalone host must be named explicitly. There is no blanket
+    // allow-every-host switch: unknown hosts get static assets only, never the API.
     const allowedStandaloneHosts = String(env.STANDALONE_HOSTS || '')
       .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
     const isNamedStandaloneHost = allowedStandaloneHosts.includes(url.hostname.toLowerCase());
-    const localDemo = env.ALLOW_LOCAL_DEMO === 'true' && (isLocal || isNamedStandaloneHost);
-    if (!localDemo) {
+    const apiEnabled = isLocal || isNamedStandaloneHost;
+    if (!apiEnabled) {
       if (backendRoute) return json({ error: 'persistent backend must be configured' }, 503);
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Assets unavailable', { status: 503 });
     }
     // Liveness does not imply that persistence is ready. These checks must not
-    // boot the demo service or run schema/seed writes just to answer a probe.
+    // boot the service or run schema/seed writes just to answer a probe.
     if (url.pathname === '/healthz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
       return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
     }
@@ -3770,13 +3683,15 @@ const workerCore = {
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
+      const origin = corsOrigin(request, env);
       return new Response(null, {
         status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
+        headers: origin ? {
+          'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-        }
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+          'Vary': 'Origin',
+        } : {},
       });
     }
 
@@ -3788,7 +3703,13 @@ const workerCore = {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
       const now = new Date().toISOString();
-      const active = CHANNEL_NOTICES.find(n => n.starts_at <= now && now < n.ends_at);
+      let active = null;
+      try {
+        await ensureSchema();
+        active = await dbOf().prepare(
+          'SELECT id, title, body FROM luno_notices WHERE starts_at <= ? AND ? < ends_at ORDER BY starts_at DESC LIMIT 1'
+        ).bind(now, now).first();
+      } catch { active = null; }
       if (!active) return json({ slot: null });
       return json({ slot: { id: active.id, title: active.title, body: active.body } });
     }
@@ -3798,9 +3719,48 @@ const workerCore = {
       return json({ error: 'Translation engine is not configured', code: 'TRANSLATE_NOT_CONFIGURED' }, 503);
     }
     if (url.pathname === '/metrics') {
-      return new Response('# HELP cf_edge_requests_total\ncf_edge_requests_total 1\n', {
-        headers: { 'Content-Type': 'text/plain' }
-      });
+      const viewer = await getAuthUser(request);
+      if (!viewer) return json({ error: 'unauthorized' }, 401);
+      if (viewer.role !== 'admin') return json({ error: 'forbidden' }, 403);
+      const mdb = dbOf();
+      if (!mdb) return json({ error: 'metrics unavailable: database not configured' }, 503);
+      await ensureSchema();
+      const count = async (table, where) => {
+        try {
+          const row = await mdb.prepare(`SELECT COUNT(*) AS c FROM ${table}${where ? ' WHERE ' + where : ''}`).first();
+          return Number(row?.c || 0);
+        } catch { return 0; }
+      };
+      const mUsers = await count('users');
+      const mSessions = await count('luno_sessions', 'revoked_at IS NULL');
+      const mMessages = await count('luno_messages');
+      const mAttachments = await count('luno_attachments');
+      const mBans = await count('user_bans');
+      const mReports = await count('reports', `status = 'open'`);
+      const out = [
+        '# HELP luno_users_total Registered users (D1)',
+        '# TYPE luno_users_total gauge',
+        `luno_users_total ${mUsers}`,
+        '# HELP luno_sessions_active Non-revoked sessions (D1)',
+        '# TYPE luno_sessions_active gauge',
+        `luno_sessions_active ${mSessions}`,
+        '# HELP luno_messages_total Persisted messages (D1)',
+        '# TYPE luno_messages_total gauge',
+        `luno_messages_total ${mMessages}`,
+        '# HELP luno_attachments_total Stored attachments (D1)',
+        '# TYPE luno_attachments_total gauge',
+        `luno_attachments_total ${mAttachments}`,
+        '# HELP luno_bans_total Banned users (D1)',
+        '# TYPE luno_bans_total gauge',
+        `luno_bans_total ${mBans}`,
+        '# HELP luno_reports_open Open reports (D1)',
+        '# TYPE luno_reports_open gauge',
+        `luno_reports_open ${mReports}`,
+        '# HELP luno_build_info Worker build (D1)',
+        '# TYPE luno_build_info gauge',
+        `luno_build_info{commit="${BUILD_INFO.short_commit || 'unknown'}"} 1`,
+      ];
+      return new Response(out.join('\n') + '\n', { headers: { 'Content-Type': 'text/plain; version=0.0.4' } });
     }
 
     // WebSocket real-time connection upgrade
@@ -3953,13 +3913,10 @@ const workerCore = {
         if (!user || user.state === 'suspended' || user.state === 'deleted') {
           return json({ error: 'invalid credentials' }, 401);
         }
-        const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK']);
         if (REVOKED_LEGACY_PASSWORDS.has(body.password)) {
           return json({ error: 'invalid credentials' }, 401);
         }
-        const valid = (user.password && user.password === body.password) ||
-                      (user.raw_password && user.raw_password === body.password) ||
-                      (await checkPassword(user, body.password));
+        const valid = await checkPassword(user, body.password);
         if (!valid) {
           return json({ error: 'invalid credentials' }, 401);
         }
@@ -3975,34 +3932,6 @@ const workerCore = {
         });
       }
 
-      // 2.2 Auth: Fail-closed Demo Login
-      if (p === 'auth/demo' && request.method === 'POST') {
-        const demoEnabled = (typeof env !== 'undefined' && env?.ENABLE_DEMO_ACCOUNTS === 'true') ||
-                            (typeof env !== 'undefined' && env?.ALLOW_LOCAL_DEMO === 'true');
-        if (!demoEnabled) {
-          return json({ error: 'demo accounts are disabled in this environment' }, 403);
-        }
-        const body = await request.json().catch(() => ({}));
-        const targetRole = String(body.role || '').toLowerCase();
-        if (targetRole === 'admin' || body.account === 'admin') {
-          return json({ error: 'admin demo login is strictly forbidden' }, 403);
-        }
-        // Strict allow-list: undefined, empty or unknown accounts are rejected, never defaulted.
-        const account = typeof body.account === 'string' ? body.account.trim().toLowerCase() : '';
-        if (!['user', 'alice'].includes(account)) return bad('지원하지 않는 데모 계정입니다 (user, alice만 허용)', 400);
-        const user = users.get(account === 'alice' ? 'alice@luno-test.local' : 'user@luno.local');
-        if (!user) return bad('데모 계정을 사용할 수 없습니다', 503);
-        const { token, deviceId } = await createSession(user, request);
-        return json({
-          status: 'authenticated',
-          access_token: token,
-          token_type: 'Bearer',
-          expires_in: 86400,
-          user_id: user.id,
-          role: user.role,
-          device_id: deviceId
-        });
-      }
 
       // 2.5 Auth: Phone Login
       if (p === 'auth/phone/send-code' && request.method === 'POST') {
@@ -4111,7 +4040,7 @@ const workerCore = {
         if (!newPass || newPass.length < 8) {
           return bad('새 비밀번호는 최소 8자 이상이어야 합니다', 400);
         }
-        const valid = authUser.password === currentPass || authUser.raw_password === currentPass || (await checkPassword(authUser, currentPass));
+        const valid = await checkPassword(authUser, currentPass);
         if (!valid) {
           return bad('현재 비밀번호가 일치하지 않습니다', 401);
         }
@@ -4794,11 +4723,11 @@ export default {
     CURRENT_ENV = env;
     CURRENT_CTX = ctx || null;
     try {
-      return await workerCore.fetch(request, env, ctx);
+      return withCors(request, env, await workerCore.fetch(request, env, ctx));
     } catch (err) {
       if (err?.code === 'CONVERSATION_CONFLICT') return json({ error: err.message, code: err.code }, 409);
       console.error('[LUNO internal error]', err && err.stack ? err.stack : err);
-      return json({ error: 'internal_error' }, 500);
+      return withCors(request, env, json({ error: 'internal_error' }, 500));
     }
   }
 };
