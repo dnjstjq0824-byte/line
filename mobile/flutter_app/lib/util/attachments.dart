@@ -4,6 +4,7 @@
 // /api/v1/attachments (with conversation_id), then a message carrying the
 // attachment id in metadata, then GET .../attachments/{id}/content for bytes.
 const maxAttachmentBytes = 512 * 1024;
+const maxFileBytes = 1400 * 1024; // base64 + JSON headroom under the ~2MB worker cap
 
 String attachmentKindForMime(String mime) {
   if (mime.startsWith('image/')) return 'image';

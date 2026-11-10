@@ -65,6 +65,14 @@ class _HomePageState extends State<HomePage> {
                     color: dark ? HarborDark.harbor : HarborLight.harbor,
                     size: 56,
                   ),
+                  IconButton(
+                    tooltip: 'PC/웹 QR 승인',
+                    icon: const Icon(Icons.qr_code_scanner),
+                    onPressed: () => showDialog(
+                      context: context,
+                      builder: (_) => const _QrApproveDialog(),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -214,13 +222,37 @@ class _HomePageState extends State<HomePage> {
                       dark ? HarborDark.harbor : HarborLight.harbor),
                   size: 44,
                 ),
-                title: Text('${u['display_name']}',
+                title: Text('${u['is_favorite'] == true ? '★ ' : ''}${u['display_name']}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(
                     '${u['status_message'] ?? '@${u['handle'] ?? ''}'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall),
+                trailing: PopupMenuButton<String>(
+                  tooltip: '친구 관리',
+                  onSelected: (v) {
+                    if (v == 'fav') {
+                      session.toggleFavoriteFriend(
+                          '${u['id']}', u['is_favorite'] != true);
+                    } else if (v == 'block') {
+                      session.toggleBlockFriend(
+                          '${u['id']}', u['is_blocked'] != true);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                        value: 'fav',
+                        child: Text(u['is_favorite'] == true
+                            ? '즐겨찾기 해제'
+                            : '즐겨찾기')),
+                    PopupMenuItem(
+                        value: 'block',
+                        child: Text(u['is_blocked'] == true
+                            ? '차단 해제'
+                            : '차단하기')),
+                  ],
+                ),
                 onTap: () async {
                   final id =
                       await session.startChat(u['id'], u['display_name']);
@@ -257,6 +289,64 @@ class _ServiceButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _QrApproveDialog extends StatefulWidget {
+  const _QrApproveDialog();
+
+  @override
+  State<_QrApproveDialog> createState() => _QrApproveDialogState();
+}
+
+class _QrApproveDialogState extends State<_QrApproveDialog> {
+  final challenge = TextEditingController();
+  final token = TextEditingController();
+
+  @override
+  void dispose() {
+    challenge.dispose();
+    token.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context, listen: false);
+    return AlertDialog(
+      title: const Text('PC/웹 로그인 승인'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('PC 화면의 QR 아래 표시된 값을 입력하세요.',
+              style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 8),
+          TextField(
+              controller: challenge,
+              decoration: const InputDecoration(
+                  labelText: 'QR Challenge ID', isDense: true)),
+          const SizedBox(height: 6),
+          TextField(
+              controller: token,
+              decoration: const InputDecoration(
+                  labelText: 'QR Token', isDense: true)),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: session.busy ? null : () => session.reload(),
+            child: const Text('새로고침')),
+        FilledButton(
+          onPressed: session.busy
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                  session.approveDesktopQR(challenge.text, token.text);
+                },
+          child: const Text('승인'),
+        ),
+      ],
     );
   }
 }

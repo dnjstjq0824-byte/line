@@ -5,20 +5,26 @@
 // go_router pages can share one session. No backend contract change.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../api/client.dart';
 import '../legacy_tokens.dart';
+import '../util/album_photos.dart';
 import '../util/attachments.dart';
 import '../util/channel_slot.dart';
 import '../util/feed_posts.dart';
 import '../util/official_accounts.dart';
 import '../util/photo_effects.dart';
+import '../util/poll_options.dart';
 import '../util/send_peer.dart';
 import '../util/store_packs.dart';
 import '../util/story_cards.dart';
@@ -41,6 +47,8 @@ class SessionController extends ChangeNotifier {
   String selfName = '';
   String selfHandle = '';
   String selfStatusMessage = '';
+  String selfAvatarUrl = '';
+  String selfBirthday = '';
 
   // null means "not loaded / unavailable" and renders as a dash. A payments
   // surface must never substitute a placeholder figure for a real balance.
@@ -56,9 +64,14 @@ class SessionController extends ChangeNotifier {
   List<dynamic> notes = [];
   List<dynamic> events = [];
   List<dynamic> polls = [];
+  List<dynamic> albums = [];
   List<dynamic> feedPosts = [];
   List<dynamic> stories = [];
   List<dynamic> openRooms = [];
+  String roomId = '';
+  String roomNickname = '';
+  bool roomJoined = false;
+  List<dynamic> roomPosts = [];
   List<dynamic> bookmarks = [];
   List<dynamic> walletHistory = [];
   List<dynamic> newsHero = [];
@@ -134,6 +147,8 @@ class SessionController extends ChangeNotifier {
       selfName = me['display_name'] ?? 'LUNO User';
       selfHandle = me['handle'] ?? '';
       selfStatusMessage = me['status_message'] ?? '';
+      selfAvatarUrl = me['avatar_url'] ?? '';
+      selfBirthday = me['birthday'] ?? '';
       notifyListeners();
       await reload();
       await connect();
@@ -182,6 +197,8 @@ class SessionController extends ChangeNotifier {
       selfName = me['display_name'] ?? 'LUNO User';
       selfHandle = me['handle'] ?? '';
       selfStatusMessage = me['status_message'] ?? '';
+      selfAvatarUrl = me['avatar_url'] ?? '';
+      selfBirthday = me['birthday'] ?? '';
       notifyListeners();
       await reload();
       await connect();
@@ -327,12 +344,14 @@ class SessionController extends ChangeNotifier {
         api.call('/api/v1/conversations/$id/notes').catchError((_) => <String, dynamic>{'notes': []}),
         api.call('/api/v1/conversations/$id/events').catchError((_) => <String, dynamic>{'events': []}),
         api.call('/api/v1/conversations/$id/polls').catchError((_) => <String, dynamic>{'polls': []}),
+        api.call('/api/v1/conversations/$id/albums').catchError((_) => <String, dynamic>{'albums': []}),
       ]);
       messages = resultsList[0]['messages'] ?? [];
       pins = resultsList[1]['pins'] ?? [];
       notes = resultsList[2]['notes'] ?? [];
       events = resultsList[3]['events'] ?? [];
       polls = resultsList[4]['polls'] ?? [];
+      albums = resultsList[5]['albums'] ?? [];
       notifyListeners();
       if (messages.isNotEmpty) {
         await api.call('/api/v1/conversations/$id/read',
@@ -609,6 +628,341 @@ class SessionController extends ChangeNotifier {
       await reload();
     });
     return conversationId;
+  }
+
+  Future<void> _refreshArchives() async {
+    if (selectedId.isEmpty) return;
+    final res = await Future.wait([
+      api.call('/api/v1/conversations/$selectedId/notes').catchError((_) => <String, dynamic>{'notes': []}),
+      api.call('/api/v1/conversations/$selectedId/events').catchError((_) => <String, dynamic>{'events': []}),
+      api.call('/api/v1/conversations/$selectedId/polls').catchError((_) => <String, dynamic>{'polls': []}),
+      api.call('/api/v1/conversations/$selectedId/albums').catchError((_) => <String, dynamic>{'albums': []}),
+    ]);
+    notes = res[0]['notes'] ?? [];
+    events = res[1]['events'] ?? [];
+    polls = res[2]['polls'] ?? [];
+    albums = res[3]['albums'] ?? [];
+    notifyListeners();
+  }
+
+  Future<void> createNote({String title = '', required String body}) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      await api.call('/api/v1/conversations/$selectedId/notes',
+          method: 'POST',
+          data: {'title': title.trim(), 'body': body.trim()});
+      notice = '노트를 저장했습니다.';
+      await _refreshArchives();
+    });
+  }
+
+  Future<void> createEvent(
+      {required String title, String startsAt = '', String location = ''}) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      final data = <String, dynamic>{'title': title.trim()};
+      if (startsAt.trim().isNotEmpty) data['starts_at'] = startsAt.trim();
+      if (location.trim().isNotEmpty) data['location'] = location.trim();
+      await api.call('/api/v1/conversations/$selectedId/events',
+          method: 'POST', data: data);
+      notice = '일정을 등록했습니다.';
+      await _refreshArchives();
+    });
+  }
+
+  Future<void> createPoll(String question, String optionsText) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      final options = pollOptionsOf(optionsText);
+      if (!pollFormValid(question, options)) {
+        throw Exception('질문과 선택지 2개 이상이 필요합니다.');
+      }
+      await api.call('/api/v1/conversations/$selectedId/polls',
+          method: 'POST',
+          data: {
+            'question': question.trim(),
+            'options': options,
+          });
+      notice = '투표를 만들었습니다.';
+      await _refreshArchives();
+    });
+  }
+
+  Future<void> votePoll(String pollId, String optionId) {
+    return run(() async {
+      await api.call('/api/v1/polls/$pollId/vote',
+          method: 'POST', data: {'option_id': optionId});
+      notice = '투표했습니다.';
+      await _refreshArchives();
+    });
+  }
+
+  Future<void> rsvpEvent(String eventId, String status) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      await api.call('/api/v1/conversations/$selectedId/events/$eventId/rsvp',
+          method: 'POST', data: {'status': status});
+      notice = '참석 여부를 보냈습니다.';
+      await _refreshArchives();
+    });
+  }
+
+  Future<void> createAlbum(String title, {bool includePhotos = true}) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      final ids =
+          includePhotos ? roomImageAttachmentIds(messages) : <String>[];
+      await api.call('/api/v1/conversations/$selectedId/albums',
+          method: 'POST',
+          data: {
+            'title': title.trim(),
+            'attachment_ids': ids,
+          });
+      notice = '앨범을 만들었습니다.';
+      await _refreshArchives();
+    });
+  }
+
+  String? _avatarKindOf(Uint8List bytes) {
+    if (bytes.length > 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return 'jpeg';
+    }
+    if (bytes.length > 4 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'png';
+    }
+    if (bytes.length > 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'webp';
+    }
+    return null;
+  }
+
+  Future<void> updateAvatarFromPicker() {
+    return run(() async {
+      final picked = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 70);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.length > 262144) {
+        throw Exception('프로필 사진이 너무 큽니다 (최대 256KB)');
+      }
+      final kind = _avatarKindOf(bytes);
+      if (kind == null) {
+        throw Exception('지원하지 않는 사진 형식입니다 (JPEG/PNG/WebP).');
+      }
+      await api.call('/api/v1/me', method: 'PATCH', data: {
+        'avatar_url': 'data:image/$kind;base64,${base64Encode(bytes)}',
+      });
+      final me = await api.call('/api/v1/me');
+      selfAvatarUrl = me['avatar_url'] ?? selfAvatarUrl;
+      notice = '프로필 사진을 바꿨습니다.';
+      await reload();
+    });
+  }
+
+  Future<void> updateProfile(
+      {String? displayName,
+      String? statusMessage,
+      String? avatarUrl,
+      String? birthday}) {
+    return run(() async {
+      final data = <String, dynamic>{};
+      if (displayName != null) data['display_name'] = displayName.trim();
+      if (statusMessage != null) data['status_message'] = statusMessage.trim();
+      if (avatarUrl != null) data['avatar_url'] = avatarUrl.trim();
+      if (birthday != null) data['birthday'] = birthday.trim();
+      if (data.isEmpty) return;
+      await api.call('/api/v1/me', method: 'PATCH', data: data);
+      final me = await api.call('/api/v1/me');
+      selfName = me['display_name'] ?? selfName;
+      selfHandle = me['handle'] ?? selfHandle;
+      selfStatusMessage = me['status_message'] ?? selfStatusMessage;
+      selfAvatarUrl = me['avatar_url'] ?? selfAvatarUrl;
+      selfBirthday = me['birthday'] ?? selfBirthday;
+      notice = '프로필을 저장했습니다.';
+      await reload();
+    });
+  }
+
+  Future<void> _patchFriend(String friendId, Map<String, dynamic> data) {
+    return run(() async {
+      await api.call('/api/v1/friends/$friendId',
+          method: 'PATCH', data: data);
+      await reload();
+    });
+  }
+
+  Future<void> toggleFavoriteFriend(String friendId, bool value) =>
+      _patchFriend(friendId, {'favorite': value});
+
+  Future<void> toggleBlockFriend(String friendId, bool value) =>
+      _patchFriend(friendId, {'blocked': value});
+
+  Future<void> createRoom(
+      {required String name, String description = '', String nickname = ''}) {
+    return run(() async {
+      final data = <String, dynamic>{'name': name.trim()};
+      if (description.trim().isNotEmpty) {
+        data['description'] = description.trim();
+      }
+      if (nickname.trim().isNotEmpty) data['nickname'] = nickname.trim();
+      final room = await api.call('/api/v1/community/rooms',
+          method: 'POST', data: data);
+      if (room['id'] != null) await _loadRoom(room['id'] as String);
+      await reload();
+    });
+  }
+
+  Future<void> joinRoom(String roomId, String nickname) {
+    return run(() async {
+      await api.call('/api/v1/community/rooms/$roomId/join',
+          method: 'POST', data: {'nickname': nickname.trim()});
+      await _loadRoom(roomId);
+      await reload();
+    });
+  }
+
+  Future<void> leaveRoom(String roomId) {
+    return run(() async {
+      await api.call('/api/v1/community/rooms/$roomId/leave', method: 'POST');
+      if (this.roomId == roomId) {
+        this.roomId = '';
+        roomNickname = '';
+        roomJoined = false;
+        roomPosts = [];
+      }
+      notice = '라운지에서 나갔습니다.';
+      await reload();
+    });
+  }
+
+  void closeRoom() {
+    roomId = '';
+    roomNickname = '';
+    roomJoined = false;
+    roomPosts = [];
+    notifyListeners();
+  }
+
+  Future<void> openRoom(String roomId) {
+    return run(() => _loadRoom(roomId));
+  }
+
+  Future<void> _loadRoom(String roomId) async {
+    final res = await api.call('/api/v1/community/rooms/$roomId/posts');
+    this.roomId = roomId;
+    roomPosts = res['posts'] ?? [];
+    roomJoined = res['joined'] == true;
+    final nick = res['nickname'];
+    if (nick is String) roomNickname = nick;
+    notifyListeners();
+  }
+
+  Future<void> postRoom(String roomId, String body) {
+    return run(() async {
+      await api.call('/api/v1/community/rooms/$roomId/posts',
+          method: 'POST', data: {'body': body.trim()});
+      notice = '라운지에 올렸습니다.';
+      await _loadRoom(roomId);
+      await reload();
+    });
+  }
+
+  Future<void> likeRoomPost(String roomId, String postId) {
+    return run(() async {
+      await api.call('/api/v1/community/rooms/$roomId/posts/$postId/like',
+          method: 'POST');
+      await _loadRoom(roomId);
+    });
+  }
+
+  Future<void> sendFile() {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      final picked =
+          await FilePicker.platform.pickFiles(withData: true);
+      final files = picked?.files ?? [];
+      if (files.isEmpty) {
+        notice = '파일을 선택하지 않았습니다.';
+        return;
+      }
+      final f = files.first;
+      final bytes = f.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        throw Exception('파일을 읽을 수 없습니다.');
+      }
+      if (bytes.length > maxFileBytes) {
+        throw Exception('파일이 너무 큽니다 (최대 약 1.4MB)');
+      }
+      final name = f.name.isNotEmpty
+          ? f.name
+          : 'file-${DateTime.now().millisecondsSinceEpoch}';
+      const mime = 'application/octet-stream';
+      final att = await api.call('/api/v1/attachments', method: 'POST', data: {
+        'conversation_id': selectedId,
+        'original_name': name,
+        'mime_type': mime,
+        'size_bytes': bytes.length,
+        'content_base64': base64Encode(bytes),
+      });
+      final x = await api.call('/api/v1/conversations/$selectedId/messages',
+          method: 'POST', data: {
+        'client_id': uuid(),
+        'kind': 'file',
+        'body': att['original_name'] ?? name,
+        'metadata': attachmentMessageMetadata(
+            id: att['id'], mime: mime, size: bytes.length),
+      });
+      if (!messages.any((m) => m['id'] == x['message']['id'])) {
+        messages.add(x['message']);
+      }
+      await reload();
+    });
+  }
+
+  Future<String?> downloadAttachment(String attachmentId, String fileName) async {
+    String? saved;
+    await run(() async {
+      final res = await http
+          .get(
+            Uri.parse(attachmentContentUrl(api.baseUrl, attachmentId)),
+            headers: {
+              if (api.token != null) 'Authorization': 'Bearer ${api.token}',
+            },
+          )
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200) {
+        throw Exception('파일을 받을 수 없습니다 (${res.statusCode})');
+      }
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = await getExternalStorageDirectory();
+      }
+      dir ??= await getApplicationDocumentsDirectory();
+      final safe = fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final file = File('${dir.path}/$safe');
+      await file.writeAsBytes(res.bodyBytes);
+      saved = file.path;
+      notice = '저장됨: $safe';
+    });
+    return saved;
   }
 
   Future<void> likeFeed(String postId) {

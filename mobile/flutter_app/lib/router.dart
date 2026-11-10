@@ -95,6 +95,10 @@ GoRouter buildRouter(SessionController session) {
                 path: 'polls',
                 pageBuilder: (c, s) => harborPage(
                     c, s, ChatArchivePage(conversationId: s.pathParameters['cid']!, kind: ChatArchiveKind.polls))),
+              GoRoute(
+                path: 'albums',
+                pageBuilder: (c, s) => harborPage(
+                    c, s, ChatArchivePage(conversationId: s.pathParameters['cid']!, kind: ChatArchiveKind.albums))),
             ],
           ),
           GoRoute(path: '/feed', pageBuilder: (c, s) => harborPage(c, s, const FeedPage())),

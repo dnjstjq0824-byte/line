@@ -78,6 +78,16 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
               ),
             ),
           ),
+        if (session.autoTranslate)
+          Container(
+            width: double.infinity,
+            color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            child: Text('자동 번역 켜짐 · ${session.targetTranslateLang.toUpperCase()} (상대 메시지 자동 번역)',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: dark ? HarborDark.ink : HarborLight.harbor)),
+          ),
         Expanded(
           child: Container(
             color: dark ? HarborDark.fog : lunoLightBlue,
@@ -196,6 +206,7 @@ class _DeckHeader extends StatelessWidget {
                   PopupMenuItem(value: 'notes', child: Text('노트')),
                   PopupMenuItem(value: 'events', child: Text('일정')),
                   PopupMenuItem(value: 'polls', child: Text('투표')),
+                  PopupMenuItem(value: 'albums', child: Text('앨범')),
                 ],
               ),
               IconButton(
@@ -348,6 +359,14 @@ class _SignalBubble extends StatelessWidget {
                     token: session.api.token ?? '',
                     durationSec: voiceDurationOf(m) ?? 0,
                     foreground: ink,
+                  ),
+                if (m['kind'] == 'file' && attachmentIdOf(m) != null)
+                  TextButton.icon(
+                    onPressed: () => session.downloadAttachment(
+                        attachmentIdOf(m)!, '${m['body']}'),
+                    icon: Icon(Icons.download, size: 16, color: ink),
+                    label: Text('저장',
+                        style: TextStyle(color: ink, fontSize: 12)),
                   ),
                 if (m['kind'] == 'sticker')
                   StickerBubble(
@@ -605,6 +624,12 @@ class _Composer extends StatelessWidget {
               icon: Icon(Icons.mic_outlined,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onPressed: () => _recordVoice(context),
+            ),
+            IconButton(
+              tooltip: '파일',
+              icon: Icon(Icons.attach_file,
+                  color: dark ? HarborDark.harbor : HarborLight.harbor),
+              onPressed: session.busy ? null : () => session.sendFile(),
             ),
             Expanded(
               child: TextField(

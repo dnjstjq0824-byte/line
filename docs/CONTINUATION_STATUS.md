@@ -501,3 +501,18 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   pre_deploy_gate 6/6, red drill restored green. Emulator touch
   injection is broken in this environment; runtime re-check needs a
   real device. Uncommitted below, undeployed.
+## Continuation: 2026-11-10 — Mobile P1 screen features
+
+- Wired all 8 P1 items: archive writes (notes/events/polls), poll voting,
+  event RSVP, albums route + composer, lounge create/join/posts/likes,
+  file send/download, profile edit (+avatar picker w/ magic-byte check),
+  friend favorite/block, home QR approve dialog, auto-translate banner.
+- Contract corrections found while wiring: friends PATCH takes
+  favorite/blocked (not is_*); events require parseable starts_at (dialog
+  uses date+time pickers); avatar_url accepts data-URLs only (picker +
+  256KB cap); rooms list key is name (was rendering fallback).
+- Tests: 10 P1 widget tests + poll/album parser tests, 5 worker shape
+  pins (scripts/cf_mobile_p1.test.mjs). Red drill broke the lounge name
+  key (1 fail), restored byte-identical (sha256 match).
+- Verification: flutter 95/95 + analyze clean, node 140/140,
+  pre_deploy_gate 6/6. file_picker added (pubspec.lock updated).
