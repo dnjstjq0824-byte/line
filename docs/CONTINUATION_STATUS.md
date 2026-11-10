@@ -488,3 +488,16 @@ on the free plan and `wrangler deploy` will fail outright without the upgrade. T
   path), so it lands on an empty canvas. Friend context menu could not be
   driven by the harness (QA-passed message menu fails identically there);
   same component/mechanism as the verified paths. Uncommitted, undeployed.
+## Continuation: 2026-11-10 — Mobile P0 gap fixes
+
+- Audit docs/MOBILE_GAP_AUDIT.md (P0 7 / P1 8 / P2 8) from worker-contract
+  probing plus a 21-screen code read. Server healthy throughout; all P0
+  defects were client key/payload/UI gaps.
+- Fixed P0 1-5+7: feed/official/stories/sync key parsers, voom title,
+  wallet 1:1 peer resolution, story composer, group-create dialog.
+  P0-6 push is external-blocked (docs/PUSH_PREREQUISITES.md).
+- Tests: 9 parser + 4 widget agreement tests, 5 worker shape pins.
+  Verification: flutter 82/82 + analyze clean, node 135/135,
+  pre_deploy_gate 6/6, red drill restored green. Emulator touch
+  injection is broken in this environment; runtime re-check needs a
+  real device. Uncommitted below, undeployed.

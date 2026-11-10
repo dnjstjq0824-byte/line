@@ -52,6 +52,15 @@ class ChatsPage extends StatelessWidget {
                 title: '토크',
                 subtitle: '정박 중인 대화방 ${session.chats.length}곳',
               ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _groupDialog(context),
+                  icon: const Icon(Icons.group_add_outlined, size: 18),
+                  label: const Text('그룹 만들기'),
+                ),
+              ),
+              const SizedBox(height: 8),
               if (session.channelSlot != null &&
                   !session.dismissedChannelSlots
                       .contains(session.channelSlot!.id))
@@ -87,6 +96,79 @@ class ChatsPage extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _groupDialog(BuildContext context) {
+    final session = SessionScope.of(context, listen: false);
+    final title = TextEditingController();
+    final picked = <String>{};
+    showDialog<void>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (dialog, setDialog) => AlertDialog(
+          title: const Text('그룹 만들기'),
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: title,
+                    decoration: const InputDecoration(
+                        labelText: '그룹 이름', isDense: true),
+                    onChanged: (_) => setDialog(() {})),
+                const SizedBox(height: 8),
+                if (session.friends.isEmpty)
+                  const Text('초대할 친구가 없습니다. 홈에서 친구를 먼저 추가하세요.'),
+                if (session.friends.isNotEmpty)
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final f in session.friends)
+                          if (f is Map)
+                            CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('${f['display_name'] ?? ''}'),
+                              value: picked.contains('${f['id']}'),
+                              onChanged: (v) => setDialog(() {
+                                final id = '${f['id']}';
+                                if (v == true) {
+                                  picked.add(id);
+                                } else {
+                                  picked.remove(id);
+                                }
+                              }),
+                            ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(dialog).pop(),
+                child: const Text('취소')),
+            FilledButton(
+              onPressed: title.text.trim().isEmpty || picked.isEmpty
+                  ? null
+                  : () async {
+                      final id = await session.createGroup(
+                          title.text, picked.toList());
+                      if (!dialog.mounted) return;
+                      Navigator.of(dialog).pop();
+                      if (id != null && id.isNotEmpty && context.mounted) {
+                        context.go('/chats/$id');
+                      }
+                    },
+              child: const Text('만들기'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -193,4 +275,5 @@ class _BerthCard extends StatelessWidget {
       ),
     );
   }
+
 }

@@ -16,8 +16,13 @@ import '../api/client.dart';
 import '../legacy_tokens.dart';
 import '../util/attachments.dart';
 import '../util/channel_slot.dart';
+import '../util/feed_posts.dart';
+import '../util/official_accounts.dart';
 import '../util/photo_effects.dart';
+import '../util/send_peer.dart';
 import '../util/store_packs.dart';
+import '../util/story_cards.dart';
+import '../util/sync_delta.dart';
 import '../util/error_report.dart';
 
 class SessionController extends ChangeNotifier {
@@ -210,9 +215,9 @@ class SessionController extends ChangeNotifier {
     ]);
     chats = resultsList[0]['conversations'] ?? [];
     friends = resultsList[1]['friends'] ?? [];
-    officialAccounts = resultsList[2]['official_accounts'] ?? [];
-    feedPosts = resultsList[3]['posts'] ?? [];
-    stories = resultsList[4]['stories'] ?? [];
+    officialAccounts = officialAccountsOf(resultsList[2]);
+    feedPosts = feedPostsOf(resultsList[3]);
+    stories = storyCardsOf(resultsList[4]);
     openRooms = resultsList[5]['rooms'] ?? [];
     walletBalance = (resultsList[6]['balance'] as num?)?.toInt();
     walletPoints = (resultsList[6]['points'] as num?)?.toInt();
@@ -351,7 +356,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       final lastSeq = messages.isNotEmpty ? messages.last['sequence'] : 0;
       final x = await api.call('/api/v1/conversations/$selectedId/sync?after_sequence=$lastSeq');
-      final list = x['messages'] as List<dynamic>;
+      final list = syncDeltaOf(x);
       for (final m in list) {
         if (!messages.any((old) => old['id'] == m['id'])) messages.add(m);
       }
@@ -573,12 +578,37 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> createFeedPost(String body) {
-    if (body.trim().isEmpty) return Future.value();
+    final title = feedPostTitleOf(body);
+    if (title.isEmpty) return Future.value();
     return run(() async {
-      await api.call('/api/v1/voom', method: 'POST', data: {'body': body.trim()});
+      await api.call('/api/v1/voom', method: 'POST', data: {'title': title});
       await reload();
       notice = 'LUNO 피드 포스트를 게시했습니다.';
     });
+  }
+
+  Future<void> postStory(String body) {
+    if (body.trim().isEmpty) return Future.value();
+    return run(() async {
+      await api.call('/api/v1/stories', method: 'POST', data: {'body': body.trim()});
+      await reload();
+      notice = '스토리를 게시했습니다.';
+    });
+  }
+
+  /// Returns the new group conversation id so the page can navigate to it.
+  Future<String?> createGroup(String title, List<String> memberIds) async {
+    String? conversationId;
+    await run(() async {
+      final c = await api.call('/api/v1/conversations', method: 'POST', data: {
+        'kind': 'group',
+        'member_ids': memberIds,
+        'title': title.trim(),
+      });
+      conversationId = c['id'] as String?;
+      await reload();
+    });
+    return conversationId;
   }
 
   Future<void> likeFeed(String postId) {
@@ -598,11 +628,21 @@ class SessionController extends ChangeNotifier {
 
   Future<void> sendPayInChat() {
     if (selectedId.isEmpty) return Future.value();
+    dynamic conversation;
+    for (final c in chats) {
+      if (c is Map && '${c['id']}' == selectedId) conversation = c;
+    }
+    final peerId = sendPeerIdOf(conversation: conversation, selfId: selfId);
+    if (peerId == null) {
+      notice = '1:1 대화방에서만 송금할 수 있습니다.';
+      notifyListeners();
+      return Future.value();
+    }
     return run(() async {
       await api.call('/api/v1/wallet/send', method: 'POST', data: {
-        'conversation_id': selectedId,
+        'to_user_id': peerId,
         'amount': 10000,
-        'title': '$selectedTitle 송금',
+        'note': '$selectedTitle 송금',
       });
       await openChat(selectedId, selectedTitle);
       await reload();

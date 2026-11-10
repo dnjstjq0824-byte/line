@@ -109,7 +109,7 @@ class _FeedPageState extends State<FeedPage> {
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700)),
                               ),
-                              Text('${p['time'] ?? ''}',
+                              Text(session.relTime('${p['created_at'] ?? ''}'),
                                   style: Theme.of(context).textTheme.bodySmall),
                             ],
                           ),

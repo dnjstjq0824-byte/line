@@ -29,6 +29,15 @@ class StoriesPage extends StatelessWidget {
                 title: '스토리',
                 subtitle: '24시간 뒤에 사라지는 항로 기록',
               ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _postDialog(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('스토리 쓰기'),
+                ),
+              ),
+              const SizedBox(height: 8),
               if (session.stories.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 64),
@@ -86,6 +95,36 @@ class StoriesPage extends StatelessWidget {
                   },
                 ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _postDialog(BuildContext context) {
+    final session = SessionScope.of(context, listen: false);
+    final body = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('스토리 쓰기'),
+        content: TextField(
+            controller: body,
+            maxLines: 3,
+            maxLength: 200,
+            decoration: const InputDecoration(
+                hintText: '가벼운 일상 한 줄', isDense: true)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialog).pop(),
+              child: const Text('취소')),
+          FilledButton(
+            onPressed: () async {
+              await session.postStory(body.text);
+              if (!dialog.mounted) return;
+              Navigator.of(dialog).pop();
+            },
+            child: const Text('게시'),
           ),
         ],
       ),
