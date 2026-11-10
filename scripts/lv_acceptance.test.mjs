@@ -130,7 +130,7 @@ test('A-04: text message round-trip: POST -> GET same token -> GET other token -
   assert.equal(Number(row.n), 1, 'message row exists in D1');
 });
 
-test('A-05: all 13 message kinds persist and are visible to a second session and after redeploy', async () => {
+test('A-05: client message kinds persist and are visible to a second session and after redeploy; forged system kinds are rejected', async () => {
   const api = await isolate();
   const a = await signup(api, 'lv-a05@lv.test', 'lva05'), b = await signin(api, 'lv-a05@lv.test');
   const cid = keepId(a.id);
@@ -141,12 +141,9 @@ test('A-05: all 13 message kinds persist and are visible to a second session and
     { kind: 'voice', body: 'v.webm', metadata: { duration: 15 } }, { kind: 'file', body: 'd.pdf', metadata: { filename: 'd.pdf', size: 1024 } },
     { kind: 'location', body: '서울역', metadata: { lat: 37.5547, lng: 126.9706, label: '서울역' } },
     { kind: 'contact', body: '연락처', metadata: { display_name: '도도형님' } },
-    { kind: 'pay', body: '10000', metadata: { amount: 10000, memo: 'sandbox' } }, { kind: 'transfer', body: '5000', metadata: { amount: 5000, memo: 'sandbox' } },
     { kind: 'ciphertext', body: 'enc:AES-GCM:dGVzdA==', metadata: { iv: 'YWJj' } },
-    { kind: 'call_status', body: '음성통화', metadata: { duration: '1:23', call_type: 'voice', call_status: 'completed' } },
-    { kind: 'security_notice', body: '로그인 성공', metadata: { ip: '127.0.0.1', device: 'Web PC' } }
   ];
-  assert.equal(kinds.length, 13);
+  assert.equal(kinds.length, 9);
   const ids = {};
   for (const k of kinds) {
     const r = await api(`conversations/${cid}/messages`, 'POST', { ...k, client_id: `a05-${k.kind}-${Date.now()}` }, a.access_token);
@@ -154,6 +151,15 @@ test('A-05: all 13 message kinds persist and are visible to a second session and
     const j = await r.json();
     assert.equal(j.message.kind, k.kind);
     ids[k.kind] = j.message.id;
+  }
+  for (const k of [
+    { kind: 'pay', body: '10000', metadata: { amount: 10000, memo: 'sandbox' } },
+    { kind: 'transfer', body: '5000', metadata: { amount: 5000, memo: 'sandbox' } },
+    { kind: 'call_status', body: '음성통화', metadata: { duration: '1:23', call_type: 'voice', call_status: 'completed' } },
+    { kind: 'security_notice', body: '로그인 성공', metadata: { ip: '127.0.0.1', device: 'Web PC' } },
+  ]) {
+    const r = await api(`conversations/${cid}/messages`, 'POST', { ...k, client_id: `a05f-${k.kind}-${Date.now()}` }, a.access_token);
+    assert.equal(r.status, 400, `forged POST ${k.kind} must be rejected`);
   }
   const redeployed = await isolate();
   const c = await signin(redeployed, 'lv-a05@lv.test');

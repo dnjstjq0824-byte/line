@@ -158,7 +158,7 @@ test('LM-07 & A-10: Session revocation and password change', async () => {
   }, resetToken);
 });
 
-test('LM-08 & A-11: 13 MESSAGE_KINDS round-trip verification', async () => {
+test('LM-08 & A-11: client MESSAGE_KINDS round-trip; forged system kinds rejected', async () => {
   const userLogin = await api('auth/login', 'POST', { email: 'user@luno.local', password: 'Lm#Demo12' });
   const { access_token: token, user_id: userId } = await userLogin.json();
 
@@ -176,9 +176,11 @@ test('LM-08 & A-11: 13 MESSAGE_KINDS round-trip verification', async () => {
     { kind: 'file', body: 'document.pdf', metadata: { filename: 'document.pdf', size: 1024 } },
     { kind: 'location', body: '서울역', metadata: { lat: 37.5547, lng: 126.9706, name: '서울역' } },
     { kind: 'contact', body: '도도형님', metadata: { name: '도도형님', phone: '+82 10-1234-5678' } },
+    { kind: 'ciphertext', body: 'enc:AES-GCM:dGVzdF9jaXBoZXJ0ZXh0', metadata: { iv: 'YWJj' } }
+  ];
+  const forged = [
     { kind: 'pay', body: '10000', metadata: { amount: 10000, memo: '커피값' } },
     { kind: 'transfer', body: '5000', metadata: { amount: 5000, memo: '정산' } },
-    { kind: 'ciphertext', body: 'enc:AES-GCM:dGVzdF9jaXBoZXJ0ZXh0', metadata: { iv: 'YWJj' } },
     { kind: 'call_status', body: '음성통화 01:23', metadata: { duration: '1:23', status: 'completed' } },
     { kind: 'security_notice', body: '로그인 성공', metadata: { ip: '127.0.0.1', device: 'Web PC' } }
   ];
@@ -193,6 +195,15 @@ test('LM-08 & A-11: 13 MESSAGE_KINDS round-trip verification', async () => {
     assert.equal(sendRes.status, 201, `Sending message kind '${item.kind}' should return 201`);
     const sent = await sendRes.json();
     assert.equal(sent.kind, item.kind, `Message kind should be ${item.kind}`);
+  }
+  for (const item of forged) {
+    const sendRes = await api(`conversations/${testConv.id}/messages`, 'POST', {
+      kind: item.kind,
+      body: item.body,
+      metadata: item.metadata,
+      client_id: `forged-${Date.now()}-${item.kind}`
+    }, token);
+    assert.equal(sendRes.status, 400, `Forged message kind '${item.kind}' must return 400`);
   }
 });
 

@@ -287,6 +287,8 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'phone_number', "TEXT DEFAULT ''"],
   ['users', 'state', "TEXT DEFAULT 'active'"],
   ['friends', 'is_favorite', 'INTEGER DEFAULT 0'],
+  ['friends', 'status', "TEXT DEFAULT 'accepted'"],
+  ['friends', 'created_at', 'TEXT'],
   ['conversations', 'owner_id', "TEXT DEFAULT ''"],
   ['conversation_members', 'is_pinned', 'INTEGER DEFAULT 0'],
   ['conversation_members', 'is_muted', 'INTEGER DEFAULT 0'],
@@ -1366,6 +1368,21 @@ function cMeta(cid, userId) {
   return chatMeta.get(k);
 }
 function isFriend(a, b) { return friendships.has(`${a}:${b}`); }
+// A-3/A-4: bidirectional block state. Memory first (no-DB path), D1 blocks
+// table second so a block survives isolates and redeploys.
+async function blockState(a, b) {
+  const byMe = fMeta(a, b).blocked, byThem = fMeta(b, a).blocked;
+  if (byMe || byThem) return { byMe, byThem };
+  const db = dbOf();
+  if (!db) return { byMe: false, byThem: false };
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT blocker_id FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)').bind(a, b, b, a).all();
+  let dByMe = false, dByThem = false;
+  for (const r of results || []) {
+    if (r.blocker_id === a) dByMe = true; else dByThem = true;
+  }
+  return { byMe: dByMe, byThem: dByThem };
+}
 function friendIds(userId) {
   const out = [];
   for (const key of friendships.keys()) {
@@ -1902,6 +1919,8 @@ function voomView(v, viewerId) {
   };
 }
 const MESSAGE_KINDS = new Set(['text', 'sticker', 'image', 'video', 'voice', 'file', 'location', 'contact', 'pay', 'transfer', 'ciphertext', 'call_status', 'security_notice']);
+// A-5: server-minted kinds a client must never send directly.
+const FORGED_CLIENT_KINDS = new Set(['security_notice', 'pay', 'transfer', 'call_status', 'system']);
 const pushTokens = new Map();
 const deviceKeys = new Map();
 const userKeys = new Map();
@@ -2479,6 +2498,12 @@ async function extended(p, request, url, me, token) {
       if (!prefsOf(target.id).allow_friend_requests || fMeta(target.id, myId).blocked) return bad('친구 추가할 수 없는 사용자입니다', 403);
       friendships.set(`${myId}:${target.id}`, true);
       friendships.set(`${target.id}:${myId}`, true);
+      if (dbOf()) {
+        await ensureSchema();
+        const fat = now();
+        await dbOf().prepare("INSERT OR IGNORE INTO friends (user_id, friend_id, status, is_favorite, created_at) VALUES (?, ?, 'accepted', 0, ?)").bind(myId, target.id, fat).run();
+        await dbOf().prepare("INSERT OR IGNORE INTO friends (user_id, friend_id, status, is_favorite, created_at) VALUES (?, ?, 'accepted', 0, ?)").bind(target.id, myId, fat).run();
+      }
       sendTo([target.id, myId], { type: 'friends.updated' });
       return json({ status: 'friend_added', friend: publicUser(target) }, 201);
     }
@@ -2491,6 +2516,17 @@ async function extended(p, request, url, me, token) {
       const meta = fMeta(myId, fid);
       for (const k of ['favorite', 'hidden', 'blocked']) if (typeof b[k] === 'boolean') meta[k] = b[k];
       if (b.nickname !== undefined) meta.nickname = clip(b.nickname, 30);
+      if (dbOf()) {
+        await ensureSchema();
+        if (typeof b.favorite === 'boolean') {
+          await dbOf().prepare('UPDATE friends SET is_favorite = ? WHERE user_id = ? AND friend_id = ?').bind(b.favorite ? 1 : 0, myId, fid).run();
+        }
+        if (b.blocked === true) {
+          await dbOf().prepare('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)').bind(myId, fid, now()).run();
+        } else if (b.blocked === false) {
+          await dbOf().prepare('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?').bind(myId, fid).run();
+        }
+      }
       return json({ status: 'updated', meta });
     }
     if (method === 'DELETE') {
@@ -2498,6 +2534,10 @@ async function extended(p, request, url, me, token) {
       friendships.delete(`${fid}:${myId}`);
       friendMeta.delete(`${myId}:${fid}`);
       friendMeta.delete(`${fid}:${myId}`);
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare('DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)').bind(myId, fid, fid, myId).run();
+      }
       sendTo([fid, myId], { type: 'friends.updated' });
       return json({ status: 'removed' });
     }
@@ -2694,9 +2734,14 @@ async function extended(p, request, url, me, token) {
       const kind = b.kind || 'text';
       await hydrateConversation(cid);
       if (!MESSAGE_KINDS.has(kind)) return bad('지원하지 않는 메시지 종류입니다');
+      if (FORGED_CLIENT_KINDS.has(kind)) return bad('시스템 메시지는 직접 전송할 수 없습니다', 400);
       if (conv.kind === 'direct') {
         const other = conv.members.find(x => x !== myId);
-        if (other && fMeta(myId, other).blocked) return bad('차단한 사용자에게는 메시지를 보낼 수 없습니다', 403);
+        if (other) {
+          const blk = await blockState(myId, other);
+          if (blk.byMe) return bad('차단한 사용자에게는 메시지를 보낼 수 없습니다', 403);
+          if (blk.byThem) return bad('상대방이 차단한 대화에는 메시지를 보낼 수 없습니다', 403);
+        }
       }
       if (b.client_id) {
         const dup = (messages.get(cid) || []).find(x => x.client_id === b.client_id && x.sender_id === myId);
@@ -2705,6 +2750,15 @@ async function extended(p, request, url, me, token) {
       let body = typeof b.body === 'string' ? b.body : '';
       let metadata = {};
       const meta = b.metadata && typeof b.metadata === 'object' ? b.metadata : {};
+      // A-6: media payloads may only reference http(s) URLs or server-issued
+      // attachment references. Active schemes can never be injected.
+      const urlCandidates = [meta.url, meta.uri];
+      if (['image', 'video', 'file', 'audio', 'voice'].includes(kind)) urlCandidates.push(body);
+      for (const candidate of urlCandidates) {
+        if (typeof candidate === 'string' && /^\s*(data|javascript|vbscript|file|blob):/i.test(candidate)) {
+          return bad('허용되지 않은 링크 형식입니다', 400);
+        }
+      }
       if (kind === 'text') {
         body = body.trim();
         if (!body) return bad('메시지를 입력하세요');
@@ -2882,13 +2936,30 @@ async function extended(p, request, url, me, token) {
     return json({ items: out.slice(-100).reverse().map(x => decorateMessage(x, myId, m[1])) });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/search$/)) && method === 'GET') {
-    const conv = conversations.get(resolveConversationId(m[1], myId));
+    const cid = resolveConversationId(m[1], myId);
+    let conv = conversations.get(cid);
+    if (!conv || !conv.members.includes(myId)) {
+      conv = await hydrateDurableConversation(cid).catch(() => null);
+    }
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
-    const q = clip(url.searchParams.get('q') || '', 100).toLowerCase();
+    const q = clip(url.searchParams.get('q') || '', 100);
     if (q.length < 1) return json({ messages: [] });
     const hs = hiddenMsgs.get(myId);
-    const out = (messages.get(m[1]) || []).filter(x => !x.unsent && x.kind !== 'sticker' && !(hs && hs.has(x.id)) && String(x.body).toLowerCase().includes(q));
-    return json({ messages: out.slice(-50).reverse().map(x => decorateMessage(x, myId, m[1])) });
+    const db = dbOf();
+    if (db) {
+      // A-19: D1 SQL search over the caller's own rooms. LIKE over the
+      // (conversation_id, sequence) index today; an FTS5 virtual table over
+      // luno_messages(body) can replace the predicate without changing this
+      // route's contract.
+      await ensureSchema();
+      const esc = q.replace(/[%_\\]/g, (ch) => '\\' + ch);
+      const { results } = await db.prepare("SELECT * FROM luno_messages WHERE conversation_id = ? AND unsent = 0 AND kind <> 'sticker' AND body LIKE ? ESCAPE '\\' ORDER BY sequence DESC LIMIT 50").bind(cid, '%' + esc + '%').all();
+      const out = (results || []).filter(r => !(hs && hs.has(r.id))).map(r => decorateMessage(rowToMessage(r), myId, cid));
+      return json({ messages: out });
+    }
+    const ql = q.toLowerCase();
+    const out = (messages.get(cid) || []).filter(x => !x.unsent && x.kind !== 'sticker' && !(hs && hs.has(x.id)) && String(x.body).toLowerCase().includes(ql));
+    return json({ messages: out.slice(-50).reverse().map(x => decorateMessage(x, myId, cid)) });
   }
 
   // ---------- Polls, notes, events, albums ----------
@@ -3042,9 +3113,20 @@ async function extended(p, request, url, me, token) {
   if (p === 'calls' && method === 'POST') {
     const b = await readJson(request);
     if (!['voice', 'video'].includes(b.kind || 'video')) return bad('통화 종류가 올바르지 않습니다');
-    const conv = conversations.get(b.conversation_id);
+    // A-12: membership is verified against D1 (durable rooms), not just isolate memory.
+    let conv = conversations.get(b.conversation_id);
+    if (!conv || !conv.members.includes(myId)) {
+      conv = await hydrateDurableConversation(b.conversation_id).catch(() => null);
+    }
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
     if (conv.official) return bad('공식계정과는 통화할 수 없습니다');
+    if (conv.kind === 'direct') {
+      const other = conv.members.find(x => x !== myId);
+      if (other) {
+        const blk = await blockState(myId, other);
+        if (blk.byMe || blk.byThem) return bad('차단된 상대와는 통화할 수 없습니다', 403);
+      }
+    }
     const call = { id: uid(), conversation_id: conv.id, kind: b.kind || 'video', state: 'ringing', initiated_by: myId, started_at: now(), connected_at: null, ended_at: null };
     callSessions.set(call.id, call);
     const peerId = conv.members.find(x => x !== myId);
@@ -3107,6 +3189,12 @@ async function extended(p, request, url, me, token) {
   }
   if ((m = p.match(/^calls\/([\w-]+)\/state$/)) && method === 'POST') {
     const call = callSessions.get(m[1]);
+    if (!call) return bad('통화를 찾을 수 없습니다', 404);
+    let stateConv = conversations.get(call.conversation_id);
+    if (!stateConv || !stateConv.members.includes(myId)) {
+      stateConv = await hydrateDurableConversation(call.conversation_id).catch(() => null);
+    }
+    if (!stateConv || !stateConv.members.includes(myId)) return bad('통화를 찾을 수 없습니다', 404);
     const b = await readJson(request);
     if (!['connected', 'ended', 'declined', 'missed'].includes(b.state)) return bad('통화 상태 값이 올바르지 않습니다');
     if (call.ended_at) return json({ status: call.state });
@@ -3716,7 +3804,12 @@ async function syncFromD1(db) {
       for (const f of friendRows.results) {
         friendships.set(`${f.user_id}:${f.friend_id}`, true);
         friendships.set(`${f.friend_id}:${f.user_id}`, true);
+        if (Number(f.is_favorite)) fMeta(f.user_id, f.friend_id).favorite = true;
       }
+    }
+    const blockRows = await db.prepare("SELECT * FROM blocks").all().catch(() => null);
+    if (blockRows && blockRows.results) {
+      for (const bl of blockRows.results) fMeta(bl.blocker_id, bl.blocked_id).blocked = true;
     }
   } catch (err) {
     console.error('[D1 Sync Error]', err);
@@ -4266,7 +4359,13 @@ const workerCore = {
       const callPath = p.match(/^calls\/([^/]+)(?:\/|$)/);
       if (callPath && !['ice-servers', 'group'].includes(callPath[1])) {
         const call = callSessions.get(callPath[1]);
-        if (!call || !conversations.get(call.conversation_id)?.members.includes(authUser.id)) {
+        // A-12: member check falls back to D1 so a durable room hydrated on
+        // another isolate still authorizes signaling, state and quality posts.
+        let callConv = call ? conversations.get(call.conversation_id) : null;
+        if (call && (!callConv || !callConv.members.includes(authUser.id))) {
+          callConv = await hydrateDurableConversation(call.conversation_id).catch(() => null);
+        }
+        if (!call || !callConv || !callConv.members.includes(authUser.id)) {
           return json({ error: 'call not found' }, 404);
         }
       }
@@ -4551,8 +4650,19 @@ const workerCore = {
       // 7. Calling & Signaling
       if (p === 'calls' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
-        if (!conversations.get(body.conversation_id)?.members.includes(authUser.id)) {
+        let callConv = conversations.get(body.conversation_id);
+        if (!callConv || !callConv.members.includes(authUser.id)) {
+          callConv = await hydrateDurableConversation(body.conversation_id).catch(() => null);
+        }
+        if (!callConv || !callConv.members.includes(authUser.id)) {
           return json({ error: 'conversation not found' }, 404);
+        }
+        if (callConv.kind === 'direct') {
+          const other = callConv.members.find(x => x !== authUser.id);
+          if (other) {
+            const blk = await blockState(authUser.id, other);
+            if (blk.byMe || blk.byThem) return json({ error: 'blocked' }, 403);
+          }
         }
         const callId = crypto.randomUUID();
         callSessions.set(callId, { id: callId, conversation_id: body.conversation_id, kind: body.kind || 'video', state: 'ringing' });

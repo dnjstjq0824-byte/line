@@ -91,16 +91,17 @@ test('P0-1 & P0-2: Verify official security channel and sample conversations res
   const keepData = await keepMsgRes.json();
   assert.ok(keepData.messages.length >= 2, 'Keep memo should have initial memo messages');
 
-  // 6. Verify LUNO custom sticker, location, contact, and call_status messages work
+  // 6. Verify LUNO custom sticker, location and contact messages work; forged call_status is rejected
   for (const payload of [
     { client_id: `st-${Date.now()}`, kind: 'sticker', body: 'lumi-hi', metadata: { sticker_id: 'lumi-hi', character: 'Lumi', label: '안녕!' } },
     { client_id: `loc-${Date.now()}`, kind: 'location', body: '강남역', metadata: { lat: 37.5006, lng: 127.0364, label: '강남역' } },
-    { client_id: `cnt-${Date.now()}`, kind: 'contact', body: 'K 🙏', metadata: { user_id: 'peer-k', handle: 'k_pray', display_name: 'K 🙏' } },
-    { client_id: `call-${Date.now()}`, kind: 'call_status', body: '음성통화', metadata: { duration: '01:12', status: 'completed', call_type: 'voice' } }
+    { client_id: `cnt-${Date.now()}`, kind: 'contact', body: 'K 🙏', metadata: { user_id: 'peer-k', handle: 'k_pray', display_name: 'K 🙏' } }
   ]) {
     const r = await api(`conversations/${kConv.id}/messages`, token, 'POST', payload);
     assert.equal(r.status, 201, `Posting ${payload.kind} message must return 201 Created`);
   }
+  const forgedCall = await api(`conversations/${kConv.id}/messages`, token, 'POST', { client_id: `call-${Date.now()}`, kind: 'call_status', body: '음성통화', metadata: { duration: '01:12', status: 'completed', call_type: 'voice' } });
+  assert.equal(forgedCall.status, 400, 'Forged call_status message must return 400');
 
   // 7. Verify conversation pin/mute and read-all and friend favorite
   const metaRes = await api(`conversations/${kConv.id}/meta`, token, 'PATCH', { pinned: true, muted: true });
