@@ -1280,11 +1280,11 @@ const NEWS_SAMPLE = [
 // Stored form: pbkdf2$<iterations>$<salt>$<hash>. The older pbkdf2$<salt>$<hash>
 // form used 1,000 iterations and is upgraded on the next successful login.
 const PBKDF2_LEGACY_ITERATIONS = 1000;
-const PBKDF2_DEFAULT_ITERATIONS = 100; // TEMP-DIAG2 cpu probe, REVERT // A-15: matches the privacy policy; verified feasible on workerd.
+const PBKDF2_DEFAULT_ITERATIONS = 100000; // workerd caps PBKDF2 at 100k iterations; higher throws NotSupportedError on real Workers (local dev has no cap).
 const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK', 'LunoAdmin#2026!', 'LunoUser#2026!', 'Alice#Rotated$48wT', 'Bob#Rotated$31qR']);
 function pbkdf2Iterations() {
   const configured = Number(CURRENT_ENV?.PBKDF2_ITERATIONS);
-  return Number.isInteger(configured) && configured >= 10000 && configured <= 310000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
+  return Number.isInteger(configured) && configured >= 10000 && configured <= 100000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
 }
 async function pbkdf2(password, saltHex, iterations = PBKDF2_LEGACY_ITERATIONS) {
   try {
@@ -1292,7 +1292,8 @@ async function pbkdf2(password, saltHex, iterations = PBKDF2_LEGACY_ITERATIONS) 
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
     const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
     return Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch {
+  } catch (err) {
+    console.error('[LUNO pbkdf2 failed]', err?.message || err);
     return null;
   }
 }
@@ -5247,8 +5248,7 @@ export default {
     } catch (err) {
       if (err?.code === 'CONVERSATION_CONFLICT') return json({ error: err.message, code: err.code }, 409);
       console.error('[LUNO internal error]', err && err.stack ? err.stack : err);
-      const diag = String((err && err.message) || err || 'unknown').slice(0, 160);
-      return withCors(request, env, json({ error: 'internal_error', diag }, 500));
+      return withCors(request, env, json({ error: 'internal_error' }, 500));
     }
   }
 };

@@ -161,7 +161,7 @@ stage gates, local-only handoff instructions and remaining work.
 |---|---|---|---|---|
 | 091 | Super Admin Console | Global KPIs, user directory, feature flags (`GET/PUT /api/v1/admin/feature-flags`), 28-service topology | `admin.go`, `admin-console` | VERIFIED_PASS |
 | 092 | Moderation & Abuse Center | User reports, account suspension/activation (`POST /api/v1/admin/moderation/actions`) | `admin.go` | VERIFIED_PASS |
-| 093 | Security & Privacy Compliance | Parameterized SQL, PBKDF2-SHA256 (310k rounds), HS256 JWT, immutable audit logs (`ops.audit_logs`) | `auth/`, `admin.go` | VERIFIED_PASS |
+| 093 | Security & Privacy Compliance | Parameterized SQL, PBKDF2-SHA256 (100k rounds), HS256 JWT, immutable audit logs (`ops.audit_logs`) | `auth/`, `admin.go` | VERIFIED_PASS |
 | 094 | Load Testing & Benchmark | Concurrent multi-client WebSocket & HTTP integration test harness | `e2e_test.go` | VERIFIED_PASS |
 | 095 | Observability & OpenTelemetry | Prometheus `/metrics` endpoint, `/healthz`, `/readyz`, slow-request latency logging | `core.go`, `admin.go` | VERIFIED_PASS |
 | 096 | Automated Test Suite | Unit tests, 80-table schema test, and 12-scenario multi-device E2E suite (`go test ./...` PASS) | `backend/internal/...` | VERIFIED_PASS |

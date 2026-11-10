@@ -9,7 +9,7 @@
 | :--- | :--- | :--- |
 | P0 버그 (대화 선택·보안 채널·통화 탭·통화 말풍선) | DONE | node 155/155, lv A-01..A-13 |
 | UI/UX·반응형 (표준 브레이크포인트·§7 토큰·타이포) | DONE | §7-2/7-3/7-4 적용, vue-tsc 통과 |
-| 인증 (PBKDF2-310k·15분 access·refresh rotation·재사용 탐지) | DONE | auth_hardening 6/6 |
+| 인증 (PBKDF2-100k·15분 access·refresh rotation·재사용 탐지) | DONE | auth_hardening 6/6 |
 | 로그인 잠금 (5회 실패→15분) · 분당 rate limit | DONE | D1 테이블 기반, 테스트 통과 |
 | 탈퇴 (단일 경로·자격증명 파기·연관행 삭제) | DONE | D-01..D-05 + batch wipe 테스트 |
 | 메시징 권한 (양방향 차단·위조 400·스킴 검증·통화 멤버십·D1 검색) | DONE | messaging_guards 5/5 |

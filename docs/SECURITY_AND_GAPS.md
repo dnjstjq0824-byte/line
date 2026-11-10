@@ -22,7 +22,7 @@ This repository is an **implementation foundation** for a LINE-class messenger, 
 ## Current safeguards
 
 - Database membership checks for chat read/write; partner roles enforced server-side.
-- Password PBKDF2-HMAC-SHA256 with a per-user 16-byte random salt and 310000 rounds (development baseline; switch to audited memory-hard Argon2id for production).
+- Password PBKDF2-HMAC-SHA256 with a per-user 16-byte random salt and 100000 rounds (Cloudflare Workers runtime ceiling; switch to audited memory-hard Argon2id for production).
 - HMAC-SHA256 bearer JWT validation with strict algorithm and issuer/audience/time checks; 32-byte minimum signing secret.
 - Short-lived single-use WebSocket tickets to avoid putting the bearer JWT in a long-lived URL.
 - Secrets of developer apps are only returned once; only their SHA-256 hashes are stored. OAuth grants are not implemented.

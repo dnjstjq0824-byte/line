@@ -1,4 +1,4 @@
-// B1 auth hardening: PBKDF2-310k, 15-min access, refresh rotation + reuse
+// B1 auth hardening: PBKDF2-100k (workerd cap), 15-min access, refresh rotation + reuse
 // detection, login lockout, per-minute rate limits, account wipe via batch.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -62,25 +62,25 @@ async function signup(api, email, handle, password = 'Hard3n#Passw0rd') {
   return { id: (await reg.json()).id, ...(await login.json()) };
 }
 
-test('B1: register hashes at PBKDF2-310k; 100k rows migrate on login', async () => {
+test('B1: register hashes at PBKDF2-100k (workerd cap); 1k rows migrate on login', async () => {
   const { api, db } = await isolate();
   const u = await signup(api, 'b1-pbkdf2@local.test', 'b1pbkdf2');
   assert.equal(u.expires_in, 900, 'access tokens live 15 minutes');
   assert.ok(u.refresh_token?.startsWith('cf-refresh-'), 'login issues a real refresh token');
   const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-pbkdf2@local.test');
-  assert.match(row.password_hash, /^pbkdf2\$100\$.+\$.+$/, 'TEMP-DIAG2: register stores probe 100 digest');
-  // A pre-change 100k row verifies, then upgrades to 310k.
+  assert.match(row.password_hash, /^pbkdf2\$100000\$.+\$.+$/, 'register stores 100k digest');
+  // A pre-change 1k row verifies, then upgrades to 100k.
   const { subtle } = await import('node:crypto');
   const salt = 'cd'.repeat(16);
-  const key = await subtle.importKey('raw', new TextEncoder().encode('Old100k#Pass'), 'PBKDF2', false, ['deriveBits']);
-  const bits = await subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(Buffer.from(salt, 'hex')), iterations: 100000 }, key, 256);
+  const key = await subtle.importKey('raw', new TextEncoder().encode('Old1k#Pass'), 'PBKDF2', false, ['deriveBits']);
+  const bits = await subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(Buffer.from(salt, 'hex')), iterations: 1000 }, key, 256);
   const hash = Buffer.from(bits).toString('hex');
-  db.raw.prepare('INSERT INTO users (id, email, password_hash, display_name) VALUES (?, ?, ?, ?)').run('b1-old100k', 'b1-old100k@local.test', `pbkdf2$100000$${salt}$${hash}`, 'Old');
+  db.raw.prepare('INSERT INTO users (id, email, password_hash, display_name) VALUES (?, ?, ?, ?)').run('b1-old1k', 'b1-old1k@local.test', `pbkdf2$1000$${salt}$${hash}`, 'Old');
   const cold = await isolate(db);
-  const login = await cold.api('auth/login', 'POST', { email: 'b1-old100k@local.test', password: 'Old100k#Pass' });
-  assert.equal(login.status, 200, '100k digest still verifies');
-  const migrated = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-old100k@local.test');
-  assert.match(migrated.password_hash, /^pbkdf2\$100000\$.+\$.+$/, 'TEMP-DIAG2: no downgrade while probe default is 100');
+  const login = await cold.api('auth/login', 'POST', { email: 'b1-old1k@local.test', password: 'Old1k#Pass' });
+  assert.equal(login.status, 200, '1k digest still verifies');
+  const migrated = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-old1k@local.test');
+  assert.match(migrated.password_hash, /^pbkdf2\$100000\$.+\$.+$/, '1k row rehashed to 100k on login');
 });
 
 test('B1: refresh rotates single-use; reuse kills the grant; expiry enforced', async () => {
