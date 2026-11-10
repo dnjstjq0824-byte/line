@@ -16,7 +16,7 @@ test('standalone readiness requires an actual database read and never boots or s
   assert.equal(queries.length, 2);
   assert.equal(queries[0], 'SELECT 1 AS ready');
   // Every required table is named, and LIMIT 0 keeps the probe at zero rows read.
-  for (const table of ['users', 'wallets', 'luno_sessions', 'luno_messages', 'luno_read_cursors', 'luno_attachments', 'luno_ws_tickets', 'luno_audit']) assert.match(queries[1], new RegExp(`\\b${table}\\b`));
+  for (const table of ['users', 'wallets', 'luno_sessions', 'luno_messages', 'attachments', 'luno_read_cursors', 'luno_attachments', 'luno_ws_tickets', 'luno_audit']) assert.match(queries[1], new RegExp(`\\b${table}\\b`));
   assert.match(queries[1], /LIMIT 0$/);
   assert.doesNotMatch(queries[1], /sqlite_master/);
 });

@@ -20,6 +20,7 @@ const STATIC = new Set([
   'MESSAGE_KINDS', 'FORGED_CLIENT_KINDS', 'REVOKED_LEGACY_PASSWORDS',
   'STICKER_CATALOG', 'THEME_CATALOG',
   'LUNO_SCHEMA', 'LUNO_SCHEMA_BASE', 'LUNO_SCHEMA_PHASE1', 'LUNO_SCHEMA_PHASE1_COLS',
+  'ATTACHMENT_MIME_ALLOW',
   'NEWS_SAMPLE', 'GRANTABLE_ROLES', 'REACTIONS', 'PEER_USERS', 'READY_TABLES',
 ]);
 const EPHEMERAL = new Set([
@@ -30,7 +31,7 @@ const CACHE = new Set([
   'users', 'usersById', 'sessions', 'revokedTokens', 'wsTickets',
   'friendships', 'friendMeta', 'conversations', 'messages', 'readCursors',
   'reactionStore', 'noteStore', 'eventStore', 'polls', 'pollVotes',
-  'attachmentStore', 'pushTokens', 'deviceKeys', 'userKeys',
+  'pushTokens', 'deviceKeys', 'userKeys',
 ]);
 const UNBACKED = new Set([
   'passkeyCreds', 'storeOrders', 'pinnedMessages', 'albums', 'savedMessages',

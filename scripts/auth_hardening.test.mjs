@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { makeBucket } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 
@@ -46,12 +47,12 @@ let isoCounter = 5000;
 async function isolate(database) {
   const db = database || makeD1();
   const mod = await import(`./cf_worker.js?b1=${++isoCounter}`);
-  const env = { DB: db };
+  const env = { DB: db, MEDIA_BUCKET: makeBucket() };
   const api = (path, method = 'GET', body = null, token = null, headers = {}) => mod.default.fetch(new Request(`${BASE}/api/v1/${path}`, {
     method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
     body: body === null ? undefined : JSON.stringify(body)
   }), env);
-  return { api, db };
+  return { api, db, bucket: env.MEDIA_BUCKET };
 }
 async function signup(api, email, handle, password = 'Hard3n#Passw0rd') {
   const reg = await api('auth/register', 'POST', { email, password, display_name: handle, handle });
@@ -137,6 +138,33 @@ test('B1: 5 login failures lock the account for 15 minutes; success resets', asy
   assert.equal((await api('auth/login', 'POST', { email: email2, password: 'ResetM3#Ok1' })).status, 200, 'four post-reset failures do not lock');
 });
 
+test('I-2/I-3: refresh travels as an httpOnly cookie; hardening headers set', async () => {
+  const { api } = await isolate();
+  const login = await api('auth/login', 'POST', { email: 'nope@local.test', password: 'x' });
+  assert.equal(login.status, 401);
+  const u = await signup(api, 'b1-cookie@local.test', 'b1cookie');
+  const login2 = await api('auth/login', 'POST', { email: 'b1-cookie@local.test', password: 'Hard3n#Passw0rd' });
+  const setCookie = login2.headers.get('set-cookie') || '';
+  assert.ok(setCookie.startsWith('luno_refresh=cf-refresh-'), 'login sets the refresh cookie');
+  assert.ok(setCookie.includes('HttpOnly'), 'cookie is httpOnly');
+  assert.ok(setCookie.includes('SameSite=Strict'), 'cookie is SameSite=Strict');
+  assert.ok(setCookie.includes('Secure'), 'Secure flag on https origins');
+  assert.equal(login2.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains');
+  assert.equal(login2.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(login2.headers.get('x-frame-options'), 'DENY');
+  assert.equal(login2.headers.get('content-security-policy'), "default-src 'none'; frame-ancestors 'none'");
+  // Cookie-only refresh (no body token).
+  const r = await api('auth/refresh', 'POST', {}, null, { Cookie: setCookie.split(';')[0] });
+  assert.equal(r.status, 200, 'cookie refresh works');
+  assert.ok((r.headers.get('set-cookie') || '').startsWith('luno_refresh=cf-refresh-'), 'rotation re-sets the cookie');
+  // Logout clears the cookie.
+  const out = await api('auth/logout', 'POST', {}, u.access_token);
+  assert.equal(out.status, 200);
+  assert.ok((out.headers.get('set-cookie') || '').includes('Max-Age=0'), 'logout clears the cookie');
+  const v = await (await api('version')).headers;
+  assert.equal(v.get('x-frame-options'), 'DENY', 'version carries hardening headers');
+});
+
 test('B1: per-minute rate limits return 429 past the cap', async () => {
   const { api } = await isolate();
   let capped = 0;
@@ -149,7 +177,7 @@ test('B1: per-minute rate limits return 429 past the cap', async () => {
 });
 
 test('B1: DELETE /me wipes the account via batch; alias behaves identically', async () => {
-  const { api, db } = await isolate();
+  const { api, db, bucket } = await isolate();
   const u = await signup(api, 'b1-wipe@local.test', 'b1wipe');
   const peer = await signup(api, 'b1-wipe-peer@local.test', 'b1wipepeer');
   assert.equal((await api('friends', 'POST', { friend_id: peer.id }, u.access_token)).status, 201);
@@ -166,7 +194,8 @@ test('B1: DELETE /me wipes the account via batch; alias behaves identically', as
   assert.equal(row.state, 'deleted');
   assert.equal(row.password_hash, 'pbkdf2$deleted', 'credentials unwound');
   assert.equal(row.display_name, '탈퇴한 사용자');
-  for (const [table, col] of [['luno_sessions', 'user_id'], ['refresh_tokens', 'user_id'], ['push_tokens', 'user_id'], ['e2ee_keys', 'user_id'], ['luno_messages', 'sender_id'], ['luno_attachments', 'owner_id']]) {
+  assert.equal(bucket.objects.size, 0, 'R2 objects wiped');
+  for (const [table, col] of [['luno_sessions', 'user_id'], ['refresh_tokens', 'user_id'], ['push_tokens', 'user_id'], ['e2ee_keys', 'user_id'], ['luno_messages', 'sender_id'], ['luno_attachments', 'owner_id'], ['attachments', 'uploader_id']]) {
     const n = db.raw.prepare(`SELECT COUNT(*) n FROM ${table} WHERE ${col} = ?`).get(u.id).n;
     assert.equal(Number(n), 0, `${table} wiped`);
   }

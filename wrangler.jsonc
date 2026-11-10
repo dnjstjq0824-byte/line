@@ -18,6 +18,12 @@
       "database_id": "a07f1945-1161-48ff-90a1-888e4a86521c"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "luno-media"
+    }
+  ],
   // ---------------------------------------------------------------------------
   // SQLite-backed Durable Objects are supported on Workers Free as well as Paid.
   // https://developers.cloudflare.com/durable-objects/platform/limits/

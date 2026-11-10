@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { reportError } from '../../../shared/monitor'
 import { handoffText } from '../../../shared/handoff-i18n'
 import { UI_DICTIONARY, detectInitialLocale, type LunoLocale } from '../luno-i18n'
-import { request, type LoginResult, type User } from '../../../shared/api'
+import { API_URL, ApiError, request, type LoginResult, type User } from '../../../shared/api'
 
 // --- Session store: shared reactive state for the auth view and messenger shell ---
 export const currentLocale = ref<LunoLocale>(detectInitialLocale())
@@ -49,7 +49,47 @@ export async function fetchAppVersion() {
   } catch {}
 }
 
-export const api = <T,>(path: string, method = 'GET', body?: unknown) => request<T>(path, token.value || null, method, body)
+// I-2: access tokens live 15 minutes; the httpOnly refresh cookie renews
+// them. One in-flight refresh is shared (singleflight); a failed refresh
+// means re-login, never a retry loop.
+let refreshing: Promise<string | null> | null = null
+function tryRefresh(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = (async () => {
+      try {
+        const res = await fetch(API_URL + '/api/v1/auth/refresh', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        })
+        if (!res.ok) return null
+        const pair = await res.json()
+        if (!pair?.access_token) return null
+        token.value = pair.access_token
+        const storage = localStorage.getItem('luno.auth_token') ? localStorage : sessionStorage
+        if (storage.getItem('luno.auth_token')) storage.setItem('luno.auth_token', token.value)
+        return token.value
+      } catch {
+        return null
+      } finally {
+        refreshing = null
+      }
+    })()
+  }
+  return refreshing
+}
+export const api = async <T,>(path: string, method = 'GET', body?: unknown): Promise<T> => {
+  try {
+    return await request<T>(path, token.value || null, method, body)
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401 && !path.startsWith('/api/v1/auth/')) {
+      const fresh = await tryRefresh()
+      if (fresh) return await request<T>(path, fresh, method, body)
+    }
+    throw e
+  }
+}
 export const wrap = async (job: () => Promise<void>) => {
   error.value = ''
   note.value = ''

@@ -23,6 +23,46 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
+  Future<void> _confirmDeleteAccount(
+      BuildContext context, SessionController session) async {
+    final password = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('계정을 영구 삭제할까요?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('모든 데이터가 삭제되며 되돌릴 수 없습니다. 계속하려면 비밀번호를 입력하세요.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: password,
+                obscureText: true,
+                decoration: const InputDecoration(
+                    labelText: '비밀번호 확인', isDense: true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('취소')),
+            FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('영구 삭제')),
+          ],
+        ),
+      );
+      if (confirmed == true && password.text.isNotEmpty) {
+        await session.deleteAccount(password.text);
+      }
+    } finally {
+      password.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
@@ -168,7 +208,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: const Text('종단간 암호화 (E2EE)',
                         style: TextStyle(
                             fontSize: 14, fontWeight: FontWeight.w700)),
-                    subtitle: Text('준비 중 — 현재 서버 암호화 저장만 적용됩니다',
+                    subtitle: Text('준비 중 — 현재 전송 구간 암호화(TLS)만 적용됩니다',
                         style: Theme.of(context).textTheme.bodySmall),
                   ),
                   const Divider(height: 1),
@@ -182,6 +222,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: Text('내 모든 메시지, 친구, 미디어 메타데이터 내보내기',
                         style: Theme.of(context).textTheme.bodySmall),
                     onTap: session.exportGdprData,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.delete_forever_outlined,
+                        color: dark ? HarborDark.danger : HarborLight.danger),
+                    title: const Text('계정 탈퇴',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w700)),
+                    subtitle: Text('모든 메시지·친구·미디어가 영구 삭제됩니다',
+                        style: Theme.of(context).textTheme.bodySmall),
+                    onTap: () => _confirmDeleteAccount(context, session),
                   ),
                 ],
               ),

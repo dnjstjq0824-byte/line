@@ -3,10 +3,14 @@ import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
 import LunoIcon from '../components/LunoIcon.vue'
 import MessageAttachment from '../components/MessageAttachment.vue'
 import LunoContextMenu, { type ContextMenuItem } from '../components/LunoContextMenu.vue'
+import CallModal from '../components/CallModal.vue'
+import ChatList from '../components/ChatList.vue'
+import FriendPanel from '../components/FriendPanel.vue'
+import MessagePane from '../components/MessagePane.vue'
+import SettingsModal from '../components/SettingsModal.vue'
 import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
-import { CALL_VIDEO_FILTERS, callRecordingName } from '../../../shared/call-fx'
 import { parseStorePacks } from '../../../shared/shop'
-import { playSendSound, playReceiveSound } from '../sound-effects'
+import { playSendSound } from '../sound-effects'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -41,36 +45,19 @@ import {
   request,
   ApiError,
   newClientID,
-  wsURL,
   type Chat,
   type Message,
   type User,
 } from '../../../shared/api'
 import {
-  startWebRTCCall,
-  endWebRTCCall,
-  queueOfflineMessage,
-  flushOfflineQueue
+  queueOfflineMessage
 } from '../messenger-utils'
+import { useChatSocket } from '../composables/useChatSocket'
+import { useAuth } from '../composables/useAuth'
+import { useWebRTC, type CallRecord } from '../composables/useWebRTC'
 
 // --- LUNO Multilingual & Accessibility & Theme State ---
 
-function enableLightMode() {
-  if (isDarkMode.value) toggleDarkMode()
-}
-function enableDarkMode() {
-  if (!isDarkMode.value) toggleDarkMode()
-}
-
-const fontScale = ref<'normal' | 'large' | 'xlarge'>('normal')
-function setFontScale(scale: 'normal' | 'large' | 'xlarge') {
-  fontScale.value = scale
-  if (scale === 'normal') {
-    document.documentElement.removeAttribute('data-font-scale')
-  } else {
-    document.documentElement.setAttribute('data-font-scale', scale)
-  }
-}
 
 // --- AI Translation State ---
 const autoTranslateEnabled = ref(false)
@@ -113,9 +100,6 @@ async function handleTranslateMessage(msg: Message) {
   }
 }
 
-// --- AI Voice/Video Call Live Captions UX ---
-const liveCaptionsEnabled = ref(false)
-const callSubtitles = ref(t('mvLiveCaptionsOn'))
 
 // --- Auth & Session State ---
 const basePath = import.meta.env.BASE_URL
@@ -146,10 +130,6 @@ const activeNav = ref<NavItem>('chats')
 // --- LUNO Mobile 4-Tab & PC Workstation State (PO Master Directive) ---
 const selectedFriendProfile = ref<User | null>(null)
 const friendSearchQuery = ref('')
-const friendsSectionOpen = ref(true)
-const groupsSectionOpen = ref(true)
-const favoritesSectionOpen = ref(true)
-const officialSectionOpen = ref(true)
 const chatWallpaper = ref<'skyblue' | 'slate' | 'mint' | 'dark'>('skyblue')
 const messagesCanvasRef = ref<HTMLElement | null>(null)
 const callFilter = ref<'all' | 'missed'>('all')
@@ -304,17 +284,6 @@ function addNewsComment(articleId: string) {
 
 
 // --- Calls Tab State (Section 9 & Screenshot 3) ---
-export interface CallRecord {
-  id: string
-  peer_id: string
-  peer_name: string
-  peer_avatar_color: string
-  call_type: 'voice' | 'video'
-  direction: 'incoming' | 'outgoing' | 'missed'
-  timestamp_text: string
-  duration_text?: string
-  count?: number
-}
 
 const callHistoryList = ref<CallRecord[]>([])
 
@@ -409,22 +378,6 @@ function removeCallRecord(id: string) {
   callHistoryList.value = callHistoryList.value.filter(c => c.id !== id)
 }
 
-// --- Recent Search History (Section 3.2 & 4) ---
-const recentSearchKeywords = ref<string[]>(['K 🙏', t('mvSeedPress'), t('navOpenChat'), 'CapCom', t('mvSeedMinutes')])
-
-function addSearchKeyword(kw: string) {
-  if (!kw.trim()) return
-  const t = kw.trim()
-  recentSearchKeywords.value = [t, ...recentSearchKeywords.value.filter(k => k !== t)].slice(0, 10)
-}
-
-function removeSearchKeyword(kw: string) {
-  recentSearchKeywords.value = recentSearchKeywords.value.filter(k => k !== kw)
-}
-
-function clearAllSearchKeywords() {
-  recentSearchKeywords.value = []
-}
 
 // --- Date Dividers & Security Notice Helpers ---
 function formatDateDivider(dateStr?: string) {
@@ -463,29 +416,7 @@ function isGroupTail(msg: any, index: number) {
   return !isSameBurst(msg, messages.value[index + 1])
 }
 
-async function handleSecurityNoticeLogout(msg: any) {
-  const sessionId = msg.metadata?.session_id
-  if (!sessionId) {
-    error.value = t('mvNoSessionInNotice')
-    return
-  }
-  try {
-    const res = await api<{ status: string; self?: boolean }>('/api/v1/auth/sessions/revoke', 'POST', { session_id: sessionId })
-    if (res.self) {
-      clearLocalSession()
-      void router.push('/login')
-      return
-    }
-    note.value = t('mvSessionRevoked')
-    await loadDevices()
-  } catch (e) {
-    // Never claim success when the server did not revoke anything.
-    error.value = e instanceof Error ? e.message : t('mvSessionRevokeFailed')
-  }
-}
 
-const approveChallengeInput = ref('')
-const approveTokenInput = ref('')
 const showPasswordModal = ref(false)
 const currentPasswordInput = ref('')
 const newPasswordInput = ref('')
@@ -581,7 +512,6 @@ const activeDrawer = ref<'none' | 'notes' | 'albums' | 'events' | 'media'>('none
 
 // --- Pinned Announcements & Polls ---
 const pinnedList = ref<{ message_id: string; pinned_by: string; pinned_at: string; body?: string }[]>([])
-const pinnedExpanded = ref(false)
 const activePolls = ref<Array<{ id: string; question: string; options: { id: string; text?: string; label?: string; votes?: number; count?: number; voted?: boolean }[]; closed?: boolean }>>([])
 const chatNotes = ref<Array<{ id: string; title?: string; body: string; author?: User; author_name?: string; likes?: number; created_at: string }>>([])
 const chatAlbums = ref<Array<{ id: string; title: string; created_by: string; created_at: string }>>([])
@@ -605,12 +535,6 @@ const showVoomCreateModal = ref(false)
 const newVoomBody = ref('')
 const newVoomComment = ref<Record<string, string>>({})
 const devicesList = ref<Array<{ id: string; name: string; platform: string; trusted: boolean; last_seen_at?: string }>>([])
-const editProfileName = ref('')
-const editProfileBio = ref('')
-const editProfileHandle = ref('')
-const profileSaving = ref(false)
-const profileSaveError = ref('')
-const profileSaved = ref(false)
 const photoInput = ref<HTMLInputElement | null>(null)
 const photoSaving = ref(false)
 const photoError = ref('')
@@ -649,15 +573,10 @@ async function removeProfilePhoto() {
   catch (error) { photoError.value = error instanceof Error ? error.message : t('profile_save_error') }
   finally { photoSaving.value = false }
 }
-const profileDirty = computed(() => editProfileName.value.trim() !== (currentUser.value?.display_name || '') || editProfileHandle.value.trim() !== (currentUser.value?.handle || '') || editProfileBio.value.trim() !== (currentUser.value?.status_message || currentUser.value?.bio || ''))
 const isRecordingVoice = ref(false)
 let mediaRecorderInstance: MediaRecorder | null = null
 let recordedChunks: BlobPart[] = []
 let voiceRecordStartedAt = 0
-const localVideoRef = ref<HTMLVideoElement | null>(null)
-const remoteVideoRef = ref<HTMLVideoElement | null>(null)
-const isScreenSharing = ref(false)
-let currentDeviceId = ''
 
 // --- Keep Vault ---
 const keepItems = ref<Array<{ id: string; body: string; kind: string; created_at: string; message_id?: string }>>([])
@@ -920,17 +839,6 @@ const stickersList = [
   { id: 'pack-work', name: t('mvStickerPackOffice'), items: ['💻', '⌨️', '📱', '🚀', '🔥', '✨', '💯', '☕', '💪', '🙏', '🆗', '✅'] }
 ]
 
-// --- Calling Simulation ---
-const activeCall = ref<{ id: string; kind: 'voice' | 'video'; state: 'ringing' | 'connected' | 'ended'; title: string; direction: 'outgoing' | 'incoming' } | null>(null)
-const callDuration = ref(0)
-const isCallMuted = ref(false)
-const isCallVideoOff = ref(false)
-const isCallSpeakerOn = ref(true)
-const callRecording = ref(false)
-const callVideoFilter = ref<'none' | 'warm' | 'cool' | 'mono'>('none')
-let callTimer: ReturnType<typeof setInterval> | null = null
-let callRemoteStream: MediaStream | null = null
-let callRecorder: { mr: MediaRecorder; ctx: AudioContext; chunks: BlobPart[]; callId: string } | null = null
 
 // --- Modals & Popups ---
 const activeProfileUser = ref<User | null>(null)
@@ -943,11 +851,6 @@ const addFriendResults = ref<User[]>([])
 const addFriendSearched = ref(false)
 const showSettingsModal = ref(false)
 const showContactPicker = ref(false)
-watch(showSettingsModal, (open) => {
-  profileSaved.value = false
-  profileSaveError.value = ''
-  if (open) void fetchPasskeys()
-})
 const showPollCreateModal = ref(false)
 const newPollQuestion = ref('')
 const newPollOption1 = ref('')
@@ -960,39 +863,6 @@ const newEventLocation = ref('')
 
 // --- QR Login ---
 
-// --- Realtime WebSocket ---
-let socket: WebSocket | null = null
-const realtimeState = ref<'connecting' | 'connected' | 'reconnecting' | 'offline'>('connecting')
-let realtimeGeneration = 0
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-let reconnectAttempts = 0
-let messageSyncTimer: ReturnType<typeof setInterval> | null = null
-let messageSyncInFlight: Promise<void> | null = null
-// Each reconcile costs four API calls (sync, messages, read, conversations). While the
-// realtime socket is open the Durable Object hub already delivers every event, so the
-// poll only runs as a slow safety net; it falls back to every tick when the socket is
-// down or the last reconcile failed (for example an offline message still queued).
-const MESSAGE_SYNC_TICK_MS = 10000
-const MESSAGE_SYNC_CONNECTED_MS = 60000
-let lastMessageSyncAt = 0
-let lastMessageSyncOk = false
-const reportedReadSequence = new Map<string, number>()
-function stopRealtime() {
-  realtimeGeneration++
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  reconnectTimer = null
-  socket?.close()
-  socket = null
-}
-function scheduleReconnect(generation: number) {
-  if (generation !== realtimeGeneration || !token.value || reconnectTimer) return
-  realtimeState.value = navigator.onLine ? 'reconnecting' : 'offline'
-  if (!navigator.onLine) return
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null
-    void connectRealtime()
-  }, Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempts++, 5)))
-}
 
 // --- Helper Functions ---
 
@@ -1098,18 +968,6 @@ function openEcosystemService(serviceId: string) {
   }
 }
 
-async function approveQrLogin() {
-  if (!approveChallengeInput.value.trim() || !approveTokenInput.value.trim()) return
-  await wrap(async () => {
-    await api('/api/v1/auth/qr/approve', 'POST', {
-      challenge_id: approveChallengeInput.value.trim(),
-      qr_token: approveTokenInput.value.trim()
-    })
-    approveChallengeInput.value = ''
-    approveTokenInput.value = ''
-    note.value = t('mvQrApproved')
-  })
-}
 
 
 async function loadInitialData() {
@@ -1128,109 +986,9 @@ async function loadInitialData() {
   ])
 }
 
-// --- Realtime WebSocket Connection ---
-async function connectRealtime() {
-  stopRealtime()
-  if (!token.value) return
-  const generation = realtimeGeneration
-  const sessionToken = token.value
-  realtimeState.value = navigator.onLine ? 'connecting' : 'offline'
-  if (!navigator.onLine) return
-  try {
-    const { ticket } = await api<{ ticket: string }>('/api/v1/ws-ticket', 'POST')
-    if (generation !== realtimeGeneration || sessionToken !== token.value) return
-    const connection = new WebSocket(wsURL(ticket))
-    socket = connection
-    connection.onclose = () => scheduleReconnect(generation)
-    connection.onerror = () => connection.close()
-    connection.onopen = () => {
-      if (generation !== realtimeGeneration) return
-      realtimeState.value = 'connected'
-      reconnectAttempts = 0
-      void processOfflineQueue()
-    }
-    connection.onmessage = (event) => {
-      if (generation !== realtimeGeneration) return
-      try {
-        const data = JSON.parse(event.data)
-        if (data.type === 'message.created') {
-          const msg = data.message as Message
-          if (msg.conversation_id === selectedChatId.value && !messages.value.some(m => m.id === msg.id)) {
-            const canvas = messagesCanvasRef.value
-            const followLatest = !canvas || canvas.scrollHeight - canvas.scrollTop - canvas.clientHeight < 100
-            messages.value.push(msg)
-            if (currentUser.value && msg.sender_id !== currentUser.value.id) {
-              if (document.visibilityState === 'visible') {
-                void api(`/api/v1/conversations/${msg.conversation_id}/read`, 'POST', { sequence: msg.sequence }).catch(() => {})
-              }
-              if (followLatest) scrollToBottom()
-              playReceiveSound()
-              if (autoTranslateEnabled.value && msg.kind === 'text') {
-                void handleTranslateMessage(msg)
-              }
-            }
-          }
-          void loadChats()
-        } else if (data.type === 'message.updated') {
-          const mid = data.message_id || data.message?.id
-          const target = messages.value.find(m => m.id === mid)
-          if (target) {
-            target.body = data.body || data.message?.body || target.body
-            target.edited_at = data.message?.edited_at || new Date().toISOString()
-          }
-        } else if (data.type === 'message.unsent' || data.type === 'message.deleted') {
-          const target = messages.value.find(m => m.id === data.message_id)
-          if (target) {
-            target.unsent = true
-            target.body = t('mvMsgUnsent')
-          }
-        } else if (data.type === 'message.reaction') {
-          const target = messages.value.find(m => m.id === data.message_id)
-          if (target) target.reactions = data.reactions
-        } else if (data.type === 'conversation.read') {
-          void loadChats()
-          if (data.conversation_id === selectedChatId.value) {
-            messages.value.forEach(m => {
-              if (data.user_id !== currentUser.value?.id && m.sequence <= (data.sequence || 0)) m.read_count = Math.max(m.read_count || 0, 1)
-            })
-          }
-        } else if (data.type === 'call.ringing') {
-          const ownEcho = (data.initiated_by && data.initiated_by === currentUser.value?.id) || activeCall.value?.id === data.call_id
-          if (!ownEcho) {
-            activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: data.caller_name || data.caller_handle || t('mvIncomingTitle'), direction: 'incoming' }
-          }
-        } else if (data.type === 'call.signal') {
-          void handleIncomingCallSignal(data)
-        } else if (data.type === 'call.state') {
-          if (data.state === 'ended') {
-            endCallLocally()
-          } else if (activeCall.value && activeCall.value.id === data.call_id) {
-            activeCall.value.state = 'connected'
-            startCallTimer()
-          }
-        } else if (data.type === 'poll.updated' || data.type === 'poll.created' || data.type === 'poll.closed') {
-          if (data.conversation_id === selectedChatId.value) void loadPolls(selectedChatId.value)
-        } else if (data.type === 'saved-messages.updated') {
-          void loadKeep()
-        }
-      } catch {
-        // ignore malformed ws message
-      }
-    }
-  } catch (err) {
-    if (generation !== realtimeGeneration) return
-    if (err instanceof ApiError && err.status === 401) {
-      clearLocalSession()
-      error.value = t('session_expired')
-      return
-    }
-    scheduleReconnect(generation)
-  }
-}
 
 // --- Data Fetchers ---
 const channelSlot = ref<{ id: string; title: string; body: string } | null>(null)
-const channelSlotDismissed = ref(false)
 async function loadChannelSlot() {
   if (!token.value) { channelSlot.value = null; return }
   try {
@@ -1249,6 +1007,33 @@ async function loadChats() {
   } catch {}
   void loadChannelSlot()
 }
+
+// I-4: calling state machine (names unchanged; template and socket untouched).
+const {
+  activeCall,
+  callDuration,
+  isCallMuted,
+  isCallVideoOff,
+  isCallSpeakerOn,
+  callRecording,
+  callVideoFilter,
+  localVideoRef,
+  remoteVideoRef,
+  isScreenSharing,
+  startCall,
+  handleIncomingCallSignal,
+  toggleCallMute,
+  toggleCallVideo,
+  toggleScreenShare,
+  updateCallState,
+  startCallTimer,
+  stopCallTimer,
+  toggleCallRecording,
+  endCallLocally,
+} = useWebRTC({ selectedChatId, chats, selectedChat, callHistoryList, loadChats, formatDuration })
+// Template expressions unwrap top-level refs, so the modal receives the stream
+// ref objects through this plain holder instead of the bare bindings.
+const callVideoRefs = { local: localVideoRef, remote: remoteVideoRef }
 
 async function loadFriends() {
   try {
@@ -1823,6 +1608,8 @@ function openEffectModal(file: File, conversation: string) {
 }
 const showCameraModal = ref(false)
 const cameraVideoRef = ref<HTMLVideoElement | null>(null)
+// Element-ref holder for MessagePane (see callVideoRefs above).
+const paneRefs = { canvas: messagesCanvasRef, file: attachmentInput, camera: cameraVideoRef }
 const cameraStream = ref<MediaStream | null>(null)
 const cameraError = ref('')
 const cameraMode = ref<'photo' | 'video'>('photo')
@@ -2105,242 +1892,6 @@ async function createEvent() {
   })
 }
 
-// --- Calling (Voice & Video WebRTC) ---
-let rtcSession: { pc: RTCPeerConnection; stream: MediaStream | null } | null = null
-
-async function initPeerSession(callId: string, kind: 'voice' | 'video') {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
-  let stream: MediaStream | null = null
-  if (navigator.mediaDevices?.getUserMedia) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === 'video' })
-      stream.getTracks().forEach(track => pc.addTrack(track, stream!))
-      if (localVideoRef.value) localVideoRef.value.srcObject = stream
-    } catch {}
-  }
-  pc.ontrack = (ev) => {
-    if (ev.streams[0]) {
-      callRemoteStream = ev.streams[0]
-      if (remoteVideoRef.value) remoteVideoRef.value.srcObject = ev.streams[0]
-    }
-  }
-  pc.onicecandidate = (ev) => {
-    if (ev.candidate) {
-      void api(`/api/v1/calls/${callId}/signal`, 'POST', {
-        signal_type: 'ice-candidate',
-        candidate: JSON.stringify(ev.candidate)
-      }).catch(() => {})
-    }
-  }
-  return { pc, stream }
-}
-
-async function startCall(kind: 'voice' | 'video', overrideTitle?: string) {
-  const targetConvId = selectedChatId.value || chats.value[0]?.id || 'chat-k-01'
-  selectedChatId.value = targetConvId
-  const convTitle = overrideTitle || selectedChat.value?.title || t('mvCall')
-  await wrap(async () => {
-    const webrtcId = await startWebRTCCall(targetConvId, kind, token.value, request)
-    let callId = webrtcId
-    if (!callId) {
-      const c = await api<{ id: string; kind: 'voice' | 'video'; state: 'ringing' }>('/api/v1/calls', 'POST', {
-        conversation_id: targetConvId,
-        kind
-      })
-      callId = c.id
-    }
-    activeCall.value = { id: callId, kind, state: 'ringing', title: convTitle, direction: 'outgoing' }
-    callDuration.value = 0
-    try {
-      const sess = await initPeerSession(callId, kind)
-      rtcSession = sess
-      const offer = await sess.pc.createOffer()
-      await sess.pc.setLocalDescription(offer)
-      await api(`/api/v1/calls/${callId}/signal`, 'POST', {
-        signal_type: 'offer',
-        sdp: offer.sdp || ''
-      }).catch(() => {})
-    } catch {}
-    if (!rtcSession || !rtcSession.stream) {
-      note.value = t('callMediaFailed')
-      endCallLocally()
-      return
-    }
-  })
-}
-
-async function handleIncomingCallSignal(data: any) {
-  if (!activeCall.value || data.from_user_id === currentUser.value?.id) return
-  try {
-    if (!rtcSession) {
-      rtcSession = await initPeerSession(activeCall.value.id, activeCall.value.kind)
-    }
-    const sess = rtcSession
-    if (!sess) return
-    if (data.signal_type === 'offer' && data.sdp) {
-      await sess.pc.setRemoteDescription({ type: 'offer', sdp: data.sdp })
-      const answer = await sess.pc.createAnswer()
-      await sess.pc.setLocalDescription(answer)
-      await api(`/api/v1/calls/${activeCall.value.id}/signal`, 'POST', {
-        signal_type: 'answer',
-        sdp: answer.sdp || ''
-      }).catch(() => {})
-    } else if (data.signal_type === 'answer' && data.sdp) {
-      await sess.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })
-    } else if (data.signal_type === 'ice-candidate' && data.candidate) {
-      await sess.pc.addIceCandidate(JSON.parse(data.candidate))
-    }
-  } catch {}
-}
-
-function toggleCallMute() {
-  isCallMuted.value = !isCallMuted.value
-  rtcSession?.stream?.getAudioTracks().forEach(t => { t.enabled = !isCallMuted.value })
-}
-
-function toggleCallVideo() {
-  isCallVideoOff.value = !isCallVideoOff.value
-  rtcSession?.stream?.getVideoTracks().forEach(t => { t.enabled = !isCallVideoOff.value })
-}
-
-async function toggleScreenShare() {
-  if (!navigator.mediaDevices?.getDisplayMedia) return
-  try {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true })
-    isScreenSharing.value = true
-    if (localVideoRef.value) localVideoRef.value.srcObject = screenStream
-    if (activeCall.value) {
-      await api(`/api/v1/calls/${activeCall.value.id}/signal`, 'POST', { signal_type: 'screen-share' }).catch(() => {})
-    }
-  } catch {}
-}
-
-async function updateCallState(state: 'connected' | 'ended') {
-  if (!activeCall.value) return
-  const cid = activeCall.value.id
-  const prevCall = { ...activeCall.value }
-  const durSec = callDuration.value
-  await wrap(async () => {
-    await api(`/api/v1/calls/${cid}/state`, 'POST', { state }).catch(() => {})
-    if (state === 'ended') {
-      const targetConvId = selectedChatId.value
-      const durText = durSec > 0 ? formatDuration(durSec) : undefined
-      const wasConnected = prevCall.state === 'connected' && durSec > 0
-      const msgBody = wasConnected ? (prevCall.kind === 'video' ? t('callVideo') : t('callVoice')) : t('mvCancel')
-      endCallLocally()
-      callHistoryList.value.unshift({
-        id: 'call-' + Date.now(),
-        peer_id: targetConvId || 'peer-k',
-        peer_name: prevCall.title,
-        peer_avatar_color: '#315BCD',
-        call_type: prevCall.kind,
-        direction: wasConnected ? 'outgoing' : 'missed',
-        timestamp_text: t('mvJustNow'),
-        duration_text: durText
-      })
-      if (targetConvId) {
-        try {
-          const res = await api<{ message: Message }>(`/api/v1/conversations/${targetConvId}/messages`, 'POST', {
-            client_id: newClientID(),
-            kind: 'call_status',
-            body: msgBody,
-            metadata: {
-              duration: durText || '',
-              status: wasConnected ? 'completed' : 'cancelled',
-              call_type: prevCall.kind
-            }
-          })
-          if (selectedChatId.value === targetConvId && !messages.value.some(m => m.id === res.message.id)) {
-            messages.value.push(res.message)
-          }
-          await loadChats()
-        } catch {}
-      }
-    } else if (activeCall.value) {
-      activeCall.value.state = 'connected'
-      startCallTimer()
-    }
-  })
-}
-
-function startCallTimer() {
-  if (callTimer) clearInterval(callTimer)
-  callDuration.value = 0
-  callTimer = setInterval(() => { callDuration.value++ }, 1000)
-}
-
-function stopCallRecording(download: boolean) {
-  const rec = callRecorder
-  callRecorder = null
-  callRecording.value = false
-  if (!rec) return
-  try {
-    rec.mr.onstop = () => {
-      try { void rec.ctx.close().catch(() => {}) } catch {}
-      if (download && rec.chunks.length > 0) {
-        const url = URL.createObjectURL(new Blob(rec.chunks, { type: rec.mr.mimeType || 'video/webm' }))
-        const link = document.createElement('a')
-        link.href = url
-        link.download = callRecordingName(rec.callId)
-        link.click()
-        setTimeout(() => URL.revokeObjectURL(url), 1000)
-      }
-    }
-    if (rec.mr.state !== 'inactive') rec.mr.stop()
-    else { try { void rec.ctx.close().catch(() => {}) } catch {} }
-  } catch { try { void rec.ctx.close().catch(() => {}) } catch {} }
-}
-
-async function toggleCallRecording() {
-  if (callRecorder) { stopCallRecording(true); return }
-  const call = activeCall.value
-  const local = rtcSession?.stream
-  const remote = callRemoteStream
-  if (!call || call.state !== 'connected' || !local || !remote) { note.value = t('callRecordFailed'); return }
-  const hasAudio = local.getAudioTracks().length > 0 || remote.getAudioTracks().length > 0
-  const hasVideo = call.kind === 'video' && remote.getVideoTracks().length > 0
-  if (!hasAudio && !hasVideo) { note.value = t('callRecordFailed'); return }
-  let ctx: AudioContext | null = null
-  try {
-    ctx = new AudioContext()
-    if (ctx.state === 'suspended') await ctx.resume()
-    const dest = ctx.createMediaStreamDestination()
-    for (const s of [local, remote]) {
-      if (s.getAudioTracks().length === 0) continue
-      ctx.createMediaStreamSource(s).connect(dest)
-    }
-    const tracks: MediaStreamTrack[] = [...dest.stream.getAudioTracks()]
-    if (call.kind === 'video') tracks.push(...remote.getVideoTracks())
-    if (tracks.length === 0) throw new Error('no tracks')
-    const rec = new MediaRecorder(new MediaStream(tracks))
-    const chunks: BlobPart[] = []
-    rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
-    callRecorder = { mr: rec, ctx, chunks, callId: call.id }
-    rec.start()
-    callRecording.value = true
-  } catch {
-    if (ctx) { try { void ctx.close().catch(() => {}) } catch {} }
-    callRecorder = null
-    callRecording.value = false
-    note.value = t('callRecordFailed')
-  }
-}
-
-function endCallLocally() {
-  stopCallRecording(true)
-  callRemoteStream = null
-  if (callTimer) {
-    clearInterval(callTimer)
-    callTimer = null
-  }
-  if (localVideoRef.value) localVideoRef.value.srcObject = null
-  if (remoteVideoRef.value) remoteVideoRef.value.srcObject = null
-  endWebRTCCall(rtcSession?.pc || null, rtcSession?.stream || null)
-  rtcSession = null
-  isScreenSharing.value = false
-  activeCall.value = null
-  callDuration.value = 0
-}
 
 // --- Wallet & Pay ---
 function openSendMoneyModal(friend: User) {
@@ -2546,40 +2097,7 @@ async function submitOpenChatPost() {
 }
 
 // --- Profile & Device Management ---
-async function saveProfileSettings() {
-  if (!editProfileName.value.trim() || profileSaving.value || !profileDirty.value) return
-  profileSaving.value = true
-  profileSaveError.value = ''
-  profileSaved.value = false
-  try {
-    const textBio = editProfileBio.value.trim()
-    await api('/api/v1/me', 'PATCH', {
-      display_name: editProfileName.value.trim(),
-      bio: textBio,
-      ...(currentUser.value && 'status_message' in currentUser.value ? { status_message: textBio } : {}),
-      handle: editProfileHandle.value.trim()
-    })
-    currentUser.value = await api<User>('/api/v1/me')
-    profileSaved.value = true
-  } catch (err) {
-    profileSaveError.value = err instanceof Error ? err.message : t('profile_save_error')
-  } finally {
-    profileSaving.value = false
-  }
-}
 
-async function revokeDevice(deviceId: string) {
-  await wrap(async () => {
-    const res = await api<{ self?: boolean }>(`/api/v1/devices/${deviceId}`, 'DELETE')
-    if (res.self) {
-      clearLocalSession()
-      void router.push('/login')
-      return
-    }
-    await loadDevices()
-    note.value = t('mvDeviceRevoked')
-  })
-}
 
 // --- Settings & Themes ---
 function switchTheme(theme: 'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight') {
@@ -2588,118 +2106,68 @@ function switchTheme(theme: 'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight')
   note.value = t('mvThemeChanged').replace('{name}', theme.toUpperCase())
 }
 
-// --- Logout ---
-async function logout() {
-  try {
-    if (currentDeviceId) await api(`/api/v1/devices/${currentDeviceId}`, 'DELETE')
-    else throw new Error('Current device unavailable')
-  } catch { error.value = t('logout_unconfirmed') }
-  clearLocalSession()
-  void router.push('/login')
-}
 
-function clearLocalSession() {
-  for (const controller of pendingSends.values()) controller.abort()
-  pendingSends.clear()
-  sendingConversations.value = new Set()
-  chatSelectVersion++
-  discardVoiceRecording()
-  stopRealtime()
-  reconnectAttempts = 0
-  localStorage.removeItem('luno.auth_token')
-  sessionStorage.removeItem('luno.auth_token')
-  localStorage.removeItem('luno.device_id')
-  sessionStorage.removeItem('luno.device_id')
-  currentDeviceId = ''
-  token.value = ''
-  currentUser.value = null
-  chats.value = []
-  selectedChatId.value = ''
-  conversationDrafts.clear()
-  draftMessage.value = ''
-  replyToMessage.value = null
-  messages.value = []
-  if (callTimer) clearInterval(callTimer)
-}
+// I-4: realtime transport (names unchanged; template and mount hooks untouched).
+const {
+  realtimeState,
+  connectRealtime,
+  stopRealtime,
+  processOfflineQueue,
+  handleNetworkOnline,
+  handleNetworkOffline,
+  handleVisibilityChange,
+  startMessageSyncLoop,
+  stopMessageSyncLoop,
+  resetReconnect,
+} = useChatSocket({
+  selectedChatId,
+  messages,
+  messagesCanvasRef,
+  scrollToBottom,
+  autoTranslateEnabled,
+  handleTranslateMessage,
+  loadChats,
+  loadPolls,
+  loadKeep,
+  onAuthExpired: () => clearLocalSession(),
+  activeCall,
+  handleIncomingCallSignal,
+  endCallLocally,
+  startCallTimer,
+})
 
-async function processOfflineQueue() {
-  if (messageSyncInFlight) return messageSyncInFlight
-  messageSyncInFlight = synchronizeMessages()
-  try { await messageSyncInFlight } finally { messageSyncInFlight = null }
-}
+// I-4: session lifecycle (names unchanged).
+const {
+  currentDeviceId,
+  handleSecurityNoticeLogout,
+  revokeDevice,
+  logout,
+  clearLocalSession,
+} = useAuth({
+  pendingSends,
+  sendingConversations,
+  discardVoiceRecording,
+  stopRealtime,
+  resetReconnect,
+  chats,
+  selectedChatId,
+  conversationDrafts,
+  draftMessage,
+  replyToMessage,
+  messages,
+  stopCallTimer,
+  invalidateChatSelection: () => { chatSelectVersion++ },
+  loadDevices,
+  router,
+})
 
-async function synchronizeMessages() {
-  if (!token.value || !currentUser.value) return
-  const sessionToken = token.value
-  const ownerId = currentUser.value.id
-  const recoveryConvId = selectedChatId.value
-  const recoveryAfter = messages.value.reduce((highest, msg) => Math.max(highest, msg.sequence), 0)
-  lastMessageSyncAt = Date.now()
-  lastMessageSyncOk = false
-  try {
-    await flushOfflineQueue(ownerId, async (msg) => {
-      if (sessionToken !== token.value) throw new Error('Session changed')
-      await request(`/api/v1/conversations/${msg.conversation_id}/messages`, sessionToken, 'POST', {
-        client_id: msg.client_id,
-        kind: msg.kind,
-        body: msg.body,
-        ...(msg.reply_to ? { reply_to: msg.reply_to } : {})
-      })
-    })
-    if (sessionToken !== token.value) return
-    if (selectedChatId.value) {
-      const convId = selectedChatId.value
-      // Replay every missed sequence, including gaps larger than the latest-page size.
-      const missed: Message[] = []
-      let after = convId === recoveryConvId ? recoveryAfter : 0
-      while (sessionToken === token.value && selectedChatId.value === convId) {
-        const delta = await api<{ messages?: Message[]; delta_messages?: Message[] }>(`/api/v1/conversations/${convId}/sync?after_sequence=${after}&since_sequence=${after}&limit=500`)
-        const batch = delta.messages || delta.delta_messages || []
-        missed.push(...batch)
-        const next = batch.reduce((highest, msg) => Math.max(highest, msg.sequence), after)
-        if (batch.length < 500 || next <= after) break
-        after = next
-      }
-      const { messages: recovered } = await api<{ messages: Message[] }>(`/api/v1/conversations/${convId}/messages?limit=50`)
-      if (sessionToken === token.value && selectedChatId.value === convId) {
-        const byId = new Map(messages.value.map(m => [m.id, m]))
-        for (const message of [...missed, ...(recovered || [])]) byId.set(message.id, message)
-        messages.value = [...byId.values()].sort((a, b) => a.sequence - b.sequence)
-        const last = messages.value[messages.value.length - 1]
-        // Report a read position only when it moved; the server keeps the maximum anyway.
-        if (last && document.visibilityState === 'visible' && last.sequence > (reportedReadSequence.get(`${ownerId}:${convId}`) || 0)) {
-          await api(`/api/v1/conversations/${convId}/read`, 'POST', { sequence: last.sequence })
-            .then(() => reportedReadSequence.set(`${ownerId}:${convId}`, last.sequence)).catch(() => {})
-        }
-      }
-      await loadChats()
-    } else {
-      await loadChats()
-    }
-    lastMessageSyncOk = true
-  } catch {}
-}
-
-function handleNetworkOnline() {
-  void connectRealtime()
-}
-
-function handleNetworkOffline() {
-  realtimeState.value = 'offline'
-}
-
-function handleVisibilityChange() {
-  if (document.visibilityState !== 'visible' || !token.value) return
-  if (socket?.readyState === WebSocket.OPEN) void processOfflineQueue()
-  else void connectRealtime()
-}
 
 onBeforeUnmount(() => {
-  if (callTimer) clearInterval(callTimer)
+  endCallLocally()
   discardVoiceRecording()
   for (const controller of pendingSends.values()) controller.abort()
   stopRealtime()
-  if (messageSyncTimer) clearInterval(messageSyncTimer)
+  stopMessageSyncLoop()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (typeof window !== 'undefined') {
     window.removeEventListener('online', handleNetworkOnline)
@@ -2707,99 +2175,6 @@ onBeforeUnmount(() => {
   }
 })
 // Phase 1 to Phase 6 Extended Actions
-const passkeyBusy = ref(false)
-const passkeyNote = ref('')
-const passkeyList = ref<Array<{ id: string; name: string; created_at: string; last_used_at: string }>>([])
-const passkeyLoaded = ref(false)
-
-async function fetchPasskeys() {
-  await wrap(async () => {
-    const res = await api<{ passkeys: Array<{ id: string; name: string; created_at: string; last_used_at: string }> }>('/api/v1/passkeys', 'GET')
-    passkeyList.value = res?.passkeys || []
-    passkeyLoaded.value = true
-  })
-}
-
-async function deletePasskey(id: string) {
-  await wrap(async () => {
-    await api('/api/v1/passkeys/' + encodeURIComponent(id), 'DELETE')
-    passkeyNote.value = t('mvPasskeyDeleted')
-    await fetchPasskeys()
-  })
-}
-
-function b64ToBytes(s: string): Uint8Array {
-  const bin = atob(s.replaceAll('-', '+').replaceAll('_', '/'))
-  const out = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
-  return out
-}
-
-function bytesToB64(b: ArrayBuffer | Uint8Array): string {
-  const u = b instanceof Uint8Array ? b : new Uint8Array(b)
-  let s = ''
-  for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i])
-  return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-}
-
-async function registerPasskey() {
-  if (passkeyBusy.value) return
-  if (!window.PublicKeyCredential || !navigator.credentials?.create) {
-    passkeyNote.value = t('mvPasskeyUnsupported')
-    return
-  }
-  passkeyBusy.value = true
-  passkeyNote.value = ''
-  try {
-    await wrap(async () => {
-      const begun = await api<{ publicKey: any }>('/api/v1/passkeys/register/begin', 'POST', {})
-      const pk = begun.publicKey
-      pk.challenge = b64ToBytes(pk.challenge)
-      pk.user.id = b64ToBytes(pk.user.id)
-      for (const e of pk.excludeCredentials || []) e.id = b64ToBytes(e.id)
-      let cred: any = null
-      try {
-        cred = await navigator.credentials.create({ publicKey: pk })
-      } catch {
-        passkeyNote.value = t('mvPasskeyCancelled')
-        return
-      }
-      if (!cred) {
-        passkeyNote.value = t('mvPasskeyCancelled')
-        return
-      }
-      const done = await api<{ verified: boolean }>('/api/v1/passkeys/register/finish', 'POST', {
-        id: cred.id,
-        rawId: bytesToB64(cred.rawId),
-        type: cred.type,
-        response: {
-          clientDataJSON: bytesToB64(cred.response.clientDataJSON),
-          attestationObject: bytesToB64(cred.response.attestationObject),
-          transports: cred.response.getTransports ? cred.response.getTransports() : undefined,
-        },
-      })
-      if (done?.verified) {
-        passkeyNote.value = t('mvPasskeyDone')
-        await fetchPasskeys()
-      } else {
-        passkeyNote.value = t('mvPasskeyFailed')
-      }
-    })
-  } finally {
-    passkeyBusy.value = false
-  }
-}
-
-async function testPushNotification() {
-  await wrap(async () => {
-    const deviceId = devicesList.value[0]?.id
-    if (!deviceId) { note.value = t('mvNoDevicePush'); return }
-    const res = await api<{ status: string }>('/api/v1/push/test', 'POST', { device_id: deviceId })
-    if (res?.status === 'test_push_queued') {
-      note.value = t('mvTestPushSent')
-    }
-  })
-}
 
 
 async function exportUserDataArchive() {
@@ -2988,11 +2363,7 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // Reconcile durable messages when an edge isolate cannot fan out to another one.
-  messageSyncTimer = setInterval(() => {
-    if (document.visibilityState !== 'visible' || !navigator.onLine || !token.value) return
-    const due = realtimeState.value !== 'connected' || !lastMessageSyncOk || Date.now() - lastMessageSyncAt >= MESSAGE_SYNC_CONNECTED_MS
-    if (due) void processOfflineQueue()
-  }, MESSAGE_SYNC_TICK_MS)
+  startMessageSyncLoop()
   if (typeof window !== 'undefined') {
     window.addEventListener('online', handleNetworkOnline)
     window.addEventListener('offline', handleNetworkOffline)
@@ -3003,12 +2374,9 @@ onMounted(async () => {
   const savedToken = token.value || readStoredToken()
   if (savedToken) {
     token.value = savedToken
-    currentDeviceId = readStoredDeviceId()
+    currentDeviceId.value = readStoredDeviceId()
     try {
       if (!currentUser.value) currentUser.value = await api<User>('/api/v1/me')
-      editProfileName.value = currentUser.value.display_name || ''
-      editProfileBio.value = currentUser.value.status_message || currentUser.value.bio || ''
-      editProfileHandle.value = currentUser.value.handle || ''
       await loadInitialData()
       await connectRealtime()
     } catch {
@@ -3256,305 +2624,52 @@ onBeforeUnmount(() => {
       <!-- (Column 2) Second Sidebar List Pane (~305px) -->
       <aside class="pc-side-pane" :class="{ 'is-collapsed': isPanelCollapsed }">
         <button v-if="isPanelCollapsed" class="btn-pane-expand" :title="t('mvCollapse')" @click="isPanelCollapsed = false">&gt;</button>
+
         <!-- VIEW 1: FRIENDS / HOME (홈 및 친구 관리 - Section 3 & Screenshot 1) -->
-        <div v-if="activeNav === 'home'" class="pc-pane-body">
-          <!-- Top Search Header with Collapse Toggle -->
-          <div class="pc-search-bar-header">
-            <div class="pc-search-box-wrap">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" class="pc-pane-search-input" @keydown.enter="addSearchKeyword(friendSearchQuery)" />
-              <button v-if="friendSearchQuery" class="btn-clear-search" @click="friendSearchQuery = ''">✕</button>
-              <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="showQrModal = true">
-                <LunoIcon name="scan" :size="15" />
-              </button>
-            </div>
-            <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
-          </div>
-
-          <!-- Recent Search Keywords (Section 3.2) -->
-          <div v-if="recentSearchKeywords.length > 0" class="home-recent-searches">
-            <div class="recent-searches-header">
-              <small>{{ t('mvRecentSearch') }}</small>
-              <button class="btn-clear-all-searches" @click="clearAllSearchKeywords">{{ t('mvClearAll') }}</button>
-            </div>
-            <div class="recent-search-chips">
-              <span v-for="kw in recentSearchKeywords" :key="kw" class="recent-keyword-chip">
-                <span class="kw-text" @click="friendSearchQuery = kw">{{ kw }}</span>
-                <button class="btn-del-kw" @click="removeSearchKeyword(kw)">✕</button>
-              </span>
-            </div>
-          </div>
-
-          <!-- Quick Service Shortcuts (Section 3.3) -->
-          <div class="home-services-bar">
-            <div class="home-service-item" @click="showStickerPicker = true">
-              <span class="srv-icon">🐻</span>
-              <span class="srv-label">{{ t('mvSticker') }}</span>
-            </div>
-            <div class="home-service-item" @click="showSettingsModal = true">
-              <span class="srv-icon">🎨</span>
-              <span class="srv-label">{{ t('mvTheme') }}</span>
-            </div>
-            <div class="home-service-item" @click="activeNav = 'chats'">
-              <span class="srv-icon">🛡️</span>
-              <span class="srv-label">{{ t('mvOfficialAccount') }}</span>
-            </div>
-            <div class="home-service-item" @click="showEcosystemHub = true">
-              <span class="srv-icon">📱</span>
-              <span class="srv-label">{{ t('mvLunoServices') }}</span>
-            </div>
-          </div>
-
-          <!-- Friends List Scroll Area -->
-          <div class="pc-pane-scroll">
-            <!-- My Profile Card with Keep & Album Buttons (Screenshot 4 & 5) -->
-            <div class="pc-my-profile-card">
-              <div class="my-profile-top-row" @click="activeProfileUser = currentUser">
-                <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #4F7CFF)' }"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ currentUser?.display_name?.slice(0, 1) }}</span>
-                </div>
-                <div class="my-profile-meta">
-                  <div class="my-name-text">{{ currentUser?.display_name }}</div>
-                  <div class="my-status-text">{{ currentUser?.status_message || t('myProfileStatus') }}</div>
-                </div>
-              </div>
-              <!-- Action Chips: Keep 메모 & 앨범 모아보기 (Matching Screenshot 4) -->
-              <div class="my-profile-action-chips">
-                <button type="button" class="btn-profile-chip" @click="openKeepMemoChat">
-                  <LunoIcon name="keep" :size="13" />
-                  <span>{{ t('keepMemo') }}</span>
-                </button>
-                <button type="button" class="btn-profile-chip" @click="toggleDrawer('albums')">
-                  <LunoIcon name="camera" :size="13" />
-                  <span>{{ t('albumView') }}</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Accordion 0: Favorites (즐겨찾기 - 항상 노출) -->
-            <div class="pc-accordion-section">
-              <div class="pc-accordion-header" @click="favoritesSectionOpen = !favoritesSectionOpen">
-                <span class="accordion-title">{{ t('mvFavorites').replace('{n}', String(favoriteFriends.length)) }}</span>
-                <span class="accordion-caret">{{ favoritesSectionOpen ? '⌵' : '›' }}</span>
-              </div>
-              <div v-show="favoritesSectionOpen" class="pc-accordion-content">
-                <div v-if="favoriteFriends.length === 0" class="accordion-empty-hint" style="padding: 10px 14px; font-size: 12px; color: #94a3b8;">{{ t('mvNoFavorites') }}</div>
-                <div
-                  v-else
-                  v-for="fav in favoriteFriends"
-                  :key="'fav-' + fav.id"
-                  class="pc-friend-item-row"
-                  :class="{ selected: selectedFriendProfile?.id === fav.id }"
-                  @click="selectFriend(fav)"
-                  @dblclick="startDirectChat(fav)"
-                  @contextmenu.prevent="openFriendContextMenu($event, fav)"
-                >
-                  <div class="pc-avatar circle-38" :style="{ background: fav.avatar_color || 'var(--om-primary, #4F7CFF)' }">
-                    {{ fav.display_name.slice(0, 1) }}
-                  </div>
-                  <div class="friend-item-meta">
-                    <div class="friend-item-name">★ {{ fav.display_name }}</div>
-                    <div class="friend-item-sub">{{ fav.status_message || fav.bio || t('mvFavFallback') }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Accordion 1: Groups (그룹 - Screenshots 4 & 5) -->
-            <div class="pc-accordion-section">
-              <div class="pc-accordion-header" @click="groupsSectionOpen = !groupsSectionOpen">
-                <span class="accordion-title">{{ t('groupSection') }} {{ groupChats.length }}</span>
-                <span class="accordion-caret">{{ groupsSectionOpen ? '⌵' : '›' }}</span>
-              </div>
-              <div v-show="groupsSectionOpen" class="pc-accordion-content">
-                <div
-                  v-for="grp in groupChats"
-                  :key="grp.id"
-                  class="pc-friend-item-row"
-                  :class="{ selected: selectedChatId === grp.id }"
-                  @click="selectChat(grp.id)"
-                >
-                  <div class="pc-avatar circle-38 group-avatar" style="background: var(--om-cyan, #8EC5FF);">
-                    {{ grp.title ? grp.title.slice(0, 1) : 'G' }}
-                  </div>
-                  <div class="friend-item-meta">
-                    <div class="friend-item-name">
-                      {{ grp.title }}
-                      <span class="group-count">({{ grp.member_count || 2 }})</span>
-                    </div>
-                    <div class="friend-item-sub">{{ grp.last_message?.body || t('mvGroupFallback') }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Accordion 1.5: Official Accounts (공식 계정) -->
-            <div v-if="officialAccounts.length > 0" class="pc-accordion-section">
-              <div class="pc-accordion-header" @click="officialSectionOpen = !officialSectionOpen">
-                <span class="accordion-title">{{ t('mvOfficialAccounts').replace('{n}', String(officialAccounts.length)) }}</span>
-                <span class="accordion-caret">{{ officialSectionOpen ? '⌵' : '›' }}</span>
-              </div>
-              <div v-show="officialSectionOpen" class="pc-accordion-content">
-                <div
-                  v-for="oa in officialAccounts"
-                  :key="oa.id"
-                  class="pc-friend-item-row"
-                  @click="followOrOpenOfficialAccount(oa)"
-                >
-                  <div class="pc-avatar circle-38" :style="{ background: oa.color || '#4F7CFF' }">
-                    🛡️
-                  </div>
-                  <div class="friend-item-meta">
-                    <div class="friend-item-name">{{ oa.name }} <span class="badge-verified">{{ t('mvOfficial') }}</span></div>
-                    <div class="friend-item-sub">{{ oa.description }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Accordion 2: Friends (친구 - Screenshots 4 & 5) -->
-            <div class="pc-accordion-section">
-              <div class="pc-accordion-header" @click="friendsSectionOpen = !friendsSectionOpen">
-                <span class="accordion-title">{{ t('friendSection') }} {{ filteredFriends.length }}</span>
-                <span class="accordion-caret">{{ friendsSectionOpen ? '⌵' : '›' }}</span>
-              </div>
-              <div v-show="friendsSectionOpen" class="pc-accordion-content">
-                <div
-                  v-for="f in filteredFriends"
-                  :key="f.id"
-                  class="pc-friend-item-row"
-                  :class="{ selected: selectedFriendProfile?.id === f.id }"
-                  @click="selectFriend(f)"
-                  @dblclick="startDirectChat(f)"
-                  @contextmenu.prevent="openFriendContextMenu($event, f)"
-                >
-                  <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || 'var(--om-primary, #4F7CFF)' }">
-                    {{ f.display_name.slice(0, 1) }}
-                  </div>
-                  <div class="friend-item-meta">
-                    <div class="friend-item-name">
-                      <span v-if="(f as any).is_favorite" class="fav-star-inline">★</span>
-                      {{ f.display_name }}
-                      <span v-if="(f as any).birthday_today" class="bday-badge" :title="t('mvBirthdayToday')">🎂</span>
-                    </div>
-                    <div class="friend-item-sub">{{ f.status_message || f.bio || t('mvFriendFallback') }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <FriendPanel
+          v-if="activeNav === 'home'"
+          :favorite-friends="favoriteFriends"
+          :selected-friend-profile="selectedFriendProfile"
+          :group-chats="groupChats"
+          :selected-chat-id="selectedChatId"
+          :official-accounts="officialAccounts"
+          :filtered-friends="filteredFriends"
+          v-model:friend-search-query="friendSearchQuery"
+          v-model:is-panel-collapsed="isPanelCollapsed"
+          @qr="showQrModal = true"
+          @sticker="showStickerPicker = true"
+          @settings="showSettingsModal = true"
+          @official="activeNav = 'chats'"
+          @services="showEcosystemHub = true"
+          @profile="activeProfileUser = currentUser"
+          @keep-memo="openKeepMemoChat"
+          @drawer="toggleDrawer"
+          @select-friend="selectFriend"
+          @direct-chat="startDirectChat"
+          @friend-menu="openFriendContextMenu"
+          @select-chat="selectChat"
+          @follow-oa="followOrOpenOfficialAccount"
+        />
 
         <!-- VIEW 2: CHATS (전체 대화 - Screenshot 4 & Section 11) -->
-        <div v-else-if="activeNav === 'chats'" class="pc-pane-body">
-          <!-- Top Chat Header Bar with Category Dropdown & Action Icons (Screenshot 4) -->
-          <div class="pc-chat-main-header">
-            <div class="chat-header-title-dropdown">
-              <span class="chat-main-heading">{{ t('mvChats') }}</span>
-              <span class="dropdown-caret">▾</span>
-            </div>
-            <div class="chat-header-action-group">
-              <button class="btn-chat-head-tool" :title="t('mvMarkAllRead')" @click="markAllChatsRead">
-                ✓✓
-              </button>
-              <button class="btn-chat-head-tool" :title="chatSortAsc ? t('mvSortName') : t('mvSortRecent')" @click="chatSortAsc = !chatSortAsc">
-                ⇅
-              </button>
-              <button class="btn-chat-head-tool" :title="t('mvMediaView')" @click="toggleDrawer('media')">
-                <LunoIcon name="photo" :size="16" />
-              </button>
-              <button class="btn-chat-head-tool" :title="t('mvCalendar')" @click="toggleDrawer('events')">
-                <LunoIcon name="calendar" :size="16" />
-              </button>
-              <button class="btn-chat-head-tool" :title="t('mvNewChat')" @click="showNewChatModal = true">
-                <LunoIcon name="chats" :size="16" />
-                <span class="tiny-plus">+</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Top Sub-Tabs: 전체 | 친구 | 그룹 | ⇄ (Screenshot 1) -->
-          <div class="pc-chat-subtabs-row">
-            <button class="btn-subtab" :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">{{ t('tabAll') }}</button>
-            <button class="btn-subtab" :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">{{ t('tabDirect') }}</button>
-            <button class="btn-subtab" :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">{{ t('tabGroup') }}</button>
-            <button class="btn-subtab filter-btn" :class="{ active: chatFilter === 'unread' }" @click="chatFilter = chatFilter === 'unread' ? 'all' : 'unread'" :title="t('mvSortFilter')">⇄</button>
-          </div>
-
-          <!-- Search Bar with Scan QR icon and Collapse (<) (Screenshot 4) -->
-          <div class="pc-search-bar-header">
-            <div class="pc-search-box-wrap">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input v-model="searchKeyword" :placeholder="t('mvSearch')" class="pc-pane-search-input" />
-              <button v-if="searchKeyword" class="btn-clear-search" @click="searchKeyword = ''">✕</button>
-              <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="showQrModal = true">
-                <LunoIcon name="scan" :size="15" />
-              </button>
-            </div>
-            <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
-          </div>
-
-          <!-- CapCom / Open Scanner Game Banner Ad (Screenshot 4) -->
-          <div class="chat-ad-banner-card" @click="openEcosystemService('open-apps')">
-            <div class="ad-banner-info">
-              <span class="ad-tag-title">LUNO</span>
-              <span class="ad-tag-link">{{ t('soon_tag') }}</span>
-            </div>
-            <div class="ad-banner-graphic">
-              <span class="ad-badge-i">ⓘ</span>
-              <img :src="lunoMark" alt="LUNO" class="ad-logo-img" />
-            </div>
-          </div>
-
-          <!-- Smart-channel slot: server-driven notice card (LINE parity) -->
-          <div v-if="channelSlot && !channelSlotDismissed" class="channel-slot-card">
-            <div class="channel-slot-text">
-              <strong>{{ channelSlot.title }}</strong>
-              <span>{{ channelSlot.body }}</span>
-            </div>
-            <button class="channel-slot-close" :title="t('mvClose')" @click="channelSlotDismissed = true">✕</button>
-          </div>
-
-          <!-- Chats Scroll List (Screenshots 1 & 4) -->
-          <div class="pc-pane-scroll">
-            <div
-              v-for="c in filteredChats"
-              :key="c.id"
-              class="pc-chat-item-row"
-              :class="{ selected: selectedChatId === c.id }"
-              @click="selectChat(c.id)"
-              @contextmenu.prevent="openChatContextMenu($event, c)"
-            >
-              <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #8EC5FF)' : c.official ? '#4F7CFF' : 'var(--om-primary, #4F7CFF)' }">
-                <span v-if="c.official">🛡️</span>
-                <span v-else>{{ c.title ? c.title.slice(0, 1) : 'L' }}</span>
-              </div>
-              <div class="pc-chat-item-meta">
-                <div class="chat-row-top">
-                  <div class="chat-row-title">
-                    <span v-if="(c as any).pinned" class="chat-pin-mark" :title="t('mvPinnedBadge')">📌</span>
-                    {{ c.title || t('mvChatFallback') }}
-                    <span v-if="c.kind === 'group'" class="member-count-badge">({{ c.member_count || 2 }})</span>
-                    <span v-if="(c as any).muted" class="chat-mute-mark" :title="t('mvMutedBadge')">🔕</span>
-                  </div>
-                  <span class="chat-row-time">{{ formatTime(c.updated_at || '') }}</span>
-                </div>
-                <div class="chat-row-bottom">
-                  <span class="chat-row-preview">{{ c.last_message?.body || t('mvNoMessages') }}</span>
-                  <div class="chat-row-badges">
-                    <span v-if="c.badge_n" class="badge-luno-n">N</span>
-                    <span v-else-if="c.unread_count && c.unread_count > 0" class="chat-unread-pill">{{ c.unread_count }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Floating Action Button (FAB) New Chat (Screenshot 1) -->
-          <button class="pc-floating-add-btn" :title="t('mvStartNewChat')" @click="showNewChatModal = true">
-            <LunoIcon name="chats" :size="20" />
-            <span class="fab-plus-mark">+</span>
-          </button>
-        </div>
+        <ChatList
+          v-else-if="activeNav === 'chats'"
+          :filtered-chats="filteredChats"
+          :selected-chat-id="selectedChatId"
+          :channel-slot="channelSlot"
+          :format-time="formatTime"
+          v-model:chat-filter="chatFilter"
+          v-model:search-keyword="searchKeyword"
+          v-model:chat-sort-asc="chatSortAsc"
+          v-model:is-panel-collapsed="isPanelCollapsed"
+          @mark-all-read="markAllChatsRead"
+          @drawer="toggleDrawer"
+          @new-chat="showNewChatModal = true"
+          @qr="showQrModal = true"
+          @ecosystem="openEcosystemService"
+          @select="selectChat"
+          @chat-menu="openChatContextMenu"
+        />
 
         <!-- VIEW: NEWS (뉴스 & 콘텐츠 - Screenshot 5 & Section 10) -->
         <div v-else-if="activeNav === 'news'" class="pc-pane-body pc-news-pane">
@@ -3665,7 +2780,7 @@ onBeforeUnmount(() => {
           <div class="pc-pane-header">
             <h2 class="pc-pane-title">{{ t('mvCall') }}</h2>
             <div class="calls-header-tools">
-              <button class="btn-pc-header-tool" :title="t('mvNewCall')" @click="startCall('voice')">
+              <button class="btn-pc-header-tool" :title="t('mvNewCall')" :disabled="!selectedChatId && chats.length === 0" @click="startCall('voice')">
                 <LunoIcon name="call-voice" :size="17" />
               </button>
             </div>
@@ -3899,463 +3014,108 @@ onBeforeUnmount(() => {
         </footer>
       </section>
 
-      <section v-else-if="selectedChat" class="pc-chat-viewport">
-        <!-- Chat Header -->
-        <header class="pc-chat-topbar">
-          <div class="chat-topbar-left">
-            <button class="btn-mobile-back" @click="selectedChatId = ''" :title="t('mvGoBack')">
-              <LunoIcon name="back" :size="18" />
-            </button>
-            <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : selectedChat.official ? '#4F7CFF' : '#315BCD' }">
-              {{ selectedChat.official ? 'L' : selectedChat.title ? selectedChat.title.slice(0, 1) : 'L' }}
-            </div>
-            <div class="chat-topbar-info">
-              <div class="title-row">
-                <span class="chat-header-title">{{ selectedChat.title }}</span>
-                <span v-if="selectedChat.kind === 'group'" class="member-tag">👥 {{ selectedChat.member_count || 2 }}</span>
-                <span v-if="selectedChat.official" class="badge-verified">{{ t('mvOfficialChannel') }}</span>
-              </div>
-              <small class="e2ee-tag ln-connection-state" :data-state="realtimeState" role="status">
-                {{ t('connection_' + realtimeState) }}
-              </small>
-            </div>
-          </div>
 
-          <div class="chat-topbar-actions">
-            <!-- AI Translation Bar Controls (Article 10) -->
-            <div class="ai-translate-tool-pill">
-              <button
-                class="btn-translate-switch"
-                :class="{ active: autoTranslateEnabled }"
-                :title="t('translateToggle')"
-                @click="autoTranslateEnabled = !autoTranslateEnabled"
-              >
-                <LunoIcon name="translate" :size="16" />
-                <span>{{ autoTranslateEnabled ? t('mvAiTranslateOn') : t('mvAiTranslate') }}</span>
-              </button>
-              <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language">
-                <option value="ko">KR</option>
-                <option value="en">EN</option>
-                <option value="th">TH</option>
-                <option value="ja">JA</option>
-              </select>
-            </div>
-
-            <button class="btn-chat-action" :title="t('mvWallpaperTitle')" @click="cycleWallpaper">🎨</button>
-            <button class="btn-chat-action" :title="t('callVoice')" @click="startCall('voice')"><LunoIcon name="call-voice" :size="18" /></button>
-            <button class="btn-chat-action" :title="t('callVideo')" @click="startCall('video')"><LunoIcon name="call-video" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" :title="t('mvEventsCalendar')" @click="toggleDrawer('events')"><LunoIcon name="calendar" :size="18" /></button>
-            <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" @click="toggleDrawer('notes')"><LunoIcon name="drawer" :size="18" /></button>
-          </div>
-        </header>
-
-        <!-- Pinned Announcement (공지사항) -->
-        <div v-if="pinnedList.length" class="pinned-banner" :class="{ expanded: pinnedExpanded }">
-          <div class="pinned-summary" @click="pinnedExpanded = !pinnedExpanded">
-            <span class="pin-icon">📢</span>
-            <span class="pin-text">{{ pinnedList[0].body || t('mvPinnedFallback') }}</span>
-            <button class="btn-unpin-inline" :title="t('mvUnpinNotice')" @click.stop="unpinMessage(pinnedList[0].message_id)">✕</button>
-            <span class="pin-toggle">{{ pinnedExpanded ? '▲' : '▼' }}</span>
-          </div>
-        </div>
-
-        <!-- Active Polls Banner -->
-        <div v-if="activePolls.length" class="polls-banner-wrap">
-          <div v-for="poll in activePolls.slice(0, 2)" :key="poll.id" class="poll-inline-card">
-            <div class="poll-inline-head">
-              <strong>📊 {{ poll.question }}</strong>
-              <small>{{ poll.closed ? t('mvPollClosed') : t('mvPollOpen') }}</small>
-            </div>
-            <div class="poll-options-row">
-              <button
-                v-for="opt in poll.options"
-                :key="opt.id"
-                class="btn-poll-opt"
-                :class="{ voted: opt.voted }"
-                @click="votePoll(poll.id, opt.id)"
-              >
-                <span>{{ opt.text || opt.label }}</span>
-                <strong>{{ t('mvVotes').replace('{n}', String(opt.votes ?? opt.count ?? 0)) }}</strong>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Slide-Over Conversation Drawer (Notes / Albums / Events / Media / Search) -->
-        <div v-if="activeDrawer !== 'none'" class="pc-drawer-panel">
-          <div class="drawer-tabs-bar">
-            <button :class="{ active: activeDrawer === 'notes' }" @click="toggleDrawer('notes')">{{ t('mvDrawerNotes') }}</button>
-            <button :class="{ active: activeDrawer === 'albums' }" @click="toggleDrawer('albums')">{{ t('mvDrawerAlbums') }}</button>
-            <button :class="{ active: activeDrawer === 'events' }" @click="toggleDrawer('events')">{{ t('mvDrawerEvents') }}</button>
-            <button :class="{ active: activeDrawer === 'media' }" @click="toggleDrawer('media')">{{ t('mvDrawerMedia') }}</button>
-            <button class="btn-drawer-close" @click="activeDrawer = 'none'">✕</button>
-          </div>
-          <div class="drawer-search-bar">
-            <input v-model="chatSearchQuery" :placeholder="t('mvSearchInChatPh')" @keydown.enter.prevent="runConversationSearch" />
-            <button class="btn-secondary" @click="runConversationSearch">{{ t('mvSearch') }}</button>
-          </div>
-          <div v-if="chatSearchResults.length" class="drawer-search-results">
-            <div v-for="sr in chatSearchResults" :key="sr.id" class="drawer-item-card">
-              <strong>{{ sr.body }}</strong>
-              <small>{{ formatTime(sr.created_at) }}</small>
-            </div>
-          </div>
-          <div v-if="activeDrawer === 'notes'" class="drawer-body">
-            <form class="flex-row" @submit.prevent="createNote">
-              <input v-model="newNoteBody" :placeholder="t('mvNewNotePh')" />
-              <button class="btn-primary" type="submit">{{ t('mvSubmit') }}</button>
-            </form>
-            <p v-if="!chatNotes.length" class="empty-muted">{{ t('mvNoNotes') }}</p>
-            <div v-for="n in chatNotes" :key="n.id" class="drawer-item-card">
-              <div class="flex-row" style="justify-content:space-between">
-                <strong>{{ n.body }}</strong>
-                <button class="btn-delete-keep" @click="deleteNoteItem(n.id)">{{ t('mvDelete') }}</button>
-              </div>
-              <small class="muted">{{ formatTime(n.created_at) }}</small>
-            </div>
-          </div>
-          <div v-else-if="activeDrawer === 'albums'" class="drawer-body">
-            <form class="flex-row" @submit.prevent="createAlbum">
-              <input v-model="newAlbumTitle" :placeholder="t('mvNewAlbumPh')" />
-              <button class="btn-primary" type="submit">{{ t('mvCreate') }}</button>
-            </form>
-            <p v-if="!chatAlbums.length" class="empty-muted">{{ t('mvNoAlbums') }}</p>
-            <div v-for="alb in chatAlbums" :key="alb.id" class="drawer-item-card">
-              <strong>🖼️ {{ alb.title }}</strong>
-              <small class="muted">{{ formatTime(alb.created_at) }}</small>
-            </div>
-          </div>
-          <div v-else-if="activeDrawer === 'events'" class="drawer-body">
-            <div class="flex-row" style="justify-content:space-between">
-              <strong>{{ t('mvChatEvents').replace('{n}', String(chatEvents.length)) }}</strong>
-              <button class="btn-primary" @click="showEventCreateModal = true">{{ t('mvNewEvent') }}</button>
-            </div>
-            <p v-if="!chatEvents.length" class="empty-muted">{{ t('mvNoEvents') }}</p>
-            <div v-for="ev in chatEvents" :key="ev.id" class="drawer-item-card">
-              <strong>📅 {{ ev.title }}</strong>
-              <small class="muted">{{ ev.starts_at }} · {{ ev.location || t('mvOnlineFallback') }}</small>
-              <div class="flex-row" style="margin-top:6px">
-                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'going')">{{ t('mvAttend').replace('{n}', String(ev.going?.length || 0)) }}</button>
-                <button class="btn-secondary" @click="rsvpEvent(ev.id, 'declined')">{{ t('mvDecline').replace('{n}', String(ev.declined?.length || 0)) }}</button>
-              </div>
-            </div>
-          </div>
-          <div v-else-if="activeDrawer === 'media'" class="drawer-body">
-            <p v-if="!chatMediaList.length" class="empty-muted">{{ t('mvNoMedia') }}</p>
-            <div v-for="m in chatMediaList" :key="m.id" class="drawer-item-card">
-              <strong>📎 {{ m.body }}</strong>
-              <small class="muted">{{ m.kind }} · {{ formatTime(m.created_at) }}</small>
-            </div>
-          </div>
-        </div>
-
-        <!-- Message History Canvas -->
-        <div ref="messagesCanvasRef" class="pc-chat-messages-canvas" :class="'wallpaper-' + chatWallpaper">
-          <div v-if="!isLoadingMessages && hasEarlierMessages" class="ln-history-control">
-            <button type="button" class="btn-secondary" :disabled="earlierMessagesLoading" @click="loadEarlierMessages">{{ t(earlierMessagesLoading ? 'history_loading' : 'history_earlier') }}</button>
-            <p v-if="earlierMessagesError" role="alert">{{ earlierMessagesError }}</p>
-          </div>
-          <!-- Loading State -->
-          <div v-if="isLoadingMessages" class="chat-canvas-state">
-            <p class="empty-muted">{{ t('mvLoadingChat') }}</p>
-          </div>
-
-          <!-- Scoped Error State with Retry -->
-          <div v-else-if="conversationError" class="chat-canvas-state error-state">
-            <p class="error-state-text">⚠️ {{ conversationError }}</p>
-            <button class="btn-primary" @click="selectChat(selectedChatId)">{{ t('mvRetry') }}</button>
-          </div>
-
-          <!-- Empty Conversation State -->
-          <div v-else-if="messages.length === 0" class="chat-canvas-state">
-            <p class="empty-muted">{{ t('mvEmptyChat') }}</p>
-          </div>
-
-          <template v-else>
-            <template v-for="(msg, index) in messages" :key="msg.id">
-              <!-- Date Separator Divider (Screenshot 2: '10. 23. (금)') -->
-              <div v-if="shouldShowDateDivider(msg, index)" class="pc-date-divider-pill">
-                {{ formatDateDivider(msg.created_at) }}
-              </div>
-
-              <!-- Case 1: Official Security Notice Card (Screenshot 6) -->
-              <div
-                v-if="msg.kind === 'security_notice'"
-                class="pc-msg-row security-notice-row"
-              >
-                <div class="pc-avatar circle-34 other-avatar luno-official-avatar" style="background: #4F7CFF; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px;">
-                  LUNO
-                </div>
-                <div class="pc-security-card-container">
-                  <div class="pc-security-notice-card">
-                    <div class="security-card-header">
-                      <span class="security-title-green">{{ msg.body || t('mvLoginOk') }}</span>
-                    </div>
-                    <div class="security-card-divider"></div>
-                    <div class="security-card-body">
-                      <p class="security-desc-bold">{{ msg.metadata?.device_name || t('security_login_notice') }}</p>
-                      <p class="security-desc-sub">{{ t('mvSecNoticeDesc') }}</p>
-                      <div class="security-specs-table">
-                        <div class="spec-row">
-                          <span class="spec-label">{{ t('mvIpLabel') }}</span>
-                          <span class="spec-val">{{ (msg as any).client_ip || msg.metadata?.ip || '—' }}</span>
-                        </div>
-                        <div class="spec-row">
-                          <span class="spec-label">{{ t('mvLocationLabel') }}</span>
-                          <span class="spec-val">{{ (msg as any).client_location || msg.metadata?.location || '—' }}</span>
-                        </div>
-                      </div>
-                      <div class="security-card-actions">
-                        <button class="btn-security-logout-green" @click="handleSecurityNoticeLogout(msg)">{{ t('mvLogout') }}</button>
-                        <button class="btn-security-pwchange-link" @click="showPasswordModal = true">{{ t('mvPwChange') }}</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="pc-msg-meta security-meta">
-                    <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Case 2: Voice/Video Call Status Bubble (Screenshot 7) -->
-              <div
-                v-else-if="msg.kind === 'call_status' || msg.kind === 'call'"
-                class="pc-msg-row"
-                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index) }"
-              >
-                <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
-                  {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
-                </div>
-                <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
-                <div class="pc-msg-bubble-group">
-                  <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
-                    {{ selectedChat.title }}
-                  </div>
-                  <div
-                    class="pc-call-status-bubble"
-                    :class="{
-                      outgoing: msg.sender_id === currentUser?.id,
-                      incoming: msg.sender_id !== currentUser?.id,
-                      missed: (msg as any).status === 'cancelled' || msg.metadata?.status === 'cancelled' || msg.body.includes(t('mvMissed')) || msg.body.includes(t('mvCancel'))
-                    }"
-                    @click="startCall('voice')"
-                  >
-                    <div class="call-bubble-icon-wrap">
-                      <LunoIcon name="calls" :size="16" />
-                    </div>
-                    <div class="call-bubble-content">
-                      <div class="call-bubble-title">{{ msg.body }}</div>
-                      <div v-if="(msg as any).call_duration || msg.metadata?.duration" class="call-bubble-sub">
-                        {{ (msg as any).call_duration || msg.metadata?.duration }}
-                      </div>
-                    </div>
-                  </div>
-                  <div v-if="isGroupTail(msg, index)" class="pc-msg-meta">
-                    <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
-                    <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Case 3: Standard Speech Bubble -->
-              <div
-                v-else
-                class="pc-msg-row"
-                :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index) }"
-              >
-                <!-- Other User Avatar (group lead only; continuations keep a 44px indent) -->
-                <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
-                  {{ selectedChat.title ? selectedChat.title.slice(0, 1) : 'U' }}
-                </div>
-                <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
-
-                <div class="pc-msg-bubble-group">
-                  <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
-                    {{ selectedChat.title }}
-                  </div>
-
-                  <!-- Speech Bubble -->
-                  <div
-                    class="pc-speech-bubble"
-                    :class="{ 'is-sticker': msg.kind === 'sticker' }"
-                    @contextmenu.prevent="openMessageContextMenu($event, msg)"
-                  >
-                    <div v-if="msg.reply_to" class="bubble-reply-preview">
-                      <LunoIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || t('mvRepliedMsg') }}
-                    </div>
-
-                    <div v-if="editingMessageId === msg.id" class="inline-edit-box">
-                      <input v-model="editingMessageBody" class="inline-edit-input" @keydown.enter.prevent="saveEditMessage" />
-                      <div class="flex-row" style="margin-top:4px;gap:4px">
-                        <button class="btn-primary" style="padding:2px 8px;font-size:11px" @click="saveEditMessage">{{ t('mvSave') }}</button>
-                        <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="editingMessageId = ''">{{ t('mvCancel') }}</button>
-                      </div>
-                    </div>
-                    <div v-else-if="msg.kind === 'sticker' && getStickerSvg(String(msg.metadata?.sticker_id || msg.body))" class="bubble-sticker-svg sticker-effect" :key="`sticker-${msg.id}-${stickerReplay[msg.id] || 0}`" @click="stickerReplay[msg.id] = (stickerReplay[msg.id] || 0) + 1" v-html="getStickerSvg(String(msg.metadata?.sticker_id || msg.body))"></div>
-                    <div v-else-if="msg.kind === 'location'" class="bubble-location-card">
-                      <div class="loc-card-top">{{ t('mvShareLocation') }}</div>
-                      <strong class="loc-card-label">{{ msg.metadata?.label || msg.body }}</strong>
-                      <small v-if="typeof msg.metadata?.lat === 'number' && typeof msg.metadata?.lng === 'number'" class="loc-card-coords">{{ msg.metadata.lat }}, {{ msg.metadata.lng }}</small>
-                    </div>
-                    <div v-else-if="msg.kind === 'contact'" class="bubble-contact-card">
-                      <div class="contact-card-top">{{ t('mvContactCard') }}</div>
-                      <strong class="contact-card-name">{{ msg.body }}</strong>
-                      <small v-if="msg.metadata?.handle" class="contact-card-handle">@{{ msg.metadata.handle }}</small>
-                    </div>
-                    <MessageAttachment v-else-if="msg.metadata?.attachment_id" :message="msg" :token="token" :labels="{ download: t('attachment_download'), retry: t('attachment_retry'), loading: t('attachment_loading'), error: t('attachment_error') }" />
-                    <div v-else class="bubble-text-content">{{ msg.body }}</div>
-
-                    <!-- Reactions Display -->
-                    <div v-if="msg.reactions && Object.keys(msg.reactions).length" class="bubble-reactions-row">
-                      <span v-for="(cnt, emo) in msg.reactions" :key="emo" class="reaction-chip" @click="reactToMessage(msg.id, String(emo))">
-                        {{ emo }} {{ cnt }}
-                      </span>
-                    </div>
-
-                    <!-- AI Translation Display Box (Article 10) -->
-                    <div v-if="messageTranslations[msg.id]" class="luno-ai-translation-box">
-                      <div class="translation-meta">
-                        <span class="badge-engine">🌐 {{ messageTranslations[msg.id].engine }} ({{ messageTranslations[msg.id].sourceLang }} → {{ targetTranslateLang.toUpperCase() }})</span>
-                        <button class="btn-retry-translate" :title="t('retranslateBtn')" @click="handleTranslateMessage(msg)">↻</button>
-                      </div>
-                      <div v-if="messageTranslations[msg.id].loading" class="translation-loading">
-                        <span>✨ {{ t('translating') }}</span>
-                      </div>
-                      <div v-else-if="messageTranslations[msg.id].error" class="translation-error">
-                        <span>⚠️ {{ messageTranslations[msg.id].error }}</span>
-                      </div>
-                      <div v-else class="translation-result">
-                        {{ messageTranslations[msg.id].translated }}
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Status Info: Read receipt & Time (group tail only) -->
-                  <div v-if="isGroupTail(msg, index)" class="pc-msg-meta">
-                    <span v-if="msg.sender_id === currentUser?.id && (msg.read_count || 0) > 0" class="pc-read-receipt">{{ t('readStatus') }}</span>
-                    <span class="pc-timestamp">{{ formatTime(msg.created_at) }}</span>
-                  </div>
-                </div>
-
-                <!-- Bubble Hover Floating Action Bar -->
-                <div class="pc-bubble-toolbar">
-                  <button :title="t('translateBtn')" @click="handleTranslateMessage(msg)"><LunoIcon name="translate" :size="14" /></button>
-                  <button :title="t('mvReactHeart')" @click="reactToMessage(msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
-                  <button :title="t('mvReactLike')" @click="reactToMessage(msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
-                  <button :title="t('mvReply')" @click="startReply(msg)"><LunoIcon name="reply" :size="14" /></button>
-                  <button v-if="msg.sender_id === currentUser?.id" :title="t('mvEdit')" @click="startEditMessage(msg)">✎</button>
-                  <button :title="t('mvCtxKeep')" @click="saveToKeep(msg)"><LunoIcon name="keep" :size="14" /></button>
-                  <button :title="t('mvNoticeRegister')" @click="pinMessage(msg.id)"><LunoIcon name="pin" :size="14" /></button>
-                  <button v-if="msg.sender_id === currentUser?.id" :title="t('mvCtxUnsend')" @click="unsendMessage(msg.id)"><LunoIcon name="close" :size="14" /></button>
-                </div>
-              </div>
-            </template>
-          </template>
-        </div>
-
-        <!-- Floating Scroll-to-Bottom Button (Matching Screenshot 7) -->
-        <button class="btn-scroll-bottom" :title="t('mvJumpBottom')" @click="scrollToBottom">
-          ↓
-        </button>
-
-        <!-- Chat Input Composer -->
-        <footer class="pc-chat-input-dock">
-          <!-- Reply Preview Banner -->
-          <div v-if="replyToMessage" class="reply-composer-bar">
-            <span>{{ t('mvReplyTo') }}<strong>{{ replyToMessage.body }}</strong></span>
-            <button class="btn-clear-search" @click="replyToMessage = null">✕</button>
-          </div>
-
-          <!-- Sticker Picker Popover -->
-          <div v-if="showStickerPicker" class="sticker-picker-popover">
-            <div class="sticker-cat-tabs">
-              <button :class="{ active: activeStickerCategory === 'All' }" @click="activeStickerCategory = 'All'">{{ t('tabAll') }}</button>
-              <button :class="{ active: activeStickerCategory === 'Lumi' }" @click="activeStickerCategory = 'Lumi'">{{ t('mvBotLumi') }}</button>
-              <button :class="{ active: activeStickerCategory === 'Nori' }" @click="activeStickerCategory = 'Nori'">{{ t('mvBotNori') }}</button>
-              <button :class="{ active: activeStickerCategory === 'Poko' }" @click="activeStickerCategory = 'Poko'">{{ t('mvBotPoko') }}</button>
-              <button class="btn-clear-search" style="margin-left:auto" @click="showStickerPicker = false">✕</button>
-            </div>
-            <div class="sticker-grid-items">
-              <button
-                v-for="st in filteredStickers"
-                :key="st.id"
-                class="btn-sticker-cell"
-                :title="st.name"
-                @click="sendSticker(st.id)"
-              >
-                <div class="sticker-svg-mini" v-html="st.svg"></div>
-                <small>{{ st.name }}</small>
-              </button>
-            </div>
-          </div>
-
-          <!-- Attachment Bar Icons -->
-          <div class="pc-input-toolbar">
-            <input ref="attachmentInput" type="file" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="uploadSelectedFile" />
-            <div v-if="effectFile" class="fx-modal-backdrop" @click.self="closeEffectModal">
-              <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
-                <h3>{{ t('fxTitle') }}</h3>
-                <img :src="effectPreviewUrl" class="fx-preview" :style="{ filter: PHOTO_EFFECT_FILTER[effectChoice] }" alt="" />
-                <div class="fx-options">
-                  <button :class="{ active: effectChoice === 'none' }" @click="effectChoice = 'none'">{{ t('fxOriginal') }}</button>
-                  <button :class="{ active: effectChoice === 'gray' }" @click="effectChoice = 'gray'">{{ t('fxGray') }}</button>
-                  <button :class="{ active: effectChoice === 'sepia' }" @click="effectChoice = 'sepia'">{{ t('fxSepia') }}</button>
-                </div>
-                <div class="fx-actions">
-                  <button class="btn-secondary" @click="closeEffectModal">{{ t('mvCancel') }}</button>
-                  <button class="btn-primary" :disabled="uploading" @click="sendEffectPhoto">{{ t('fxSend') }}</button>
-                </div>
-              </div>
-            </div>
-            <button class="btn-tool-icon" :title="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker">😊</button>
-            <div v-if="showCameraModal" class="fx-modal-backdrop" @click.self="closeCamera">
-              <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
-                <h3>{{ t('camTitle') }}</h3>
-                <div class="cam-tabs">
-                  <button :class="{ active: cameraMode === 'photo' }" :disabled="videoRecording" @click="switchCameraMode('photo')">{{ t('camPhoto') }}</button>
-                  <button :class="{ active: cameraMode === 'video' }" :disabled="videoRecording" @click="switchCameraMode('video')">{{ t('camVideo') }}</button>
-                </div>
-                <video v-show="!cameraError" ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
-                <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
-                <p v-if="videoRecording" class="rec-indicator">🔴 {{ videoElapsed }}s / 8s</p>
-                <div class="fx-actions">
-                  <button class="btn-secondary" @click="closeCamera">{{ t('mvCancel') }}</button>
-                  <button v-if="cameraMode === 'photo'" class="btn-secondary" @click="closeCamera(); chooseAttachment('image')">{{ t('camChooseFile') }}</button>
-                  <button v-if="!cameraError && cameraMode === 'photo'" class="btn-primary" @click="capturePhoto">{{ t('camCapture') }}</button>
-                  <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="startVideoCapture">⏺️</button>
-                  <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="stopVideoCapture">⏹️</button>
-                </div>
-              </div>
-            </div>
-            <button class="btn-tool-icon" :title="t('mvAttachPhoto')" :disabled="uploading" @click="openCamera">📷</button>
-            <button class="btn-tool-icon" :title="t('mvAttachFile')" :disabled="uploading" @click="chooseAttachment('file')">📎</button>
-            <button class="btn-tool-icon" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="toggleVoiceRecording">
-              {{ isRecordingVoice ? '⏹️' : '🎙️' }}
-            </button>
-            <button class="btn-tool-icon" :title="t('mvMakePoll')" @click="showPollCreateModal = true">📊</button>
-            <button class="btn-tool-icon" :title="t('mvAddEvent')" @click="showEventCreateModal = true">📅</button>
-            <button class="btn-tool-icon" :title="t('mvLocationShare')" @click="sendLocationMessage">📍</button>
-            <button class="btn-tool-icon" :title="t('mvShareContact')" @click="sendContactMessage">👤</button>
-            <button class="btn-tool-icon" :title="t('mvCapture')" @click="captureScreenToChat">✂️</button>
-            <button class="btn-tool-icon" :title="t('mvSend')" @click="openSendMoneyFromChat">₩</button>
-          </div>
-
-          <!-- Textarea Form Area -->
-          <form class="pc-textarea-form" :aria-busy="sendingConversations.has(selectedChatId)" @submit.prevent="sendMessage">
-            <textarea
-              v-model="draftMessage"
-              :disabled="sendingConversations.has(selectedChatId)"
-              :placeholder="t('inputPlaceholder')"
-              rows="3"
-              @keydown.enter.exact="handleComposerEnter"
-            ></textarea>
-            <div class="pc-textarea-bottom">
-              <span class="char-count">{{ draftMessage.length }}</span>
-              <button class="btn-green-send" :disabled="!draftMessage.trim() || sendingConversations.has(selectedChatId)">{{ sendingConversations.has(selectedChatId) ? t('message_sending') : t('sendBtn') }}</button>
-            </div>
-          </form>
-        </footer>
-      </section>
+      <MessagePane
+        v-else-if="selectedChat"
+        :selected-chat="selectedChat"
+        :selected-chat-id="selectedChatId"
+        :chats="chats"
+        :realtime-state="realtimeState"
+        :chat-wallpaper="chatWallpaper"
+        :pinned-list="pinnedList"
+        :active-polls="activePolls"
+        :chat-notes="chatNotes"
+        :chat-albums="chatAlbums"
+        :chat-events="chatEvents"
+        :chat-media-list="chatMediaList"
+        :chat-search-results="chatSearchResults"
+        :messages="messages"
+        :is-loading-messages="isLoadingMessages"
+        :has-earlier-messages="hasEarlierMessages"
+        :earlier-messages-loading="earlierMessagesLoading"
+        :earlier-messages-error="earlierMessagesError"
+        :conversation-error="conversationError"
+        :message-translations="messageTranslations"
+        :sending-conversations="sendingConversations"
+        :filtered-stickers="filteredStickers"
+        :uploading="uploading"
+        :effect-file="effectFile"
+        :effect-preview-url="effectPreviewUrl"
+        :show-camera-modal="showCameraModal"
+        :camera-mode="cameraMode"
+        :camera-error="cameraError"
+        :video-recording="videoRecording"
+        :video-elapsed="videoElapsed"
+        :is-recording-voice="isRecordingVoice"
+        :messages-canvas-ref="paneRefs.canvas"
+        :attachment-input="paneRefs.file"
+        :camera-video-ref="paneRefs.camera"
+        :format-time="formatTime"
+        :format-date-divider="formatDateDivider"
+        :should-show-date-divider="shouldShowDateDivider"
+        :is-group-lead="isGroupLead"
+        :is-group-tail="isGroupTail"
+        :get-sticker-svg="getStickerSvg"
+        v-model:auto-translate-enabled="autoTranslateEnabled"
+        v-model:target-translate-lang="targetTranslateLang"
+        v-model:active-drawer="activeDrawer"
+        v-model:chat-search-query="chatSearchQuery"
+        v-model:new-note-body="newNoteBody"
+        v-model:new-album-title="newAlbumTitle"
+        v-model:reply-to-message="replyToMessage"
+        v-model:draft-message="draftMessage"
+        v-model:show-sticker-picker="showStickerPicker"
+        v-model:active-sticker-category="activeStickerCategory"
+        v-model:sticker-replay="stickerReplay"
+        v-model:editing-message-id="editingMessageId"
+        v-model:editing-message-body="editingMessageBody"
+        v-model:effect-choice="effectChoice"
+        @back="selectedChatId = ''"
+        @call="startCall"
+        @drawer="toggleDrawer"
+        @cycle-wallpaper="cycleWallpaper"
+        @unpin="unpinMessage"
+        @vote="votePoll"
+        @search="runConversationSearch"
+        @create-note="createNote"
+        @delete-note="deleteNoteItem"
+        @create-album="createAlbum"
+        @rsvp="rsvpEvent"
+        @new-event="showEventCreateModal = true"
+        @load-earlier="loadEarlierMessages"
+        @retry="selectChat(selectedChatId)"
+        @security-logout="handleSecurityNoticeLogout"
+        @password="showPasswordModal = true"
+        @message-menu="openMessageContextMenu"
+        @save-edit="saveEditMessage"
+        @react="reactToMessage"
+        @translate="handleTranslateMessage"
+        @reply="startReply"
+        @edit-start="startEditMessage"
+        @keep="saveToKeep"
+        @pin="pinMessage"
+        @unsend="unsendMessage"
+        @scroll-bottom="scrollToBottom"
+        @sticker="sendSticker"
+        @file-change="uploadSelectedFile"
+        @effect-close="closeEffectModal"
+        @effect-send="sendEffectPhoto"
+        @camera-close="closeCamera"
+        @camera-mode="switchCameraMode"
+        @photo="capturePhoto"
+        @video-start="startVideoCapture"
+        @video-stop="stopVideoCapture"
+        @camera-open="openCamera"
+        @attach="chooseAttachment"
+        @voice-toggle="toggleVoiceRecording"
+        @poll-create="showPollCreateModal = true"
+        @location="sendLocationMessage"
+        @contact="sendContactMessage"
+        @capture="captureScreenToChat"
+        @send-money="openSendMoneyFromChat"
+        @send="sendMessage"
+        @composer-enter="handleComposerEnter"
+      />
 
       <!-- Case B: Friend Profile Selected Preview (Screenshot 5) -->
       <section v-else-if="selectedFriendProfile" class="pc-friend-profile-viewport">
@@ -4536,80 +3296,28 @@ onBeforeUnmount(() => {
     </div>
 
 <!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call with AI Live Captions) -->
-    <div v-if="activeCall" class="call-overlay-modal">
-      <div class="call-dialog-box">
-        <template v-if="activeCall.kind === 'video'">
-        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
-          <video ref="remoteVideoRef" autoplay playsinline style="width:180px;height:130px;background:#0f172a;border-radius:12px;object-fit:cover"></video>
-          <video ref="localVideoRef" autoplay muted playsinline style="width:100px;height:130px;background:#334155;border-radius:12px;object-fit:cover" :style="{ filter: CALL_VIDEO_FILTERS[callVideoFilter] }"></video>
-        </div>
-        <div v-if="activeCall.kind === 'video'" class="call-filter-row" :title="t('callFilterTitle')">
-          <button :class="{ active: callVideoFilter === 'none' }" @click="callVideoFilter = 'none'">{{ t('callFilterNone') }}</button>
-          <button :class="{ active: callVideoFilter === 'warm' }" @click="callVideoFilter = 'warm'">{{ t('callFilterWarm') }}</button>
-          <button :class="{ active: callVideoFilter === 'cool' }" @click="callVideoFilter = 'cool'">{{ t('callFilterCool') }}</button>
-          <button :class="{ active: callVideoFilter === 'mono' }" @click="callVideoFilter = 'mono'">{{ t('callFilterMono') }}</button>
-        </div>
-        </template>
-        <div v-else class="call-avatar-pulse">
-          <div class="avatar-circle lg" style="background:#315BCD">{{ activeCall.title.slice(0, 1) }}</div>
-        </div>
-        <h3>{{ activeCall.title }}</h3>
-        <p class="call-type-status">
-          {{ activeCall.kind === 'video' ? '📹 ' + t('callVideo') : '📞 ' + t('callVoice') }} ·
-          <span v-if="activeCall.state === 'ringing'">{{ activeCall.direction === 'outgoing' ? t('mvCalling') : t('mvConnecting') }}</span>
-          <span v-else-if="activeCall.state === 'connected'" class="timer-active">{{ formatDuration(callDuration) }}</span>
-          <span v-if="callRecording" class="rec-indicator">🔴 {{ t('callRecording') }}</span>
-        </p>
 
-        <!-- AI Live Translation Captions UX (Article 10.2) -->
-        <div class="live-captions-control">
-          <button
-            class="btn-caption-toggle"
-            :class="{ active: liveCaptionsEnabled }"
-            @click="liveCaptionsEnabled = !liveCaptionsEnabled"
-          >
-            <LunoIcon name="translate" :size="15" />
-            <span>{{ liveCaptionsEnabled ? t('callLiveTranslate') + ' (ON)' : t('callLiveTranslate') + ' (OFF)' }}</span>
-          </button>
-        </div>
-
-        <div v-if="liveCaptionsEnabled" class="live-captions-box">
-          <div class="caption-notice">ℹ️ {{ t('callConsentNotice') }}</div>
-          <div class="caption-lang-badge">
-            <span class="lang-tag">{{ currentLocale.toUpperCase() }}</span>
-            <span class="lang-arrow">⇄</span>
-            <span class="lang-tag">{{ targetTranslateLang.toUpperCase() }}</span>
-            <span class="badge-engine-mini">AI Live</span>
-          </div>
-          <div class="caption-stream">
-            <p class="caption-live-text">"{{ callSubtitles }}"</p>
-          </div>
-        </div>
-
-        <!-- Call Action Buttons -->
-        <div class="call-controls-row">
-          <template v-if="activeCall.state === 'connected'">
-            <button class="btn-call-circle" :class="{ off: isCallMuted }" :title="t('mvMicMute')" @click="toggleCallMute">
-              {{ isCallMuted ? '🔇' : '🎤' }}
-            </button>
-            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isCallVideoOff }" :title="t('mvCameraToggle')" @click="toggleCallVideo">
-              {{ isCallVideoOff ? '🚫' : '📹' }}
-            </button>
-            <button v-if="activeCall.kind === 'video'" class="btn-call-circle" :class="{ off: isScreenSharing }" :title="t('mvScreenShare')" @click="toggleScreenShare">
-              🖥️
-            </button>
-            <button class="btn-call-circle" :class="{ off: !isCallSpeakerOn }" :title="t('mvSpeaker')" @click="isCallSpeakerOn = !isCallSpeakerOn">
-              🔊
-            </button>
-            <button class="btn-call-circle" :class="{ recording: callRecording }" :title="callRecording ? t('callRecording') : t('callRecord')" @click="toggleCallRecording">
-              {{ callRecording ? '⏹️' : '⏺️' }}
-            </button>
-          </template>
-          <button v-if="activeCall.state === 'ringing' && activeCall.direction === 'incoming'" class="btn-call-answer" @click="updateCallState('connected')">{{ t('mvAnswerCall') }}</button>
-          <button class="btn-call-hangup" @click="updateCallState('ended')">{{ t('mvEndCall') }}</button>
-        </div>
-      </div>
-    </div>
+    <CallModal
+      v-if="activeCall"
+      :active-call="activeCall"
+      :call-duration="callDuration"
+      :format-duration="formatDuration"
+      :call-recording="callRecording"
+      :is-call-muted="isCallMuted"
+      :is-call-video-off="isCallVideoOff"
+      :is-screen-sharing="isScreenSharing"
+      :local-video-ref="callVideoRefs.local"
+      :remote-video-ref="callVideoRefs.remote"
+      :target-translate-lang="targetTranslateLang"
+      v-model:is-call-speaker-on="isCallSpeakerOn"
+      v-model:call-video-filter="callVideoFilter"
+      @mute="toggleCallMute"
+      @video="toggleCallVideo"
+      @screenshare="toggleScreenShare"
+      @record="toggleCallRecording"
+      @answer="updateCallState('connected')"
+      @hangup="updateCallState('ended')"
+    />
 
     <!-- PROFILE MODAL (Full LUNO User Profile View) -->
     <div v-if="activeProfileUser" class="modal-backdrop" @click.self="activeProfileUser = null">
@@ -4778,182 +3486,17 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- SETTINGS & THEMES MODAL -->
-    <div v-if="showSettingsModal" class="modal-backdrop" @click.self="showSettingsModal = false">
-      <div class="standard-modal-box settings-modal">
-        <div class="modal-header">
-          <h3>⚙️ {{ t('settingsTitle') }}</h3>
-          <button class="btn-modal-close" @click="showSettingsModal = false">✕</button>
-        </div>
-        <div class="modal-body-form">
-          <!-- 1. Language Selector (Article 11) -->
-          <div class="setting-group">
-            <strong>🌐 {{ t('languageLabel') }}</strong>
-            <div class="locale-choice-grid">
-              <button
-                v-for="loc in SUPPORTED_LOCALES"
-                :key="loc.code"
-                class="btn-locale-pill"
-                :class="{ active: currentLocale === loc.code }"
-                @click="setLocale(loc.code)"
-              >
-                <span>{{ loc.flag }}</span> {{ loc.nativeName }} ({{ loc.code.toUpperCase() }})
-              </button>
-            </div>
-          </div>
 
-          <!-- 2. AI Translation Target Language (Article 10) -->
-          <div class="setting-group">
-            <strong>✨ {{ t('targetLangLabel') }}</strong>
-            <div class="locale-choice-grid">
-              <button
-                v-for="loc in SUPPORTED_LOCALES"
-                :key="'pref-target-' + loc.code"
-                class="btn-locale-pill"
-                :class="{ active: targetTranslateLang === loc.code }"
-                @click="targetTranslateLang = loc.code"
-              >
-                <span>{{ loc.flag }}</span> {{ loc.nativeName }}
-              </button>
-            </div>
-          </div>
-
-          <!-- 3. Accessible Font Scale (Article 6.2 & 17.3) -->
-          <div class="setting-group">
-            <strong>🔤 {{ t('fontScaleLabel') }}</strong>
-            <div class="font-scale-buttons">
-              <button class="btn-scale-chip" :class="{ active: fontScale === 'normal' }" @click="setFontScale('normal')">{{ t('mvFontNormal') }}</button>
-              <button class="btn-scale-chip" :class="{ active: fontScale === 'large' }" @click="setFontScale('large')">{{ t('mvFontLarge') }}</button>
-              <button class="btn-scale-chip" :class="{ active: fontScale === 'xlarge' }" @click="setFontScale('xlarge')">{{ t('mvFontXLarge') }}</button>
-            </div>
-          </div>
-
-          <!-- 4. Design Theme & Dark Mode (Article 4 & 4.5) -->
-          <div class="setting-group">
-            <strong>{{ t('mvDesignMode') }}</strong>
-            <div class="theme-choice-buttons">
-              <button class="btn-theme-swatch default" :class="{ active: !isDarkMode }" @click="enableLightMode">{{ t('mvThemeLightSwatch') }}</button>
-              <button class="btn-theme-swatch dark" :class="{ active: isDarkMode }" @click="enableDarkMode">{{ t('mvThemeDarkSwatch') }}</button>
-            </div>
-          </div>
-
-          <!-- 5. Honest Security (Article 14 & 17.4) -->
-          <div class="setting-group">
-            <strong>🛡️ {{ t('securitySection') }}</strong>
-            <div class="setting-toggle-row">
-              <span>{{ t('mvConnSecurity') }}</span>
-              <span class="badge-status-on">{{ t('mvServerVerify') }}</span>
-            </div>
-            <div class="setting-toggle-row">
-              <span>{{ t('mvReadReceipts') }}</span>
-              <input type="checkbox" checked />
-            </div>
-            <div class="setting-toggle-row">
-              <span>{{ t('mvSoundNotif') }}</span>
-              <input type="checkbox" checked />
-            </div>
-            <!-- Phase 1: Push Notifications -->
-            <div class="setting-toggle-row">
-              <span>{{ t('mvPushNotif') }}</span>
-              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="testPushNotification">{{ t('mvTestSend') }}</button>
-            </div>
-
-            <!-- Phase 2: E2EE Key Management -->
-            <div class="setting-toggle-row">
-              <span>{{ t('mvKeyMgmt') }}</span>
-              <span class="muted">{{ t('e2ee_preparing') }}</span>
-            </div>
-          </div>
-
-          <!-- 5b. Passkey registration -->
-          <div class="setting-group" style="margin-top:8px">
-            <strong>🔑 {{ t('mvPasskeyTitle') }}</strong>
-            <div class="setting-toggle-row">
-              <span>{{ t('mvPasskeyDesc') }}</span>
-              <button class="btn-secondary" style="font-size:12px;padding:3px 8px" :disabled="passkeyBusy" @click="registerPasskey">{{ t('mvPasskeyRegister') }}</button>
-            </div>
-            <div v-if="passkeyNote" class="muted" style="font-size:12px;margin-top:4px" role="status">{{ passkeyNote }}</div>
-            <div v-if="passkeyList.length" style="margin-top:6px;display:flex;flex-direction:column;gap:4px">
-              <div v-for="k in passkeyList" :key="k.id" class="setting-toggle-row" style="font-size:12px">
-                <span class="muted">🔑 {{ k.id.slice(0, 8) }}… · {{ (k.created_at || '').slice(0, 10) }}</span>
-                <button class="btn-secondary" style="font-size:11px;padding:2px 8px" @click="deletePasskey(k.id)">{{ t('mvPasskeyDelete') }}</button>
-              </div>
-            </div>
-            <div v-else-if="passkeyLoaded" class="muted" style="font-size:12px;margin-top:4px">{{ t('mvPasskeyNoKeys') }}</div>
-          </div>
-
-          <!-- Phase 6: GDPR Data Portability & Deletion -->
-          <div class="setting-group" style="margin-top:8px">
-            <strong>{{ t('mvBackupPrivacy') }}</strong>
-            <input v-model="deletePasswordInput" type="password" autocomplete="current-password" :placeholder="t('mvDeletePwPh')" :aria-label="t('mvDeletePwAria')" class="pc-login-input" style="margin:2px 0 6px" />
-            <div class="flex-row" style="margin-top:6px;gap:8px">
-              <button class="btn-secondary" style="flex:1" @click="exportUserDataArchive">{{ t('mvBackupData') }}</button>
-              <button class="btn-secondary" style="flex:1;color:#ef4444" @click="deleteUserAccount">{{ t('mvDeleteAccount') }}</button>
-            </div>
-          </div>
-
-          <form class="setting-group ln-profile-editor" :aria-busy="profileSaving" @submit.prevent="saveProfileSettings" @input="profileSaved = false; profileSaveError = ''">
-            <div class="ln-section-heading"><strong>{{ t('profileEdit') }}</strong><span>{{ t('profile_details') }}</span></div>
-            <div class="ln-profile-fields">
-              <label for="profile-name">{{ t('profile_name_label') }}<input id="profile-name" v-model="editProfileName" autocomplete="name" required :disabled="profileSaving" /></label>
-              <label for="profile-handle">LUNO ID<input id="profile-handle" v-model="editProfileHandle" autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="profileSaving" /></label>
-              <label for="profile-bio" class="ln-profile-bio">{{ t('profile_bio_label') }}<textarea id="profile-bio" v-model="editProfileBio" rows="3" :disabled="profileSaving" /></label>
-            </div>
-            <p class="ln-profile-hint">{{ t('profile_visibility_preparing') }}</p>
-            <p v-if="profileSaveError" class="ln-profile-error" role="alert">{{ profileSaveError }}</p>
-            <div class="ln-profile-save"><span role="status">{{ profileSaved ? t('profile_saved') : '' }}</span><button type="submit" class="btn-primary" :disabled="profileSaving || !profileDirty || !editProfileName.trim()">{{ profileSaving ? t('profile_saving') : t('profile_save') }}</button></div>
-          </form>
-
-          <div class="setting-group" style="margin-top:8px">
-            <strong>{{ t('mvQrApproveTitle') }}</strong>
-            <div class="flex-row" style="margin-top:6px">
-              <input v-model="approveChallengeInput" placeholder="Challenge ID" style="flex:1" />
-              <input v-model="approveTokenInput" placeholder="QR Token" style="flex:1" />
-              <button class="btn-secondary" @click="approveQrLogin">{{ t('mvApprove') }}</button>
-            </div>
-          </div>
-
-          <div v-if="devicesList.length" class="setting-group" style="margin-top:8px">
-            <strong>{{ t('mvDevicesTitle').replace('{n}', String(devicesList.length)) }}</strong>
-            <div v-for="dv in devicesList" :key="dv.id" class="setting-toggle-row">
-              <span>{{ dv.name }} ({{ dv.platform }})</span>
-              <button class="btn-delete-keep" @click="revokeDevice(dv.id)">{{ t('mvRevoke') }}</button>
-            </div>
-          </div>
-
-          <div class="setting-group" style="margin-top:12px; background: #eaf1ff; padding: 12px; border-radius: 12px; border: 1px solid #d9e1ec;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <strong style="color:#315BCD; font-size:13px;">{{ t('mvMobileApp') }}</strong>
-                <p style="font-size:11px; color:#5b6475; margin-top:2px;">{{ t('mvMobileAppDesc') }}</p>
-              </div>
-              <a href="./download.html" target="_blank" class="btn-primary" style="text-decoration:none; font-size:12px; padding:6px 12px; display:inline-block;">{{ t('mvApkDownload') }}</a>
-            </div>
-          </div>
-
-          <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
-            <strong>{{ t('mvLegal') }}</strong>
-            <div style="margin-top:4px; display:flex; gap:12px;">
-              <a href="./legal/terms.html" target="_blank" rel="noopener">{{ t('mvTerms') }}</a>
-              <a href="./legal/privacy.html" target="_blank" rel="noopener">{{ t('mvPrivacy') }}</a>
-            </div>
-          </div>
-
-          <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
-            <strong>{{ t('mvVersionInfo') }}</strong>
-            <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
-              <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '—' }}</span>
-              <span><b>Git Commit:</b> <code>{{ appVersion.commit || t('checkingText') }}</code></span>
-              <span><b>Build Time:</b> {{ appVersion.build_time || '—' }}</span>
-              <span><b>Environment:</b> {{ appVersion.env || '—' }}</span>
-            </div>
-          </div>
-
-          <div class="modal-actions-right">
-            <button class="btn-primary" @click="showSettingsModal = false">{{ t('mvDone') }}</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <SettingsModal
+      v-if="showSettingsModal"
+      :devices-list="devicesList"
+      v-model:target-translate-lang="targetTranslateLang"
+      v-model:delete-password-input="deletePasswordInput"
+      @close="showSettingsModal = false"
+      @export="exportUserDataArchive"
+      @delete="deleteUserAccount"
+      @revoke-device="revokeDevice"
+    />
 
     <div v-if="showContactPicker" class="modal-backdrop" @click.self="showContactPicker = false">
       <section class="standard-modal-box ln-contact-picker" role="dialog" aria-modal="true" aria-labelledby="contact-picker-title">

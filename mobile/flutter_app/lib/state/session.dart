@@ -31,6 +31,27 @@ import '../util/story_cards.dart';
 import '../util/sync_delta.dart';
 import '../util/error_report.dart';
 
+/// A-23: reconnect backoff — 2^(attempt-1) seconds capped at 30s, plus up to
+/// 1s of jitter so a fleet of clients does not retry in lockstep.
+double reconnectDelaySeconds(int attempt, {double Function()? jitter}) {
+  final capped = min(pow(2, max(0, attempt - 1)).toDouble(), 30.0);
+  return capped + (jitter ?? _defaultJitter)();
+}
+
+double _defaultJitter() => Random().nextDouble();
+
+/// A-23: merge a GET .../sync delta page into the cached message list.
+/// Dedupes by message id and restores ascending sequence order.
+List<dynamic> mergeDeltaMessages(List<dynamic> existing, List<dynamic> delta) {
+  final seen = <String>{for (final m in existing) '${m['id']}'};
+  final out = List<dynamic>.from(existing);
+  for (final m in delta) {
+    if (seen.add('${m['id']}')) out.add(m);
+  }
+  out.sort((a, b) => ((a['sequence'] ?? 0) as num).compareTo((b['sequence'] ?? 0) as num));
+  return out;
+}
+
 class SessionController extends ChangeNotifier {
   final Api api = Api();
 
@@ -100,6 +121,8 @@ class SessionController extends ChangeNotifier {
   Map<String, dynamic>? activeCall;
   WebSocketChannel? socket;
   StreamSubscription? wsSubscription;
+  Timer? reconnectTimer;
+  int reconnectAttempt = 0;
 
   // Real-time AI Translation Cache
   final Map<String, Map<String, dynamic>> translations = {};
@@ -250,6 +273,8 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> connect() async {
+    reconnectTimer?.cancel();
+    reconnectTimer = null;
     await wsSubscription?.cancel();
     await socket?.sink.close();
     try {
@@ -264,16 +289,7 @@ class SessionController extends ChangeNotifier {
         try {
           final data = jsonDecode(event);
           if (data['type'] == 'message.created') {
-            final item = data['message'];
-            if (item['conversation_id'] == selectedId &&
-                !messages.any((m) => m['id'] == item['id'])) {
-              messages.add(item);
-              if (autoTranslate && item['sender_id'] != selfId && item['kind'] == 'text') {
-                translateMessage(item['id'], item['body']);
-              }
-              notifyListeners();
-            }
-            reload();
+            applyMessageCreated(data);
           } else if (data['type'] == 'message.updated') {
             if (data['conversation_id'] == selectedId) {
               for (final m in messages) {
@@ -290,7 +306,7 @@ class SessionController extends ChangeNotifier {
               notifyListeners();
             }
           } else if (data['type'] == 'conversation.read') {
-            reload();
+            applyConversationRead(data);
           } else if (data['type'] == 'call.ringing') {
             activeCall = data;
             notifyListeners();
@@ -300,10 +316,83 @@ class SessionController extends ChangeNotifier {
           }
         } catch (_) {}
       }, onError: (_) {
-        notice = '실시간 연결 재시도 중...';
-        notifyListeners();
-      });
+        scheduleReconnect();
+      }, onDone: scheduleReconnect);
+      reconnectAttempt = 0;
+      if (notice.startsWith('연결이 끊어')) notice = '';
+    } catch (_) {
+      scheduleReconnect();
+    }
+  }
+
+  /// A-23: schedule one reconnect attempt with exponential backoff (1s->30s)
+  /// plus jitter. Any manual connect()/logout() cancels the pending timer.
+  void scheduleReconnect() {
+    if (!authed || api.token == null) return;
+    reconnectTimer?.cancel();
+    reconnectAttempt++;
+    final delay = reconnectDelaySeconds(reconnectAttempt);
+    notice = '연결이 끊어졌습니다. 재연결 중...';
+    notifyListeners();
+    reconnectTimer = Timer(Duration(milliseconds: (delay * 1000).round()), () async {
+      await connect();
+      await deltaResync();
+    });
+  }
+
+  /// A-23: after a reconnect, pull only messages sent while offline
+  /// (GET .../sync?since_sequence=...) plus ONE conversation-list refresh
+  /// for previews/unread — never the 12-call full reload().
+  Future<void> deltaResync() async {
+    if (selectedId.isNotEmpty) {
+      try {
+        final since = messages.isEmpty ? 0 : ((messages.last['sequence'] ?? 0) as num).toInt();
+        final res = await api.call('/api/v1/conversations/$selectedId/sync?since_sequence=$since');
+        messages = mergeDeltaMessages(messages, res['delta_messages'] ?? []);
+      } catch (_) {}
+    }
+    try {
+      final res = await api.call('/api/v1/conversations');
+      chats = res['conversations'] ?? chats;
     } catch (_) {}
+    notifyListeners();
+  }
+
+  /// A-23: apply a message.created event in place — append to the open room
+  /// and patch exactly one chat-list row (preview + unread, moved to top).
+  void applyMessageCreated(dynamic data) {
+    final item = data['message'];
+    final cid = '${item['conversation_id']}';
+    final mine = '${item['sender_id']}' == selfId;
+    if (cid == selectedId && !messages.any((m) => m['id'] == item['id'])) {
+      messages.add(item);
+      if (autoTranslate && !mine && item['kind'] == 'text') {
+        translateMessage(item['id'], item['body']);
+      }
+    }
+    final idx = chats.indexWhere((c) => '${c['id']}' == cid);
+    if (idx >= 0) {
+      final row = Map<String, dynamic>.from(chats[idx] as Map);
+      row['last_message'] = item;
+      final unread = (row['unread_count'] ?? 0) as num;
+      row['unread_count'] = cid == selectedId ? 0 : (mine ? unread.toInt() : unread.toInt() + 1);
+      chats
+        ..removeAt(idx)
+        ..insert(0, row);
+    }
+    notifyListeners();
+  }
+
+  /// A-23: apply a conversation.read event in place — zero one row's unread.
+  void applyConversationRead(dynamic data) {
+    final cid = '${data['conversation_id']}';
+    final idx = chats.indexWhere((c) => '${c['id']}' == cid);
+    if (idx >= 0) {
+      final row = Map<String, dynamic>.from(chats[idx] as Map);
+      row['unread_count'] = 0;
+      chats[idx] = row;
+      notifyListeners();
+    }
   }
 
   Future<void> find(String query) {
@@ -1012,7 +1101,20 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  /// H-4: permanently delete the account (server DELETE /api/v1/me with
+  /// password confirmation), then wipe local state.
+  Future<void> deleteAccount(String password) {
+    return run(() async {
+      await api.call('/api/v1/me', method: 'DELETE', data: {'password': password});
+      notice = '계정이 영구 삭제되었습니다.';
+      await logout();
+    });
+  }
+
   Future<void> logout() async {
+    reconnectTimer?.cancel();
+    reconnectTimer = null;
+    reconnectAttempt = 0;
     await wsSubscription?.cancel();
     await socket?.sink.close();
     await storage.delete(key: 'access_token');
@@ -1167,6 +1269,7 @@ class SessionController extends ChangeNotifier {
   }
 
   void disposeAll() {
+    reconnectTimer?.cancel();
     wsSubscription?.cancel();
     socket?.sink.close();
     super.dispose();

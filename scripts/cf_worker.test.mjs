@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
+import { makeBucket, makeD1 } from './test_helpers.mjs';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -26,11 +27,11 @@ globalThis.WebSocketPair = class {
     this[1] = server;
   }
 };
-async function api(path, token, method = 'GET', body, extraHeaders = {}) {
+async function api(path, token, method = 'GET', body, extraHeaders = {}, extraEnv = null) {
   return worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' });
+  }), { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12', ...(extraEnv || {}) });
 }
 
 test('public hosts cannot enable demo credentials or synthetic payment success', async () => {
@@ -283,17 +284,26 @@ test('translate fails closed without an engine and e2ee flag stays off', async (
 });
 
 test('attachments serve identical bytes at the content alias', async () => {
-  const alice = await signup('att-alice@luno-test.local', 'attallice');
-  const peer = await signup('att-peer@luno-test.local', 'attpeer');
-  const convRoom = await api('conversations', alice.token, 'POST', { title: 'attachment room', member_ids: [peer.id] });
+  const env = { DB: makeD1(), DURABLE_CONVERSATIONS: 'true', MEDIA_BUCKET: makeBucket() };
+  const register = async (email, handle) => {
+    const reg = await api('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: handle, handle }, {}, env);
+    assert.equal(reg.status, 201, `register ${email}`);
+    const id = (await reg.json()).id;
+    const token = (await (await api('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' }, {}, env)).json()).access_token;
+    assert.ok(token, `login ${email}`);
+    return { id, token };
+  };
+  const alice = await register('att-alice@luno-test.local', 'attallice');
+  const peer = await register('att-peer@luno-test.local', 'attpeer');
+  const convRoom = await api('conversations', alice.token, 'POST', { title: 'attachment room', member_ids: [peer.id] }, {}, env);
   assert.equal(convRoom.status, 201);
   const cid = (await convRoom.json()).id;
   const b64 = Buffer.from('hello-bytes').toString('base64');
-  const up = await api('attachments', alice.token, 'POST', { conversation_id: cid, content_base64: b64, mime_type: 'text/plain', original_name: 'hi.txt' });
+  const up = await api('attachments', alice.token, 'POST', { conversation_id: cid, content_base64: b64, mime_type: 'text/plain', original_name: 'hi.txt' }, {}, env);
   assert.equal(up.status, 201);
   const { id } = await up.json();
   for (const path of [`attachments/${id}`, `attachments/${id}/content`]) {
-    const res = await api(path, alice.token, 'GET');
+    const res = await api(path, alice.token, 'GET', undefined, {}, env);
     assert.equal(res.status, 200);
     assert.equal(await res.text(), 'hello-bytes');
   }

@@ -1,17 +1,26 @@
 // WebRTC, E2EE, and Offline Queue utilities for LUNO messenger web client
 
-export async function startWebRTCCall(convId: string, kind: 'voice' | 'video', token: string, requestFn: any): Promise<string | null> {
+export type WebRTCSession = { id: string; pc: RTCPeerConnection; stream: MediaStream }
+
+// A-14: the peer connection AND the mic/camera stream are returned to the
+// caller, which owns their lifetime (endWebRTCCall). Any failure path closes
+// what was already acquired, so nothing leaks on a failed call.
+export async function startWebRTCCall(convId: string, kind: 'voice' | 'video', token: string, requestFn: any): Promise<WebRTCSession | null> {
+  let stream: MediaStream | null = null
+  let pc: RTCPeerConnection | null = null
   try {
     const constraints: MediaStreamConstraints = { audio: true, video: kind === 'video' }
-    const stream = await navigator.mediaDevices.getUserMedia(constraints)
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
-    stream.getTracks().forEach(track => pc.addTrack(track, stream))
+    stream = await navigator.mediaDevices.getUserMedia(constraints)
+    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    stream.getTracks().forEach(track => pc!.addTrack(track, stream!))
     const offer = await pc.createOffer()
     await pc.setLocalDescription(offer)
     const res = await requestFn(`/api/v1/calls`, token, 'POST', { conversation_id: convId, kind, sdp_offer: offer.sdp })
-    return res.id
+    if (!res?.id) throw new Error('no call id')
+    return { id: res.id, pc, stream }
   } catch (e: any) {
     console.error('Call failed:', e)
+    endWebRTCCall(pc, stream)
     return null
   }
 }

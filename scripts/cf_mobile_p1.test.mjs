@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { makeBucket, makeD1 } from './test_helpers.mjs'
 
 // Mobile P1 (2026-11-10): server shapes the new archive/album/lounge/
 // profile/friend/file/QR features rely on. All green at pinning time;
@@ -9,12 +10,12 @@ import test from 'node:test'
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
 
-async function api(path, token, method = 'GET', body) {
+async function api(path, token, method = 'GET', body, env = { ALLOW_LOCAL_DEMO: 'true' }) {
   const res = await worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
-  }), { ALLOW_LOCAL_DEMO: 'true' })
+  }), env)
   let data = null
   try { data = await res.json() } catch { data = null }
   return { status: res.status, data }
@@ -98,9 +99,15 @@ test('friend block toggles and qr approve roundtrips', async () => {
 })
 
 test('file attachments roundtrip and cap size', async () => {
+  const env = { DB: makeD1(), DURABLE_CONVERSATIONS: 'true', MEDIA_BUCKET: makeBucket() }
+  await api('auth/register', null, 'POST', { email: 'file-a@luno-test.local', password: PW, display_name: 'File A', handle: 'file_a' }, env)
+  await api('auth/register', null, 'POST', { email: 'file-b@luno-test.local', password: PW, display_name: 'File B', handle: 'file_b' }, env)
+  const ltk = (await api('auth/login', null, 'POST', { email: 'file-a@luno-test.local', password: PW }, env)).data.access_token
+  const peer = (await api('auth/login', null, 'POST', { email: 'file-b@luno-test.local', password: PW }, env)).data
+  const room = (await api('conversations', ltk, 'POST', { kind: 'group', member_ids: [peer.user_id], title: 'file room' }, env)).data
   const b64 = Buffer.from('probe file bytes').toString('base64')
-  const up = await api('attachments', token, 'POST', { conversation_id: dm.id, content_base64: b64, mime_type: 'text/plain', original_name: 'probe.txt' })
+  const up = await api('attachments', ltk, 'POST', { conversation_id: room.id, content_base64: b64, mime_type: 'text/plain', original_name: 'probe.txt' }, env)
   assert.equal(up.status, 201)
-  const big = await api('attachments', token, 'POST', { conversation_id: dm.id, content_base64: 'A'.repeat(2000001), mime_type: 'text/plain', original_name: 'big.txt' })
+  const big = await api('attachments', ltk, 'POST', { conversation_id: room.id, content_base64: 'A'.repeat(14000001), mime_type: 'text/plain', original_name: 'big.txt' }, env)
   assert.equal(big.status, 413)
 })

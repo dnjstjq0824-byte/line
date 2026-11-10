@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { makeBucket, makeD1 } from './test_helpers.mjs';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -10,8 +11,10 @@ async function api(path, token, method = 'GET', body) {
     method,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), {});
+  }), testEnv);
 }
+
+const testEnv = { DB: makeD1(), DURABLE_CONVERSATIONS: 'true', MEDIA_BUCKET: makeBucket() };
 
 async function signup(email, handle) {
   const res = await api('auth/register', null, 'POST', {

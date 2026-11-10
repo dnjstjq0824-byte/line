@@ -51,6 +51,7 @@ test('favorite toggle persists and restores (star path contract)', async () => {
 })
 
 const vue = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8')
+const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8')
 const appCss = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8')
 const v2Css = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8')
 const i18n = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8')
@@ -70,16 +71,21 @@ test('collapse wins over the desktop width override and stays reversible', () =>
 })
 
 test('file input is programmatically clickable (no hidden attribute)', () => {
-  assert.doesNotMatch(vue, /type="file"\s+hidden/)
-  assert.match(vue, /ref="attachmentInput"[^>]*type="file"/)
+  assert.doesNotMatch(pane, /type="file"\s+hidden/)
+  assert.match(pane, /ref="attachmentInput"[^>]*type="file"/)
   assert.match(appCss, /\.file-input-hidden\s*\{[^}]*position:\s*absolute/)
   assert.match(appCss, /\.file-input-hidden\s*\{[^}]*opacity:\s*0/)
 })
 
 test('camera/file/voice entry points stay wired', () => {
-  assert.match(vue, /@click="openCamera"/)
-  assert.match(vue, /showCameraModal/)
-  assert.match(vue, /@click="chooseAttachment\('file'\)"/)
-  assert.match(vue, /@click="toggleVoiceRecording"/)
-  assert.match(vue, /@change="uploadSelectedFile"/)
+  // I-4: the pane emits, the view handles — both halves must exist.
+  assert.match(pane, /@click="emit\('camera-open'\)"/)
+  assert.match(pane, /showCameraModal/)
+  assert.match(vue, /@camera-open="openCamera"/)
+  assert.match(pane, /@click="emit\('attach', 'file'\)"/)
+  assert.match(vue, /@attach="chooseAttachment"/)
+  assert.match(pane, /@click="emit\('voice-toggle'\)"/)
+  assert.match(vue, /@voice-toggle="toggleVoiceRecording"/)
+  assert.match(pane, /@change="emit\('file-change', \$event\)"/)
+  assert.match(vue, /@file-change="uploadSelectedFile"/)
 })

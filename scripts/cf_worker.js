@@ -65,9 +65,17 @@ const ownedThemes = new Map();
 const officialAccounts = new Map();
 const followedOfficial = new Map();
 const roomMembers = new Map();
-const attachmentStore = new Map();
 const adminReports = [];
-const MAX_ATTACHMENT_B64 = 2_000_000;
+// A-20/B-3: attachment bytes live in R2 (MEDIA_BUCKET); D1 keeps metadata
+// only. Base64 intake is kept so existing clients keep working.
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_B64 = 14_000_000;
+const ATTACHMENT_MIME_ALLOW = new Set([
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+  'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'application/pdf', 'text/plain',
+]);
 const MAX_BODY = 20000;
 
 // Unstamped placeholder for local runs and tests. scripts/build_cf.js never edits
@@ -297,6 +305,8 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['polls', 'closed', 'INTEGER DEFAULT 0'],
   ['polls', 'created_by', "TEXT DEFAULT ''"],
   ['polls', 'options_json', "TEXT DEFAULT '[]'"],
+  ['attachments', 'name', "TEXT DEFAULT ''"],
+  ['e2ee_keys', 'prekey_sig', "TEXT DEFAULT ''"],
 ];
 async function ensurePhase1Columns(db) {
   for (const [table, column, ddl] of LUNO_SCHEMA_PHASE1_COLS) {
@@ -915,6 +925,14 @@ async function deleteAccountData(userId) {
   if (!db) return;
   await ensureSchema();
   const at = now();
+  // A-20/B-3: remove the user's R2 objects before the metadata rows go.
+  const bucket = mediaBucketOf();
+  if (bucket) {
+    try {
+      const rows = await db.prepare('SELECT object_key FROM attachments WHERE uploader_id = ?').bind(userId).all();
+      for (const r of (rows.results || [])) { if (r.object_key) await bucket.delete(r.object_key).catch(() => {}); }
+    } catch (_) {}
+  }
   await d1Batch(db, [
     ["UPDATE users SET state = 'deleted', display_name = ?, password_hash = 'pbkdf2$deleted', bio = '', status_message = '', avatar_url = '', phone_number = '', birthday = '', updated_at = ? WHERE id = ?", '탈퇴한 사용자', at, userId],
     ['DELETE FROM luno_sessions WHERE user_id = ?', userId],
@@ -925,6 +943,7 @@ async function deleteAccountData(userId) {
     ['DELETE FROM e2ee_keys WHERE user_id = ?', userId],
     ['DELETE FROM luno_messages WHERE sender_id = ?', userId],
     ['DELETE FROM luno_attachments WHERE owner_id = ?', userId],
+    ['DELETE FROM attachments WHERE uploader_id = ?', userId],
     ['DELETE FROM luno_read_cursors WHERE user_id = ?', userId],
     ['DELETE FROM luno_ws_tickets WHERE user_id = ?', userId],
     ['DELETE FROM conversation_notes WHERE author_id = ?', userId],
@@ -1101,25 +1120,42 @@ async function recordLoginEvent(user, sessionId, info) {
 }
 
 // ---------- Attachments ----------
-async function persistAttachment(att) {
+// ---------- Attachments (A-20/B-3: R2 bytes + D1 metadata) ----------
+function mediaBucketOf() { return CURRENT_ENV && CURRENT_ENV.MEDIA_BUCKET ? CURRENT_ENV.MEDIA_BUCKET : null; }
+async function persistAttachmentR2(att) {
+  const bucket = mediaBucketOf();
   const db = dbOf();
-  if (!db) return;
+  if (!bucket || !db) return null;
+  const object_key = `conv/${att.conversation_id}/${att.id}`;
+  const sha256 = await sha256Hex(att.bytes);
+  await bucket.put(object_key, att.bytes, { httpMetadata: { contentType: att.mime } });
   await ensureSchema();
-  await db.prepare('INSERT INTO luno_attachments (id, conversation_id, owner_id, name, mime, size, b64, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(att.id, att.conversation_id, att.owner, att.name, att.mime, att.size, att.b64, now()).run();
+  await db.prepare('INSERT INTO attachments (id, conversation_id, object_key, name, mime_type, size_bytes, sha256, uploader_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(att.id, att.conversation_id, object_key, att.name, att.mime, att.bytes.length, sha256, att.owner, now()).run();
+  return { object_key, sha256, size: att.bytes.length };
 }
 async function loadAttachment(id) {
   if (!id) return null;
-  const hit = attachmentStore.get(id);
-  if (hit) return hit;
   const db = dbOf();
   if (!db) return null;
   await ensureSchema();
+  const meta = await db.prepare('SELECT * FROM attachments WHERE id = ?').bind(String(id)).first();
+  if (meta) {
+    const bucket = mediaBucketOf();
+    if (!bucket) return null;
+    const obj = await bucket.get(meta.object_key);
+    if (!obj) return null;
+    const bytes = new Uint8Array(await obj.arrayBuffer());
+    return { id: meta.id, owner: meta.uploader_id, conversation_id: meta.conversation_id, name: meta.name || 'file', mime: meta.mime_type, size: meta.size_bytes, bytes };
+  }
+  // Legacy rows: base64 still in D1 from before the R2 cutover. Read-only —
+  // no new b64 writes exist anymore.
   const r = await db.prepare('SELECT * FROM luno_attachments WHERE id = ?').bind(String(id)).first();
   if (!r) return null;
-  const att = { id: r.id, owner: r.owner_id, conversation_id: r.conversation_id, name: r.name, mime: r.mime, size: r.size, b64: r.b64 };
-  attachmentStore.set(att.id, att);
-  return att;
+  const bin = atob(r.b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { id: r.id, owner: r.owner_id, conversation_id: r.conversation_id, name: r.name, mime: r.mime, size: r.size, bytes };
 }
 
 // ---------- LUNO editorial SAMPLE content (G-4: explicitly labelled, not real press) ----------
@@ -1697,6 +1733,39 @@ function corsOrigin(request, env) {
   if (origin === requestOrigin(request)) return origin;
   const list = String((env && env.ALLOWED_ORIGINS) || '').split(',').map(s => s.trim()).filter(Boolean);
   return list.includes(origin) ? origin : '';
+}
+function cookieValue(request, name) {
+  const header = request.headers.get('Cookie') || '';
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+  }
+  return '';
+}
+// I-2: refresh tokens travel as httpOnly cookies. Secure is set on https
+// origins only so http://localhost development keeps working.
+function refreshCookie(token, request, maxAge = 30 * 86400) {
+  let secure = false;
+  try { secure = new URL(request.url).protocol === 'https:'; } catch { secure = false; }
+  return `luno_refresh=${token}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+}
+// I-3: hardening headers on every response. The strict CSP applies to API
+// payloads only; hosted app assets keep their own document policy.
+async function withSecurityHeaders(request, res) {
+  if (!res || res.webSocket) return res;
+  const headers = new Headers(res.headers);
+  headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  try {
+    const path = new URL(request.url).pathname;
+    if (path.startsWith('/api/') || path === '/metrics') {
+      headers.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    }
+  } catch { /* keep the other headers */ }
+  const nullBody = res.status === 204 || res.status === 304 || res.status === 101;
+  return new Response(nullBody ? null : res.body, { status: res.status, statusText: res.statusText, headers });
 }
 async function withCors(request, env, res) {
   if (!res || res.webSocket) return res;
@@ -2471,7 +2540,7 @@ async function extended(p, request, url, me, token) {
       await revokeSessionById(sid, myId);
       await persistAudit(myId, 'session.logout', sid, {});
     }
-    return json({ status: 'logged_out' });
+    return json({ status: 'logged_out' }, 200, { 'Set-Cookie': refreshCookie('', request, 0) });
   }
   if ((p === 'me/devices' || p === 'devices') && method === 'GET') {
     return json({ devices: await listSessionsFor(myId, sessions.get(token)?.device_id) });
@@ -3102,7 +3171,15 @@ async function extended(p, request, url, me, token) {
       const b = await readJson(request);
       const title = clip(b.title, 60);
       if (!title) return bad('앨범 제목을 입력하세요');
-      const ids = (Array.isArray(b.attachment_ids) ? b.attachment_ids : []).filter(id => attachmentStore.get(id)?.conversation_id === cid && attachmentStore.get(id).mime.startsWith('image/')).slice(0, 100);
+      let ids = [];
+      const candIds = (Array.isArray(b.attachment_ids) ? b.attachment_ids : []).slice(0, 100);
+      if (candIds.length && dbOf()) {
+        await ensureSchema();
+        for (const aid of candIds) {
+          const row = await dbOf().prepare('SELECT conversation_id, mime_type FROM attachments WHERE id = ?').bind(String(aid)).first().catch(() => null);
+          if (row && row.conversation_id === cid && (row.mime_type || '').startsWith('image/')) ids.push(String(aid));
+        }
+      }
       const album = { id: uid(), title, attachment_ids: ids, created_by: myId, created_at: now() };
       list.push(album);
       albums.set(cid, list);
@@ -3112,23 +3189,31 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Attachments ----------
   if (p === 'attachments' && method === 'POST') {
-    const b = await readJson(request);
+    // Attachments bypass readJson's 3MB global cap with their own 413 gate.
+    const rawBody = await request.text().catch(() => '');
+    if (rawBody.length > MAX_ATTACHMENT_B64 + 4096) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
+    let b = {};
+    try { const v = JSON.parse(rawBody || '{}'); if (v && typeof v === 'object') b = v; } catch { b = {}; }
     const conv = conversations.get(b.conversation_id);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
-    if (typeof b.content_base64 !== 'string' || !b.content_base64 || b.content_base64.length > MAX_ATTACHMENT_B64 || !/^[A-Za-z0-9+/=]+$/.test(b.content_base64)) return bad('파일이 비어 있거나 너무 큽니다 (최대 약 1.5MB)', 413);
-    const mime = typeof b.mime_type === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(b.mime_type) ? b.mime_type.toLowerCase() : 'application/octet-stream';
-    const size = Math.floor(b.content_base64.length * 3 / 4);
-    const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, size, b64: b.content_base64 };
-    await persistAttachment(att);
-    attachmentStore.set(att.id, att);
-    return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: size }, 201);
+    if (typeof b.content_base64 !== 'string' || !b.content_base64 || b.content_base64.length > MAX_ATTACHMENT_B64 || !/^[A-Za-z0-9+/=]+$/.test(b.content_base64)) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
+    const mime = typeof b.mime_type === 'string' ? b.mime_type.toLowerCase() : '';
+    if (!ATTACHMENT_MIME_ALLOW.has(mime)) return json({ error: '허용되지 않은 파일 형식입니다', code: 'MIME_NOT_ALLOWED' }, 415);
+    const bucket = mediaBucketOf();
+    const store = dbOf();
+    if (!bucket || !store) return json({ error: '미디어 스토리지가 아직 연결되지 않았습니다', code: 'MEDIA_UNAVAILABLE' }, 503);
+    const bin = atob(b.content_base64);
+    if (bin.length > MAX_ATTACHMENT_BYTES) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, bytes };
+    await persistAttachmentR2(att);
+    return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: bytes.length }, 201);
   }
   if ((m = p.match(/^attachments\/([\w-]+)(?:\/content)?$/)) && method === 'GET') {
     const att = await loadAttachment(m[1]);
     if (!att || !conversations.get(att.conversation_id)?.members.includes(myId)) return bad('파일을 찾을 수 없습니다', 404);
-    const bin = atob(att.b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const bytes = att.bytes;
     const inline = INLINE_MIME.test(att.mime);
     const acao = corsOrigin(request, typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null);
     return new Response(bytes, {
@@ -3242,7 +3327,10 @@ async function extended(p, request, url, me, token) {
     call.state = 'ended';
     const duration = call.connected_at ? Math.round((Date.parse(call.ended_at) - Date.parse(call.connected_at)) / 1000) : 0;
     call.result = call.connected_at ? 'completed' : (b.state === 'declined' ? 'declined' : (call.initiated_by === myId ? 'canceled' : 'missed'));
-    pushMessage(call.conversation_id, call.initiated_by, { kind: 'call', body: '', metadata: { call_id: call.id, call_kind: call.kind, duration, result: call.result } });
+    // A-5/A-14: the server mints the call_status bubble itself (clients are
+    // forbidden from forging system kinds). Shape matches the /calls ledger.
+    const durText = Math.floor(duration / 60) + ':' + String(duration % 60).padStart(2, '0');
+    pushMessage(call.conversation_id, call.initiated_by, { kind: 'call_status', body: (call.kind === 'video' ? '영상통화' : '음성통화') + (duration > 0 ? ' ' + durText : ''), metadata: { call_id: call.id, call_type: call.kind, call_kind: call.kind, duration: durText, call_status: call.result, status: call.result } });
     broadcast({ type: 'call.state', call_id: call.id, state: 'ended', result: call.result });
     return json({ status: 'ended', result: call.result, duration });
   }
@@ -3599,22 +3687,42 @@ async function extended(p, request, url, me, token) {
   if ((m = p.match(/^devices\/([\w-]+)\/keys$/))) {
     if (method === 'PUT') {
       const b = await readJson(request);
+      if (typeof b.identity_key !== 'string' || !b.identity_key) return bad('identity_key가 필요합니다');
+      const otks = Array.isArray(b.one_time_prekeys) ? b.one_time_prekeys.filter(x => typeof x === 'string').slice(0, 100) : [];
       const bundle = {
         device_id: m[1],
         user_id: myId,
         identity_key: b.identity_key,
-        signed_prekey: b.signed_prekey,
-        prekey_sig: b.prekey_sig,
-        one_time_prekeys: Array.isArray(b.one_time_prekeys) ? b.one_time_prekeys : [],
+        signed_prekey: typeof b.signed_prekey === 'string' ? b.signed_prekey : '',
+        prekey_sig: typeof b.prekey_sig === 'string' ? b.prekey_sig : '',
+        one_time_prekeys: otks,
         updated_at: now()
       };
       deviceKeys.set(m[1], bundle);
       userKeys.set(myId, bundle);
+      const kdb = dbOf();
+      if (kdb) {
+        await ensureSchema();
+        await kdb.prepare('INSERT INTO e2ee_keys (user_id, device_id, identity_key, signed_prekey, prekey_sig, prekeys_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, device_id) DO UPDATE SET identity_key=excluded.identity_key, signed_prekey=excluded.signed_prekey, prekey_sig=excluded.prekey_sig, prekeys_json=excluded.prekeys_json, updated_at=excluded.updated_at')
+          .bind(myId, m[1], bundle.identity_key, bundle.signed_prekey, bundle.prekey_sig, JSON.stringify(otks), bundle.updated_at).run();
+      }
       return json({ status: 'keys_registered', device_id: m[1] });
     }
   }
   if ((m = p.match(/^users\/([\w-]+)\/keys$/)) && method === 'GET') {
     const targetId = m[1];
+    const kdb = dbOf();
+    if (kdb) {
+      await ensureSchema();
+      const row = await kdb.prepare('SELECT * FROM e2ee_keys WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1').bind(targetId).first();
+      if (row) {
+        let otks = [];
+        try { otks = JSON.parse(row.prekeys_json || '[]'); } catch { otks = []; }
+        const otk = otks.length ? otks.shift() : null;
+        if (otk) await kdb.prepare('UPDATE e2ee_keys SET prekeys_json = ? WHERE user_id = ? AND device_id = ?').bind(JSON.stringify(otks), targetId, row.device_id).run();
+        return json({ user_id: targetId, device_id: row.device_id, identity_key: row.identity_key, signed_prekey: row.signed_prekey, prekey_sig: row.prekey_sig || '', one_time_prekey: otk });
+      }
+    }
     const bundle = userKeys.get(targetId);
     if (!bundle) {
       return json({ error: 'No registered key bundle', code: 'KEY_BUNDLE_NOT_FOUND' }, 404);
@@ -3861,7 +3969,7 @@ async function syncFromD1(db) {
   }
 }
 
-const READY_TABLES = ['users', 'wallets', 'luno_sessions', 'luno_messages', 'luno_read_cursors', 'luno_attachments', 'luno_ws_tickets', 'luno_audit'];
+const READY_TABLES = ['users', 'wallets', 'luno_sessions', 'luno_messages', 'attachments', 'luno_read_cursors', 'luno_attachments', 'luno_ws_tickets', 'luno_audit'];
 let booted = null;
 function boot(env) {
   if (!booted) {
@@ -3877,6 +3985,26 @@ function boot(env) {
   return booted;
 }
 
+// Gateway routing shared by the export wrapper (transparent proxy) and
+// workerCore (misconfiguration fails closed). Returns the validated origin,
+// 'invalid' for a rejected API_BACKEND_ORIGIN, or null when the gateway
+// does not apply to this request.
+function gatewayOriginFor(request, env) {
+  const url = new URL(request.url);
+  const backendRoute = url.pathname.startsWith('/api/') || ['/healthz', '/readyz', '/metrics'].includes(url.pathname);
+  if (!env.API_BACKEND_ORIGIN || !backendRoute) return null;
+  try {
+    const origin = new URL(env.API_BACKEND_ORIGIN);
+    if (origin.protocol !== 'https:' || origin.username || origin.password ||
+        origin.pathname !== '/' || origin.search || origin.hash || origin.origin === url.origin) {
+      return 'invalid';
+    }
+    return origin;
+  } catch {
+    return 'invalid';
+  }
+}
+
 const workerCore = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -3886,26 +4014,10 @@ const workerCore = {
     // Route the complete API to one persistent backend; never mix its identities
     // with the isolate-local demo or fall back to demo data on upstream failure.
     const backendRoute = url.pathname.startsWith('/api/') || ['/healthz', '/readyz', '/metrics'].includes(url.pathname);
-    if (env.API_BACKEND_ORIGIN && backendRoute) {
-      let origin;
-      try {
-        origin = new URL(env.API_BACKEND_ORIGIN);
-        if (origin.protocol !== 'https:' || origin.username || origin.password ||
-            origin.pathname !== '/' || origin.search || origin.hash || origin.origin === url.origin) {
-          throw new Error('invalid origin');
-        }
-      } catch {
-        return json({ error: 'backend configuration invalid' }, 503);
-      }
-      url.protocol = origin.protocol;
-      url.host = origin.host;
-      const upstream = new Request(url, request);
-      upstream.headers.delete('Host');
-      try {
-        return await fetch(new Request(upstream, { redirect: 'manual' }));
-      } catch {
-        return json({ error: 'backend unavailable' }, 502);
-      }
+    // Valid origins are proxied transparently by the export wrapper (no edge
+    // header rewrites); only a misconfigured origin fails closed here.
+    if (gatewayOriginFor(request, env) === 'invalid') {
+      return json({ error: 'backend configuration invalid' }, 503);
     }
     const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     // Cloudflare hostnames can serve production traffic. Public standalone hosts
@@ -3999,7 +4111,7 @@ const workerCore = {
       const mUsers = await count('users');
       const mSessions = await count('luno_sessions', 'revoked_at IS NULL');
       const mMessages = await count('luno_messages');
-      const mAttachments = await count('luno_attachments');
+      const mAttachments = await count('attachments');
       const mBans = await count('user_bans');
       const mReports = await count('reports', `status = 'open'`);
       const out = [
@@ -4012,7 +4124,7 @@ const workerCore = {
         '# HELP luno_messages_total Persisted messages (D1)',
         '# TYPE luno_messages_total gauge',
         `luno_messages_total ${mMessages}`,
-        '# HELP luno_attachments_total Stored attachments (D1)',
+        '# HELP luno_attachments_total Stored attachment metadata (D1, bytes in R2)',
         '# TYPE luno_attachments_total gauge',
         `luno_attachments_total ${mAttachments}`,
         '# HELP luno_bans_total Banned users (D1)',
@@ -4214,7 +4326,7 @@ const workerCore = {
           user_id: user.id,
           role: user.role,
           device_id: deviceId
-        });
+        }, 200, refreshToken ? { 'Set-Cookie': refreshCookie(refreshToken, request) } : {});
       }
       // 2b. Auth: Refresh rotation (A-15). Single-use refresh tokens: each
       // successful call burns the presented token and mints a fresh pair on
@@ -4223,7 +4335,7 @@ const workerCore = {
       if (p === 'auth/refresh' && request.method === 'POST') {
         if (!await rateLimit('rl:refresh:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const rbody = await request.json().catch(() => ({}));
-        const presented = String(rbody.refresh_token || '');
+        const presented = String(rbody.refresh_token || cookieValue(request, 'luno_refresh') || '');
         const rdb = dbOf();
         if (!rdb) return json({ error: 'token refresh requires a configured database' }, 501);
         if (!presented.startsWith('cf-refresh-')) return json({ error: 'invalid credentials' }, 401);
@@ -4266,7 +4378,7 @@ const workerCore = {
           user_id: ruser.id,
           role: ruser.role,
           device_id: rrow.device_id
-        });
+        }, 200, { 'Set-Cookie': refreshCookie(newRefresh, request) });
       }
 
 
@@ -5090,7 +5202,22 @@ export default {
     CURRENT_ENV = env;
     CURRENT_CTX = ctx || null;
     try {
-      return withCors(request, env, await workerCore.fetch(request, env, ctx));
+      const gwOrigin = gatewayOriginFor(request, env);
+      if (gwOrigin && gwOrigin !== 'invalid') {
+        // Transparent reverse proxy: the upstream response passes through
+        // byte-identical (cf_gateway contract) — no edge header rewrites.
+        const url = new URL(request.url);
+        url.protocol = gwOrigin.protocol;
+        url.host = gwOrigin.host;
+        const upstream = new Request(url, request);
+        upstream.headers.delete('Host');
+        try {
+          return await fetch(new Request(upstream, { redirect: 'manual' }));
+        } catch {
+          return withSecurityHeaders(request, await withCors(request, env, json({ error: 'backend unavailable' }, 502)));
+        }
+      }
+      return withSecurityHeaders(request, await withCors(request, env, await workerCore.fetch(request, env, ctx)));
     } catch (err) {
       if (err?.code === 'CONVERSATION_CONFLICT') return json({ error: err.message, code: err.code }, 409);
       console.error('[LUNO internal error]', err && err.stack ? err.stack : err);
