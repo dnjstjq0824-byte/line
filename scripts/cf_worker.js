@@ -3975,8 +3975,12 @@ const LATEST_ANDROID_BUILD = {
   platform: 'android',
   version: '2.0.0',
   build: 5,
-  size_bytes: 63283179,
-  url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build5/luno-v2.0.0-build5.apk',
+  package: 'com.bookingnetwork.messenger.global_messenger',
+  assets: [
+    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 22682844, sha256: 'B78C58E6C7933B1410491B36AF3986E40CFBC871915F4F09BD5DBC425E3145A0', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build5/luno-messenger-arm64.apk' },
+    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 20551498, sha256: '7B48B59E2E22263ED96B6032491995FC088863BD893B1E0EC3470A898F97552E', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build5/luno-messenger-arm32.apk' },
+    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 24288477, sha256: '51F0370C81939020D140FD38C20AC4196A55BA38AE935B969828A5D73FEC00AD', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build5/luno-messenger-x86_64.apk' },
+  ],
 };
 
 const READY_TABLES = ['users', 'wallets', 'luno_sessions', 'luno_messages', 'attachments', 'luno_read_cursors', 'luno_attachments', 'luno_ws_tickets', 'luno_audit'];
@@ -4047,24 +4051,6 @@ const workerCore = {
     if (url.pathname === '/healthz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
       return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
     }
-    if (url.pathname === '/download') {
-      const b = LATEST_ANDROID_BUILD;
-      const mb = (b.size_bytes / 1048576).toFixed(1);
-      const html = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">' +
-        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-        '<title>LUNO Android 앱 다운로드</title>' +
-        '<style>body{font-family:system-ui,sans-serif;background:#0F172A;color:#F8FAFC;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}' +
-        'main{padding:32px}a{display:inline-block;margin-top:16px;padding:14px 28px;background:#2563EB;color:#fff;text-decoration:none;border-radius:12px;font-weight:700}' +
-        '.meta{color:#94A3B8;font-size:14px;margin-top:16px}</style></head><body><main>' +
-        '<h1>LUNO</h1><p>Android ' + b.version + ' (build ' + b.build + ') · ' + mb + 'MB</p>' +
-        '<a href="/download/apk">APK 다운로드</a>' +
-        '<p class="meta">설치 시 알 수 없는 출처의 앱 허용이 필요할 수 있습니다.</p>' +
-        '</main></body></html>';
-      return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
-    }
-    if (url.pathname === '/download/apk') {
-      return new Response(null, { status: 302, headers: { Location: LATEST_ANDROID_BUILD.url, 'Cache-Control': 'no-store' } });
-    }
     if (url.pathname === '/readyz') {
       if (!env.DB) return json({ status: 'not_ready', checks: { database: 'not_configured' } }, 503);
       try {
@@ -4106,7 +4092,7 @@ const workerCore = {
     }
     if (url.pathname === '/api/v1/app/latest' && request.method === 'GET') {
       const b = LATEST_ANDROID_BUILD;
-      return json({ platform: b.platform, version: b.version, build: b.build, size_bytes: b.size_bytes, url: b.url });
+      return json({ platform: b.platform, version: b.version, build: b.build, package: b.package, assets: b.assets });
     }
     if (url.pathname === '/api/v1/channel/slot' && request.method === 'GET') {
       const auth = await getAuthUser(request);
