@@ -294,6 +294,10 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'bio', "TEXT DEFAULT ''"],
   ['users', 'phone_number', "TEXT DEFAULT ''"],
   ['users', 'state', "TEXT DEFAULT 'active'"],
+  ['users', 'password_hash', "TEXT NOT NULL DEFAULT ''"],
+  ['users', 'display_name', "TEXT NOT NULL DEFAULT ''"],
+  ['users', 'created_at', "TEXT NOT NULL DEFAULT ''"],
+  ['users', 'updated_at', "TEXT NOT NULL DEFAULT ''"],
   ['friends', 'is_favorite', 'INTEGER DEFAULT 0'],
   ['friends', 'status', "TEXT DEFAULT 'accepted'"],
   ['friends', 'created_at', 'TEXT'],
@@ -324,6 +328,10 @@ async function ensurePhase1Columns(db) {
     await db.prepare(`UPDATE users SET handle = 'user_' || substr(id, 1, 8) WHERE handle IS NULL`).run();
     await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users(handle)`).run();
   } catch (_) { /* pre-existing duplicates stay; register enforces going forward */ }
+  // Rows that predate display_name get the email prefix so clients never render a blank name.
+  try {
+    await db.prepare(`UPDATE users SET display_name = substr(email, 1, instr(email, '@') - 1) WHERE display_name = ''`).run();
+  } catch (_) { /* ancient row without email stays blank */ }
 }
 
 let schemaReady = null;
