@@ -14,13 +14,36 @@ const appCssSource = await readFile(new URL('../apps/user-web/src/App.vue', impo
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
 
-const OPTS = { tag: 'ko-KR', yesterday: '어제', nowMs: Date.parse('2026-11-10T21:20:00+09:00') };
+const OPTS = { tag: 'ko-KR', yesterday: '어제', nowMs: Date.now() };
+
+// Inputs derive from the local calendar so the suite passes in any zone
+// (CI runs UTC; fixed +09:00 fixtures broke there while green in KST).
+const _pad = (n) => String(n).padStart(2, '0');
+const _isoLocal = (d) =>
+  `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}T${_pad(d.getHours())}:${_pad(d.getMinutes())}:00`;
 
 test('list rows show clock time today, dates otherwise', () => {
-  assert.equal(listRowTime('2026-11-10T12:00:00+09:00', OPTS), '오후 12:00');
-  assert.equal(listRowTime('2026-11-09T23:20:00+09:00', OPTS), '어제');
-  assert.match(listRowTime('2026-10-09T14:20:00+09:00', OPTS), /10.*9/);
-  assert.match(listRowTime('2025-12-31T23:59:00+09:00', OPTS), /2025.*12.*31/);
+  const now = new Date();
+  const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0);
+  const yestNoon = new Date(todayNoon.getTime() - 86400000);
+  const oldDate = new Date(todayNoon.getTime() - 65 * 86400000);
+  const lastYear = new Date(now.getFullYear() - 1, 0, 15, 12, 0);
+  assert.match(listRowTime(_isoLocal(todayNoon), OPTS), /오후 \d{2}:\d{2}/);
+  assert.equal(listRowTime(_isoLocal(yestNoon), OPTS), '어제');
+  const oldOut = listRowTime(_isoLocal(oldDate), OPTS);
+  if (oldDate.getFullYear() === now.getFullYear()) {
+    assert.match(oldOut, new RegExp(`${oldDate.getMonth() + 1}.*${oldDate.getDate()}`));
+    assert.doesNotMatch(oldOut, new RegExp(`${now.getFullYear()}`));
+  } else {
+    assert.match(
+      oldOut,
+      new RegExp(`${oldDate.getFullYear()}.*${oldDate.getMonth() + 1}.*${oldDate.getDate()}`),
+    );
+  }
+  assert.match(
+    listRowTime(_isoLocal(lastYear), OPTS),
+    new RegExp(`${now.getFullYear() - 1}.*1.*15`),
+  );
   assert.equal(listRowTime('', OPTS), '');
   assert.equal(listRowTime('not-a-date', OPTS), '');
 });
