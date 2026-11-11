@@ -4396,7 +4396,8 @@ const workerCore = {
       // 2b. Auth: Refresh rotation (A-15). Single-use refresh tokens: each
       // successful call burns the presented token and mints a fresh pair on
       // the same session. Presenting an already-rotated token signals theft:
-      // the whole grant (all sessions + refresh tokens) is revoked.
+      // only the compromised session chain is revoked (rotation reuses the
+      // session id, so the thief's rotated tokens die with it).
       if (p === 'auth/refresh' && request.method === 'POST') {
         if (!await rateLimit('rl:refresh:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const rbody = await request.json().catch(() => ({}));
@@ -4409,8 +4410,11 @@ const workerCore = {
         const rrow = await rdb.prepare('SELECT token_hash, user_id, device_id, expires_at, revoked FROM refresh_tokens WHERE token_hash = ?').bind(rhash).first();
         if (!rrow) return json({ error: 'invalid credentials' }, 401);
         if (rrow.revoked) {
-          await revokeAllRefresh(rrow.user_id, null);
-          await revokeOtherSessions(rrow.user_id, '', rrow.user_id);
+          // Scope the kill to this session chain. A whole-grant kill
+          // self-sustains across multi-device clients: every live client
+          // holds a pre-kill token and re-kills on its next refresh,
+          // permanently DoSing fresh logins (prod login-kick loop).
+          await revokeSessionById(rrow.device_id, rrow.user_id);
           await persistAudit(rrow.user_id, 'refresh.reuse_detected', rrow.device_id || '', {});
           return json({ error: 'invalid credentials' }, 401);
         }

@@ -83,7 +83,7 @@ test('B1: register hashes at PBKDF2-100k (workerd cap); 1k rows migrate on login
   assert.match(migrated.password_hash, /^pbkdf2\$100000\$.+\$.+$/, '1k row rehashed to 100k on login');
 });
 
-test('B1: refresh rotates single-use; reuse kills the grant; expiry enforced', async () => {
+test('B1: refresh rotates single-use; reuse kills only its chain; expiry enforced', async () => {
   const { api, db } = await isolate();
   const u = await signup(api, 'b1-refresh@local.test', 'b1refresh');
   const r1 = await api('auth/refresh', 'POST', { refresh_token: u.refresh_token });
@@ -94,13 +94,23 @@ test('B1: refresh rotates single-use; reuse kills the grant; expiry enforced', a
   assert.equal(pair.device_id, u.device_id, 'rotation stays on the same session');
   assert.equal((await api('me', 'GET', null, pair.access_token)).status, 200, 'rotated access works');
   assert.equal((await api('me', 'GET', null, u.access_token)).status, 401, 'pre-rotation access is dead');
-  // Reuse of the burned token: theft response, whole grant dies.
+  // Second device: its own session + refresh pair.
+  const login2 = await api('auth/login', 'POST', { email: 'b1-refresh@local.test', password: 'Hard3n#Passw0rd' });
+  assert.equal(login2.status, 200, 'second device logs in');
+  const dev2 = await login2.json();
+  // Reuse of the burned token: theft response scoped to the compromised
+  // chain. A whole-grant kill self-sustains across multi-device clients
+  // (each live client holds a pre-kill token and re-kills on refresh),
+  // permanently DoSing fresh logins — the prod login-kick loop.
   const reuse = await api('auth/refresh', 'POST', { refresh_token: u.refresh_token });
   assert.equal(reuse.status, 401, 'rotated token is single-use');
-  assert.equal((await api('me', 'GET', null, pair.access_token)).status, 401, 'reuse kills the live session too');
-  assert.equal((await api('auth/refresh', 'POST', { refresh_token: pair.refresh_token })).status, 401, 'reuse kills sibling refresh');
+  assert.equal((await api('me', 'GET', null, pair.access_token)).status, 401, 'reuse kills the compromised chain');
+  assert.equal((await api('auth/refresh', 'POST', { refresh_token: pair.refresh_token })).status, 401, 'chain refresh dies with it');
+  assert.equal((await api('me', 'GET', null, dev2.access_token)).status, 200, 'sibling device session survives');
+  const r2 = await api('auth/refresh', 'POST', { refresh_token: dev2.refresh_token });
+  assert.equal(r2.status, 200, 'sibling device refresh still rotates');
   const left = db.raw.prepare('SELECT COUNT(*) n FROM refresh_tokens WHERE user_id = ? AND revoked = 0').get(u.user_id);
-  assert.equal(Number(left.n), 0, 'no live refresh tokens remain');
+  assert.equal(Number(left.n), 1, 'only the sibling chain stays live');
   // Forged and expired tokens fail closed.
   assert.equal((await api('auth/refresh', 'POST', { refresh_token: 'cf-refresh-forged' })).status, 401);
   const u2 = await signup(api, 'b1-refresh2@local.test', 'b1refresh2');
@@ -108,6 +118,23 @@ test('B1: refresh rotates single-use; reuse kills the grant; expiry enforced', a
   const h = createHash('sha256').update(u2.refresh_token).digest('hex');
   db.raw.prepare('UPDATE refresh_tokens SET expires_at = ? WHERE token_hash = ?').run(Date.now() - 1000, h);
   assert.equal((await api('auth/refresh', 'POST', { refresh_token: u2.refresh_token })).status, 401, 'expired refresh rejected');
+});
+
+test('B1: stale-client reuse must not kill a fresh login (multi-device cascade)', async () => {
+  const { api } = await isolate();
+  const a = await signup(api, 'b1-cascade@local.test', 'b1cascade');
+  // Device A rotates, then goes stale holding the burned token.
+  const r = await api('auth/refresh', 'POST', { refresh_token: a.refresh_token });
+  assert.equal(r.status, 200, 'device A rotates');
+  const burned = a.refresh_token;
+  // Device B logs in fresh afterwards.
+  const loginB = await api('auth/login', 'POST', { email: 'b1-cascade@local.test', password: 'Hard3n#Passw0rd' });
+  assert.equal(loginB.status, 200, 'device B logs in fresh');
+  const b = await loginB.json();
+  // Stale device A presents its dead token: must not touch B.
+  assert.equal((await api('auth/refresh', 'POST', { refresh_token: burned })).status, 401, 'burned token rejected');
+  assert.equal((await api('me', 'GET', null, b.access_token)).status, 200, 'fresh login survives stale reuse');
+  assert.equal((await api('auth/refresh', 'POST', { refresh_token: b.refresh_token })).status, 200, 'fresh refresh survives stale reuse');
 });
 
 test('B1: access tokens die after 15 minutes (D1 clock)', async () => {
