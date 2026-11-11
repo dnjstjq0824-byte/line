@@ -426,6 +426,8 @@ Future<void> _textDialog(
   required ValueChanged<String> onSave,
 }) async {
   final controller = TextEditingController(text: initial);
+  // No synchronous dispose: the pop transition still touches this while
+  // the session notify rebuilds. Unmount unregisters; GC collects.
   await showDialog<void>(
     context: context,
     builder: (dialog) => StatefulBuilder(
@@ -455,7 +457,6 @@ Future<void> _textDialog(
       ),
     ),
   );
-  controller.dispose();
 }
 
 Future<void> _qrSheet(BuildContext context) async {

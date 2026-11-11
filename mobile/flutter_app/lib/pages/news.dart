@@ -1,5 +1,7 @@
-// Route: /news — signal wire. Every card renders GET /api/v1/news only.
-// Articles open on their own route (/news/:aid), never a stacked sheet.
+// Route: /news — LINE-style news. A swipeable hero carousel over every
+// GET /api/v1/news hero (segment indicator included), then ranked popular
+// rows with thumbnails. Articles open on their own route (/news/:aid).
+// Gear and ad rows are omitted: no backend serves them.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -18,10 +20,10 @@ String newsByline(SessionController session, Map<String, dynamic> article) {
   return '$press · $when';
 }
 
-/// Stable address for an article: `hero` or `popular-N`.
+/// Stable address for an article: `hero-N` or `popular-N`.
 String newsAddress(SessionController session, Map<String, dynamic> article) {
   final heroIndex = session.newsHero.indexWhere((h) => identical(h, article));
-  if (heroIndex >= 0) return 'hero';
+  if (heroIndex >= 0) return 'hero-$heroIndex';
   final popularIndex =
       session.newsPopular.indexWhere((p) => identical(p, article));
   if (popularIndex >= 0) return 'popular-$popularIndex';
@@ -31,6 +33,13 @@ String newsAddress(SessionController session, Map<String, dynamic> article) {
 Map<String, dynamic>? resolveArticle(SessionController session, String aid) {
   if (aid == 'hero' && session.newsHero.isNotEmpty) {
     return session.newsHero.first as Map<String, dynamic>;
+  }
+  if (aid.startsWith('hero-')) {
+    final i = int.tryParse(aid.substring('hero-'.length)) ?? -1;
+    if (i >= 0 && i < session.newsHero.length) {
+      return session.newsHero[i] as Map<String, dynamic>;
+    }
+    return null;
   }
   if (aid.startsWith('popular-')) {
     final i = int.tryParse(aid.substring('popular-'.length)) ?? -1;
@@ -63,8 +72,15 @@ class NewsSampleBanner extends StatelessWidget {
   }
 }
 
-class NewsPage extends StatelessWidget {
+class NewsPage extends StatefulWidget {
   const NewsPage({super.key});
+
+  @override
+  State<NewsPage> createState() => _NewsPageState();
+}
+
+class _NewsPageState extends State<NewsPage> {
+  int _heroPage = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -91,72 +107,53 @@ class NewsPage extends StatelessWidget {
         ),
       );
     }
-    final hero = session.newsHero.isNotEmpty
-        ? session.newsHero.first as Map<String, dynamic>
-        : null;
+    final heroes =
+        session.newsHero.whereType<Map<String, dynamic>>().toList();
     return RefreshIndicator(
       onRefresh: session.reload,
       child: ListView(
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '뉴스', subtitle: 'LUNO 신호 전보'),
+              const Masthead(title: '뉴스'),
               if (session.newsIsSample) const NewsSampleBanner(),
-              if (hero != null)
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(HarborRadius.card)),
-                  child: InkWell(
-                    onTap: () => context
-                        .go('/news/${newsAddress(session, hero)}'),
-                    child: Container(
-                      width: double.infinity,
-                      color:
-                          dark ? HarborDark.chart : HarborLight.harbor,
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const LampBar(height: 16),
-                              const SizedBox(width: 8),
-                              Text('헤드라인',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: dark
-                                          ? HarborDark.beacon
-                                          : HarborLight.seaGlass)),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            newsField(hero, 'title'),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                height: 1.3),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            newsByline(session, hero),
-                            style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.75),
-                                fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
+              if (heroes.isNotEmpty) ...[
+                SizedBox(
+                  height: 220,
+                  child: PageView.builder(
+                    itemCount: heroes.length,
+                    onPageChanged: (i) => setState(() => _heroPage = i),
+                    itemBuilder: (context, i) =>
+                        _HeroCard(article: heroes[i], index: i),
                   ),
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  key: const ValueKey('hero-segments'),
+                  children: [
+                    for (var i = 0; i < heroes.length; i++)
+                      Expanded(
+                        child: Container(
+                          height: 3,
+                          margin: EdgeInsets.only(
+                              left: i == 0 ? 0 : 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(2),
+                            color: i == _heroPage
+                                ? (dark
+                                    ? Colors.white
+                                    : HarborLight.harbor)
+                                : (dark
+                                    ? Colors.white24
+                                    : HarborLight.channel),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               if (session.newsPopular.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Text('오늘의 인기 기사',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
@@ -177,6 +174,79 @@ class NewsPage extends StatelessWidget {
   }
 }
 
+class _HeroCard extends StatelessWidget {
+  final Map<String, dynamic> article;
+  final int index;
+  const _HeroCard({required this.article, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context, listen: false);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final imageUrl = newsField(article, 'image_url');
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(HarborRadius.card)),
+      child: InkWell(
+        onTap: () => context.go('/news/hero-$index'),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (imageUrl.isNotEmpty)
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, _, __) => Container(
+                    color: dark ? HarborDark.chart : HarborLight.harbor),
+              )
+            else
+              Container(
+                  color: dark ? HarborDark.chart : HarborLight.harbor),
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black87],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 14,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    newsField(article, 'title'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        height: 1.3),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    newsByline(session, article),
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NewsRow extends StatelessWidget {
   final Map<String, dynamic> article;
   final int fallbackRank;
@@ -187,25 +257,65 @@ class _NewsRow extends StatelessWidget {
     final session = SessionScope.of(context, listen: false);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final rank = article['rank'] is int ? article['rank'] as int : fallbackRank;
+    final imageUrl = newsField(article, 'image_url');
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       onTap: () =>
           context.go('/news/${newsAddress(session, article)}'),
-      leading: Container(
-        width: 44,
-        height: 44,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: dark ? HarborDark.chart : HarborLight.chart,
-          borderRadius: BorderRadius.circular(HarborRadius.control),
+      leading: SizedBox(
+        width: 72,
+        height: 72,
+        child: Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: imageUrl.isNotEmpty
+                  ? Image.network(
+                      imageUrl,
+                      width: 72,
+                      height: 72,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, _, __) => Container(
+                        width: 72,
+                        height: 72,
+                        color:
+                            dark ? HarborDark.chart : HarborLight.chart,
+                        child: Icon(Icons.newspaper_outlined,
+                            color: dark
+                                ? HarborDark.channel
+                                : HarborLight.channel),
+                      ),
+                    )
+                  : Container(
+                      width: 72,
+                      height: 72,
+                      color: dark ? HarborDark.chart : HarborLight.chart,
+                    ),
+            ),
+            Positioned(
+              left: 4,
+              top: 4,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('$rank',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12)),
+              ),
+            ),
+          ],
         ),
-        child: Text('$rank',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
       ),
       title: Text(newsField(article, 'title'),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
       subtitle: Text(newsByline(session, article),
           style: Theme.of(context).textTheme.bodySmall),
     );

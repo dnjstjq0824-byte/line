@@ -8,6 +8,7 @@ import 'design/responsive.dart';
 import 'design/v3.dart';
 import 'pages/apps.dart';
 import 'pages/auth.dart';
+import 'pages/call_detail.dart';
 import 'pages/calls.dart';
 import 'pages/channels.dart';
 import 'pages/chat_archive.dart';
@@ -21,7 +22,9 @@ import 'pages/lounge.dart';
 import 'pages/more.dart';
 import 'pages/news.dart';
 import 'pages/news_article.dart';
+import 'pages/privacy.dart';
 import 'pages/profile.dart';
+import 'pages/search.dart';
 import 'pages/settings.dart';
 import 'pages/shop.dart';
 import 'pages/splash.dart';
@@ -110,8 +113,14 @@ GoRouter buildRouter(SessionController session) {
             pageBuilder: (c, s) => harborPage(c, s, NewsArticlePage(articleId: s.pathParameters['aid']!)),
           ),
           GoRoute(path: '/calls', pageBuilder: (c, s) => harborPage(c, s, const CallsPage())),
+          GoRoute(
+            path: '/calls/:cid',
+            pageBuilder: (c, s) => harborPage(c, s, CallDetailPage(conversationId: s.pathParameters['cid']!)),
+          ),
           GoRoute(path: '/wallet', pageBuilder: (c, s) => harborPage(c, s, const WalletPage())),
           GoRoute(path: '/settings', pageBuilder: (c, s) => harborPage(c, s, const SettingsPage())),
+          GoRoute(path: '/search', pageBuilder: (c, s) => harborPage(c, s, const SearchPage())),
+          GoRoute(path: '/privacy', pageBuilder: (c, s) => harborPage(c, s, const PrivacyPage())),
           GoRoute(path: '/keep', pageBuilder: (c, s) => harborPage(c, s, const KeepPage())),
           GoRoute(path: '/more', pageBuilder: (c, s) => harborPage(c, s, const MorePage())),
           GoRoute(path: '/apps', pageBuilder: (c, s) => harborPage(c, s, const AppsPage())),

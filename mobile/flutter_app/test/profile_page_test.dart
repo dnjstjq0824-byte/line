@@ -82,12 +82,15 @@ void main() {
     expect(find.text('프로필 사진 삭제'), findsOneWidget);
   });
 
-  testWidgets('name row opens an edit dialog',
+  testWidgets('name edit submits fail-closed without server',
       (WidgetTester tester) async {
-    await tester.pumpWidget(_wrap(_fixture()));
+    final s = _fixture();
+    await tester.pumpWidget(_wrap(s));
     await tester.pumpAndSettle();
     await tester.tap(find.text('도도'));
     await tester.pumpAndSettle();
-    expect(find.text('저장'), findsOneWidget);
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+    expect(s.error, isNotEmpty);
   });
 }

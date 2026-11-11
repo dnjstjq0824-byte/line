@@ -1,11 +1,15 @@
 // Route: /calls — call ledger. Rendered from GET /api/v1/calls, which
-// merges live sessions with the call_status message ledger.
+// merges live sessions with the call_status message ledger. Consecutive
+// same-peer calls collapse into one LINE-style "name (n)" row; missed rows
+// render red. Durations live in the detail view, not here.
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/call_groups.dart';
 
 class CallsPage extends StatelessWidget {
   const CallsPage({super.key});
@@ -14,14 +18,15 @@ class CallsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final groups = groupCalls(session.callHistory);
     return RefreshIndicator(
       onRefresh: session.reload,
       child: ListView(
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '통화', subtitle: '신호 기록부'),
-              if (session.callHistory.isEmpty)
+              const Masthead(title: '통화'),
+              if (groups.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 64),
                   child: Column(
@@ -41,9 +46,9 @@ class CallsPage extends StatelessWidget {
                   ),
                 )
               else
-                for (var i = 0; i < session.callHistory.length; i++) ...[
+                for (var i = 0; i < groups.length; i++) ...[
                   if (i > 0) const Divider(height: 1),
-                  _CallRow(call: session.callHistory[i] as Map<String, dynamic>),
+                  _CallRow(group: groups[i]),
                 ],
             ],
           ),
@@ -54,35 +59,30 @@ class CallsPage extends StatelessWidget {
 }
 
 class _CallRow extends StatelessWidget {
-  final Map<String, dynamic> call;
-  const _CallRow({required this.call});
+  final CallGroup group;
+  const _CallRow({required this.group});
 
   @override
   Widget build(BuildContext context) {
+    final call = group.latest;
     final session = SessionScope.of(context, listen: false);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final title = call['title']?.toString() ?? '알 수 없음';
     final outgoing = call['outgoing'] == true;
-    final result = call['result']?.toString() ?? '';
+    final missed = group.missed;
     final kind = call['kind']?.toString() ?? 'voice';
-    final missed = result == 'missed' || result == 'declined';
-    final duration = call['duration'] is num ? (call['duration'] as num).toInt() : 0;
+    final label = group.count > 1 ? '$title (${group.count})' : title;
 
     final IconData directionIcon = missed
         ? (outgoing ? Icons.call_missed_outgoing : Icons.call_missed)
         : (outgoing ? Icons.call_made : Icons.call_received);
-    final Color lineColor = missed
-        ? (dark ? HarborDark.danger : HarborLight.danger)
-        : (dark ? HarborDark.drift : HarborLight.drift);
-
-    final parts = <String>[session.relTime(call['started_at'])];
-    if (missed) {
-      parts.add(result == 'declined' ? '거절된 통화' : '부재중 전화');
-    } else if (duration > 0) {
-      parts.add('통화시간 ${session.formatDuration(duration)}');
-    }
+    final danger = dark ? HarborDark.danger : HarborLight.danger;
+    final Color lineColor =
+        missed ? danger : (dark ? HarborDark.drift : HarborLight.drift);
 
     return ListTile(
+      onTap: () =>
+          context.go("/calls/${call['conversation_id']?.toString() ?? ''}"),
       leading: IdentityTile(
         glyph: title,
         color: session.colorFromHex(
@@ -90,13 +90,13 @@ class _CallRow extends StatelessWidget {
             dark ? HarborDark.harbor : HarborLight.harbor),
       ),
       title: Text(
-        title,
+        label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 14,
-          color: missed ? (dark ? HarborDark.danger : HarborLight.danger) : null,
+          color: missed ? danger : null,
         ),
       ),
       subtitle: Row(
@@ -105,7 +105,7 @@ class _CallRow extends StatelessWidget {
           const SizedBox(width: 4),
           Expanded(
             child: Text(
-              parts.join(' · '),
+              callRowDate(call['started_at']),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: lineColor, fontFeatures: const [LunoType.tabular]),

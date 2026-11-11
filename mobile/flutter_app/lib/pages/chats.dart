@@ -1,4 +1,6 @@
-// Route: /chats — berth board (conversation list). Rooms are /chats/:id.
+// Route: /chats — talk list. Plain LINE-style rows (avatar, title,
+// preview, time, unread badge), a search entry into /search, an
+// unread-first sort toggle, and the working group dialog.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -36,23 +38,62 @@ String previewOfLastMessage(dynamic last) {
   return (text.isEmpty || text == 'null') ? '메시지를 입력해보세요' : text;
 }
 
-class ChatsPage extends StatelessWidget {
+class ChatsPage extends StatefulWidget {
   const ChatsPage({super.key});
+
+  @override
+  State<ChatsPage> createState() => _ChatsPageState();
+}
+
+class _ChatsPageState extends State<ChatsPage> {
+  bool unreadFirst = false;
 
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final rooms = session.chats.whereType<Map<String, dynamic>>().toList();
+    final ordered = unreadFirst
+        ? [
+            ...rooms.where((c) =>
+                ((c['unread_count'] as num?)?.toInt() ?? 0) > 0),
+            ...rooms.where((c) =>
+                ((c['unread_count'] as num?)?.toInt() ?? 0) <= 0),
+          ]
+        : rooms;
     return RefreshIndicator(
       onRefresh: session.reload,
       child: ListView(
         children: [
           PageColumn(
             children: [
-              Masthead(
-                title: '토크',
-                subtitle: '정박 중인 대화방 ${session.chats.length}곳',
+              const Masthead(title: '토크'),
+              Row(
+                children: [
+                  Expanded(child: _SearchEntry(dark: dark)),
+                  Material(
+                    color: Colors.transparent,
+                    child: IconButton(
+                      tooltip: '안 읽은 방 먼저',
+                      icon: Icon(
+                        unreadFirst
+                            ? Icons.sort
+                            : Icons.sort_outlined,
+                        color: unreadFirst
+                            ? (dark
+                                ? HarborDark.harbor
+                                : HarborLight.harbor)
+                            : (dark
+                                ? HarborDark.drift
+                                : HarborLight.drift),
+                      ),
+                      onPressed: () =>
+                          setState(() => unreadFirst = !unreadFirst),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
                 child: FilledButton.tonalIcon(
@@ -71,7 +112,7 @@ class ChatsPage extends StatelessWidget {
                   onDismiss: () =>
                       session.dismissChannelSlot(session.channelSlot!.id),
                 ),
-              if (session.chats.isEmpty)
+              if (ordered.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(32),
                   child: Center(
@@ -89,11 +130,10 @@ class ChatsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-              for (final c in session.chats)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _BerthCard(conversation: c, dark: dark),
-                ),
+              for (var i = 0; i < ordered.length; i++) ...[
+                if (i > 0) const Divider(height: 1),
+                _TalkRow(conversation: ordered[i]),
+              ],
             ],
           ),
         ],
@@ -175,14 +215,52 @@ class ChatsPage extends StatelessWidget {
   }
 }
 
-class _BerthCard extends StatelessWidget {
-  final dynamic conversation;
+class _SearchEntry extends StatelessWidget {
   final bool dark;
-  const _BerthCard({required this.conversation, required this.dark});
+  const _SearchEntry({required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => context.go('/search'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: dark ? HarborDark.chart : const Color(0xFFF1F3F4),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.search,
+                  size: 20,
+                  color:
+                      dark ? HarborDark.drift : HarborLight.drift),
+              const SizedBox(width: 8),
+              Text('대화·친구 검색',
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: dark
+                          ? HarborDark.drift
+                          : HarborLight.drift)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TalkRow extends StatelessWidget {
+  final Map<String, dynamic> conversation;
+  const _TalkRow({required this.conversation});
 
   @override
   Widget build(BuildContext context) {
     final c = conversation;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final unread = (c['unread_count'] as num?)?.toInt() ?? 0;
     final raw = '${c['title'] ?? ''}';
     final title = raw.isEmpty ? '대화방' : raw;
@@ -193,23 +271,14 @@ class _BerthCard extends StatelessWidget {
     final rowTime =
         listTime(c['updated_at'] ?? (last is Map ? last['created_at'] : null));
     final session = SessionScope.of(context, listen: false);
-    return Card(
-      color: dark ? HarborDark.surface : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(HarborRadius.card),
-        side: BorderSide(color: dark ? HarborDark.channel : HarborLight.channel),
-      ),
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(HarborRadius.card),
-        onTap: () => context.go('/chats/${c['id']}'),
+        onTap: () => context.go("/chats/${c['id']}"),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
             children: [
-              if (unread > 0) ...[
-                const LampBar(height: 34),
-                const SizedBox(width: 10),
-              ],
               IdentityTile(
                 glyph: title,
                 color: session.colorFromHex(
@@ -260,11 +329,12 @@ class _BerthCard extends StatelessWidget {
                     ),
                   if (unread > 0)
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: dark ? HarborDark.beacon : HarborLight.beacon,
-                        borderRadius: BorderRadius.circular(HarborRadius.lamp),
+                        borderRadius:
+                            BorderRadius.circular(HarborRadius.lamp),
                       ),
                       child: Text('$unread',
                           style: TextStyle(
@@ -274,12 +344,7 @@ class _BerthCard extends StatelessWidget {
                               fontSize: LunoType.stampSize,
                               fontWeight: LunoType.stampWeight,
                               fontFeatures: const [LunoType.tabular])),
-                    )
-                  else
-                    Icon(Icons.chevron_right,
-                        size: 20,
-                        color:
-                            dark ? HarborDark.drift : HarborLight.drift),
+                    ),
                 ],
               ),
             ],
@@ -288,5 +353,4 @@ class _BerthCard extends StatelessWidget {
       ),
     );
   }
-
 }

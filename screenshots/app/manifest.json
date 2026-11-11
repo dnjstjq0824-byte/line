@@ -110,6 +110,26 @@
   "errors": []
  },
  {
+  "file": "search_mobile_390.png",
+  "page": "search",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/search",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "privacy_mobile_390.png",
+  "page": "privacy",
+  "device": "mobile",
+  "width": 390,
+  "ok": true,
+  "url": "#/privacy",
+  "scrollX": false,
+  "errors": []
+ },
+ {
   "file": "home_tablet_768.png",
   "page": "home",
   "device": "tablet",
@@ -190,6 +210,26 @@
   "errors": []
  },
  {
+  "file": "search_tablet_768.png",
+  "page": "search",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/search",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "privacy_tablet_768.png",
+  "page": "privacy",
+  "device": "tablet",
+  "width": 768,
+  "ok": true,
+  "url": "#/privacy",
+  "scrollX": false,
+  "errors": []
+ },
+ {
   "file": "home_tablet_landscape_1024.png",
   "page": "home",
   "device": "tablet_landscape",
@@ -266,6 +306,26 @@
   "width": 1024,
   "ok": true,
   "url": "#/news",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "search_tablet_landscape_1024.png",
+  "page": "search",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/search",
+  "scrollX": false,
+  "errors": []
+ },
+ {
+  "file": "privacy_tablet_landscape_1024.png",
+  "page": "privacy",
+  "device": "tablet_landscape",
+  "width": 1024,
+  "ok": true,
+  "url": "#/privacy",
   "scrollX": false,
   "errors": []
  }

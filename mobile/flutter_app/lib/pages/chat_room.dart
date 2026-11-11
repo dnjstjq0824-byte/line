@@ -18,6 +18,7 @@ import '../util/photo_effects.dart';
 import '../util/inapp_camera.dart';
 import '../util/video_bubble.dart';
 import '../util/chat_time.dart';
+import '../util/call_groups.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String conversationId;
@@ -29,11 +30,27 @@ class ChatRoomPage extends StatefulWidget {
 
 class _ChatRoomPageState extends State<ChatRoomPage> {
   final message = TextEditingController();
+  final _scroll = ScrollController();
   bool _opened = false;
+  bool _showJump = false;
+
+  void _watchScroll() {
+    if (!_scroll.hasClients) return;
+    final pos = _scroll.position;
+    final show = (pos.maxScrollExtent - pos.pixels) > 200;
+    if (show != _showJump && mounted) setState(() => _showJump = show);
+  }
+
+  void _jumpLatest() {
+    if (!_scroll.hasClients) return;
+    _scroll.animateTo(_scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+  }
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_watchScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final session = SessionScope.of(context, listen: false);
       if (session.selectedId != widget.conversationId) {
@@ -45,6 +62,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   @override
   void dispose() {
+    _scroll.dispose();
     message.dispose();
     super.dispose();
   }
@@ -92,12 +110,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     color: dark ? HarborDark.ink : HarborLight.harbor)),
           ),
         Expanded(
-          child: Container(
-            color: LunoTheme.chatRoomBackgroundColor(
+          child: Stack(
+            children: [
+              Container(
+                color: LunoTheme.chatRoomBackgroundColor(
                 dark ? Brightness.dark : Brightness.light),
             child: loading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
+                    controller: _scroll,
                     padding: const EdgeInsets.all(12),
                     itemCount: session.messages.length,
                     itemBuilder: (_, i) {
@@ -130,6 +151,31 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       );
                     },
                   ),
+              ),
+              if (_showJump)
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: Material(
+                    color: dark ? HarborDark.surface : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    elevation: 3,
+                    child: InkWell(
+                      key: const ValueKey('jump-latest'),
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: _jumpLatest,
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Icon(Icons.arrow_downward,
+                            size: 20,
+                            color: dark
+                                ? HarborDark.harbor
+                                : HarborLight.harbor),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         if (session.showStickerPicker) const _StickerDeck(),
@@ -331,6 +377,24 @@ class _SignalBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (entry is Map<String, dynamic> &&
+        entry['kind'] == 'call_status') {
+      return _CallBubble(
+        entry: entry,
+        groupLead: groupLead,
+        groupTail: groupTail,
+        peerName: peerName,
+      );
+    }
+    if (entry is Map<String, dynamic> &&
+        entry['kind'] == 'security_notice') {
+      return _SecurityNoticeCard(
+        entry: entry,
+        groupLead: groupLead,
+        groupTail: groupTail,
+        peerName: peerName,
+      );
+    }
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final m = entry;
@@ -558,6 +622,369 @@ class _SignalBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// System call record bubble (kind `call_status`, minted by the server):
+/// phone icon + kind + duration, no action row, no reply target.
+class _CallBubble extends StatelessWidget {
+  final Map<String, dynamic> entry;
+  final bool groupLead;
+  final bool groupTail;
+  final String peerName;
+  const _CallBubble(
+      {required this.entry,
+      this.groupLead = true,
+      this.groupTail = true,
+      this.peerName = ''});
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final m = entry;
+    final mine = m['sender_id'] == session.selfId;
+    final bubble = mine
+        ? (dark ? LunoDark.bubbleMineBg : LunoLight.bubbleMineBg)
+        : (dark ? LunoDark.bubbleTheirsBg : LunoLight.bubbleTheirsBg);
+    final ink = mine
+        ? (dark ? LunoDark.bubbleMineText : LunoLight.bubbleMineText)
+        : (dark ? LunoDark.bubbleTheirsText : LunoLight.bubbleTheirsText);
+    final faint = mine
+        ? Colors.white.withValues(alpha: 0.75)
+        : (dark ? HarborDark.drift : HarborLight.drift);
+    final time = groupTail ? bubbleTime(m['created_at']) : '';
+    final muted = dark ? LunoDark.textMuted : LunoLight.textMuted;
+    final timeStyle = TextStyle(
+        fontSize: LunoType.stampSize,
+        fontWeight: LunoType.stampWeight,
+        height: LunoType.stampHeight,
+        fontFeatures: const [LunoType.tabular],
+        color: muted);
+    final meta = m['metadata'];
+    final video = meta is Map && meta['call_type'] == 'video';
+    final duration = callBubbleDuration(m);
+    final avatar = !mine && groupLead
+        ? Container(
+            width: LunoBubble.avatarSize,
+            height: LunoBubble.avatarSize,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark ? HarborDark.harbor : HarborLight.harbor,
+            ),
+            child: Text(peerName.isEmpty ? '?' : peerName.characters.first,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+          )
+        : const SizedBox(width: LunoBubble.continuedIndent);
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!mine) ...[
+            avatar,
+            const SizedBox(width: 8),
+          ],
+          if (mine && time.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 6, bottom: 6),
+              child: Text(time, style: timeStyle),
+            ),
+          Flexible(
+              child: Column(
+            crossAxisAlignment:
+                mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              if (!mine && groupLead && peerName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, bottom: 2),
+                  child: Text(peerName,
+                      style: TextStyle(
+                          fontSize: LunoType.stampSize,
+                          fontWeight: LunoType.stampWeight,
+                          color: dark
+                              ? LunoDark.textSecondary
+                              : LunoLight.textSecondary)),
+                ),
+              Container(
+                decoration: BoxDecoration(
+                  color: bubble,
+                  borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: mine
+                              ? Colors.white.withValues(alpha: 0.22)
+                              : (dark
+                                  ? HarborDark.seaGlass
+                                  : HarborLight.seaGlass),
+                        ),
+                        child: Icon(video ? Icons.videocam : Icons.phone,
+                            size: 20, color: ink),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(callBubbleTitle(m),
+                              style: TextStyle(
+                                  color: ink,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700)),
+                          if (duration.isNotEmpty)
+                            Text(duration,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: faint,
+                                    fontFeatures: const [
+                                      LunoType.tabular
+                                    ])),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          )),
+          if (!mine && time.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, bottom: 6),
+              child: Text(time, style: timeStyle),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Server-minted login notice (kind `security_notice`): facts first, then
+/// the two working responses — remote logout of the named session and
+/// password change. Notices without a session_id (seed fixtures) omit the
+/// logout button instead of calling an endpoint that would 400.
+class _SecurityNoticeCard extends StatelessWidget {
+  final Map<String, dynamic> entry;
+  final bool groupLead;
+  final bool groupTail;
+  final String peerName;
+  const _SecurityNoticeCard(
+      {required this.entry,
+      this.groupLead = true,
+      this.groupTail = true,
+      this.peerName = ''});
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final m = entry;
+    final meta = m['metadata'];
+    final data = meta is Map<String, dynamic>
+        ? meta
+        : const <String, dynamic>{};
+    final device = data['device']?.toString() ?? '';
+    final ip = data['ip']?.toString() ?? '';
+    final location = data['location']?.toString() ?? '';
+    final sessionId = data['session_id']?.toString() ?? '';
+    final sample = data['sample'] == true;
+    final time = groupTail ? bubbleTime(m['created_at']) : '';
+    final muted = dark ? LunoDark.textMuted : LunoLight.textMuted;
+    final sub = dark ? LunoDark.textSecondary : LunoLight.textSecondary;
+    final ink = dark ? LunoDark.textPrimary : LunoLight.textPrimary;
+    final avatar = groupLead
+        ? Container(
+            width: LunoBubble.avatarSize,
+            height: LunoBubble.avatarSize,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dark ? HarborDark.harbor : HarborLight.harbor,
+            ),
+            child: Text(peerName.isEmpty ? '?' : peerName.characters.first,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+          )
+        : const SizedBox(width: LunoBubble.continuedIndent);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          avatar,
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (groupLead && peerName.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, bottom: 2),
+                    child: Text(peerName,
+                        style: TextStyle(
+                            fontSize: LunoType.stampSize,
+                            fontWeight: LunoType.stampWeight,
+                            color: sub)),
+                  ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: dark
+                        ? LunoDark.bubbleTheirsBg
+                        : LunoLight.bubbleTheirsBg,
+                    borderRadius: LunoBubble.theirs,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${m['body']}',
+                            style: const TextStyle(
+                                color: LunoStatus.online,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800)),
+                        const Divider(height: 16),
+                        if (device.isNotEmpty)
+                          Text('$device에서 LUNO에 로그인했습니다.',
+                              style:
+                                  TextStyle(fontSize: 13, color: ink)),
+                        const SizedBox(height: 8),
+                        Text(
+                            '본인이 로그인하지 않았다면 아래 버튼을 눌러 로그아웃해 주세요. 안전한 LUNO 이용을 위해 비밀번호 변경을 권장합니다.',
+                            style: TextStyle(fontSize: 13, color: ink)),
+                        if (ip.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text('IP 주소: $ip',
+                              style:
+                                  TextStyle(fontSize: 12, color: sub)),
+                        ],
+                        if (location.isNotEmpty)
+                          Text('위치: $location',
+                              style:
+                                  TextStyle(fontSize: 12, color: sub)),
+                        if (sample)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text('샘플 데이터',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontStyle: FontStyle.italic,
+                                    color: sub)),
+                          ),
+                        if (sessionId.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: () => session
+                                  .revokeNoticeSession(sessionId),
+                              child: const Text('로그아웃'),
+                            ),
+                          ),
+                        ],
+                        Center(
+                          child: TextButton(
+                            onPressed: () => _passwordDialog(context),
+                            child: const Text('비밀번호 변경'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (time.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, bottom: 6),
+              child: Text(time,
+                  style: TextStyle(
+                      fontSize: LunoType.stampSize,
+                      fontWeight: LunoType.stampWeight,
+                      height: LunoType.stampHeight,
+                      fontFeatures: const [LunoType.tabular],
+                      color: muted)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _passwordDialog(BuildContext context) async {
+  final session = SessionScope.of(context, listen: false);
+  final current = TextEditingController();
+  final fresh = TextEditingController();
+  final ready = ValueNotifier(false);
+  void refresh() {
+    ready.value = current.text.isNotEmpty && fresh.text.length >= 8;
+  }
+
+  current.addListener(refresh);
+  fresh.addListener(refresh);
+  // No synchronous dispose: the pop transition still touches these while
+  // the session notify rebuilds. Unmount unregisters; GC collects.
+  await showDialog<void>(
+      context: context,
+      builder: (dialog) => ValueListenableBuilder<bool>(
+        valueListenable: ready,
+        builder: (dialog, ok, _) => AlertDialog(
+          title: const Text('비밀번호 변경'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: current,
+                obscureText: true,
+                decoration: const InputDecoration(
+                    labelText: '현재 비밀번호', isDense: true),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: fresh,
+                obscureText: true,
+                decoration: const InputDecoration(
+                    labelText: '새 비밀번호 (8자 이상)', isDense: true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(dialog).pop(),
+                child: const Text('취소')),
+            FilledButton(
+              // Call first, pop second: the sync notify lands while the
+              // dialog is active (controllers alive), matching _qrDialog.
+              onPressed: ok
+                  ? () {
+                      session.changePassword(current.text, fresh.text);
+                      Navigator.of(dialog).pop();
+                    }
+                  : null,
+              child: const Text('변경'),
+            ),
+          ],
+        ),
+      ),
+    );
 }
 
 class _StickerDeck extends StatelessWidget {

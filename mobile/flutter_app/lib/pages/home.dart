@@ -16,14 +16,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final search = TextEditingController();
   bool friendsOpen = true;
-
-  @override
-  void dispose() {
-    search.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +31,36 @@ class _HomePageState extends State<HomePage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
+          // Shortcut capsule: Keep + settings only. The reference bell
+          // and plus have no backend on this phone, so they stay out.
+          Align(
+            alignment: Alignment.centerRight,
+            child: Container(
+              decoration: BoxDecoration(
+                color: dark ? HarborDark.surface : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: dark
+                        ? HarborDark.channel
+                        : HarborLight.channel),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Keep',
+                    icon: const Icon(Icons.bookmark_border),
+                    onPressed: () => context.go('/keep'),
+                  ),
+                  IconButton(
+                    tooltip: '설정',
+                    icon: const Icon(Icons.settings_outlined),
+                    onPressed: () => context.go('/settings'),
+                  ),
+                ],
+              ),
+            ),
+          ),
           InkWell(
             onTap: () => context.go('/profile'),
             borderRadius: BorderRadius.circular(12),
@@ -78,41 +101,29 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: search,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: '검색',
-              prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor:
-                  dark ? HarborDark.chart : const Color(0xFFF1F3F4),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide.none,
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => context.go('/search'),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: dark ? HarborDark.chart : const Color(0xFFF1F3F4),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search, size: 20),
+                    const SizedBox(width: 8),
+                    Text('검색',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide.none,
-              ),
-              isDense: true,
             ),
-            onSubmitted: (_) => session.find(search.text),
           ),
-          for (final u in session.results)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('${u['display_name']}'),
-              subtitle: Text('@${u['handle'] ?? ''}'),
-              trailing: FilledButton.tonal(
-                onPressed: () => session.addFriend(u['id']),
-                child: const Text('친구 추가'),
-              ),
-            ),
           const SizedBox(height: 16),
           Text('서비스', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),

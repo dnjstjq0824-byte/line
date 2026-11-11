@@ -430,6 +430,24 @@ class SessionController extends ChangeNotifier {
     }
   }
 
+  /// Tapped search entities (friend/chat/user), newest first, cap 20.
+  /// Client-side only: the server keeps no search history.
+  List<Map<String, dynamic>> recentSearches = [];
+
+  void rememberSearch(String kind, String id, String title) {
+    recentSearches
+        .removeWhere((e) => e['kind'] == kind && e['id'] == id);
+    recentSearches.insert(0, {'kind': kind, 'id': id, 'title': title});
+    if (recentSearches.length > 20) recentSearches.removeLast();
+    notifyListeners();
+  }
+
+  void forgetSearch(String kind, String id) {
+    recentSearches
+        .removeWhere((e) => e['kind'] == kind && e['id'] == id);
+    notifyListeners();
+  }
+
   Future<void> find(String query) {
     return run(() async {
       final x = await api.call('/api/v1/users?search=${Uri.encodeQueryComponent(query)}');
@@ -1218,6 +1236,62 @@ class SessionController extends ChangeNotifier {
       await api.call('/api/v1/me', method: 'DELETE', data: {'password': password});
       notice = '계정이 영구 삭제되었습니다.';
       await logout();
+    });
+  }
+
+  /// Security-notice remote logout: revokes the session named by the
+  /// notice (server POST /api/v1/auth/sessions/revoke). Revoking the
+  /// current device drops local credentials too, like the web client.
+  Future<void> revokeNoticeSession(String sessionId) {
+    return run(() async {
+      final res = await api.call('/api/v1/auth/sessions/revoke',
+          method: 'POST', data: {'session_id': sessionId});
+      if (res['self'] == true) {
+        notice = '현재 기기에서 로그아웃했습니다.';
+        await logout();
+      } else {
+        notice = '해당 기기에서 로그아웃했습니다.';
+      }
+    });
+  }
+
+  /// Password change (server POST /api/v1/auth/change-password).
+  Future<void> changePassword(String currentPassword, String newPassword) {
+    return run(() async {
+      await api.call('/api/v1/auth/change-password',
+          method: 'POST',
+          data: {
+            'current_password': currentPassword,
+            'new_password': newPassword
+          });
+      notice = '비밀번호를 변경했습니다.';
+    });
+  }
+
+  /// Signed-in devices (server GET /api/v1/devices; the unscoped form
+  /// both the worker and the Go backend implement).
+  List<dynamic> devices = [];
+
+  Future<void> loadDevices() {
+    return run(() async {
+      final res = await api.call('/api/v1/devices');
+      devices = res['devices'] ?? [];
+    });
+  }
+
+  /// Revokes one device session (server DELETE /api/v1/devices/:id).
+  /// Revoking the current device drops local credentials too.
+  Future<void> revokeDevice(String sessionId) {
+    return run(() async {
+      final res = await api.call('/api/v1/devices/$sessionId',
+          method: 'DELETE');
+      if (res['self'] == true) {
+        notice = '현재 기기에서 로그아웃했습니다.';
+        await logout();
+      } else {
+        notice = '기기에서 로그아웃했습니다.';
+        await loadDevices();
+      }
     });
   }
 
