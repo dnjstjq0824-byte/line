@@ -79,7 +79,7 @@ class SettingsPage extends StatelessWidget {
                   switchKey: const ValueKey('auto-translate-toggle'),
                   title: '새 메시지 자동 번역',
                   description:
-                      '상대방의 외국어 메시지를 선택한 언어로 즉시 번역합니다.',
+                      '준비 중 — 번역 엔진 연결 전까지 켜도 번역되지 않습니다.',
                   value: session.autoTranslate,
                   enabled: true,
                   ink: ink,
@@ -412,6 +412,12 @@ Future<void> _qrDialog(BuildContext context) async {
           TextButton(
               onPressed: () => Navigator.of(dialog).pop(),
               child: const Text('취소')),
+          TextButton(
+              onPressed: () {
+                Navigator.of(dialog).pop();
+                context.go('/qr/scan');
+              },
+              child: const Text('카메라로 스캔')),
           FilledButton(
             onPressed: () {
               session.approveDesktopQR(challenge.text, token.text);

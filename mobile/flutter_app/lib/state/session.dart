@@ -463,6 +463,32 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  Future<void> addFriendByQr(String payload) {
+    return run(() async {
+      try {
+        final res = await api.call('/api/v1/friends',
+            method: 'POST', data: {'qr_code': payload.trim()});
+        final friend = res['friend'];
+        final name = friend is Map ? '${friend['display_name'] ?? ''}' : '';
+        if (res['status'] == 'already_friends') {
+          notice = name.isEmpty ? '이미 친구입니다.' : '이미 친구입니다 ($name).';
+        } else {
+          notice = name.isEmpty ? '친구로 추가했습니다.' : '$name님을 친구로 추가했습니다.';
+        }
+        await reload();
+      } on ApiException catch (e) {
+        if (e.statusCode == 404) {
+          notice = 'QR 속 사용자를 찾을 수 없습니다.';
+          return;
+        }
+        if (e.statusCode == 403) {
+          notice = '친구 추가할 수 없는 사용자입니다.';
+          return;
+        }
+        rethrow;
+      }
+    });
+  }
   String titleOf(String conversationId) {
     for (final c in chats) {
       if (c['id'] == conversationId) {

@@ -93,7 +93,12 @@ class _HomePageState extends State<HomePage> {
                     icon: const Icon(Icons.qr_code_scanner),
                     onPressed: () => showDialog(
                       context: context,
-                      builder: (_) => const _QrApproveDialog(),
+                      builder: (dialog) => _QrApproveDialog(
+                        onScan: () {
+                          Navigator.of(dialog).pop();
+                          context.go('/qr/scan');
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -305,7 +310,8 @@ class _ServiceButton extends StatelessWidget {
 }
 
 class _QrApproveDialog extends StatefulWidget {
-  const _QrApproveDialog();
+  final VoidCallback? onScan;
+  const _QrApproveDialog({this.onScan});
 
   @override
   State<_QrApproveDialog> createState() => _QrApproveDialogState();
@@ -345,6 +351,10 @@ class _QrApproveDialogState extends State<_QrApproveDialog> {
         ],
       ),
       actions: [
+        if (widget.onScan != null)
+          TextButton(
+              onPressed: widget.onScan,
+              child: const Text('카메라로 스캔')),
         TextButton(
             onPressed: session.busy ? null : () => session.reload(),
             child: const Text('새로고침')),

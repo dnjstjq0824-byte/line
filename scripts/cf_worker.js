@@ -3273,7 +3273,7 @@ async function extended(p, request, url, me, token) {
   // ---------- Calls ----------
   if (p === 'calls' && method === 'POST') {
     const b = await readJson(request);
-    if (!['voice', 'video'].includes(b.kind || 'video')) return bad('통화 종류가 올바르지 않습니다');
+    if (!['voice', 'video'].includes(b.kind || 'voice')) return bad('통화 종류가 올바르지 않습니다');
     // A-12: membership is verified against D1 (durable rooms), not just isolate memory.
     let conv = conversations.get(b.conversation_id);
     if (!conv || !conv.members.includes(myId)) {
@@ -3288,7 +3288,7 @@ async function extended(p, request, url, me, token) {
         if (blk.byMe || blk.byThem) return bad('차단된 상대와는 통화할 수 없습니다', 403);
       }
     }
-    const call = { id: uid(), conversation_id: conv.id, kind: b.kind || 'video', state: 'ringing', initiated_by: myId, started_at: now(), connected_at: null, ended_at: null };
+    const call = { id: uid(), conversation_id: conv.id, kind: b.kind || 'voice', state: 'ringing', initiated_by: myId, started_at: now(), connected_at: null, ended_at: null };
     callSessions.set(call.id, call);
     const peerId = conv.members.find(x => x !== myId);
     const callkitPayload = {

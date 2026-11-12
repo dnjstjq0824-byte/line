@@ -141,6 +141,7 @@ const activeHeroSlideIndex = ref(0)
 const isPanelCollapsed = ref(false)
 const chatSortAsc = ref(false)
 const showNewChatModal = ref(false)
+const showNewCallModal = ref(false)
 const showEcosystemHub = ref(false)
 const activeEcosystemId = ref<string | null>(null)
 const notificationsEnabled = ref(true)
@@ -305,6 +306,10 @@ function callDateText(iso: string): string {
 
 // The call list is the server-side call ledger (GET /api/v1/calls), consistent with call_status chat bubbles.
 async function loadCalls() {
+  if (!callHistoryList.value.length) {
+    const snap = readSnapshot<CallRecord>(CALLS_SNAPSHOT_KEY)
+    if (snap && snap.length) callHistoryList.value = snap
+  }
   try {
     const res = await api<{ calls: any[] }>('/api/v1/calls')
     callHistoryList.value = (res.calls || []).map((c: any): CallRecord => ({
@@ -312,13 +317,14 @@ async function loadCalls() {
       peer_id: c.peer_id || '',
       peer_name: c.title || '',
       peer_avatar_color: c.peer_color || '#315BCD',
-      call_type: c.kind === 'video' ? 'video' : 'voice',
+      call_type: normalizeCallKind(c.kind),
       direction: c.result === 'missed' ? 'missed' : (c.outgoing ? 'outgoing' : 'incoming'),
       timestamp_text: callDateText(c.started_at),
       duration_text: c.duration > 0 ? formatDuration(c.duration) : undefined
     }))
+    writeSnapshot(CALLS_SNAPSHOT_KEY, callHistoryList.value)
   } catch {
-    callHistoryList.value = []
+    if (!callHistoryList.value.length) callHistoryList.value = []
   }
 }
 const conversationError = ref('')
@@ -372,11 +378,17 @@ async function openChatFromCallRecord(record: CallRecord) {
   await selectChat(cid)
 }
 
+// FX-18: history kinds come from server data; anything but an explicit
+// 'video' redials as voice so a voice record can never start video.
+function normalizeCallKind(kind: unknown): 'voice' | 'video' {
+  return kind === 'video' ? 'video' : 'voice'
+}
+
 async function startCallFromHistory(record: CallRecord, kind: 'voice' | 'video' = 'voice') {
   selectedCallRecord.value = record
   const cid = await resolvePeerConversationId(record)
   selectedChatId.value = cid
-  await startCall(kind, record.peer_name)
+  await startCall(normalizeCallKind(kind), record.peer_name)
 }
 
 function removeCallRecord(id: string) {
@@ -1011,11 +1023,38 @@ async function loadChannelSlot() {
       : null
   } catch { channelSlot.value = null }
 }
+// FX-15: stale-while-revalidate. List snapshots survive reloads so the
+// lists paint instantly; room messages cache in memory per room.
+const CHATS_SNAPSHOT_KEY = 'luno-chats-snapshot'
+const CALLS_SNAPSHOT_KEY = 'luno-calls-snapshot'
+const roomMessageCache = new Map<string, Message[]>()
+
+function readSnapshot<T>(key: string): T[] | null {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { items?: unknown }
+    if (!parsed || !Array.isArray(parsed.items)) return null
+    return parsed.items as T[]
+  } catch { return null }
+}
+
+function writeSnapshot(key: string, items: unknown) {
+  try { localStorage.setItem(key, JSON.stringify({ saved_at: Date.now(), items })) } catch {}
+}
+
 async function loadChats() {
   const sessionToken = token.value
+  if (!chats.value.length) {
+    const snap = readSnapshot<Chat>(CHATS_SNAPSHOT_KEY)
+    if (snap && snap.length) chats.value = snap
+  }
   try {
     const res = await api<{ conversations: Chat[] }>('/api/v1/conversations')
-    if (sessionToken === token.value) chats.value = res.conversations || []
+    if (sessionToken === token.value) {
+      chats.value = res.conversations || []
+      writeSnapshot(CHATS_SNAPSHOT_KEY, chats.value)
+    }
   } catch {}
   void loadChannelSlot()
 }
@@ -1138,7 +1177,13 @@ async function selectChat(convId: string) {
   activeDrawer.value = 'none'
   error.value = ''
   conversationError.value = ''
-  isLoadingMessages.value = true
+  const cachedRoom = roomMessageCache.get(convId)
+  if (cachedRoom && cachedRoom.length) {
+    messages.value = cachedRoom
+    isLoadingMessages.value = false
+  } else {
+    isLoadingMessages.value = true
+  }
   const version = ++chatSelectVersion
   try {
     const [msgRes, pinsRes] = await Promise.all([
@@ -1146,10 +1191,17 @@ async function selectChat(convId: string) {
       api<{ pins: any[] }>(`/api/v1/conversations/${convId}/pins`).catch(() => ({ pins: [] }))
     ])
     if (selectedChatId.value !== convId || version !== chatSelectVersion) return
-    const received = new Map((msgRes.messages || []).map(message => [message.id, message]))
-    for (const message of messages.value) if (message.conversation_id === convId) received.set(message.id, message)
+    const fresh = msgRes.messages || []
+    const received = new Map(fresh.map(message => [message.id, message]))
+    const maxFreshSeq = fresh.reduce((m, message) => Math.max(m, message.sequence || 0), 0)
+    for (const message of messages.value) {
+      if (message.conversation_id !== convId) continue
+      if (received.has(message.id) || (message.sequence || 0) > maxFreshSeq) received.set(message.id, message)
+    }
     messages.value = [...received.values()].sort((a, b) => a.sequence - b.sequence)
-    hasEarlierMessages.value = (msgRes.messages || []).length === 50
+    roomMessageCache.set(convId, messages.value.slice(-50))
+    if (roomMessageCache.size > 20) roomMessageCache.delete(roomMessageCache.keys().next().value as string)
+    hasEarlierMessages.value = fresh.length === 50
     pinnedList.value = pinsRes.pins || []
     if (messages.value.length > 0) {
       const last = messages.value[messages.value.length - 1]
@@ -1167,7 +1219,7 @@ async function selectChat(convId: string) {
     scrollToBottom()
     await Promise.all([loadChats(), loadPolls(convId)])
   } catch (e: any) {
-    if (selectedChatId.value === convId && version === chatSelectVersion) {
+    if (selectedChatId.value === convId && version === chatSelectVersion && !messages.value.length) {
       conversationError.value = e?.message || t('mvLoadMsgsFailed')
       messages.value = []
     }
@@ -1300,6 +1352,13 @@ async function loadConversationMedia(convId: string) {
   } catch {}
 }
 
+// FX-10: a broken avatar photo hides itself; the initial layered
+// underneath shows instead of the browser's broken-image glyph.
+function hideBrokenAvatar(ev: Event) {
+  const img = ev.target as HTMLElement | null
+  if (img) img.style.display = 'none'
+}
+
 async function runConversationSearch() {
   if (!selectedChatId.value) return
   const q = chatSearchQuery.value.trim()
@@ -1308,8 +1367,8 @@ async function runConversationSearch() {
     return
   }
   try {
-    const res = await api<{ results: any[] }>(`/api/v1/conversations/${selectedChatId.value}/search?q=${encodeURIComponent(q)}`)
-    chatSearchResults.value = res.results || []
+    const res = await api<{ results?: any[]; messages?: any[] }>(`/api/v1/conversations/${selectedChatId.value}/search?q=${encodeURIComponent(q)}`)
+    chatSearchResults.value = res.results || res.messages || []
   } catch {}
 }
 
@@ -2388,6 +2447,15 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   }
 }
 
+// FX-07: iOS keyboards shrink the visual viewport; while one is open the
+// composer sticks to the viewport bottom instead of hiding behind it.
+function syncKeyboardOpen() {
+  const vv = window.visualViewport
+  if (!vv) return
+  const open = vv.height < window.innerHeight - 120
+  document.documentElement.classList.toggle('keyboard-open', open)
+}
+
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // Reconcile durable messages when an edge isolate cannot fan out to another one.
@@ -2396,6 +2464,7 @@ onMounted(async () => {
     window.addEventListener('online', handleNetworkOnline)
     window.addEventListener('offline', handleNetworkOffline)
     window.addEventListener('keydown', handleGlobalKeydown)
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', syncKeyboardOpen)
   }
   await fetchAppVersion()
   applyRouteNav()
@@ -2420,6 +2489,8 @@ onBeforeUnmount(() => {
     window.removeEventListener('online', handleNetworkOnline)
     window.removeEventListener('offline', handleNetworkOffline)
     window.removeEventListener('keydown', handleGlobalKeydown)
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', syncKeyboardOpen)
+    document.documentElement.classList.remove('keyboard-open')
   }
   if (heroCarouselTimer) clearInterval(heroCarouselTimer)
 })
@@ -2436,7 +2507,7 @@ onBeforeUnmount(() => {
         <div class="pc-rail-top">
           <!-- 1. My Profile Avatar with Online Dot -->
           <button type="button" class="pc-user-avatar-trigger" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
-            <div class="pc-avatar circle-36" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #2563EB)' }"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(currentUser?.display_name) }}</span>
+            <div class="pc-avatar circle-36" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #2563EB)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
             </div>
             <span v-if="realtimeState === 'connected'" class="pc-dot-online" :title="t('connection_connected')"></span>
           </button>
@@ -2808,8 +2879,9 @@ onBeforeUnmount(() => {
           <div class="pc-pane-header">
             <h2 class="pc-pane-title">{{ t('mvCall') }}</h2>
             <div class="calls-header-tools">
-              <button class="btn-pc-header-tool" :title="t('mvNewCall')" :disabled="!selectedChatId && chats.length === 0" @click="startCall('voice')">
+              <button class="btn-pc-header-tool btn-new-call-labeled" :title="t('mvNewCall')" @click="showNewCallModal = true">
                 <LunoIcon name="call-voice" :size="17" />
+                <span>{{ t('mvNewCall') }}</span>
               </button>
             </div>
           </div>
@@ -2842,6 +2914,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="call-row-sub">
                   <span class="direction-arrow">{{ log.direction === 'incoming' || log.direction === 'missed' ? '↙' : '↗' }}</span>
+                  <span class="call-kind-icon" :title="log.call_type === 'video' ? t('mvVideoCallLabel') : t('mvVoiceCall')"><LunoIcon :name="log.call_type === 'video' ? 'call-video' : 'call-voice'" :size="13" /></span>
                   <span class="timestamp-text">{{ log.timestamp_text }}</span>
                   <span v-if="log.duration_text" class="duration-text">({{ log.duration_text }})</span>
                 </div>
@@ -2851,7 +2924,7 @@ onBeforeUnmount(() => {
               <button
                 class="btn-call-history-action"
                 :title="t('mvCallBack').replace('{name}', log.peer_name)"
-                @click.stop="startCallFromHistory(log, log.call_type)"
+                @click.stop="startCallFromHistory(log, normalizeCallKind(log.call_type))"
               >
                 <LunoIcon name="calls" :size="18" />
               </button>
@@ -3254,7 +3327,7 @@ onBeforeUnmount(() => {
           </div>
           <span class="nav-label">{{ t('mvWallet') }}</span>
         </button>
-        <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(currentUser?.display_name) }}</span></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
+        <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
       </nav>
     </main>
 
@@ -3310,7 +3383,7 @@ onBeforeUnmount(() => {
             </div>
             <div v-else style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">{{ t('mvFirstComment') }}</div>
             <form @submit.prevent="addNewsComment(activeNewsArticle.id)" style="display:flex; gap:6px;">
-              <input v-model="newCommentInput" :placeholder="t('mvCommentPh')" style="flex:1; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12px;" />
+              <input v-model="newCommentInput" :placeholder="t('mvCommentPh')" style="flex:1; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:16px;" />
               <button type="submit" class="btn-primary" style="padding:6px 12px; font-size:12px;">{{ t('mvSubmit') }}</button>
             </form>
           </div>
@@ -3353,7 +3426,7 @@ onBeforeUnmount(() => {
           <button class="btn-modal-close" @click="activeProfileUser = null">✕</button>
         </div>
         <div class="profile-avatar-center">
-          <div class="avatar-circle xl"><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(activeProfileUser.display_name) }}</span></div>
+          <div class="avatar-circle xl"><span>{{ initialOf(activeProfileUser.display_name) }}</span><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></div>
         </div>
         <div v-if="activeProfileUser.id === currentUser?.id" class="profile-photo-controls" :aria-busy="photoSaving">
           <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="changeProfilePhoto" />
@@ -3685,6 +3758,25 @@ onBeforeUnmount(() => {
                 <small>{{ t('mvInviteLinkDesc') }}</small>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FX-17: NEW CALL contact picker (never dials blind) -->
+    <div v-if="showNewCallModal" class="modal-backdrop" @click.self="showNewCallModal = false">
+      <div class="standard-modal-box new-call-modal" role="dialog" :aria-label="t('mvNewCall')">
+        <div class="modal-header">
+          <h3>{{ t('mvNewCall') }}</h3>
+          <button class="btn-modal-close" @click="showNewCallModal = false">✕</button>
+        </div>
+        <div class="modal-body-form new-call-body">
+          <p v-if="!friends.length" class="muted">{{ t('contact_empty') }}</p>
+          <div v-for="f in friends" :key="f.id" class="new-call-row">
+            <div class="pc-avatar circle-36" :style="{ background: (f as any).avatar_color || '#315BCD' }">{{ initialOf(f.display_name, 'U') }}</div>
+            <span class="new-call-name">{{ f.display_name }}</span>
+            <button class="btn-subaction-pill" :title="t('mvVoiceCall')" @click="showNewCallModal = false; startCallWithUser(f, 'voice')">📞 {{ t('mvVoiceCall') }}</button>
+            <button class="btn-subaction-pill" :title="t('mvVideoCallLabel')" @click="showNewCallModal = false; startCallWithUser(f, 'video')">📹 {{ t('mvVideoCallLabel') }}</button>
           </div>
         </div>
       </div>

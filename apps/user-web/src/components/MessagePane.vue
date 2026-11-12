@@ -131,6 +131,28 @@ const editingMessageBody = defineModel<string>('editingMessageBody', { required:
 const effectChoice = defineModel<'none' | 'gray' | 'sepia'>('effectChoice', { required: true })
 
 const pinnedExpanded = ref(false)
+
+// FX-21: the jump button only earns its pixels while scrolled up.
+const showJumpBottom = ref(false)
+function trackCanvasScroll(ev: Event) {
+  const el = ev.target as HTMLElement | null
+  if (!el) return
+  showJumpBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight > 120
+}
+
+// FX-19: search hits scroll the canvas to the message and flash it.
+const flashedMessageId = ref('')
+let flashTimer: ReturnType<typeof setTimeout> | null = null
+function jumpToSearchedMessage(id: string) {
+  const canvas = props.messagesCanvasRef.value
+  if (!canvas) return
+  const row = canvas.querySelector(`[data-message-id="${CSS.escape(id)}"]`)
+  if (!row) return
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  flashedMessageId.value = id
+  if (flashTimer) clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => { flashedMessageId.value = '' }, 1800)
+}
 // Group rooms show the sender; direct rooms keep the (nickname-aware) title.
 function headerName(msg: Message): string {
   if (props.selectedChat.kind === 'group') return senderDisplayName(msg, props.selectedChat.members || [])
@@ -237,7 +259,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
         <button class="btn-secondary" @click="emit('search')">{{ t('mvSearch') }}</button>
       </div>
       <div v-if="chatSearchResults.length" class="drawer-search-results">
-        <div v-for="sr in chatSearchResults" :key="sr.id" class="drawer-item-card">
+        <div v-for="sr in chatSearchResults" :key="sr.id" class="drawer-item-card drawer-hit" role="button" tabindex="0" :title="t('mvJumpToMessage')" @click="jumpToSearchedMessage(sr.id)" @keydown.enter="jumpToSearchedMessage(sr.id)">
           <strong>{{ sr.body }}</strong>
           <small>{{ formatTime(sr.created_at) }}</small>
         </div>
@@ -292,7 +314,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
     </div>
 
     <!-- Message History Canvas -->
-    <div :ref="messagesCanvasRef" class="pc-chat-messages-canvas" :class="'wallpaper-' + chatWallpaper">
+    <div :ref="messagesCanvasRef" class="pc-chat-messages-canvas" :class="'wallpaper-' + chatWallpaper" @scroll="trackCanvasScroll">
       <div v-if="!isLoadingMessages && hasEarlierMessages" class="ln-history-control">
         <button type="button" class="btn-secondary" :disabled="earlierMessagesLoading" @click="emit('load-earlier')">{{ t(earlierMessagesLoading ? 'history_loading' : 'history_earlier') }}</button>
         <p v-if="earlierMessagesError" role="alert">{{ earlierMessagesError }}</p>
@@ -324,6 +346,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           <div
             v-if="msg.kind === 'security_notice'"
             class="pc-msg-row security-notice-row"
+            :data-message-id="msg.id"
+            :class="{ 'searched-flash': flashedMessageId === msg.id }"
           >
             <div class="pc-avatar circle-34 other-avatar luno-official-avatar" style="background: #4F7CFF; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px;">
               LUNO
@@ -363,7 +387,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           <div
             v-else-if="msg.kind === 'call_status' || msg.kind === 'call'"
             class="pc-msg-row"
-            :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index) }"
+            :data-message-id="msg.id"
+            :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index), 'searched-flash': flashedMessageId === msg.id }"
           >
             <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
               {{ initialOf(headerName(msg), 'U') }}
@@ -403,7 +428,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           <div
             v-else
             class="pc-msg-row"
-            :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index) }"
+            :data-message-id="msg.id"
+            :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index), 'searched-flash': flashedMessageId === msg.id }"
           >
             <!-- Other User Avatar (group lead only; continuations keep a 44px indent) -->
             <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
@@ -497,7 +523,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
     </div>
 
     <!-- Floating Scroll-to-Bottom Button (Matching Screenshot 7) -->
-    <button class="btn-scroll-bottom" :title="t('mvJumpBottom')" @click="emit('scroll-bottom')">
+    <button class="btn-scroll-bottom" v-show="showJumpBottom" :title="t('mvJumpBottom')" @click="emit('scroll-bottom')">
       ↓
     </button>
 

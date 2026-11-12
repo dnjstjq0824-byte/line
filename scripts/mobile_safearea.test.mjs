@@ -105,12 +105,12 @@ test('mobile (<=700px) floating nav clears the Safari toolbar (safe-area bottom)
     bottom.includes('env(safe-area-inset-bottom)'),
     `nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
   );
-  // Toolbar-robust even when env() stops at the home indicator: 100vh-100dvh
-  // equals the visible toolbar height (0 when it hides). max() picks whichever
-  // is correct, so it can never double-count.
+  // FX-01 supersedes the 100vh-100dvh term: position:fixed already anchors
+  // to the visual viewport (toolbar excluded), so the extra term pushed the
+  // nav a toolbar-height above the bottom on real iPhones (6 captures).
   assert.ok(
-    bottom.includes('100dvh'),
-    `nav bottom must include a 100vh-100dvh toolbar term, got: ${bottom}`,
+    !bottom.includes('100dvh'),
+    `nav bottom must not double-count the toolbar, got: ${bottom}`,
   );
 });
 
@@ -133,9 +133,10 @@ test('App.vue mobile nav base also respects the safe-area inset', () => {
     bottom.includes('env(safe-area-inset-bottom)'),
     `App.vue nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
   );
+  // FX-01: same double-count removal as the v2 rule above.
   assert.ok(
-    bottom.includes('100dvh'),
-    `App.vue nav bottom must include a 100vh-100dvh toolbar term, got: ${bottom}`,
+    !bottom.includes('100dvh'),
+    `App.vue nav bottom must not double-count the toolbar, got: ${bottom}`,
   );
 });
 

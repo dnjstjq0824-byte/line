@@ -65,3 +65,16 @@
 - 계약 매트릭스: `mob-matrix{,2,3,4}.mjs` + 결과 JSON (임시 보관, 커밋 제외).
 - 판독 파일: `mobile/flutter_app/lib/{state/session.dart, pages/*.dart}` 전수.
 - 에뮬레이터 재확인은 수정 턴에서(AVD `muse_check` 존재, 미기동).
+
+## 수정 상태 (2026-11-10 오후, 커밋 e764bd3)
+
+- P1 8~13 구현 완료: 아카이브 쓰기(노트/일정/투표+투표/RSVP), 앨범, 라운지(개설/참여/글/좋아요), 파일(전송+다운로드), 프로필 편집(UX 12에서 리디자인), 즐겨찾기/차단. 계약 `scripts/cf_mobile_p1.test.mjs`, 위젯 `test/p1_pages_test.dart`.
+- P1-14 QR는 승인 다이얼로그(수기 입력)까지만. 카메라 스캔은 아래 11-12 작업에서 추가.
+- P1-15 번역은 서버 503(엔진 미구성) 유지. 앱은 정직 표시.
+
+## 수정 상태 (2026-11-12, 미커밋)
+
+- P1-14 QR 스캔 완료: `LUNO-LOGIN:{challenge}:{token}` 계약(`apps/shared/login_qr.ts`+`scripts/login_qr.test.mjs` 5/5), 웹 AuthView 실매트릭스+타이머+수동값(i18n `qr_preparing`·`qrManualLabel` 4로케일 신규 — 기존 원문 노출 해소), 모바일 `/qr/scan`(mobile_scanner, 파서 `util/qr_payload` 6/6, 시트/페이지 위젯 5/5), `session.addFriendByQr`(201/이미친구/404/403 정직 안내), 홈·설정 다이얼로그에 스캔 진입점. 서버 변경 없음(challenge/approve/poll+friends qr_code 기존 계약).
+- P1-15 문구 정직화: 설정 설명·대화방 배너에 "엔진 준비 중" 명시. 엔진 연동(외부 API 선정·키·비용)은 별도 결정 필요.
+- 검증: flutter analyze clean+191/191, node 243/243, pre gate 6/6, i18n TOTAL 0, 웹 6빌드, 레드드릴 2파괴→실패→바이트 복원 그린.
+- 실스캔 E2E(실기기 카메라→PC 로그인, 친구 QR 추가)는 실기기 확인 필요.

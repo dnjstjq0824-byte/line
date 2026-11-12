@@ -104,7 +104,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             width: double.infinity,
             color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            child: Text('자동 번역 켜짐 · ${session.targetTranslateLang.toUpperCase()} (상대 메시지 자동 번역)',
+            child: Text('자동 번역 켜짐 · ${session.targetTranslateLang.toUpperCase()} (엔진 준비 중)',
                 style: TextStyle(
                     fontSize: 11,
                     color: dark ? HarborDark.ink : HarborLight.harbor)),

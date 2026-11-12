@@ -7,6 +7,16 @@ export function initialOf(name = JSON.parse('""'), fallback = JSON.parse('""')) 
   const s = typeof name === 'string' ? name : '';
   const fb = typeof fallback === 'string' ? fallback : '';
   if (!s) return fb;
-  const first = Array.from(s)[0];
-  return typeof first === 'string' && first ? first : fb;
+  // FX-10: skip blanks; a lone surrogate, control/format char, or combining
+  // mark would render as a broken glyph, so fall through to the fallback.
+  for (const ch of Array.from(s.trimStart())) {
+    const cp = ch.codePointAt(0) || 0;
+    if (cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f)) continue;
+    if (cp >= 0xd800 && cp <= 0xdfff) continue;
+    if (cp === 0xfeff || (cp >= 0x200b && cp <= 0x200f)) continue;
+    if (cp >= 0x300 && cp <= 0x36f) continue;
+    if (/\s/.test(ch)) continue;
+    return ch;
+  }
+  return fb;
 }

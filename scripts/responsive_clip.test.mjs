@@ -17,8 +17,10 @@ test('translate pill never squeezes or wraps its label', () => {
   assert.match(css, /\.ai-translate-tool-pill span \{\s*white-space: nowrap;/);
 });
 
-test('service names wrap to two lines instead of one-char ellipsis', () => {
-  assert.match(css, /\.svc-names strong \{[^}]*-webkit-line-clamp: 2;/);
+test('service names show in full instead of one-char ellipsis', () => {
+  // FX-11 supersedes the 2-line clamp: card titles render complete.
+  assert.ok(!/\.svc-names strong \{[^}]*-webkit-line-clamp/.test(css));
+  assert.match(css, /\.svc-names strong \{[^}]*display: block;/);
   assert.match(css, /\.svc-status-pill \{[^}]*flex-shrink: 0;/);
   assert.match(css, /\.svc-status-pill \{[^}]*max-width: 110px;/);
   assert.match(css, /\.ecosystem-cards-grid \{[^}]*minmax\(300px, 1fr\)/);

@@ -68,6 +68,13 @@ function removeSearchKeyword(kw: string) {
 function clearAllSearchKeywords() {
   recentSearchKeywords.value = []
 }
+
+// FX-10: a broken avatar photo hides itself; the initial layered
+// underneath shows instead of the browser's broken-image glyph.
+function hideBrokenAvatar(ev: Event) {
+  const img = ev.target as HTMLElement | null
+  if (img) img.style.display = 'none'
+}
 </script>
 
 <template>
@@ -124,7 +131,7 @@ function clearAllSearchKeywords() {
       <!-- My Profile Card with Keep & Album Buttons (Screenshot 4 & 5) -->
       <div class="pc-my-profile-card">
         <div class="my-profile-top-row" @click="emit('profile')">
-          <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #4F7CFF)' }"><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" /><span v-else>{{ initialOf(currentUser?.display_name) }}</span>
+          <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #4F7CFF)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
           </div>
           <div class="my-profile-meta">
             <div class="my-name-text">{{ currentUser?.display_name }}</div>

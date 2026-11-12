@@ -39,6 +39,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .luno-desktop-app {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   background: var(--line-rail-bg);
@@ -50,8 +51,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* Floating Alerts (Toast) */
 .floating-alert {
   position: fixed;
-  top: 16px;
-  right: 20px;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(92vw, 480px);
   z-index: 9999;
   padding: 10px 18px;
   border-radius: 8px;
@@ -66,6 +69,13 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .floating-alert.note { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; }
 .btn-dismiss { background: none; border: none; cursor: pointer; font-size: 12px; color: inherit; }
 
+/* FX-07: text-entry minimums (Safari zooms sub-16px entries on focus). */
+.luno-desktop-app input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']),
+.luno-desktop-app textarea,
+.luno-desktop-app select {
+  font-size: 16px !important;
+}
+
 /* ==========================================================================
    AUTH SCREEN: AUTHENTIC OPEN MESSENGER PC 2-COLUMN LOGIN WINDOW (Screenshots 2 & 3)
    ========================================================================== */
@@ -76,6 +86,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   justify-content: center;
   background: radial-gradient(circle at 50% 30%, #1e293b, #0b1020);
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   padding: 20px;
   box-sizing: border-box;
@@ -473,6 +484,22 @@ import { activeTheme, darkMode, error, note } from './store/session'
   margin-bottom: 16px;
 }
 
+.ln-qr-matrix svg {
+  display: block;
+  width: 168px;
+  height: 168px;
+}
+
+.pc-qr-manual {
+  font-size: 11px;
+  color: #64748b;
+  word-break: break-all;
+}
+
+.pc-qr-manual code {
+  font-size: 10px;
+}
+
 .qr-svg-matrix {
   display: block;
 }
@@ -526,6 +553,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   display: flex;
   flex: 1;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
 }
@@ -577,6 +605,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .circle-34 { width: 34px; height: 34px; font-size: 13px; }
 .circle-36 { width: 36px; height: 36px; font-size: 14px; }
 .circle-38 { width: 38px; height: 38px; font-size: 14px; }
+/* FX-10: avatar photos layer over the initial; a load failure hides the
+   photo and the initial underneath shows instead of a broken glyph. */
+.pc-avatar, .avatar-circle, .mobile-profile-avatar { position: relative; overflow: hidden; }
+.ln-profile-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .circle-44 { width: 44px; height: 44px; font-size: 16px; }
 .circle-46 { width: 46px; height: 46px; font-size: 17px; }
 
@@ -703,6 +735,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   flex-direction: column;
   flex-shrink: 0;
   height: 100vh;
+  height: 100dvh;
   position: relative;
   transition: width 0.2s ease;
 }
@@ -726,10 +759,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
   border-bottom: 1px solid var(--om-border, #e2e8f0);
   background: var(--om-surface, #ffffff);
   align-items: center;
+  overflow-x: auto;
 }
 
 .btn-subtab {
-  flex: 1;
+  flex: 1 0 auto;
   height: 100%;
   background: none;
   border: none;
@@ -741,6 +775,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
   display: flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0 12px;
   transition: color 0.15s ease;
 }
 
@@ -874,6 +911,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .pc-pane-scroll {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
+  padding-bottom: 72px;
 }
 
 /* My Profile Card (Screenshots 4 & 5) */
@@ -1213,15 +1252,18 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .profile-preview-subactions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  justify-content: flex-start;
   gap: 8px;
   margin-top: 16px;
+  padding-bottom: 4px;
 }
 
 .btn-subaction-pill {
   padding: 6px 12px;
   white-space: nowrap;
+  flex-shrink: 0;
   background: #f1f5f9;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -1309,12 +1351,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
   min-width: 0;
 }
 .svc-names strong {
-  display: -webkit-box;
+  display: block;
   font-size: 13px;
   color: var(--om-text, #111827);
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
 }
 .svc-ko {
   font-size: 10px;
@@ -1421,6 +1460,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   flex-direction: column;
   background: var(--line-slate-bg);
   height: 100vh;
+  height: 100dvh;
   position: relative;
 }
 .pc-chat-topbar {
@@ -1468,6 +1508,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* Canvas for Chat Messages */
 .pc-chat-messages-canvas {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px 20px;
   display: flex;
@@ -1602,12 +1643,18 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 /* Chat Input Dock */
 .pc-chat-input-dock {
-  height: 135px;
+  min-height: 135px;
+  flex-shrink: 0;
   background: #ffffff;
   border-top: 1px solid #e9edf1;
   display: flex;
   flex-direction: column;
   position: relative;
+}
+.keyboard-open .pc-chat-input-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
 }
 .pc-input-toolbar {
   height: 36px;
@@ -2292,6 +2339,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   .pc-side-pane {
     width: 100vw;
     height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
   }
   .btn-mobile-back {
     display: grid;
@@ -2538,6 +2586,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   background: #000000;
   position: relative;
   transition: transform 0.15s ease;
+  flex-shrink: 0;
 }
 .news-hero-card:hover {
   transform: translateY(-2px);
@@ -2547,6 +2596,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   position: relative;
   width: 100%;
   height: 240px;
+  background: linear-gradient(110deg, #0f172a 30%, #1e293b 50%, #0f172a 70%);
 }
 
 .hero-img {
@@ -2576,6 +2626,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   font-weight: 700;
   line-height: 1.35;
   margin: 0 0 4px 0;
+  color: #ffffff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
 
@@ -2956,8 +3007,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
   .luno-mobile-floating-nav {
     display: flex;
     position: fixed;
-    bottom: 16px;
-    bottom: max(16px, env(safe-area-inset-bottom), calc(100vh - 100dvh + 16px));
+    bottom: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
@@ -3045,7 +3096,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
   .pc-side-pane {
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     padding-bottom: 74px; /* clearance for floating capsule */
+  }
+  .pc-floating-add-btn {
+    bottom: 96px; /* FX-08: rides above the nav capsule */
   }
 }
 
@@ -3100,6 +3155,12 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .news-header-tools, .calls-header-tools { display: flex; align-items: center; gap: 6px; }
 .btn-pc-header-tool { background: none; border: none; width: 30px; height: 30px; border-radius: 6px; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .btn-pc-header-tool:hover { background: #f1f5f9; color: #0f172a; }
+/* FX-17: labeled new-call button + contact picker rows. */
+.btn-pc-header-tool.btn-new-call-labeled { width: auto; padding: 0 10px; gap: 6px; font-size: 13px; font-weight: 600; }
+.new-call-modal { width: 420px; max-width: 94vw; }
+.new-call-body { max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.new-call-row { display: flex; align-items: center; gap: 8px; }
+.new-call-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .hero-press-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: rgba(255,255,255,0.85); }
 .hero-time { opacity: 0.8; }
 .dot { width: 16px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.35); display: inline-block; }
@@ -3126,6 +3187,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .text-red { color: #ef4444 !important; }
 .call-count-tag { font-size: 12.5px; font-weight: 700; }
 .call-row-sub { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #64748b; }
+.call-kind-icon { display: inline-flex; align-items: center; color: #94a3b8; }
 .direction-arrow { font-weight: 700; color: #94a3b8; }
 .timestamp-text, .duration-text { color: #94a3b8; }
 
@@ -3155,7 +3217,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .profile-preview-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; margin-top: 8px; }
 .pc-modal-backdrop { position: fixed; inset: 0; z-index: 3000; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; }
 .pc-modal-card { background: #ffffff; border-radius: 14px; }
-.avatar-circle { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 700; }
+.avatar-circle { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 700; flex-shrink: 0; }
 .lg { width: 72px; height: 72px; font-size: 26px; }
 .xl { width: 84px; height: 84px; font-size: 30px; background: #315BCD; border: 3px solid #ffffff; }
 .call-type-status { font-size: 13px; color: #cbd5e1; margin: 4px 0 10px; }
@@ -3231,6 +3293,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .drawer-search-results, .drawer-body { display: flex; flex-direction: column; gap: 6px; }
 .drawer-item-card { padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
 .chat-canvas-state { margin: auto; text-align: center; padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+/* FX-19/21: search hits are clickable; the jumped message flashes. */
+.drawer-item-card.drawer-hit { cursor: pointer; }
+.drawer-item-card.drawer-hit:hover { background: #eff6ff; border-color: #93c5fd; }
+.searched-flash { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 10px; }
 .error-state { background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; }
 .error-state-text { color: #dc2626; font-size: 13px; font-weight: 600; }
 .inline-edit-box { display: flex; flex-direction: column; gap: 4px; }

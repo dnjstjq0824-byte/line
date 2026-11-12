@@ -6,6 +6,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SUPPORTED_LOCALES } from '../luno-i18n'
 import { request, type LoginResult, type User } from '../../../shared/api'
+import { makeLoginQrSvg } from '../../../shared/login_qr'
 import {
   api,
   appVersion,
@@ -49,6 +50,7 @@ let qrCountdownInterval: ReturnType<typeof setInterval> | null = null
 
 const qrChallengeID = ref('')
 const qrToken = ref('')
+const loginQrSvg = computed(() => makeLoginQrSvg(qrChallengeID.value, qrToken.value))
 let qrPollInterval: ReturnType<typeof setInterval> | null = null
 
 const formattedPhoneTimer = computed(() => {
@@ -292,7 +294,7 @@ async function quickDemoLogin(account: 'user' | 'alice') {
   })
 }
 
-onMounted(() => { void fetchAppVersion() })
+onMounted(() => { void fetchAppVersion(); void startQrLoginChallenge() })
 onBeforeUnmount(() => {
   if (qrPollInterval) clearInterval(qrPollInterval)
   if (qrCountdownInterval) clearInterval(qrCountdownInterval)
@@ -485,18 +487,21 @@ onBeforeUnmount(() => {
           <div class="pc-auth-col qr-col">
             <div class="pc-qr-box-inner">
               <h3 class="pc-qr-heading">{{ t('loginQrTab') }}</h3>
-              <div class="pc-qr-matrix-card" :aria-label="t('soon_tag')">
-                <img :src="lunoMark" alt="LUNO" class="ln-qr-brand" />
-                <!-- High Fidelity Dynamic QR Code SVG with Open Messenger Center Badge -->
+              <div class="pc-qr-matrix-card" :aria-label="t('loginQrTab')">
+                <div v-if="loginQrSvg" v-html="loginQrSvg" class="ln-qr-matrix"></div>
+                <img v-else :src="lunoMark" alt="LUNO" class="ln-qr-brand" />
               </div>
 
               <!-- Instruction Text (Screenshot 2 & 3) -->
               <p class="pc-qr-instruction">
-                {{ t('qr_preparing') }}
+                {{ qrChallengeID ? t('qrScanNote') : t('qr_preparing') }}
+              </p>
+              <p v-if="qrChallengeID" class="pc-qr-manual">
+                {{ t('qrManualLabel') }}: <code>{{ qrChallengeID }}</code> / <code>{{ qrToken }}</code>
               </p>
 
               <!-- Expiry & Reload Pill -->
-              <div v-if="false" class="pc-qr-timer-pill">
+              <div v-if="qrChallengeID" class="pc-qr-timer-pill">
                 <span>{{ t('validTimeLabel') }} <strong>{{ formattedQrCountdown }}</strong></span>
                 <button type="button" class="btn-qr-reload" @click="refreshQr" :title="t('reloadBtn')">
                   {{ t('reloadBtn') }} ↻
