@@ -2763,6 +2763,7 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Passkeys (WebAuthn registration) ----------
   if (p === 'passkeys/register/begin' && request.method === 'POST') {
+    if (!await rateLimit('rl:pkregb:' + myId, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
     const reqUrl = new URL(request.url);
     const rpId = reqUrl.hostname.toLowerCase();
     const creds = await pkListCreds(myId);
@@ -2782,6 +2783,7 @@ async function extended(p, request, url, me, token) {
     }});
   }
   if (p === 'passkeys/register/finish' && request.method === 'POST') {
+    if (!await rateLimit('rl:pkregf:' + myId, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
     const b = await readJson(request);
     const reqUrl = new URL(request.url);
     const rpId = reqUrl.hostname.toLowerCase();
@@ -4965,6 +4967,7 @@ const workerCore = {
 
       // 1b. Passkey login (email-first, public)
       if (p === 'passkeys/login/begin' && request.method === 'POST') {
+        if (!await rateLimit('rl:pkloginb:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
         const email = typeof body.email === 'string' ? body.email.toLowerCase().trim() : '';
         const user = email
@@ -4988,6 +4991,7 @@ const workerCore = {
         }});
       }
       if (p === 'passkeys/login/finish' && request.method === 'POST') {
+        if (!await rateLimit('rl:pkloginf:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
         let challenge = '';
         try {
@@ -5235,6 +5239,9 @@ const workerCore = {
         const body = await request.json().catch(() => ({}));
         const phone = String(body.phone || '').trim().replace(/[^0-9+]/g, '');
         const code = String(body.code || '').trim();
+        // H1: 6-digit codes in a 3-minute window are guessable, so verify is
+        // capped tighter than the house 60 and keyed per IP + number.
+        if (!await rateLimit('rl:phonev:' + (request.headers.get('CF-Connecting-IP') || 'unknown') + ':' + phone, 30)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const entry = phoneVerificationCodes.get(phone);
         const isValid = !!entry && entry.code === code && Date.now() <= entry.expires_at;
         if (!isValid) {
@@ -5256,6 +5263,7 @@ const workerCore = {
 
       // 3. Auth: QR Login
       if (p === 'auth/qr/challenge' && request.method === 'POST') {
+        if (!await rateLimit('rl:qrchall:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const challId = crypto.randomUUID();
         const qrToken = `qr-tok-${crypto.randomUUID()}`;
         qrChallenges.set(challId, { token: qrToken, status: 'pending', user_id: null, created_at: Date.now() });
@@ -5264,6 +5272,7 @@ const workerCore = {
       if (p === 'auth/qr/approve' && request.method === 'POST') {
         const authUser = await getAuthUser(request);
         if (!authUser) return json({ error: 'unauthorized' }, 401);
+        if (!await rateLimit('rl:qrappr:' + authUser.id, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
         const c = qrChallenges.get(body.challenge_id);
         if (!c || c.token !== body.qr_token) return json({ error: 'invalid qr challenge' }, 400);
@@ -5276,6 +5285,8 @@ const workerCore = {
         return json({ status: 'approved' });
       }
       if (p === 'auth/qr/poll' && request.method === 'POST') {
+        // H1: the web client polls every 2.5s (24/min), so poll gets headroom.
+        if (!await rateLimit('rl:qrpoll:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
         const c = qrChallenges.get(body.challenge_id);
         if (!c || c.token !== body.qr_token) return json({ error: 'invalid qr challenge' }, 401);
@@ -5340,6 +5351,7 @@ const workerCore = {
       }
 
       if (p === 'ws-ticket' && request.method === 'POST') {
+        if (!await rateLimit('rl:wstick:' + authUser.id, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         for (const [key, grant] of wsTickets) {
           if (grant.expiresAt <= Date.now()) wsTickets.delete(key);
         }

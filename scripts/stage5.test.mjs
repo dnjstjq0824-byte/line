@@ -54,3 +54,66 @@ test('C2: web hides calls and composer in official rooms', () => {
   assert.ok(paneSource.includes('v-if="!selectedChat?.official" class="btn-chat-action"'), 'call buttons gated');
   assert.ok(paneSource.includes('<footer v-if="!selectedChat?.official" class="pc-chat-input-dock">'), 'composer gated');
 });
+
+// ---------- H1: auth-adjacent rate limits ----------
+
+async function capProbe(api, path, method, body, token, cap, openStatus) {
+  // Fresh isolate + DB per test, so the first `cap` hits stay under the cap
+  // and answer with the endpoint's normal status; hit cap+1 must be 429.
+  for (let i = 0; i < cap; i++) {
+    const r = await api(path, method, body, token);
+    assert.equal(r.status, openStatus, `${path} attempt ${i + 1} stays open`);
+  }
+  const capped = await api(path, method, body, token);
+  assert.equal(capped.status, 429, `${path} caps past ${cap}`);
+  assert.equal((await capped.json()).code, 'RATE_LIMITED');
+}
+
+test('H1: passkeys login begin/finish cap per IP', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    await capProbe(api, 'passkeys/login/begin', 'POST', { email: 'nobody@luno.local' }, null, 60, 401);
+  } finally { db.raw.close(); }
+  const db2 = makeD1();
+  try {
+    const { api } = await stage5Isolate(db2);
+    await capProbe(api, 'passkeys/login/finish', 'POST', { id: 'x', response: {} }, null, 60, 400);
+  } finally { db2.raw.close(); }
+});
+
+test('H1: phone verify caps per IP and number', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    await capProbe(api, 'auth/phone/verify', 'POST', { phone: '+821099991111', code: '000000' }, null, 30, 400);
+  } finally { db.raw.close(); }
+});
+
+test('H1: QR challenge caps per IP, poll gets headroom', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    await capProbe(api, 'auth/qr/challenge', 'POST', {}, null, 60, 201);
+  } finally { db.raw.close(); }
+  const db2 = makeD1();
+  try {
+    const { api } = await stage5Isolate(db2);
+    await capProbe(api, 'auth/qr/poll', 'POST', { challenge_id: 'nope', qr_token: 'nope' }, null, 120, 401);
+  } finally { db2.raw.close(); }
+});
+
+test('H1: QR approve and ws-ticket cap per user', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    const a = await registerLogin(api, 'h1-a@luno-test.local', 'h1_a');
+    await capProbe(api, 'auth/qr/approve', 'POST', { challenge_id: 'nope', qr_token: 'nope' }, a.token, 60, 400);
+  } finally { db.raw.close(); }
+  const db2 = makeD1();
+  try {
+    const { api } = await stage5Isolate(db2);
+    const b = await registerLogin(api, 'h1-b@luno-test.local', 'h1_b');
+    await capProbe(api, 'ws-ticket', 'POST', {}, b.token, 60, 200);
+  } finally { db2.raw.close(); }
+});
