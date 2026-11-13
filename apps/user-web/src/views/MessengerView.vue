@@ -2258,6 +2258,7 @@ const {
   endCallLocally,
   startCallTimer,
   clearNoAnswerTimer,
+  chatTitleOf: (convId: string) => chats.value.find((c) => c.id === convId)?.title || 'LUNO',
 })
 
 // I-4: session lifecycle (names unchanged).

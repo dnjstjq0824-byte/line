@@ -36,6 +36,8 @@ class _MessengerAppState extends State<MessengerApp>
     _session.restore();
     _session.checkForUpdate();
     _session.ensureTranslateLanguages();
+    _session.notifyTap = (route) async => _router.go(route);
+    _session.initNotifier();
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -47,10 +49,14 @@ class _MessengerAppState extends State<MessengerApp>
   }
 
   // N2-L: backgrounding ends any live call (no background hold).
+  // N1-L: track foreground for notifications; resync on return.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.resumed) {
+      _session.setForeground(true);
+    } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      _session.setForeground(false);
       _session.onAppBackgrounded();
     }
   }

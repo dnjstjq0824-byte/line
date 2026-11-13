@@ -5,11 +5,13 @@
 // chat backup, shop, watch) are omitted rather than faked.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_permissions.dart';
 import '../util/app_update.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -76,6 +78,32 @@ class SettingsPage extends StatelessWidget {
               title: '대화',
               sub: sub,
               children: [
+                _ToggleRow(
+                  switchKey: const ValueKey('notify-toggle'),
+                  title: '새 메시지·전화 알림',
+                  description: '앱이 백그라운드에 있을 때만 울립니다.',
+                  value: session.notifyEnabled,
+                  enabled: true,
+                  ink: ink,
+                  sub: sub,
+                  onChanged: (v) {
+                    final ctl =
+                        SessionScope.of(context, listen: false);
+                    if (!v) {
+                      ctl.setNotifyEnabled(false);
+                      return;
+                    }
+                    withPermissions(
+                      context,
+                      permissions: const [
+                        (Permission.notification, '알림 권한 필요',
+                            '새 메시지와 수신 전화를 알려주는 데 사용합니다.'),
+                      ],
+                      action: () async => ctl.setNotifyEnabled(true),
+                    );
+                  },
+                ),
+                const _RowDivider(),
                 _ToggleRow(
                   switchKey: const ValueKey('auto-translate-toggle'),
                   title: '새 메시지 자동 번역',

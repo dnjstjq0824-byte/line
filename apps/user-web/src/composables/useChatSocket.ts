@@ -7,6 +7,7 @@ import { api, currentUser, error, t, token } from '../store/session'
 import { ApiError, request, wsURL, type Message } from '../../../shared/api'
 import { flushOfflineQueue } from '../messenger-utils'
 import { playReceiveSound } from '../sound-effects'
+import { maybeWebNotify, webNotifyKindLabel } from '../web_notify'
 import type { ActiveCallState } from './useWebRTC'
 
 export interface ChatSocketDeps {
@@ -19,6 +20,7 @@ export interface ChatSocketDeps {
   loadChats: () => Promise<void>
   loadPolls: (convId: string) => Promise<void>
   loadKeep: () => Promise<void>
+  chatTitleOf: (convId: string) => string
   onAuthExpired: () => void
   activeCall: Ref<ActiveCallState | null>
   handleIncomingCallSignal: (data: any) => Promise<void>
@@ -32,7 +34,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
   const {
     selectedChatId, messages, messagesCanvasRef, scrollToBottom,
     autoTranslateEnabled, handleTranslateMessage, loadChats, loadPolls,
-    loadKeep, onAuthExpired, activeCall, handleIncomingCallSignal,
+    loadKeep, chatTitleOf, onAuthExpired, activeCall, handleIncomingCallSignal,
     handleIncomingRing, endCallLocally, startCallTimer, clearNoAnswerTimer,
   } = deps
 
@@ -107,6 +109,11 @@ export function useChatSocket(deps: ChatSocketDeps) {
                 }
                 if (followLatest) scrollToBottom()
                 playReceiveSound()
+                maybeWebNotify(
+                  chatTitleOf(msg.conversation_id),
+                  msg.kind === 'text' ? (msg.body || '').slice(0, 120) : webNotifyKindLabel(msg.kind),
+                  `msg-${msg.conversation_id}`,
+                )
                 if (autoTranslateEnabled.value && msg.kind === 'text') {
                   void handleTranslateMessage(msg)
                 }

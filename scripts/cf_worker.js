@@ -308,6 +308,12 @@ const LUNO_SCHEMA_PHASE1 = [
   `CREATE TABLE IF NOT EXISTS luno_translate_usage (
     user_id TEXT NOT NULL, day TEXT NOT NULL,
     chars INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))`,
+  `CREATE TABLE IF NOT EXISTS luno_push_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
+    kind TEXT NOT NULL, conversation_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_push_outbox_user ON luno_push_outbox(user_id)`,
   `CREATE TABLE IF NOT EXISTS blocks (
     blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at TEXT NOT NULL,
     PRIMARY KEY (blocker_id, blocked_id))`,
@@ -2314,6 +2320,63 @@ async function getAuthUser(request) {
   return user;
 }
 
+// N1-L: notification funnel. notify(env, userIds, event) filters out the
+// sender, users with notifications off, and muted rooms, then dispatches to
+// the push provider. WS delivery of the underlying events (message.created,
+// call.ringing) continues at the existing broadcast points, which connected
+// clients already consume; this funnel adds the filtered provider leg.
+// Providers: none (default) and log (D1 outbox for local verification).
+// No FCM driver — the registration slot below is where one plugs in later.
+const pushProviders = new Map();
+function registerPushProvider(name, send) {
+  pushProviders.set(name, send);
+}
+function activePushProvider(env) {
+  const name = env && env.PUSH_PROVIDER;
+  if (!name || name === 'none') return null;
+  return pushProviders.get(name) || null;
+}
+registerPushProvider('log', async (env, targets, event) => {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  const at = now();
+  for (const uid of targets) {
+    const preview = prefsOf(uid).notification_preview !== false;
+    await db.prepare('INSERT INTO luno_push_outbox(user_id,kind,conversation_id,title,body,created_at) VALUES (?,?,?,?,?,?)')
+      .bind(uid, event.kind, event.conversation_id || '', event.title || '', preview ? (event.body || '') : '새 알림', at).run();
+  }
+});
+async function roomMuted(cid, uid) {
+  if (!cid) return false;
+  if (cMeta(cid, uid).muted) return true;
+  const db = dbOf();
+  if (!db) return false;
+  await ensureSchema();
+  const row = await db.prepare('SELECT is_muted FROM conversation_members WHERE conversation_id = ? AND user_id = ?').bind(cid, uid).first().catch(() => null);
+  return !!row?.is_muted;
+}
+async function notify(env, userIds, event) {
+  const targets = [];
+  for (const uid of new Set(userIds || [])) {
+    if (!uid || uid === event.sender_id) continue;
+    if (prefsOf(uid).notifications === false) continue;
+    if (event.conversation_id && await roomMuted(event.conversation_id, uid)) continue;
+    targets.push(uid);
+  }
+  if (targets.length === 0) return { notified: [] };
+  const provider = activePushProvider(env || {});
+  if (provider) await provider(env, targets, event);
+  return { notified: targets };
+}
+function notifyEnv() {
+  return (typeof CURRENT_ENV !== 'undefined' && CURRENT_ENV) ? CURRENT_ENV : {};
+}
+function notifyMessagePreview(kind, body) {
+  if (kind === 'text') return String(body || '').slice(0, 120) || '새 메시지';
+  const labels = { image: '[사진]', video: '[동영상]', file: '[파일]', voice: '[음성 메시지]', sticker: '[스티커]', location: '[위치]', contact: '[연락처]' };
+  return labels[kind] || '[새 메시지]';
+}
 function sendTo(userIds, payload) {
   hubFanOut(userIds, payload);
   const msg = JSON.stringify(payload);
@@ -3487,6 +3550,14 @@ async function extended(p, request, url, me, token) {
       }
       const msg = await pushPersistent(cid, myId, { client_id: b.client_id, kind, body, reply_to: replyTo, metadata: Object.keys(metadata).length ? metadata : undefined });
       await persistCursor(cid, myId, msg.sequence);
+      // N1-L: fan the message out to the notification provider leg.
+      await notify(notifyEnv(), conv.members, {
+        kind: 'message',
+        conversation_id: cid,
+        sender_id: myId,
+        title: me.display_name || me.handle || 'LUNO',
+        body: notifyMessagePreview(kind, body),
+      });
       if (conv.official) {
         const acct = officialAccounts.get(conv.members.find(x => officialAccounts.has(x)));
         if (acct && kind === 'text') await pushPersistent(cid, acct.id, { kind: 'text', body: botReply(body, acct) });
@@ -3954,6 +4025,14 @@ async function extended(p, request, url, me, token) {
       }
     };
     broadcast(callkitPayload);
+    // N1-L: the invite doubles as the incoming-call notification.
+    await notify(notifyEnv(), conv.members, {
+      kind: 'call',
+      conversation_id: conv.id,
+      sender_id: myId,
+      title: me.display_name || me.handle || 'LUNO',
+      body: call.kind === 'video' ? '영상 전화가 왔습니다' : '음성 전화가 왔습니다',
+    });
     return json({ id: call.id, state: 'ringing', kind: call.kind, callkit: callkitPayload.callkit }, 201);
   }
   if (p === 'calls' && method === 'GET') {

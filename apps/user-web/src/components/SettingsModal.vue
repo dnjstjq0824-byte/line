@@ -6,6 +6,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import type { User } from '../../../shared/api'
 import { SUPPORTED_LOCALES, type LunoLocale } from '../luno-i18n'
+import { requestWebNotifyPermission, webNotifyEnabled } from '../web_notify'
 import {
   api,
   appVersion,
@@ -190,6 +191,17 @@ async function registerPasskey() {
   }
 }
 
+// N1-L: the ONLY place that asks for browser notification permission.
+const notifyState = ref<'off' | 'on' | 'blocked'>('off')
+function refreshNotifyState() {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') notifyState.value = 'blocked'
+  else notifyState.value = webNotifyEnabled.value ? 'on' : 'off'
+}
+async function enableWebNotify() {
+  await requestWebNotifyPermission()
+  refreshNotifyState()
+}
+
 async function testPushNotification() {
   await wrap(async () => {
     const deviceId = props.devicesList[0]?.id
@@ -207,6 +219,7 @@ onMounted(() => {
   editProfileName.value = currentUser.value?.display_name || ''
   editProfileBio.value = currentUser.value?.status_message || currentUser.value?.bio || ''
   editProfileHandle.value = currentUser.value?.handle || ''
+  refreshNotifyState()
   void fetchPasskeys()
 })
 </script>
@@ -290,6 +303,13 @@ onMounted(() => {
           <div class="setting-toggle-row">
             <span>{{ t('mvPushNotif') }}</span>
             <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="testPushNotification">{{ t('mvTestSend') }}</button>
+          </div>
+          <!-- N1-L: hidden-tab browser notifications (permission only here) -->
+          <div class="setting-toggle-row">
+            <span>{{ t('mvNotifyTitle') }}</span>
+            <button v-if="notifyState === 'off'" class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="enableWebNotify">{{ t('mvNotifyEnable') }}</button>
+            <span v-else-if="notifyState === 'on'" class="badge-status-on">{{ t('mvNotifyOn') }}</span>
+            <span v-else class="muted">{{ t('mvNotifyBlocked') }}</span>
           </div>
 
           <!-- Phase 2: E2EE Key Management -->

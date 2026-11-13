@@ -20,6 +20,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../api/client.dart';
 import '../legacy_tokens.dart';
+import '../util/app_notify.dart';
 import '../util/app_update.dart';
 import '../util/call_media.dart';
 import '../util/album_photos.dart';
@@ -159,6 +160,11 @@ class SessionController extends ChangeNotifier {
   String editingMsgId = '';
 
   Map<String, dynamic>? activeCall;
+  // N1-L: background notifications. notifier is the test seam (fake sink).
+  AppNotifier notifier = ProdAppNotifier();
+  bool notifyEnabled = true;
+  bool isForeground = true;
+  Future<void> Function(String route)? notifyTap;
   // N2-L: 1:1 call media + state. mediaFactory is the test seam (fake media).
   CallMedia Function() mediaFactory = WebrtcCallMedia.new;
   CallMedia? callMedia;
@@ -372,6 +378,7 @@ class SessionController extends ChangeNotifier {
           final data = jsonDecode(event);
           if (data['type'] == 'message.created') {
             applyMessageCreated(data);
+            maybeNotifyMessage(data);
           } else if (data['type'] == 'message.updated') {
             if (data['conversation_id'] == selectedId) {
               for (final m in messages) {
@@ -463,6 +470,69 @@ class SessionController extends ChangeNotifier {
         ..insert(0, row);
     }
     notifyListeners();
+  }
+
+  // N1-L: notification plumbing. Taps route to the room (calls: the call's
+  // room, where the overlay is already live).
+  Future<void> initNotifier() async {
+    try {
+      await notifier.init(onTap: (payload) async {
+        if (payload == null) return;
+        if (payload.startsWith('room:')) {
+          await notifyTap?.call('/chats/${payload.substring(5)}');
+        } else if (payload.startsWith('call:')) {
+          final cid = activeCall?['conversation_id'];
+          await notifyTap?.call(cid != null ? '/chats/$cid' : '/calls');
+        }
+      });
+    } catch (_) {}
+  }
+
+  void setForeground(bool value) {
+    final was = isForeground;
+    isForeground = value;
+    if (value && !was) unawaited(deltaResync());
+  }
+
+  void setNotifyEnabled(bool value) {
+    notifyEnabled = value;
+    notifyListeners();
+  }
+
+  /// Show an OS notification for a background message. No-op in the
+  /// foreground, for own messages, or when disabled. Public so tests drive
+  /// the same path the socket branch calls.
+  void maybeNotifyMessage(Map<String, dynamic> data) {
+    if (!notifyEnabled || isForeground) return;
+    final item = data['message'];
+    if (item == null) return;
+    if ('${item['sender_id']}' == selfId) return;
+    final cid = '${item['conversation_id']}';
+    final chat = chats
+        .whereType<Map>()
+        .firstWhere((c) => '${c['id']}' == cid, orElse: () => {});
+    final title = '${chat['title'] ?? '새 메시지'}';
+    final kind = '${item['kind'] ?? 'text'}';
+    final rawBody = kind == 'text' ? '${item['body'] ?? ''}' : _notifyKindLabel(kind);
+    unawaited(notifier
+        .showMessage(
+            roomId: cid,
+            title: title,
+            body: rawBody.isEmpty ? '새 메시지' : rawBody)
+        .catchError((_) {}));
+  }
+
+  String _notifyKindLabel(String kind) {
+    return const {
+      'image': '[사진]',
+      'video': '[동영상]',
+      'file': '[파일]',
+      'voice': '[음성 메시지]',
+      'sticker': '[스티커]',
+      'location': '[위치]',
+      'contact': '[연락처]',
+    }[kind] ??
+        '[새 메시지]';
   }
 
   /// A-23: apply a conversation.read event in place — zero one row's unread.
@@ -830,15 +900,26 @@ class SessionController extends ChangeNotifier {
       }).catchError((_) {}));
       return;
     }
+    final callerTitle =
+        '${data['caller_name'] ?? data['caller_handle'] ?? '수신된 통화'}';
+    final callKind = '${data['kind'] ?? 'voice'}';
     activeCall = {
       'id': incomingId,
       'call_id': incomingId,
       'conversation_id': data['conversation_id'],
-      'kind': data['kind'] ?? 'voice',
+      'kind': callKind,
       'state': 'ringing',
       'direction': 'incoming',
-      'title': data['caller_name'] ?? data['caller_handle'] ?? '수신된 통화',
+      'title': callerTitle,
     };
+    if (notifyEnabled && !isForeground) {
+      unawaited(notifier
+          .showIncomingCall(
+              callId: incomingId,
+              title: callerTitle,
+              body: callKind == 'video' ? '영상 전화가 왔습니다' : '음성 전화가 왔습니다')
+          .catchError((_) {}));
+    }
     _armNoAnswerTimer(incomingId, false);
     notifyListeners();
   }
@@ -925,6 +1006,7 @@ class SessionController extends ChangeNotifier {
     _cancelNoAnswerTimer();
     _callTimer?.cancel();
     _callTimer = null;
+    unawaited(notifier.cancelCall().catchError((_) {}));
     final media = callMedia;
     callMedia = null;
     if (media != null) unawaited(media.dispose().catchError((_) {}));

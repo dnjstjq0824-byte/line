@@ -23,6 +23,7 @@ const STATIC = new Set([
   'ATTACHMENT_MIME_ALLOW',
   'NEWS_SAMPLE', 'GRANTABLE_ROLES', 'REACTIONS', 'PEER_USERS', 'READY_TABLES',
   'translateProviders', // T1: provider registry, populated once at module load
+  'pushProviders', // N1-L: push provider registry, populated once at module load
 ]);
 const EPHEMERAL = new Set([
   'activeSockets', 'AUTH_CTX', 'callSessions', 'groupCallRooms',

@@ -147,6 +147,78 @@ test('N2-L: call screen fills the viewport with PiP and a 4-button bar', async (
   assert.ok(modal.includes('showMorePanel') && modal.includes('callVideoFilter') && modal.includes('liveCaptionsEnabled'), 'filters and captions behind more');
 });
 
+test('N1-L: message and call fan out to the log outbox, sender excluded', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage7Isolate(db, { PUSH_PROVIDER: 'log' });
+    const a = await registerLogin(api, 'n1-a@luno-test.local', 'n1_a');
+    const b = await registerLogin(api, 'n1-b@luno-test.local', 'n1_b');
+    const cid = await directRoom(api, a, b);
+    assert.equal((await api(`conversations/${cid}/messages`, 'POST', { body: 'hello there' }, a.token)).status, 201);
+    let rows = db.raw.prepare('SELECT user_id, kind, body FROM luno_push_outbox ORDER BY id').all();
+    assert.deepEqual(rows.map((r) => r.user_id), [b.id], 'peer notified, sender excluded');
+    assert.equal(rows[0].kind, 'message');
+    assert.equal(rows[0].body, 'hello there');
+    assert.equal((await api('calls', 'POST', { conversation_id: cid, kind: 'voice' }, a.token)).status, 201);
+    rows = db.raw.prepare('SELECT user_id, kind FROM luno_push_outbox ORDER BY id').all();
+    assert.deepEqual(rows.map((r) => [r.user_id, r.kind]), [[b.id, 'message'], [b.id, 'call']]);
+  } finally { db.raw.close(); }
+});
+
+test('N1-L: muted rooms and disabled prefs stay silent', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage7Isolate(db, { PUSH_PROVIDER: 'log' });
+    const a = await registerLogin(api, 'n1m-a@luno-test.local', 'n1m_a');
+    const b = await registerLogin(api, 'n1m-b@luno-test.local', 'n1m_b');
+    const cid = await directRoom(api, a, b);
+    assert.equal((await api(`conversations/${cid}/meta`, 'PATCH', { muted: true }, b.token)).status, 200);
+    assert.equal((await api(`conversations/${cid}/messages`, 'POST', { body: 'muted?' }, a.token)).status, 201);
+    assert.equal((await api('calls', 'POST', { conversation_id: cid, kind: 'voice' }, a.token)).status, 201);
+    let rows = db.raw.prepare('SELECT user_id FROM luno_push_outbox').all();
+    assert.deepEqual(rows, [], 'muted room gets nothing');
+    assert.equal((await api(`conversations/${cid}/meta`, 'PATCH', { muted: false }, b.token)).status, 200);
+    assert.equal((await api('me/settings', 'PATCH', { notifications: false }, b.token)).status, 200);
+    assert.equal((await api(`conversations/${cid}/messages`, 'POST', { body: 'prefs off?' }, a.token)).status, 201);
+    rows = db.raw.prepare('SELECT user_id FROM luno_push_outbox').all();
+    assert.deepEqual(rows, [], 'disabled prefs get nothing');
+    assert.equal((await api('me/settings', 'PATCH', { notification_preview: false, notifications: true }, b.token)).status, 200);
+    assert.equal((await api(`conversations/${cid}/messages`, 'POST', { body: 'secret text' }, a.token)).status, 201);
+    rows = db.raw.prepare('SELECT body FROM luno_push_outbox').all();
+    assert.deepEqual(rows.map((r) => r.body), ['새 알림'], 'preview off hides the text');
+  } finally { db.raw.close(); }
+});
+
+test('N1-L: without a provider nothing is recorded', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage7Isolate(db);
+    const a = await registerLogin(api, 'n1n-a@luno-test.local', 'n1n_a');
+    const b = await registerLogin(api, 'n1n-b@luno-test.local', 'n1n_b');
+    const cid = await directRoom(api, a, b);
+    assert.equal((await api(`conversations/${cid}/messages`, 'POST', { body: 'hi' }, a.token)).status, 201);
+    const rows = db.raw.prepare('SELECT user_id FROM luno_push_outbox').all();
+    assert.deepEqual(rows, [], 'no provider, no outbox writes');
+  } finally { db.raw.close(); }
+});
+
+test('N1-L: web notifies hidden tabs, permission from settings only', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const notify = await readFile(new URL('../apps/user-web/src/web_notify.ts', import.meta.url), 'utf8');
+  const sock = await readFile(new URL('../apps/user-web/src/composables/useChatSocket.ts', import.meta.url), 'utf8');
+  const rtc = await readFile(new URL('../apps/user-web/src/composables/useWebRTC.ts', import.meta.url), 'utf8');
+  const settings = await readFile(new URL('../apps/user-web/src/components/SettingsModal.vue', import.meta.url), 'utf8');
+  const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+  assert.ok(notify.includes("!document.hidden"), 'foreground tabs stay silent');
+  assert.ok(notify.includes('webNotifyEnabled'), 'settings opt-in respected');
+  assert.ok(sock.includes('maybeWebNotify('), 'messages notify');
+  assert.ok(rtc.includes('maybeWebNotify('), 'incoming calls notify');
+  assert.ok(settings.includes('requestWebNotifyPermission'), 'settings button requests permission');
+  for (const [name, src] of [['socket', sock], ['webrtc', rtc], ['view', view]]) {
+    assert.ok(!src.includes('requestPermission'), `${name} never asks on its own`);
+  }
+});
+
 test('N2-L: incoming-ring policy (own echo, busy, no-answer)', () => {
   assert.equal(policy.CALL_NO_ANSWER_MS, 30000);
   assert.equal(policy.decideIncomingRing({ activeCallId: null, incomingCallId: 'c1', selfId: 'u1', initiatedBy: 'u2' }), 'show');

@@ -8,6 +8,7 @@ import { request, type Chat } from '../../../shared/api'
 import { callRecordingName } from '../../../shared/call-fx'
 import { CALL_NO_ANSWER_MS, decideIncomingRing, noAnswerState } from '../../../shared/call_policy'
 import { endWebRTCCall, fetchIceServers, startWebRTCCall } from '../messenger-utils'
+import { maybeWebNotify } from '../web_notify'
 
 export interface CallRecord {
   id: string
@@ -176,6 +177,11 @@ export function useWebRTC(deps: WebRTCDeps) {
       return
     }
     activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: data.caller_name || data.caller_handle || t('mvIncomingTitle'), direction: 'incoming' }
+    maybeWebNotify(
+      data.caller_name || data.caller_handle || t('mvIncomingTitle'),
+      (data.kind || 'voice') === 'video' ? t('mvIncomingVideo') : t('mvIncomingVoice'),
+      `call-${data.call_id}`,
+    )
     armNoAnswerTimer(data.call_id, 'callee')
   }
 
