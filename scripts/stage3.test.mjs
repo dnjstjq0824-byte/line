@@ -115,3 +115,44 @@ test('U1: demo flags stay out of the deployed defaults', () => {
   assert.ok(!wrangler.includes('DEMO_MODE'), 'no DEMO_MODE default');
   assert.ok(!wrangler.includes('DEMO_USER_IDS'), 'no DEMO_USER_IDS default');
 });
+
+// ---------- U2: no fake web displays ----------
+
+const messengerSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const friendPanelSource = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
+const chatListSource = await readFile(new URL('../apps/user-web/src/components/ChatList.vue', import.meta.url), 'utf8');
+const messagePaneSource = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
+const webI18nSource = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
+
+test('U2: wallet starts at zero, never seeded', () => {
+  assert.ok(!messengerSource.includes('ref(3450)'), 'no seeded points');
+  assert.ok(!messengerSource.includes('ref(50000)'), 'no seeded balance');
+  assert.ok(messengerSource.includes('walletPoints = ref(0)'), 'points start at zero');
+  assert.ok(messengerSource.includes('walletBalance = ref(0)'), 'balance starts at zero');
+});
+
+test('U2: recent searches start empty and record real input', () => {
+  assert.ok(friendPanelSource.includes('recentSearchKeywords = ref<string[]>([])'), 'no sample searches');
+  assert.ok(friendPanelSource.includes('@keydown.enter="addSearchKeyword(friendSearchQuery)"'), 'real searches recorded');
+});
+
+test('U2: chat list carries no ad banner', () => {
+  assert.ok(!chatListSource.includes('chat-ad-banner-card'), 'banner markup gone');
+  assert.ok(!chatListSource.includes('CapCom'), 'no ad copy');
+});
+
+test('U2: charge options stay inactive with preparing guidance', () => {
+  assert.ok(messengerSource.includes('mvPreparing'), 'preparing guidance wired');
+  const hits = webI18nSource.match(/mvPreparing\b/g) || [];
+  assert.equal(hits.length, 4, 'mvPreparing in all four locales');
+});
+
+test('U2: notice dates render from actual timestamps; seed keys cleaned', () => {
+  // Display paths bind to real timestamps (A-07 pins the sample fixtures
+  // byte-identical across isolates, so the fixtures themselves stay fixed).
+  assert.ok(messagePaneSource.includes('formatDateDivider(msg.created_at)'), 'divider uses created_at');
+  assert.ok(messagePaneSource.includes('formatTime(msg.created_at)'), 'bubble time uses created_at');
+  assert.ok(chatListSource.includes("formatTime(c.updated_at"), 'list row uses updated_at');
+  assert.ok(!webI18nSource.includes('mvSeedPress'), 'mvSeedPress removed');
+  assert.ok(!webI18nSource.includes('mvSeedMinutes'), 'mvSeedMinutes removed');
+});

@@ -3,8 +3,6 @@
 // Filter/sort/search/collapse stay two-way models (the view owns filtering);
 // actions emit upward. The channel-slot dismiss flag is list-local.
 import { ref } from 'vue'
-
-import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
 import type { Chat } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
 import { t } from '../store/session'
@@ -85,18 +83,6 @@ const channelSlotDismissed = ref(false)
         </button>
       </div>
       <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
-    </div>
-
-    <!-- CapCom / Open Scanner Game Banner Ad (Screenshot 4) -->
-    <div class="chat-ad-banner-card" @click="emit('ecosystem', 'open-apps')">
-      <div class="ad-banner-info">
-        <span class="ad-tag-title">LUNO</span>
-        <span class="ad-tag-link">{{ t('soon_tag') }}</span>
-      </div>
-      <div class="ad-banner-graphic">
-        <span class="ad-badge-i">ⓘ</span>
-        <img :src="lunoMark" alt="LUNO" class="ad-logo-img" />
-      </div>
     </div>
 
     <!-- Smart-channel slot: server-driven notice card (LINE parity) -->

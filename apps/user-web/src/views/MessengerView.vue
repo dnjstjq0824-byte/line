@@ -608,8 +608,9 @@ const newStoryText = ref('')
 const showNewStoryModal = ref(false)
 
 // --- Wallet & Pay ---
-const walletBalance = ref(50000)
-const walletPoints = ref(3450)
+// U2: never seeded — loadWallet() fills real API values (0 when absent).
+const walletBalance = ref(0)
+const walletPoints = ref(0)
 const walletTx = ref<Array<{ id: string; type?: string; kind?: string; title?: string; amount: number; note?: string; counterparty?: string; created_at: string }>>([])
 const showSendMoneyModal = ref(false)
 const showChargeModal = ref(false)
@@ -3529,6 +3530,7 @@ onBeforeUnmount(() => {
         <div class="modal-body-form">
           <p>{{ t('mvChargePick') }}</p>
           <p class="ln-charge-notice" role="note">{{ t('mvChargeNotice') }}</p>
+          <p class="ln-charge-preparing" role="note">{{ t('mvPreparing') }}</p>
           <div class="charge-options-grid">
             <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge10k') }}</button>
             <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge30k') }}</button>

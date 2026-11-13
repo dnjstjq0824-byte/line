@@ -53,7 +53,8 @@ const favoritesSectionOpen = ref(true)
 const officialSectionOpen = ref(true)
 
 // --- Recent Search History (Section 3.2 & 4) ---
-const recentSearchKeywords = ref<string[]>(['K 🙏', t('mvSeedPress'), t('navOpenChat'), 'CapCom', t('mvSeedMinutes')])
+// U2: starts empty; only real searches are recorded (see addSearchKeyword).
+const recentSearchKeywords = ref<string[]>([])
 
 function addSearchKeyword(kw: string) {
   if (!kw.trim()) return
