@@ -32,15 +32,16 @@ const CACHE = new Set([
   'users', 'usersById', 'sessions', 'revokedTokens', 'wsTickets',
   'friendships', 'friendMeta', 'conversations', 'messages', 'readCursors',
   'reactionStore', 'noteStore', 'eventStore', 'polls', 'pollVotes',
+  'pinnedMessages', 'albums', 'savedMessages', 'hiddenMsgs',
   'pushTokens', 'deviceKeys', 'userKeys',
 ]);
 const UNBACKED = new Set([
-  'passkeyCreds', 'storeOrders', 'pinnedMessages', 'albums', 'savedMessages',
+  'passkeyCreds', 'storeOrders',
   'partnerOrgs', 'partnerAccounts',
   'partnerTickets', 'partnerCampaigns', 'oaBotRules', 'devOrgs', 'devApps',
   'devWebhooks', 'devMiniApps', 'creatorProfiles', 'creatorPacks', 'creatorItems',
   'adsAdvertisers', 'adsCampaigns', 'adsGroups', 'userPrefs', 'chatMeta',
-  'hiddenMsgs', 'wallets', 'ownedPacks', 'ownedThemes',
+  'wallets', 'ownedPacks', 'ownedThemes',
   'officialAccounts', 'followedOfficial', 'richMenus', 'creatorSettlements',
   'auditLogs', 'adminReports',
   'featureFlags',

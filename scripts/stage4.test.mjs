@@ -20,7 +20,7 @@ async function stage4Isolate(db, extraEnv = {}) {
 }
 
 async function registerLogin(api, email, handle, password = 'Str0ng!Passw0rd') {
-  const reg = await api('auth/register', 'POST', { email, password, display_name: handle });
+  const reg = await api('auth/register', 'POST', { email, password, display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const id = (await reg.json()).id;
   const login = await api('auth/login', 'POST', { email, password });
@@ -28,16 +28,28 @@ async function registerLogin(api, email, handle, password = 'Str0ng!Passw0rd') {
   return { id, token: (await login.json()).access_token };
 }
 
-async function befriend(api, token, handle) {
-  const res = await api('friends', 'POST', { handle }, token);
-  assert.equal(res.status, 201, `befriend ${handle}`);
-}
-
 async function loginAs(api, email, password = 'Str0ng!Passw0rd') {
   const login = await api('auth/login', 'POST', { email, password });
   assert.equal(login.status, 200, `login ${email}`);
   const body = await login.json();
   return { id: body.user_id, token: body.access_token };
+}
+
+async function befriend(api, token, handle) {
+  assert.equal((await api('friends', 'POST', { handle }, token)).status, 201, `befriend ${handle}`);
+}
+
+async function makeRoom(api, token, memberIds, title = 'D2 Room') {
+  const res = await api('conversations', 'POST', { kind: 'group', title, member_ids: memberIds }, token);
+  assert.equal(res.status, 201, 'room created');
+  return (await res.json()).id;
+}
+
+let d2MsgSerial = 0;
+async function sendMsg(api, token, cid, body) {
+  const res = await api(`conversations/${cid}/messages`, 'POST', { client_id: `d2-${++d2MsgSerial}-${Date.now()}`, body }, token);
+  assert.equal(res.status, 201, 'message sent');
+  return (await res.json()).message;
 }
 
 // ---------- D4: feed, stories, VOOM, openchat ----------
@@ -174,4 +186,199 @@ test('D4: the six social memory stores are gone; one community impl remains', ()
   }
   const communityRoutes = workerSource.match(/p === 'community\/rooms'/g) || [];
   assert.equal(communityRoutes.length, 1, 'single community/rooms handler');
+});
+
+// ---------- D2: conversation extras ----------
+// Rooms themselves go durable in D1; these tests enable the durable flag so a
+// new isolate can reach the same room (test_helpers makeD1 ships the table).
+const DURABLE = { DURABLE_CONVERSATIONS: 'true' };
+
+test('D2: reactions survive a new isolate and toggle off', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd2-ra@luno-test.local', 'd2_ra');
+    const b = await registerLogin(first.api, 'd2-rb@luno-test.local', 'd2_rb');
+    const cid = await makeRoom(first.api, a.token, [b.id]);
+    const msg = await sendMsg(first.api, a.token, cid, 'react to this');
+    assert.equal((await first.api(`conversations/${cid}/messages/${msg.id}/reactions`, 'POST', { reaction: '❤️' }, b.token)).status, 201);
+    const second = await stage4Isolate(db, DURABLE);
+    const b2 = await loginAs(second.api, 'd2-rb@luno-test.local');
+    const list = await (await second.api(`conversations/${cid}/messages`, 'GET', null, b2.token)).json();
+    const found = list.messages.find((m) => m.id === msg.id);
+    assert.deepEqual(found.reactions, { '❤️': 1 });
+    assert.deepEqual(found.my_reactions, ['❤️']);
+    assert.equal((await second.api(`conversations/${cid}/messages/${msg.id}/reactions`, 'POST', { reaction: '❤️' }, b2.token)).status, 200);
+    const third = await stage4Isolate(db, DURABLE);
+    const b3 = await loginAs(third.api, 'd2-rb@luno-test.local');
+    const relist = await (await third.api(`conversations/${cid}/messages`, 'GET', null, b3.token)).json();
+    assert.deepEqual(relist.messages.find((m) => m.id === msg.id).reactions, {});
+  } finally { db.raw.close(); }
+});
+
+test('D2: pins survive a new isolate; unsend clears them', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd2-pa@luno-test.local', 'd2_pa');
+    const b = await registerLogin(first.api, 'd2-pb@luno-test.local', 'd2_pb');
+    const cid = await makeRoom(first.api, a.token, [b.id]);
+    const msg = await sendMsg(first.api, a.token, cid, 'pin this hello world message');
+    assert.equal((await first.api(`conversations/${cid}/pins`, 'POST', { message_id: msg.id }, b.token)).status, 201);
+    const second = await stage4Isolate(db, DURABLE);
+    const b2 = await loginAs(second.api, 'd2-pb@luno-test.local');
+    const pins = await (await second.api(`conversations/${cid}/pins`, 'GET', null, b2.token)).json();
+    assert.equal(pins.pins.length, 1);
+    assert.equal(pins.pins[0].message_id, msg.id);
+    assert.ok(pins.pins[0].body.includes('pin this'), 'pin carries the message body');
+    assert.equal((await second.api(`conversations/${cid}/pins/${msg.id}`, 'DELETE', null, b2.token)).status, 200);
+    const third = await stage4Isolate(db, DURABLE);
+    const b3 = await loginAs(third.api, 'd2-pb@luno-test.local');
+    assert.deepEqual((await (await third.api(`conversations/${cid}/pins`, 'GET', null, b3.token)).json()).pins, []);
+    const msg2 = await sendMsg(third.api, (await loginAs(third.api, 'd2-pa@luno-test.local')).token, cid, 'doomed pin');
+    await third.api(`conversations/${cid}/pins`, 'POST', { message_id: msg2.id }, b3.token);
+    const a3 = await loginAs(third.api, 'd2-pa@luno-test.local');
+    assert.equal((await third.api(`conversations/${cid}/messages/${msg2.id}`, 'DELETE', null, a3.token)).status, 200);
+    assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM luno_pins WHERE message_id = ?').get(msg2.id).n, 0, 'unsend clears the pin row');
+  } finally { db.raw.close(); }
+});
+
+test('D2: polls, votes and close survive a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd2-pla@luno-test.local', 'd2_pla');
+    const b = await registerLogin(first.api, 'd2-plb@luno-test.local', 'd2_plb');
+    const cid = await makeRoom(first.api, a.token, [b.id]);
+    const poll = await (await first.api(`conversations/${cid}/polls`, 'POST', { question: 'lunch?', options: ['a', 'b'] }, a.token)).json();
+    assert.equal((await first.api(`polls/${poll.id}/vote`, 'POST', { option_id: 'opt-0' }, b.token)).status, 200);
+    const second = await stage4Isolate(db, DURABLE);
+    const b2 = await loginAs(second.api, 'd2-plb@luno-test.local');
+    const list = await (await second.api(`conversations/${cid}/polls`, 'GET', null, b2.token)).json();
+    assert.equal(list.polls.length, 1);
+    assert.equal(list.polls[0].options[0].votes, 1);
+    assert.equal(list.polls[0].options[0].voted, true);
+    assert.equal(list.polls[0].total_voters, 1);
+    assert.equal((await second.api(`polls/${poll.id}/vote`, 'POST', { option_id: 'opt-1' }, b2.token)).status, 200);
+    const third = await stage4Isolate(db, DURABLE);
+    const b3 = await loginAs(third.api, 'd2-plb@luno-test.local');
+    const switched = await (await third.api(`conversations/${cid}/polls`, 'GET', null, b3.token)).json();
+    assert.equal(switched.polls[0].options[0].votes, 0, 'single-choice vote moves');
+    assert.equal(switched.polls[0].options[1].votes, 1);
+    const a3 = await loginAs(third.api, 'd2-pla@luno-test.local');
+    assert.equal((await third.api(`polls/${poll.id}/vote`, 'POST', { option_id: 'opt-1' }, a3.token)).status, 200);
+    assert.equal((await third.api(`polls/${poll.id}/close`, 'POST', {}, b3.token)).status, 403, 'only the creator closes');
+    assert.equal((await third.api(`polls/${poll.id}/close`, 'POST', {}, a3.token)).status, 200);
+    const fourth = await stage4Isolate(db, DURABLE);
+    const b4 = await loginAs(fourth.api, 'd2-plb@luno-test.local');
+    const closed = await (await fourth.api(`conversations/${cid}/polls`, 'GET', null, b4.token)).json();
+    assert.equal(closed.polls[0].closed, true, 'close sticks');
+  } finally { db.raw.close(); }
+});
+
+test('D2: notes survive a new isolate with author/owner delete rules', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd2-na@luno-test.local', 'd2_na');
+    const b = await registerLogin(first.api, 'd2-nb@luno-test.local', 'd2_nb');
+    const cid = await makeRoom(first.api, a.token, [b.id]);
+    const note = await (await first.api(`conversations/${cid}/notes`, 'POST', { title: 'plan', body: 'v1' }, b.token)).json();
+    const second = await stage4Isolate(db, DURABLE);
+    const a2 = await loginAs(second.api, 'd2-na@luno-test.local');
+    const notes = await (await second.api(`conversations/${cid}/notes`, 'GET', null, a2.token)).json();
+    assert.equal(notes.notes.length, 1);
+    assert.equal(notes.notes[0].title, 'plan');
+    assert.ok(notes.notes[0].author && notes.notes[0].author.display_name, 'author brief kept');
+    const c = await registerLogin(second.api, 'd2-nc@luno-test.local', 'd2_nc');
+    await befriend(second.api, c.token, 'd2_na');
+    const cid2 = await makeRoom(second.api, c.token, [a2.id]);
+    assert.equal((await second.api(`conversations/${cid2}/notes/${note.id}`, 'DELETE', null, c.token)).status, 404, 'cross-room delete misses');
+    assert.equal((await second.api(`conversations/${cid}/notes/${note.id}`, 'DELETE', null, a2.token)).status, 200, 'room owner deletes');
+    const third = await stage4Isolate(db, DURABLE);
+    const b3 = await loginAs(third.api, 'd2-nb@luno-test.local');
+    assert.deepEqual((await (await third.api(`conversations/${cid}/notes`, 'GET', null, b3.token)).json()).notes, []);
+  } finally { db.raw.close(); }
+});
+
+test('D2: events and rsvps survive a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd2-ea@luno-test.local', 'd2_ea');
+    const b = await registerLogin(first.api, 'd2-eb@luno-test.local', 'd2_eb');
+    const cid = await makeRoom(first.api, a.token, [b.id]);
+    const starts = new Date(Date.now() + 86400000).toISOString();
+    const ev = await (await first.api(`conversations/${cid}/events`, 'POST', { title: 'offsite', starts_at: starts, location: 'jeju' }, a.token)).json();
+    assert.equal((await first.api(`conversations/${cid}/events/${ev.id}/rsvp`, 'POST', { status: 'maybe' }, b.token)).status, 200);
+    const second = await stage4Isolate(db, DURABLE);
+    const b2 = await loginAs(second.api, 'd2-eb@luno-test.local');
+    const list = await (await second.api(`conversations/${cid}/events`, 'GET', null, b2.token)).json();
+    assert.equal(list.events.length, 1);
+    assert.equal(list.events[0].title, 'offsite');
+    assert.equal(list.events[0].my_rsvp, 'maybe');
+    assert.deepEqual(list.events[0].rsvps, { [a.id]: 'going', [b.id]: 'maybe' });
+    assert.ok(list.events[0].creator && list.events[0].creator.display_name, 'creator brief kept');
+  } finally { db.raw.close(); }
+});
+
+test('D2: albums survive a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd2-aa@luno-test.local', 'd2_aa');
+    const b = await registerLogin(first.api, 'd2-ab@luno-test.local', 'd2_ab');
+    const cid = await makeRoom(first.api, a.token, [b.id]);
+    const album = await (await first.api(`conversations/${cid}/albums`, 'POST', { title: 'trip' }, a.token)).json();
+    assert.equal(db.raw.prepare('SELECT created_by AS c FROM albums WHERE id = ?').get(album.id).c, a.id, 'album author stored');
+    const second = await stage4Isolate(db, DURABLE);
+    const b2 = await loginAs(second.api, 'd2-ab@luno-test.local');
+    const list = await (await second.api(`conversations/${cid}/albums`, 'GET', null, b2.token)).json();
+    assert.equal(list.albums.length, 1);
+    assert.equal(list.albums[0].title, 'trip');
+    assert.equal(list.albums[0].created_by, a.id);
+  } finally { db.raw.close(); }
+});
+
+test('D2: hidden messages stay hidden on a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd2-ha@luno-test.local', 'd2_ha');
+    const b = await registerLogin(first.api, 'd2-hb@luno-test.local', 'd2_hb');
+    const cid = await makeRoom(first.api, a.token, [b.id]);
+    const msg = await sendMsg(first.api, a.token, cid, 'hide me');
+    assert.equal((await first.api(`conversations/${cid}/messages/${msg.id}/hide`, 'POST', {}, b.token)).status, 200);
+    const second = await stage4Isolate(db, DURABLE);
+    const b2 = await loginAs(second.api, 'd2-hb@luno-test.local');
+    const list = await (await second.api(`conversations/${cid}/messages`, 'GET', null, b2.token)).json();
+    assert.ok(!list.messages.some((m) => m.id === msg.id), 'hidden message filtered');
+    const a2 = await loginAs(second.api, 'd2-ha@luno-test.local');
+    const lista = await (await second.api(`conversations/${cid}/messages`, 'GET', null, a2.token)).json();
+    assert.ok(lista.messages.some((m) => m.id === msg.id), 'other members unaffected');
+  } finally { db.raw.close(); }
+});
+
+test('D2: keep vault survives a new isolate per user', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db);
+    const a = await registerLogin(first.api, 'd2-ka@luno-test.local', 'd2_ka');
+    const b = await registerLogin(first.api, 'd2-kb@luno-test.local', 'd2_kb');
+    const saved = await (await first.api('saved-messages', 'POST', { body: 'remember this', kind: 'text' }, a.token)).json();
+    const second = await stage4Isolate(db);
+    const a2 = await loginAs(second.api, 'd2-ka@luno-test.local');
+    const mine = await (await second.api('saved-messages', 'GET', null, a2.token)).json();
+    assert.equal(mine.saved_messages.length, 1);
+    assert.equal(mine.saved_messages[0].body, 'remember this');
+    assert.equal(mine.saved_messages[0].kind, 'text');
+    const b2 = await loginAs(second.api, 'd2-kb@luno-test.local');
+    assert.deepEqual((await (await second.api('saved-messages', 'GET', null, b2.token)).json()).saved_messages, [], 'vault is per user');
+    assert.equal((await second.api(`saved-messages/${saved.id}`, 'DELETE', null, b2.token)).status, 200, 'delete is idempotent across users');
+    assert.deepEqual((await (await second.api('saved-messages', 'GET', null, a2.token)).json()).saved_messages.length, 1, 'other user delete removes nothing');
+    assert.equal((await second.api(`saved-messages/${saved.id}`, 'DELETE', null, a2.token)).status, 200);
+    const third = await stage4Isolate(db);
+    const a3 = await loginAs(third.api, 'd2-ka@luno-test.local');
+    assert.deepEqual((await (await third.api('saved-messages', 'GET', null, a3.token)).json()).saved_messages, []);
+  } finally { db.raw.close(); }
 });

@@ -199,6 +199,15 @@ const LUNO_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_luno_community_posts_room ON luno_community_posts(room_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS luno_community_post_likes (
     post_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (post_id, user_id))`,
+  // D2: conversation extras without a legacy table get luno_ tables.
+  `CREATE TABLE IF NOT EXISTS luno_pins (
+    conversation_id TEXT NOT NULL, message_id TEXT NOT NULL,
+    pinned_by TEXT NOT NULL, pinned_at TEXT NOT NULL,
+    PRIMARY KEY (conversation_id, message_id))`,
+  `CREATE TABLE IF NOT EXISTS luno_hidden_messages (
+    user_id TEXT NOT NULL, message_id TEXT NOT NULL,
+    PRIMARY KEY (user_id, message_id))`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_hidden_user ON luno_hidden_messages(user_id)`,
 ];
 const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -246,7 +255,7 @@ const LUNO_SCHEMA_BASE = [
     body TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS albums (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, title TEXT NOT NULL,
-    image_urls TEXT NOT NULL, created_at TEXT NOT NULL)`,
+    image_urls TEXT NOT NULL, created_by TEXT DEFAULT '', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, title TEXT NOT NULL,
     event_date TEXT NOT NULL, location TEXT DEFAULT '', created_at TEXT NOT NULL)`,
@@ -355,6 +364,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['polls', 'options_json', "TEXT DEFAULT '[]'"],
   ['attachments', 'name', "TEXT DEFAULT ''"],
   ['e2ee_keys', 'prekey_sig', "TEXT DEFAULT ''"],
+  ['albums', 'created_by', "TEXT DEFAULT ''"],
 ];
 async function ensurePhase1Columns(db) {
   for (const [table, column, ddl] of LUNO_SCHEMA_PHASE1_COLS) {
@@ -1002,6 +1012,7 @@ async function deleteAccountData(userId) {
     ['DELETE FROM event_rsvps WHERE user_id = ?', userId],
     ['DELETE FROM poll_votes WHERE user_id = ?', userId],
     ['DELETE FROM reactions WHERE user_id = ?', userId],
+    ['DELETE FROM message_reactions WHERE user_id = ?', userId],
   ]);
 }
 async function listSessionsFor(userId, currentSid) {
@@ -1070,6 +1081,89 @@ async function hydrateConversation(cid) {
   await ensureSchema();
   const { results } = await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? ORDER BY sequence DESC LIMIT 500').bind(cid).all();
   applyRows(cid, (results || []).reverse());
+  await hydrateReactions((results || []).map(r => r.id));
+}
+// D2: reaction + hidden caches are D1 write-through; hydration fills them so
+// the synchronous decoration paths keep working on cold isolates.
+async function hydrateReactions(messageIds) {
+  const db = dbOf();
+  if (!db || !messageIds.length) return;
+  await ensureSchema();
+  const ph = messageIds.map(() => '?').join(',');
+  const { results } = await db.prepare(`SELECT message_id, user_id, emoji FROM message_reactions WHERE message_id IN (${ph})`).bind(...messageIds).all();
+  for (const r of results || []) {
+    if (!reactionStore.has(r.message_id)) reactionStore.set(r.message_id, new Map());
+    const rm = reactionStore.get(r.message_id);
+    if (!rm.has(r.emoji)) rm.set(r.emoji, new Set());
+    rm.get(r.emoji).add(r.user_id);
+  }
+}
+async function hydrateHidden(userId) {
+  const db = dbOf();
+  if (!db || !userId) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT message_id FROM luno_hidden_messages WHERE user_id = ?').bind(userId).all();
+  hiddenMsgs.set(userId, new Set((results || []).map(r => r.message_id)));
+}
+async function hydratePins(cid) {
+  const db = dbOf();
+  if (!db || !cid) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT message_id, pinned_by, pinned_at FROM luno_pins WHERE conversation_id = ?').bind(cid).all();
+  pinnedMessages.set(cid, (results || []).map(r => ({ message_id: r.message_id, pinned_by: r.pinned_by, pinned_at: r.pinned_at })));
+}
+async function hydratePolls(cid) {
+  const db = dbOf();
+  if (!db || !cid) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT * FROM polls WHERE conversation_id = ?').bind(cid).all();
+  for (const row of results || []) {
+    let options = [];
+    try { options = JSON.parse(row.options_json || '[]'); } catch { options = []; }
+    const poll = { id: row.id, conversation_id: row.conversation_id, question: row.question, multiple: !!row.multiple, closed: !!row.closed, created_by: row.created_by || '', created_at: row.created_at, options: options.map((o, i) => ({ id: o.id || `opt-${i}`, text: o.text || '', voters: new Set() })) };
+    const votes = await db.prepare('SELECT option_id, user_id FROM poll_votes WHERE poll_id = ?').bind(row.id).all();
+    for (const v of votes.results || []) poll.options.find(o => o.id === v.option_id)?.voters.add(v.user_id);
+    polls.set(poll.id, poll);
+  }
+}
+async function hydrateNotes(cid) {
+  const db = dbOf();
+  if (!db || !cid) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT * FROM conversation_notes WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC').bind(cid).all();
+  noteStore.set(cid, (results || []).map(r => ({ id: r.id, title: r.title, body: r.body, author_id: r.author_id, created_at: r.created_at })));
+}
+async function hydrateEvents(cid) {
+  const db = dbOf();
+  if (!db || !cid) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT * FROM conversation_events WHERE conversation_id = ? ORDER BY starts_at ASC').bind(cid).all();
+  const list = [];
+  for (const row of results || []) {
+    const ev = { id: row.id, title: row.title, starts_at: row.starts_at, location: row.location || '', created_by: row.created_by || '', created_at: row.created_at, rsvps: new Map() };
+    const rsvps = await db.prepare('SELECT user_id, status FROM event_rsvps WHERE event_id = ?').bind(row.id).all();
+    for (const s of rsvps.results || []) ev.rsvps.set(s.user_id, s.status);
+    list.push(ev);
+  }
+  eventStore.set(cid, list);
+}
+async function hydrateAlbums(cid) {
+  const db = dbOf();
+  if (!db || !cid) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT * FROM albums WHERE conversation_id = ?').bind(cid).all();
+  albums.set(cid, (results || []).map(r => {
+    let ids = [];
+    try { ids = JSON.parse(r.image_urls || '[]'); } catch { ids = []; }
+    return { id: r.id, title: r.title, attachment_ids: Array.isArray(ids) ? ids : [], created_by: r.created_by || '', created_at: r.created_at };
+  }));
+}
+async function hydrateKeep(userId) {
+  const db = dbOf();
+  if (!db || !userId) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT * FROM keep_items WHERE user_id = ? ORDER BY created_at DESC, rowid DESC').bind(userId).all();
+  savedMessages.set(userId, (results || []).map(r => ({ id: r.id, body: r.body, kind: r.category || 'text', created_at: r.created_at })));
 }
 async function hydrateCursors(userId) {
   const db = dbOf();
@@ -2566,6 +2660,7 @@ async function extended(p, request, url, me, token) {
   const myId = me.id;
   ensureKeepMemo(myId);
   if (isDemoUser(CURRENT_ENV, myId)) ensureDemoConversationsForUser(myId);
+  await hydrateHidden(myId);
 
   // ---------- Passkeys (WebAuthn registration) ----------
   if (p === 'passkeys/register/begin' && request.method === 'POST') {
@@ -3110,18 +3205,33 @@ async function extended(p, request, url, me, token) {
       await persistMessageUpdate(msg);
       const pins = pinnedMessages.get(cid);
       if (pins) pinnedMessages.set(cid, pins.filter(x => x.message_id !== msg.id));
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare('DELETE FROM luno_pins WHERE conversation_id = ? AND message_id = ?').bind(cid, msg.id).run();
+      }
       broadcast({ type: 'message.unsent', conversation_id: cid, message_id: msg.id });
       return json({ status: 'recalled', message_id: msg.id });
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)\/hide$/)) && method === 'POST') {
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await db.prepare('INSERT OR IGNORE INTO luno_hidden_messages (user_id, message_id) VALUES (?, ?)').bind(myId, m[2]).run();
+    }
     const hs = hiddenMsgs.get(myId) || new Set();
     hs.add(m[2]);
     hiddenMsgs.set(myId, hs);
     return json({ status: 'hidden' });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)\/reactions$/)) && method === 'POST') {
-    const cid = m[1], mid = m[2];
+    const cid = resolveConversationId(m[1], myId), mid = m[2];
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateConversation(cid);
+      await hydrateReactions([mid]);
+    }
     if (!(messages.get(cid) || []).some(x => x.id === mid && !x.unsent)) return bad('메시지를 찾을 수 없습니다', 404);
     const b = await readJson(request);
     if (!REACTIONS.includes(b.reaction)) return bad('지원하지 않는 반응입니다');
@@ -3132,6 +3242,11 @@ async function extended(p, request, url, me, token) {
     const set = rm.get(b.reaction);
     const removed = set.has(myId);
     if (removed) set.delete(myId); else set.add(myId);
+    if (db) {
+      await db.prepare('DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji <> ?').bind(mid, myId, b.reaction).run();
+      if (removed) await db.prepare('DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').bind(mid, myId, b.reaction).run();
+      else await db.prepare('INSERT OR IGNORE INTO message_reactions (message_id, user_id, emoji, created_at) VALUES (?, ?, ?, ?)').bind(mid, myId, b.reaction, now()).run();
+    }
     const counts = reactionCounts(mid);
     broadcast({ type: 'message.reaction', conversation_id: cid, message_id: mid, reactions: counts });
     return json({ status: removed ? 'removed' : 'reacted', reactions: counts }, removed ? 200 : 201);
@@ -3166,6 +3281,12 @@ async function extended(p, request, url, me, token) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateConversation(cid);
+      await hydratePins(cid);
+    }
     const pins = pinnedMessages.get(cid) || [];
     const view = () => pins.map(x => {
       const src = (messages.get(cid) || []).find(y => y.id === x.message_id);
@@ -3176,17 +3297,27 @@ async function extended(p, request, url, me, token) {
       const b = await readJson(request);
       const src = (messages.get(cid) || []).find(y => y.id === b.message_id && !y.unsent);
       if (!src) return bad('메시지를 찾을 수 없습니다', 404);
-      if (!pins.some(x => x.message_id === src.id)) pins.unshift({ message_id: src.id, pinned_by: myId, pinned_at: now() });
+      if (!pins.some(x => x.message_id === src.id)) {
+        const pin = { message_id: src.id, pinned_by: myId, pinned_at: now() };
+        pins.unshift(pin);
+        if (db) await db.prepare('INSERT OR IGNORE INTO luno_pins (conversation_id, message_id, pinned_by, pinned_at) VALUES (?, ?, ?, ?)').bind(cid, pin.message_id, pin.pinned_by, pin.pinned_at).run();
+      }
       pinnedMessages.set(cid, pins);
       broadcast({ type: 'conversation.pins', conversation_id: cid });
       return json({ status: 'pinned', message_id: src.id }, 201);
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/pins\/([\w-]+)$/)) && method === 'DELETE') {
-    const conv = conversations.get(resolveConversationId(m[1], myId));
+    const cid = resolveConversationId(m[1], myId);
+    const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
-    pinnedMessages.set(m[1], (pinnedMessages.get(m[1]) || []).filter(x => x.message_id !== m[2]));
-    broadcast({ type: 'conversation.pins', conversation_id: m[1] });
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await db.prepare('DELETE FROM luno_pins WHERE conversation_id = ? AND message_id = ?').bind(cid, m[2]).run();
+    }
+    pinnedMessages.set(cid, (pinnedMessages.get(cid) || []).filter(x => x.message_id !== m[2]));
+    broadcast({ type: 'conversation.pins', conversation_id: cid });
     return json({ status: 'unpinned' });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/media$/)) && method === 'GET') {
@@ -3220,6 +3351,7 @@ async function extended(p, request, url, me, token) {
       await ensureSchema();
       const esc = q.replace(/[%_\\]/g, (ch) => '\\' + ch);
       const { results } = await db.prepare("SELECT * FROM luno_messages WHERE conversation_id = ? AND unsent = 0 AND kind <> 'sticker' AND body LIKE ? ESCAPE '\\' ORDER BY sequence DESC LIMIT 50").bind(cid, '%' + esc + '%').all();
+      await hydrateReactions((results || []).map(r => r.id));
       const out = (results || []).filter(r => !(hs && hs.has(r.id))).map(r => decorateMessage(rowToMessage(r), myId, cid));
       return json({ messages: out });
     }
@@ -3233,6 +3365,11 @@ async function extended(p, request, url, me, token) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydratePolls(cid);
+    }
     if (method === 'GET') return json({ polls: Array.from(polls.values()).filter(x => x.conversation_id === cid).map(x => pollView(x, myId)) });
     if (method === 'POST') {
       const b = await readJson(request);
@@ -3241,31 +3378,58 @@ async function extended(p, request, url, me, token) {
       if (!question || opts.length < 2 || opts.length > 10) return bad('질문과 2~10개의 선택지가 필요합니다');
       const poll = { id: uid(), conversation_id: cid, question, multiple: b.multiple === true, closed: false, created_by: myId, created_at: now(), options: opts.map((t, i) => ({ id: `opt-${i}`, text: t, voters: new Set() })) };
       polls.set(poll.id, poll);
+      if (db) {
+        const optionsJson = JSON.stringify(poll.options.map(o => ({ id: o.id, text: o.text })));
+        await db.prepare('INSERT INTO polls (id, conversation_id, question, option1, option2, multiple, closed, created_by, options_json, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)').bind(poll.id, cid, question, opts[0] || '', opts[1] || '', poll.multiple ? 1 : 0, myId, optionsJson, poll.created_at).run();
+      }
       pushMessage(cid, myId, { kind: 'poll', body: question, metadata: { poll_id: poll.id } });
       broadcast({ type: 'poll.updated', conversation_id: cid, poll_id: poll.id });
       return json(pollView(poll, myId), 201);
     }
   }
   if ((m = p.match(/^polls\/([\w-]+)\/vote$/)) && method === 'POST') {
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      const prow = await db.prepare('SELECT conversation_id FROM polls WHERE id = ?').bind(m[1]).first();
+      if (prow) await hydratePolls(prow.conversation_id);
+    }
     const poll = polls.get(m[1]);
-    if (!poll || !conversations.get(poll.conversation_id)?.members.includes(myId)) return bad('투표를 찾을 수 없습니다', 404);
+    let pconv = poll ? conversations.get(poll.conversation_id) : null;
+    if (poll && !pconv) pconv = await hydrateDurableConversation(poll.conversation_id).catch(() => null);
+    if (!poll || !pconv?.members.includes(myId)) return bad('투표를 찾을 수 없습니다', 404);
     if (poll.closed) return bad('종료된 투표입니다');
     const b = await readJson(request);
     const opt = poll.options.find(o => o.id === b.option_id);
     if (!opt) return bad('선택지를 찾을 수 없습니다');
-    if (opt.voters.has(myId)) opt.voters.delete(myId);
+    const wasVoted = opt.voters.has(myId);
+    if (wasVoted) opt.voters.delete(myId);
     else {
       if (!poll.multiple) poll.options.forEach(o => o.voters.delete(myId));
       opt.voters.add(myId);
+    }
+    if (db) {
+      if (!poll.multiple && !wasVoted) await db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?').bind(m[1], myId).run();
+      if (wasVoted) await db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND option_id = ? AND user_id = ?').bind(m[1], opt.id, myId).run();
+      else await db.prepare('INSERT OR IGNORE INTO poll_votes (poll_id, option_id, user_id, created_at) VALUES (?, ?, ?, ?)').bind(m[1], opt.id, myId, now()).run();
     }
     broadcast({ type: 'poll.updated', conversation_id: poll.conversation_id, poll_id: poll.id });
     return json({ status: 'voted', poll: pollView(poll, myId) });
   }
   if ((m = p.match(/^polls\/([\w-]+)\/close$/)) && method === 'POST') {
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      const prow = await db.prepare('SELECT conversation_id FROM polls WHERE id = ?').bind(m[1]).first();
+      if (prow) await hydratePolls(prow.conversation_id);
+    }
     const poll = polls.get(m[1]);
-    if (!poll || !conversations.get(poll.conversation_id)?.members.includes(myId)) return bad('투표를 찾을 수 없습니다', 404);
+    let pconv = poll ? conversations.get(poll.conversation_id) : null;
+    if (poll && !pconv) pconv = await hydrateDurableConversation(poll.conversation_id).catch(() => null);
+    if (!poll || !pconv?.members.includes(myId)) return bad('투표를 찾을 수 없습니다', 404);
     if (poll.created_by !== myId) return bad('투표를 만든 사람만 종료할 수 있습니다', 403);
     poll.closed = true;
+    if (db) await db.prepare('UPDATE polls SET closed = 1 WHERE id = ?').bind(m[1]).run();
     broadcast({ type: 'poll.updated', conversation_id: poll.conversation_id, poll_id: poll.id });
     return json({ status: 'closed', poll: pollView(poll, myId) });
   }
@@ -3273,6 +3437,11 @@ async function extended(p, request, url, me, token) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateNotes(cid);
+    }
     const list = noteStore.get(cid) || [];
     if (method === 'GET') return json({ notes: list.map(n => ({ ...n, author: userBrief(n.author_id) })) });
     if (method === 'POST') {
@@ -3282,23 +3451,36 @@ async function extended(p, request, url, me, token) {
       const note = { id: uid(), title, body, author_id: myId, created_at: now() };
       list.unshift(note);
       noteStore.set(cid, list);
+      if (db) await db.prepare('INSERT INTO conversation_notes (id, conversation_id, author_id, title, body, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(note.id, cid, note.author_id, note.title, note.body, note.created_at).run();
       return json({ ...note, author: userBrief(myId) }, 201);
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/notes\/([\w-]+)$/)) && method === 'DELETE') {
-    const conv = conversations.get(resolveConversationId(m[1], myId));
+    const cid = resolveConversationId(m[1], myId);
+    const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
-    const list = noteStore.get(m[1]) || [];
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateNotes(cid);
+    }
+    const list = noteStore.get(cid) || [];
     const note = list.find(n => n.id === m[2]);
     if (!note) return bad('노트를 찾을 수 없습니다', 404);
     if (note.author_id !== myId && conv.owner_id !== myId) return bad('삭제 권한이 없습니다', 403);
-    noteStore.set(m[1], list.filter(n => n.id !== m[2]));
+    noteStore.set(cid, list.filter(n => n.id !== m[2]));
+    if (db) await db.prepare('DELETE FROM conversation_notes WHERE id = ? AND conversation_id = ?').bind(m[2], cid).run();
     return json({ status: 'deleted' });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/events$/))) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateEvents(cid);
+    }
     const list = eventStore.get(cid) || [];
     const view = e => ({ ...e, rsvps: Object.fromEntries(e.rsvps), my_rsvp: e.rsvps.get(myId) || '', creator: userBrief(e.created_by) });
     if (method === 'GET') return json({ events: list.map(view) });
@@ -3311,24 +3493,40 @@ async function extended(p, request, url, me, token) {
       list.push(ev);
       list.sort((a, b2) => a.starts_at.localeCompare(b2.starts_at));
       eventStore.set(cid, list);
+      if (db) {
+        await db.prepare('INSERT INTO conversation_events (id, conversation_id, title, starts_at, location, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(ev.id, cid, ev.title, ev.starts_at, ev.location, ev.created_by, ev.created_at).run();
+        await db.prepare('INSERT OR IGNORE INTO event_rsvps (event_id, user_id, status, updated_at) VALUES (?, ?, ?, ?)').bind(ev.id, myId, 'going', now()).run();
+      }
       pushMessage(cid, myId, { kind: 'text', body: `📅 일정 등록: ${title} (${new Date(startsAt).toLocaleString('ko-KR')})` });
       return json(view(ev), 201);
     }
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/events\/([\w-]+)\/rsvp$/)) && method === 'POST') {
-    const conv = conversations.get(resolveConversationId(m[1], myId));
+    const cid = resolveConversationId(m[1], myId);
+    const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
-    const ev = (eventStore.get(m[1]) || []).find(e => e.id === m[2]);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateEvents(cid);
+    }
+    const ev = (eventStore.get(cid) || []).find(e => e.id === m[2]);
     if (!ev) return bad('일정을 찾을 수 없습니다', 404);
     const b = await readJson(request);
     if (!['going', 'maybe', 'no'].includes(b.status)) return bad('참석 상태 값이 올바르지 않습니다');
     ev.rsvps.set(myId, b.status);
+    if (db) await db.prepare('INSERT INTO event_rsvps (event_id, user_id, status, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(event_id, user_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at').bind(m[2], myId, b.status, now()).run();
     return json({ status: 'saved', rsvps: Object.fromEntries(ev.rsvps) });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/albums$/))) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateAlbums(cid);
+    }
     const list = albums.get(cid) || [];
     if (method === 'GET') return json({ albums: list });
     if (method === 'POST') {
@@ -3347,6 +3545,7 @@ async function extended(p, request, url, me, token) {
       const album = { id: uid(), title, attachment_ids: ids, created_by: myId, created_at: now() };
       list.push(album);
       albums.set(cid, list);
+      if (db) await db.prepare('INSERT INTO albums (id, conversation_id, title, image_urls, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(album.id, cid, album.title, JSON.stringify(ids), myId, album.created_at).run();
       return json(album, 201);
     }
   }
@@ -3915,6 +4114,7 @@ async function extended(p, request, url, me, token) {
     }
     const hasMore = delta.length > 500;
     delta = delta.slice(0, 500);
+    if (db) await hydrateReactions(delta.map(x => x.id));
     return json({
       conversation_id: cid,
       since_sequence: since,
@@ -5135,83 +5335,18 @@ const workerCore = {
         return json({ status: 'typing' });
       }
 
-      const reactMatch = p.match(/^conversations\/([a-zA-Z0-9_-]+)\/messages\/([a-zA-Z0-9_-]+)\/reactions$/);
-      if (reactMatch && request.method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        broadcast({
-          type: 'message.reaction',
-          conversation_id: reactMatch[1],
-          message_id: reactMatch[2],
-          reaction: body.reaction || '👍',
-          user_id: authUser.id
-        });
-        return json({ status: 'reacted' }, 201);
-      }
+      // D2: duplicate reactions/pins/polls/albums handlers lived here. They were
+      // unreachable (extended() answers these routes first, with membership
+      // checks the duplicates lacked) and are removed; extended() is the one
+      // impl. Saved-messages below is workerCore-only and stays, D1-backed.
 
-      // Pinned messages
-      const pinsMatch = p.match(/^conversations\/([a-zA-Z0-9_-]+)\/pins$/);
-      if (pinsMatch) {
-        const cid = pinsMatch[1];
-        if (request.method === 'POST') {
-          const body = await request.json().catch(() => ({}));
-          const pinList = pinnedMessages.get(cid) || [];
-          pinList.unshift({ message_id: body.message_id, pinned_by: authUser.id, pinned_at: new Date().toISOString() });
-          pinnedMessages.set(cid, pinList);
-          return json({ status: 'pinned', message_id: body.message_id }, 201);
-        }
-        if (request.method === 'GET') {
-          return json({ pins: pinnedMessages.get(cid) || [] });
-        }
-      }
-
-      // Polls
-      const pollMatch = p.match(/^conversations\/([a-zA-Z0-9_-]+)\/polls$/);
-      if (pollMatch && request.method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const pollId = crypto.randomUUID();
-        const poll = {
-          id: pollId,
-          conversation_id: pollMatch[1],
-          question: body.question,
-          options: (body.options || []).map((o, idx) => ({ id: `opt-${idx}`, text: o, votes: 0 })),
-          created_by: authUser.id,
-          created_at: new Date().toISOString()
-        };
-        polls.set(pollId, poll);
-        return json(poll, 201);
-      }
-      const pollVoteMatch = p.match(/^polls\/([a-zA-Z0-9_-]+)\/vote$/);
-      if (pollVoteMatch && request.method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const poll = polls.get(pollVoteMatch[1]);
-        if (!poll || !conversations.get(poll.conversation_id)?.members.includes(authUser.id)) {
-          return json({ error: 'poll not found' }, 404);
-        }
-        const opt = poll.options.find(o => o.id === body.option_id);
-        if (opt) opt.votes += 1;
-        return json({ status: 'voted', poll });
-      }
-
-      // Albums
-      const albumMatch = p.match(/^conversations\/([a-zA-Z0-9_-]+)\/albums$/);
-      if (albumMatch) {
-        const cid = albumMatch[1];
-        if (request.method === 'POST') {
-          const body = await request.json().catch(() => ({}));
-          const aid = crypto.randomUUID();
-          const alist = albums.get(cid) || [];
-          const alb = { id: aid, title: body.title || 'Album', image_url: body.image_url || '', created_at: new Date().toISOString() };
-          alist.push(alb);
-          albums.set(cid, alist);
-          return json(alb, 201);
-        }
-        if (request.method === 'GET') {
-          return json({ albums: albums.get(cid) || [] });
-        }
-      }
-
-      // Saved Messages (Keep)
+      // Saved Messages (Keep) — D2: keep_items is authoritative, the Map is cache.
       if (p === 'saved-messages') {
+        const kdb = dbOf();
+        if (kdb) {
+          await ensureSchema();
+          await hydrateKeep(authUser.id);
+        }
         if (request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const sid = crypto.randomUUID();
@@ -5219,6 +5354,7 @@ const workerCore = {
           const smsg = { id: sid, body: body.body || '', kind: body.kind || 'text', created_at: new Date().toISOString() };
           slist.unshift(smsg);
           savedMessages.set(authUser.id, slist);
+          if (kdb) await kdb.prepare('INSERT INTO keep_items (id, user_id, title, body, category, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(smsg.id, authUser.id, '', smsg.body, smsg.kind, smsg.created_at).run();
           notifyUser(authUser.id, { type: 'saved-messages.updated' });
           return json(smsg, 201);
         }
@@ -5229,6 +5365,12 @@ const workerCore = {
       const savedDelMatch = p.match(/^saved-messages\/([a-zA-Z0-9_-]+)$/);
       if (savedDelMatch && request.method === 'DELETE') {
         const sid = savedDelMatch[1];
+        const kdb = dbOf();
+        if (kdb) {
+          await ensureSchema();
+          await hydrateKeep(authUser.id);
+          await kdb.prepare('DELETE FROM keep_items WHERE id = ? AND user_id = ?').bind(sid, authUser.id).run();
+        }
         let slist = savedMessages.get(authUser.id) || [];
         slist = slist.filter(item => item.id !== sid && item.message_id !== sid);
         savedMessages.set(authUser.id, slist);
