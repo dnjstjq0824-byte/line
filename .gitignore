@@ -44,3 +44,7 @@ docs/roadmap/luno-100k/LUNO_SECURITY_TASK_REGISTER.csv
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# B4: third-party messenger reference images stay local-only (UX reference).
+# Never tracked; local files are kept.
+screenshots/line-reference/
