@@ -96,11 +96,11 @@ function effectiveHeight(bodies) {
   return height;
 }
 
-const mobile700 = mediaBody(v2, 'max-width:700px');
+const mobile700 = mediaBody(v2, 'max-width:699px');
 
-test('mobile (<=700px) floating nav clears the Safari toolbar (safe-area bottom)', () => {
+test('mobile (<=699px) floating nav clears the Safari toolbar (safe-area bottom)', () => {
   const bottom = effectiveBottom(ruleBodies(mobile700, '.luno-mobile-floating-nav'));
-  assert.ok(bottom, 'expected a bottom declaration for .luno-mobile-floating-nav in the <=700px block');
+  assert.ok(bottom, 'expected a bottom declaration for .luno-mobile-floating-nav in the <=699px block');
   assert.ok(
     bottom.includes('env(safe-area-inset-bottom)'),
     `nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
@@ -114,8 +114,8 @@ test('mobile (<=700px) floating nav clears the Safari toolbar (safe-area bottom)
   );
 });
 
-test('mobile (<=700px) chat input dock keeps its safe-area padding (no shorthand clobber)', () => {
-  // Global rules apply first, then the <=700px block, in source order.
+test('mobile (<=699px) chat input dock keeps its safe-area padding (no shorthand clobber)', () => {
+  // Global rules apply first, then the <=699px block, in source order.
   const bodies = [...ruleBodies(v2.split('@media')[0], '.pc-chat-input-dock'), ...ruleBodies(mobile700, '.pc-chat-input-dock')];
   const bottom = effectivePaddingBottom(bodies);
   assert.ok(bottom, 'expected a padding declaration for .pc-chat-input-dock');
@@ -126,9 +126,9 @@ test('mobile (<=700px) chat input dock keeps its safe-area padding (no shorthand
 });
 
 test('App.vue mobile nav base also respects the safe-area inset', () => {
-  const base700 = mediaBody(app, 'max-width: 700px');
+  const base700 = mediaBody(app, 'max-width: 699px');
   const bottom = effectiveBottom(ruleBodies(base700, '.luno-mobile-floating-nav'));
-  assert.ok(bottom, 'expected a bottom declaration for .luno-mobile-floating-nav in the <=700px block');
+  assert.ok(bottom, 'expected a bottom declaration for .luno-mobile-floating-nav in the <=699px block');
   assert.ok(
     bottom.includes('env(safe-area-inset-bottom)'),
     `App.vue nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
@@ -141,9 +141,9 @@ test('App.vue mobile nav base also respects the safe-area inset', () => {
 });
 
 test('mobile chat room sizes to the dynamic viewport so the send dock stays visible', () => {
-  const base700 = mediaBody(app, 'max-width: 700px');
+  const base700 = mediaBody(app, 'max-width: 699px');
   const height = effectiveHeight(ruleBodies(base700, '.pc-chat-viewport'));
-  assert.ok(height, 'expected a height declaration for .pc-chat-viewport in the <=700px block');
+  assert.ok(height, 'expected a height declaration for .pc-chat-viewport in the <=699px block');
   assert.ok(
     height.includes('100dvh'),
     `chat viewport height must resolve to 100dvh (visible area above the toolbar), got: ${height}`,

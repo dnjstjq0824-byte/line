@@ -1551,7 +1551,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   box-shadow: 0 1px 2px rgba(0,0,0,0.06);
   max-width: var(--bubble-max-mobile, 76%);
 }
-@media (min-width: 701px) {
+@media (min-width: 700px) {
   .pc-msg-row .pc-speech-bubble { max-width: var(--bubble-max-desktop, 520px); }
 }
 .pc-msg-row.other .pc-speech-bubble {
@@ -2299,7 +2299,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* ==========================================================================
    RESPONSIVE DESIGN BREAKPOINTS (Article 12)
    ========================================================================== */
-@media (max-width: 700px) {
+@media (max-width: 699px) {
   .pc-workspace {
     flex-direction: column-reverse;
   }
@@ -2992,7 +2992,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   display: none; /* hidden on PC desktop layout */
 }
 
-@media (max-width: 700px) {
+@media (max-width: 699px) {
   .luno-mobile-floating-nav {
     display: flex;
     position: fixed;

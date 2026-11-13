@@ -289,7 +289,7 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .ln-profile-editor button:disabled{opacity:.5;cursor:not-allowed}
 .luno-desktop-app .settings-modal .btn-locale-pill{background:var(--ln-subtle)!important;color:var(--ln-text)!important;border:1px solid var(--ln-line)!important;box-shadow:none!important;opacity:1!important}
 .luno-desktop-app .settings-modal .btn-locale-pill.active{background:var(--ln-accent-soft)!important;color:var(--ln-accent)!important;border-color:var(--ln-accent)!important}
-@media(max-width:480px){.luno-desktop-app .ln-profile-fields{grid-template-columns:1fr}.luno-desktop-app .ln-profile-save{align-items:stretch;flex-direction:column}.luno-desktop-app .ln-section-heading{align-items:flex-start;flex-direction:column;gap:4px}}
+@media(max-width:399px){.luno-desktop-app .ln-profile-fields{grid-template-columns:1fr}.luno-desktop-app .ln-profile-save{align-items:stretch;flex-direction:column}.luno-desktop-app .ln-section-heading{align-items:flex-start;flex-direction:column;gap:4px}}
 /* Own profile, contact preview, edit and account settings share one visual family. */
 .luno-desktop-app .profile-modal-card{width:420px!important;max-width:100%;border-radius:24px!important;background:var(--ln-surface)!important;border:1px solid var(--ln-line);box-shadow:var(--ln-shadow)!important}
 .luno-desktop-app .profile-cover-header{height:130px!important;background:var(--ln-accent-soft)!important;position:relative}
@@ -311,8 +311,8 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .setting-toggle-row{border-color:var(--ln-line)!important;padding:12px 0!important}
 .luno-desktop-app .mobile-bottom-nav{background:var(--ln-surface)!important;border-color:var(--ln-line)!important}
 .luno-desktop-app .mobile-nav-item{color:var(--ln-muted)!important}.luno-desktop-app .mobile-nav-item.active{color:var(--ln-accent)!important}
-@media(max-width:1100px){.luno-desktop-app .pc-auth-col{padding:36px!important}.luno-desktop-app .pc-chat-messages-canvas{padding:24px!important}}
-@media(max-width:700px){
+@media(max-width:1099px){.luno-desktop-app .pc-auth-col{padding:36px!important}.luno-desktop-app .pc-chat-messages-canvas{padding:24px!important}}
+@media(max-width:699px){
   .luno-desktop-app .pc-chat-topbar{height:56px!important;min-height:56px;flex-wrap:nowrap!important;padding:0 12px!important;gap:8px!important;flex-shrink:0}
   .luno-desktop-app .chat-topbar-left{min-width:0;flex:1 1 auto;gap:8px;overflow:hidden}
   .luno-desktop-app .chat-topbar-info{flex:1;min-width:0;overflow:hidden}
@@ -351,7 +351,7 @@ ul, ol {list-style:none;margin:0;padding:0}
   .luno-desktop-app .modal-body-form{padding:18px!important}
   .luno-desktop-app .setting-group .flex-row{flex-wrap:wrap}
 }
-@media(min-width:701px) and (max-width:1000px){
+@media(min-width:700px) and (max-width:1099px){
   .luno-desktop-app .pc-workspace{flex-direction:row!important}
   .luno-desktop-app .pc-side-pane{width:310px!important;height:100dvh!important;padding-bottom:0!important}
   .luno-desktop-app .pc-rail{display:flex!important;flex-direction:column!important;height:100dvh!important}

@@ -61,3 +61,19 @@ test('UX1: one font load, extracted rules survive in the skin', async () => {
   }
   assert.ok(!skin.includes('--om-primary:var(--ln-accent)'), 'remap block gone');
 });
+
+test('UX2: tokens, app and web share one breakpoint scale', async () => {
+  const tokens = JSON.parse(await readFile(join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'shared', 'design-v3.tokens.json'), 'utf8'));
+  assert.deepEqual(tokens.breakpoints, [400, 700, 1100]);
+  assert.deepEqual(tokens.layout.railPx, 76);
+  assert.deepEqual(tokens.layout.listPx, 340);
+  assert.deepEqual([tokens.layout.compactMaxPx, tokens.layout.mobileMaxPx, tokens.layout.tabletMaxPx], [400, 700, 1100]);
+  const dart = await readFile(join(dirname(fileURLToPath(import.meta.url)), '..', 'mobile', 'flutter_app', 'lib', 'design', 'responsive.dart'), 'utf8');
+  assert.ok(dart.includes('compactMax = 400'), 'app compactMax 400');
+  assert.ok(dart.includes('mobileMax = 700'), 'app mobileMax 700');
+  assert.ok(dart.includes('tabletMax = 1100'), 'app tabletMax 1100');
+  const skin = await readFile(join(root, 'styles', 'luno-v2.css'), 'utf8');
+  for (const px of [480, 1000]) {
+    assert.ok(!new RegExp(`\\((min|max)-width\\s*:\\s*${px}px`).test(skin), `no ${px}px media bound in the skin`);
+  }
+});

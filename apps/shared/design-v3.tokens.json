@@ -23,6 +23,7 @@
   "typePx": { "display": 22, "title": 17, "body": 15, "small": 12, "micro": 11 },
   "spacingPx": [4, 8, 12, 16, 20, 24, 32, 48],
   "radiusPx": {"control": 10, "card": 14, "avatar": 12, "sheet": 22, "lamp": 999},
-  "layout": {"compactMaxPx": 400, "mobileMaxPx": 720, "tabletMaxPx": 1120, "pageMaxPx": 880},
+  "layout": {"compactMaxPx": 400, "mobileMaxPx": 700, "tabletMaxPx": 1100, "pageMaxPx": 880, "railPx": 76, "listPx": 340},
+  "breakpoints": [400, 700, 1100],
   "fonts": ["Pretendard", "Noto Sans KR", "system-ui", "sans-serif"]
 }

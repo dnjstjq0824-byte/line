@@ -4,11 +4,10 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Responsive standard (docs/RESPONSIVE_STANDARD.md): web + app share one
-// breakpoint scale. Layout flips only at 700 (phone/tablet) and 1100
-// (tablet/desktop). 480 is small-phone refinement, 1000 is an inner
-// tablet-narrow refinement. Anything else (notably 768) reopens the
-// 701-768 conflict zone where phone and tablet rules fought.
+// UX2 responsive standard (§11 spec 1): web + app share one breakpoint
+// scale — 400/700/1100, CSS bounds at 399/699/1099. The old 480 small-phone
+// and 1000 tablet-narrow refinements are gone; anything else (notably 768)
+// reopens the conflict zone where phone and tablet rules fought.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'user-web', 'src');
 
 async function cssFiles(dir) {
@@ -31,8 +30,8 @@ for (const f of files) {
 }
 
 test('web layout breakpoints use only the standard scale', () => {
-  const allowedMax = new Set([480, 700, 1000, 1100]);
-  const allowedMin = new Set([701]);
+  const allowedMax = new Set([399, 699, 1099]);
+  const allowedMin = new Set([400, 700, 1100]);
   const bad = hits.filter(h =>
     (h.kind === 'max' && !allowedMax.has(h.px)) ||
     (h.kind === 'min' && !allowedMin.has(h.px)));
