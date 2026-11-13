@@ -4272,6 +4272,12 @@ const workerCore = {
         const email = (body.email || '').toLowerCase().trim();
         if (!email || !body.password) return json({ error: 'invalid email or password' }, 400);
         if (users.has(email)) return json({ error: 'account already exists' }, 409);
+        if (env.DB) {
+          await ensureSchema();
+          // S3: memory only sees this isolate — D1 is authoritative, so an
+          // address registered on another isolate still answers 409 here.
+          if (await loadUserFromD1ByLogin(email)) return json({ error: 'account already exists' }, 409);
+        }
 
         if (typeof body.password !== 'string' || body.password.length < 8) return json({ error: 'password must be at least 8 characters' }, 400);
         // S2: handles follow the profile rule (same regex as PATCH me) and are
@@ -4282,7 +4288,6 @@ const workerCore = {
           if (!/^[a-z0-9_.]{3,20}$/.test(handle)) return json({ error: 'handle must be 3-20 lowercase letters, digits, _ or .' }, 400);
           if (RESERVED_HANDLES.has(handle) || RESERVED_PEER_PREFIX.test(handle)) return json({ error: 'handle is not available' }, 409);
         }
-        if (env.DB) await ensureSchema();
         const handleTaken = async (h) => {
           if (Array.from(users.values()).some(u => (u.handle || '').toLowerCase() === h)) return true;
           if (env.DB) {

@@ -260,3 +260,37 @@ test('S2: users INSERT fails on conflict; wallets INSERT ignores conflicts', () 
   assert.ok(!workerSource.includes('INSERT OR REPLACE INTO wallets'), 'no clobbering wallets write');
   assert.ok(workerSource.includes('INSERT OR IGNORE INTO wallets'), 'wallets write is OR IGNORE');
 });
+
+// ---------- S3: register email duplicate check hits D1 ----------
+
+test('S3: email registered on another isolate is 409 with the row untouched', async () => {
+  const db = makeD1();
+  try {
+    const bSide = await p0Isolate(db);
+    // Boot B first: its memory snapshot predates the registration below.
+    assert.equal((await bSide.api('auth/login', 'POST', { email: 's3-boot@luno-test.local', password: 'x' })).status, 401);
+    const aSide = await p0Isolate(db);
+    await register(aSide.api, 's3-victim@luno-test.local', 'Victim#Pass99');
+    const before = db.raw.prepare('SELECT id, password_hash FROM users WHERE email = ?').get('s3-victim@luno-test.local');
+    const again = await bSide.api('auth/register', 'POST', { email: 's3-victim@luno-test.local', password: 'Second#Pass99', display_name: 'second' });
+    assert.equal(again.status, 409, 'cross-isolate duplicate email');
+    const rows = db.raw.prepare('SELECT id, password_hash FROM users WHERE email = ?').all('s3-victim@luno-test.local');
+    assert.equal(rows.length, 1, 'exactly one row survives');
+    assert.equal(rows[0].id, before.id, 'row id untouched');
+    assert.equal(rows[0].password_hash, before.password_hash, 'password hash untouched');
+    assert.equal((await bSide.api('auth/login', 'POST', { email: 's3-victim@luno-test.local', password: 'Victim#Pass99' })).status, 200);
+    assert.equal((await bSide.api('auth/login', 'POST', { email: 's3-victim@luno-test.local', password: 'Second#Pass99' })).status, 401);
+  } finally { db.raw.close(); }
+});
+
+test('S3: case-variant email on a stale isolate is 409', async () => {
+  const db = makeD1();
+  try {
+    const stale = await p0Isolate(db);
+    assert.equal((await stale.api('auth/login', 'POST', { email: 's3-boot2@luno-test.local', password: 'x' })).status, 401);
+    const other = await p0Isolate(db);
+    await register(other.api, 's3-case@luno-test.local');
+    assert.equal((await stale.api('auth/register', 'POST', { email: 'S3-Case@Luno-Test.Local', password: 'Second#Pass99', display_name: 'second' })).status, 409);
+    assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM users').get().n, 1, 'no second row');
+  } finally { db.raw.close(); }
+});
