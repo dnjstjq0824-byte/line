@@ -5,12 +5,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../legacy_tokens.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_permissions.dart';
 import '../util/attachments.dart';
 import '../util/voice_recorder.dart';
 import '../util/stickers.dart';
@@ -256,12 +258,25 @@ class _DeckHeader extends StatelessWidget {
               IconButton(
                 tooltip: '음성통화',
                 icon: Icon(Icons.phone, color: dark ? HarborDark.ink : Colors.white),
-                onPressed: () => session.startCall('voice'),
+                onPressed: () => withPermissions(
+                  context,
+                  permissions: const [
+                    (Permission.microphone, '마이크 권한 필요', '음성통화에 사용합니다.'),
+                  ],
+                  action: () async => session.startCall('voice'),
+                ),
               ),
               IconButton(
                 tooltip: '영상통화',
                 icon: Icon(Icons.videocam, color: dark ? HarborDark.ink : Colors.white),
-                onPressed: () => session.startCall('video'),
+                onPressed: () => withPermissions(
+                  context,
+                  permissions: const [
+                    (Permission.microphone, '마이크 권한 필요', '영상통화에 사용합니다.'),
+                    (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
+                  ],
+                  action: () async => session.startCall('video'),
+                ),
               ),
               PopupMenuButton<String>(
                 tooltip: '보관함',
@@ -1028,19 +1043,37 @@ String? _stickerIdOf(dynamic m) {
   return id is String ? id : null;
 }
 
-void _recordVoice(BuildContext context) {
+Future<void> _recordVoice(BuildContext context) {
   final session = SessionScope.of(context, listen: false);
-  showDialog<VoiceRecording>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const VoiceRecordDialog(),
-  ).then((rec) {
-    if (rec != null) session.sendVoice(rec.bytes, durationSec: rec.seconds);
-  });
+  return withPermissions(
+    context,
+    permissions: const [
+      (Permission.microphone, '마이크 권한 필요', '음성 메시지를 녹음하는 데 사용합니다.'),
+    ],
+    action: () async {
+      if (!context.mounted) return;
+      final rec = await showDialog<VoiceRecording>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const VoiceRecordDialog(),
+      );
+      if (rec != null) session.sendVoice(rec.bytes, durationSec: rec.seconds);
+    },
+  );
 }
 
 Future<void> _sendImageWithEffect(BuildContext context, ImageSource source) async {
   final session = SessionScope.of(context, listen: false);
+  // 시스템 사진 선택기(갤러리)는 권한이 필요 없으므로 카메라 경로만 가드한다.
+  if (source == ImageSource.camera) {
+    final ok = await withPermissions(
+      context,
+      permissions: const [
+        (Permission.camera, '카메라 권한 필요', '채팅에 보낼 사진을 촬영하는 데 사용합니다.'),
+      ],
+    );
+    if (!ok || !context.mounted) return;
+  }
   final pic = await session.pickChatImage(source);
   if (pic == null || !context.mounted) return;
   final effect = await showModalBottomSheet<String>(
@@ -1053,6 +1086,13 @@ Future<void> _sendImageWithEffect(BuildContext context, ImageSource source) asyn
 
 Future<void> _captureWithInAppCamera(BuildContext context) async {
   final session = SessionScope.of(context, listen: false);
+  final ok = await withPermissions(
+    context,
+    permissions: const [
+      (Permission.camera, '카메라 권한 필요', '채팅에 보낼 사진·동영상을 촬영하는 데 사용합니다.'),
+    ],
+  );
+  if (!ok || !context.mounted) return;
   final pic = await showDialog<PickedImage>(
     context: context,
     builder: (_) => const InAppCameraSheet(),

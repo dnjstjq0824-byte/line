@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:luno_messenger/design/v3.dart';
 import 'package:luno_messenger/pages/calls.dart';
 import 'package:luno_messenger/state/session.dart';
+import 'package:luno_messenger/util/app_permissions.dart';
 import 'package:luno_messenger/util/call_groups.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 // Item 14: the call ledger groups consecutive same-peer calls (LINE-style
 // "name (n)" rows), shows red missed names, a day-aware date, and working
@@ -44,6 +46,11 @@ SessionController _fixture(List<dynamic> calls) {
   final s = SessionController()..callHistory = calls;
   addTearDown(s.disposeAll);
   return s;
+}
+
+class _GrantedGateway extends PermissionGateway {
+  @override
+  Future<bool> isGranted(Permission p) async => true;
 }
 
 void main() {
@@ -158,6 +165,11 @@ void main() {
 
     testWidgets('trailing button redials and fail-closes without server',
         (WidgetTester tester) async {
+      // C4: the redial button sits behind the mic permission gate, which has
+      // no native side under flutter test; grant it so the test keeps
+      // exercising the redial fail-close it was written for.
+      PermissionGateway.debugOverride = _GrantedGateway();
+      addTearDown(() => PermissionGateway.debugOverride = null);
       final s = _fixture([
         _call(
             title: 'K',

@@ -4,11 +4,13 @@
 // render red. Durations live in the detail view, not here.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_permissions.dart';
 import '../util/call_groups.dart';
 
 class CallsPage extends StatelessWidget {
@@ -117,8 +119,16 @@ class _CallRow extends StatelessWidget {
         tooltip: kind == 'video' ? '영상통화' : '음성통화',
         icon: Icon(kind == 'video' ? Icons.videocam : Icons.phone,
             color: dark ? HarborDark.harbor : HarborLight.harbor),
-        onPressed: () =>
-            session.startCallIn(call['conversation_id']?.toString() ?? '', kind),
+        onPressed: () => withPermissions(
+          context,
+          permissions: [
+            const (Permission.microphone, '마이크 권한 필요', '통화에 사용합니다.'),
+            if (kind == 'video')
+              const (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
+          ],
+          action: () async => session.startCallIn(
+              call['conversation_id']?.toString() ?? '', kind),
+        ),
       ),
     );
   }

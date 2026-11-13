@@ -3,11 +3,13 @@
 // history grouped under day headers. Unknown peers get an honest empty.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_permissions.dart';
 import '../util/call_groups.dart';
 import '../util/chat_time.dart';
 
@@ -90,15 +92,28 @@ class CallDetailPage extends StatelessWidget {
                     icon: Icons.phone,
                     label: '음성통화',
                     ink: ink,
-                    onTap: () =>
-                        session.startCallIn(conversationId, 'voice'),
+                    onTap: () => withPermissions(
+                      context,
+                      permissions: const [
+                        (Permission.microphone, '마이크 권한 필요', '음성통화에 사용합니다.'),
+                      ],
+                      action: () async =>
+                          session.startCallIn(conversationId, 'voice'),
+                    ),
                   ),
                   _Action(
                     icon: Icons.videocam,
                     label: '영상통화',
                     ink: ink,
-                    onTap: () =>
-                        session.startCallIn(conversationId, 'video'),
+                    onTap: () => withPermissions(
+                      context,
+                      permissions: const [
+                        (Permission.microphone, '마이크 권한 필요', '영상통화에 사용합니다.'),
+                        (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
+                      ],
+                      action: () async =>
+                          session.startCallIn(conversationId, 'video'),
+                    ),
                   ),
                 ],
               ),
