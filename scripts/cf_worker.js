@@ -77,6 +77,10 @@ const MAX_BODY = 20000;
 const QUOTA_UPLOADS_PER_DAY = 200;
 const QUOTA_UPLOAD_BYTES_PER_DAY = 1024 * 1024 * 1024; // 1GB
 const QUOTA_ROOMS_PER_DAY = 50;
+// T1: translation guards. Defaults live here and nowhere else.
+const TRANSLATE_MAX_CHARS = 5000;
+const TRANSLATE_PER_MINUTE = 60;
+const TRANSLATE_CHARS_PER_DAY = 50000;
 
 // Unstamped placeholder for local runs and tests. scripts/build_cf.js never edits
 // this file: it writes a stamped copy to dist_worker/cf_worker.js, which is what
@@ -296,6 +300,14 @@ const LUNO_SCHEMA_PHASE1 = [
     challenge_id TEXT PRIMARY KEY, qr_token TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', user_id TEXT,
     expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_translation_cache (
+    text_hash TEXT NOT NULL, target_lang TEXT NOT NULL,
+    translated TEXT NOT NULL, source_lang TEXT NOT NULL DEFAULT '',
+    engine TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+    PRIMARY KEY (text_hash, target_lang))`,
+  `CREATE TABLE IF NOT EXISTS luno_translate_usage (
+    user_id TEXT NOT NULL, day TEXT NOT NULL,
+    chars INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))`,
   `CREATE TABLE IF NOT EXISTS blocks (
     blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at TEXT NOT NULL,
     PRIMARY KEY (blocker_id, blocked_id))`,
@@ -1058,6 +1070,51 @@ async function qrDeleteChallenge(challId) {
     await dbOf().prepare('DELETE FROM luno_qr_challenges WHERE challenge_id = ?').bind(challId).run();
   }
   qrChallenges.delete(challId);
+}
+// T1: translation provider interface. translate(env, text, target, source)
+// resolves { translated, source_lang, engine }. One registration slot; the
+// fake provider prefixes [target] and is selectable only when DEMO_MODE is on
+// (tests + local demo). Source text is never logged.
+const translateProviders = new Map();
+function registerTranslateProvider(name, provider) {
+  translateProviders.set(name, provider);
+}
+const translateProviderCalls = [];
+registerTranslateProvider('fake', {
+  languages: ['ko', 'en', 'ja', 'th'],
+  async translate(env, text, target, source) {
+    translateProviderCalls.push({ text, target, source });
+    return { translated: `[${target}] ${text}`, source_lang: source || 'auto', engine: 'fake' };
+  },
+});
+function activeTranslateProvider(env) {
+  const name = env.TRANSLATE_PROVIDER;
+  if (!name) return null;
+  if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
+  return translateProviders.get(name) || null;
+}
+async function translateCacheGet(textHash, target) {
+  const db = dbOf();
+  if (!db) return null;
+  await ensureSchema();
+  return db.prepare('SELECT translated, source_lang, engine FROM luno_translation_cache WHERE text_hash = ? AND target_lang = ?').bind(textHash, target).first();
+}
+async function translateCachePut(textHash, target, translated, sourceLang, engine) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT OR IGNORE INTO luno_translation_cache(text_hash,target_lang,translated,source_lang,engine,created_at) VALUES (?,?,?,?,?,?)').bind(textHash, target, translated, sourceLang || '', engine || '', now()).run();
+}
+async function translateConsumeChars(userId, len) {
+  const db = dbOf();
+  if (!db) return { ok: true };
+  await ensureSchema();
+  const day = quotaDayUTC();
+  const row = await db.prepare('SELECT chars FROM luno_translate_usage WHERE user_id = ? AND day = ?').bind(userId, day).first() || {};
+  const used = Number(row.chars) || 0;
+  if (quotaWouldExceed(used, len, TRANSLATE_CHARS_PER_DAY)) return { ok: false, used };
+  await db.prepare('INSERT INTO luno_translate_usage(user_id,day,chars) VALUES (?,?,?) ON CONFLICT(user_id,day) DO UPDATE SET chars = chars + ?').bind(userId, day, len, len).run();
+  return { ok: true, used: used + len };
 }
 async function revokeOtherSessions(userId, keepSid, by) {
   const db = dbOf();
@@ -4918,7 +4975,30 @@ const workerCore = {
     if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
-      return json({ error: 'Translation engine is not configured', code: 'TRANSLATE_NOT_CONFIGURED' }, 503);
+      const b = await request.json().catch(() => ({}));
+      const text = typeof b.text === 'string' ? b.text : '';
+      const target = typeof b.target_lang === 'string' ? b.target_lang.trim().toLowerCase() : '';
+      const source = typeof b.source_lang === 'string' ? b.source_lang.trim().toLowerCase() : '';
+      if (!text.trim() || !target) return bad('번역할 텍스트와 대상 언어가 필요합니다', 400);
+      if (text.length > TRANSLATE_MAX_CHARS) return json({ error: 'text too long', code: 'TEXT_TOO_LONG' }, 413);
+      if (!await rateLimit('rl:trx:' + auth.id, TRANSLATE_PER_MINUTE)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+      const provider = activeTranslateProvider(env);
+      if (!provider) return json({ error: 'Translation engine is not configured', code: 'TRANSLATE_NOT_CONFIGURED' }, 503);
+      const hash = await sha256Hex(`${source || 'auto'}\n${target}\n${text}`);
+      const hit = await translateCacheGet(hash, target);
+      if (hit) return json({ translated: hit.translated, source_lang: hit.source_lang || source || 'auto', target_lang: target, engine: hit.engine || 'cache' });
+      const day = await translateConsumeChars(auth.id, text.length);
+      if (!day.ok) return json({ error: 'daily translation quota exceeded', code: 'QUOTA_EXCEEDED' }, 429);
+      const out = await provider.translate(env, text, target, source || 'auto');
+      await translateCachePut(hash, target, out.translated, out.source_lang, out.engine);
+      return json({ translated: out.translated, source_lang: out.source_lang, target_lang: target, engine: out.engine });
+    }
+    if (url.pathname === '/api/v1/translate/languages' && request.method === 'GET') {
+      const auth = await getAuthUser(request);
+      if (!auth) return json({ error: 'unauthorized' }, 401);
+      const provider = activeTranslateProvider(env);
+      if (!provider) return json({ configured: false, languages: [] });
+      return json({ configured: true, engine: env.TRANSLATE_PROVIDER, languages: provider.languages || [] });
     }
     if (url.pathname === '/metrics') {
       const viewer = await getAuthUser(request);
@@ -6069,6 +6149,7 @@ export class UserSocketHub {
 // S1: test seam export (mock/log recovery-mail deliveries).
 export { recoveryMailOutbox };
 export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };
+export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };
 export default {
   async fetch(request, env, ctx) {
     CURRENT_ENV = env;

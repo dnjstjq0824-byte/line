@@ -41,7 +41,6 @@ import {
   SUPPORTED_LOCALES,
   UI_DICTIONARY,
   formatLocalizedTime,
-  translateMessageText,
   type LunoLocale
 } from '../luno-i18n'
 import {
@@ -73,10 +72,41 @@ const messageTranslations = ref<Record<string, {
   loading?: boolean;
   error?: string;
 }>>({})
+// T1: translation engine state from GET /api/v1/translate/languages.
+const translateConfigured = ref(false)
+const translateLanguages = ref<string[]>([])
+let translateLangsLoaded = false
+async function ensureTranslateLanguages() {
+  if (translateLangsLoaded) return
+  translateLangsLoaded = true
+  try {
+    const res = await api<{ configured: boolean; languages: string[] }>('/api/v1/translate/languages', 'GET')
+    if (res.configured && Array.isArray(res.languages) && res.languages.length > 0) {
+      translateLanguages.value = res.languages
+      translateConfigured.value = true
+      if (!res.languages.includes(targetTranslateLang.value)) {
+        targetTranslateLang.value = res.languages[0] as LunoLocale
+      }
+    }
+  } catch {
+    translateConfigured.value = false
+  }
+}
 
 async function handleTranslateMessage(msg: Message) {
   if (messageTranslations.value[msg.id]?.translated && !messageTranslations.value[msg.id]?.error) {
     delete messageTranslations.value[msg.id]
+    return
+  }
+  await ensureTranslateLanguages()
+  if (!translateConfigured.value) {
+    messageTranslations.value[msg.id] = {
+      translated: '',
+      sourceLang: 'auto',
+      engine: 'luno-ai',
+      loading: false,
+      error: t('mvTranslatePending')
+    }
     return
   }
   messageTranslations.value[msg.id] = {
@@ -86,20 +116,21 @@ async function handleTranslateMessage(msg: Message) {
     loading: true
   }
   try {
-    const res = await translateMessageText(msg.body, targetTranslateLang.value)
+    const res = await api<{ translated: string; source_lang: string; target_lang: string; engine: string }>(
+      '/api/v1/translate', 'POST', { text: msg.body, target_lang: targetTranslateLang.value })
     messageTranslations.value[msg.id] = {
       translated: res.translated,
-      sourceLang: res.sourceLang,
+      sourceLang: res.source_lang,
       engine: res.engine,
       loading: false
     }
-  } catch {
+  } catch (e) {
     messageTranslations.value[msg.id] = {
       translated: '',
       sourceLang: 'auto',
       engine: 'luno-ai',
       loading: false,
-      error: t('mvTranslateFailed')
+      error: e instanceof ApiError && e.status === 503 ? t('mvTranslatePending') : t('mvTranslateFailed')
     }
   }
 }
@@ -2458,6 +2489,7 @@ function syncKeyboardOpen() {
 }
 
 onMounted(async () => {
+  void ensureTranslateLanguages()
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // Reconcile durable messages when an edge isolate cannot fan out to another one.
   startMessageSyncLoop()
@@ -3138,6 +3170,8 @@ onBeforeUnmount(() => {
         :earlier-messages-error="earlierMessagesError"
         :conversation-error="conversationError"
         :message-translations="messageTranslations"
+        :translate-configured="translateConfigured"
+        :translate-languages="translateLanguages"
         :sending-conversations="sendingConversations"
         :filtered-stickers="filteredStickers"
         :uploading="uploading"
@@ -3592,6 +3626,8 @@ onBeforeUnmount(() => {
     <SettingsModal
       v-if="showSettingsModal"
       :devices-list="devicesList"
+      :translate-configured="translateConfigured"
+      :translate-languages="translateLanguages"
       v-model:target-translate-lang="targetTranslateLang"
       v-model:delete-password-input="deletePasswordInput"
       @close="showSettingsModal = false"

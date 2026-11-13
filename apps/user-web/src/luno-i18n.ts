@@ -268,6 +268,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvToday: '오늘',
     mvYesterday: '어제',
     mvTranslateFailed: '번역에 실패했습니다.',
+    mvTranslatePending: '번역 준비 중입니다.',
     mvLiveCaptionsOn: '실시간 AI 통역 자막이 연결되었습니다.',
     mvRecordingVoice: '🎙️ 음성 메시지를 녹음 중입니다. 다시 누르면 전송됩니다.',
     mvVoiceRecordFailed: '음성 녹음을 시작할 수 없습니다. 오디오 파일을 직접 선택해 주세요.',
@@ -859,6 +860,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvToday: 'Today',
     mvYesterday: 'Yesterday',
     mvTranslateFailed: 'Translation failed.',
+    mvTranslatePending: 'Translation is getting ready.',
     mvLiveCaptionsOn: 'Live AI interpretation captions connected.',
     mvRecordingVoice: '🎙️ Recording a voice message. Press again to send.',
     mvVoiceRecordFailed: 'Could not start voice recording. Please pick an audio file instead.',
@@ -1450,6 +1452,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvToday: 'วันนี้',
     mvYesterday: 'เมื่อวาน',
     mvTranslateFailed: 'แปลไม่สำเร็จ',
+    mvTranslatePending: 'กำลังเตรียมการแปล',
     mvLiveCaptionsOn: 'เชื่อมต่อคำบรรยายแปลสด AI แล้ว',
     mvRecordingVoice: '🎙️ กำลังอัดข้อความเสียง กดอีกครั้งเพื่อส่ง',
     mvVoiceRecordFailed: 'เริ่มอัดเสียงไม่ได้ โปรดเลือกไฟล์เสียงโดยตรง',
@@ -2041,6 +2044,7 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvToday: '今日',
     mvYesterday: '昨日',
     mvTranslateFailed: '翻訳に失敗しました',
+    mvTranslatePending: '翻訳を準備中です。',
     mvLiveCaptionsOn: 'リアルタイムAI通訳字幕を接続しました',
     mvRecordingVoice: '🎙️ ボイスメッセージを録音中です。もう一度押すと送信します',
     mvVoiceRecordFailed: '音声を録音できませんでした。音声ファイルを直接選んでください',
@@ -2418,131 +2422,6 @@ export function formatLocalizedTime(iso: string, locale: LunoLocale): string {
   } catch {
     return '';
   }
-}
-
-// ============================================================================
-// AI MULTILINGUAL TRANSLATION CORPUS & FALLBACK ENGINE
-// Supports instant deterministic translation + live Edge endpoint integration
-// ============================================================================
-const PHRASE_CORPUS: Array<Record<LunoLocale, string>> = [
-  {
-    ko: '안녕하세요! 반갑습니다.',
-    en: 'Hello! Nice to meet you.',
-    th: 'สวัสดีครับ/ค่ะ! ยินดีที่ได้รู้จัก',
-    ja: 'こんにちは！よろしくお願いします。'
-  },
-  {
-    ko: '오늘 회의 시간 괜찮으신가요?',
-    en: 'Does the meeting time today work for you?',
-    th: 'เวลาประชุมวันนี้คุณสะดวกไหมครับ/คะ?',
-    ja: '本日の会議の時間はご都合いかがでしょうか？'
-  },
-  {
-    ko: '커피 한 잔의 여유 ☕',
-    en: 'Relaxing with a cup of coffee ☕',
-    th: 'พักผ่อนจิบกาแฟสบายๆ ☕',
-    ja: 'コーヒー一杯のゆとり ☕'
-  },
-  {
-    ko: '새 프로젝트 배포 완료! 🚀',
-    en: 'New project deployment completed! 🚀',
-    th: 'อัปเดตโปรเจกต์ใหม่เรียบร้อยแล้ว! 🚀',
-    ja: '新プロジェクトのデプロイ完了！ 🚀'
-  },
-  {
-    ko: '감사합니다! 확인 후 연락드리겠습니다.',
-    en: 'Thank you! I will check and get back to you.',
-    th: 'ขอบคุณครับ/ค่ะ! ตรวจสอบแล้วจะติดต่อกลับนะครับ/คะ',
-    ja: 'ありがとうございます！確認後ご連絡いたします。'
-  }
-];
-
-export async function translateMessageText(
-  text: string,
-  targetLang: LunoLocale
-): Promise<{ translated: string; sourceLang: string; engine: string }> {
-  const clean = text.trim();
-  if (!clean) {
-    return { translated: '', sourceLang: 'auto', engine: 'luno-local-dictionary' };
-  }
-
-  // Detect approximate source script
-  let sourceLang: LunoLocale = 'en';
-  if (/[가-힣]/.test(clean)) sourceLang = 'ko';
-  else if (/[\u0E00-\u0E7F]/.test(clean)) sourceLang = 'th';
-  else if (/[\u3040-\u30FF\u4E00-\u9FAF]/.test(clean)) sourceLang = 'ja';
-
-  if (sourceLang === targetLang) {
-    return { translated: clean, sourceLang, engine: 'luno-same-lang' };
-  }
-
-  // Exact or substring match in verified corpus
-  for (const entry of PHRASE_CORPUS) {
-    if (Object.values(entry).some(v => v.toLowerCase() === clean.toLowerCase())) {
-      return {
-        translated: entry[targetLang],
-        sourceLang,
-        engine: 'luno-phrasebook'
-      };
-    }
-  }
-
-  // Local keyword substitution for input outside the phrasebook (not neural MT)
-  const prefixMap: Record<LunoLocale, string> = {
-    ko: '[한국어 사전 번역]',
-    en: '[EN dictionary translation]',
-    th: '[พจนานุกรมไทย]',
-    ja: '[日本語辞書翻訳]'
-  };
-
-  const dictionaryReplacements: Record<LunoLocale, Array<[RegExp, string]>> = {
-    en: [
-      [/안녕하세요|안녕/g, 'Hello'],
-      [/감사합니다|고마워요|고맙습니다/g, 'Thank you'],
-      [/좋아요|네|알겠습니다/g, 'Sounds good, understood'],
-      [/언제|시간/g, 'when / time'],
-      [/회의|미팅/g, 'meeting'],
-      [/오늘/g, 'today'],
-      [/내일/g, 'tomorrow'],
-      [/สวัสดี/g, 'Hello'],
-      [/ขอบคุณ/g, 'Thank you'],
-      [/こんにちは/g, 'Hello'],
-      [/ありがとう/g, 'Thank you']
-    ],
-    th: [
-      [/안녕하세요|안녕|Hello|Hi|こんにちは/gi, 'สวัสดีครับ/ค่ะ'],
-      [/감사합니다|고마워요|Thank you|Thanks|ありがとう/gi, 'ขอบคุณมากครับ/ค่ะ'],
-      [/좋아요|OK|Sounds good/gi, 'ตกลงครับ/ค่ะ ดีเลย'],
-      [/오늘|today|今日/gi, 'วันนี้'],
-      [/회의|meeting|会議/gi, 'การประชุม']
-    ],
-    ja: [
-      [/안녕하세요|안녕|Hello|Hi|สวัสดี/gi, 'こんにちは'],
-      [/감사합니다|고마워요|Thank you|Thanks|ขอบคุณ/gi, 'ありがとうございます'],
-      [/좋아요|OK|Sounds good/gi, 'いいですね、了解しました'],
-      [/오늘|today|วันนี้/gi, '今日'],
-      [/회의|meeting|การประชุม/gi, 'ミーティング']
-    ],
-    ko: [
-      [/Hello|Hi|สวัสดี|こんにちは/gi, '안녕하세요'],
-      [/Thank you|Thanks|ขอบคุณ|ありがとう/gi, '감사합니다'],
-      [/Sounds good|OK|ตกลง|了解/gi, '네, 좋습니다'],
-      [/today|วันนี้|今日/gi, '오늘'],
-      [/meeting|การประชุม|会議/gi, '회의']
-    ]
-  };
-
-  let synthesized = clean;
-  for (const [regex, rep] of dictionaryReplacements[targetLang]) {
-    synthesized = synthesized.replace(regex, rep);
-  }
-
-  const finalOut = synthesized !== clean ? `${synthesized}` : `${prefixMap[targetLang]} ${clean}`;
-
-  return {
-    translated: finalOut,
-    sourceLang,
-    engine: 'luno-local-dictionary'
-  };
-}
-
+}
+// T1: message translation goes through POST /api/v1/translate; the old
+// local phrasebook engine lived here and was removed.

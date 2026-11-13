@@ -45,6 +45,8 @@ const props = defineProps<{
   earlierMessagesError: string
   conversationError: string
   messageTranslations: Record<string, { translated: string; sourceLang: string; engine: string; loading?: boolean; error?: string }>
+  translateConfigured: boolean
+  translateLanguages: string[]
   sendingConversations: Set<string>
   filteredStickers: LunoSticker[]
   uploading: boolean
@@ -202,17 +204,15 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
               <button
                 class="btn-translate-switch"
                 :class="{ active: autoTranslateEnabled }"
-                :title="t('translateToggle')"
+                :title="translateConfigured ? t('translateToggle') : t('mvTranslatePending')"
+                :disabled="!translateConfigured"
                 @click="autoTranslateEnabled = !autoTranslateEnabled"
               >
                 <LunoIcon name="translate" :size="16" />
                 <span>{{ autoTranslateEnabled ? t('mvAiTranslateOn') : t('mvAiTranslate') }}</span>
               </button>
-              <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language">
-                <option value="ko">KR</option>
-                <option value="en">EN</option>
-                <option value="th">TH</option>
-                <option value="ja">JA</option>
+              <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language" :disabled="!translateConfigured" :title="translateConfigured ? '' : t('mvTranslatePending')">
+                <option v-for="lang in translateLanguages" :key="lang" :value="lang">{{ lang.toUpperCase() }}</option>
               </select>
             </div>
             <button class="chat-topbar-menu-item" @click="emit('cycle-wallpaper'); showTopbarMenu = false"><span aria-hidden="true">🎨</span><span>{{ t('mvWallpaperTitle') }}</span></button>
@@ -517,7 +517,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
 
             <!-- Bubble Hover Floating Action Bar -->
             <div class="pc-bubble-toolbar">
-              <button :title="t('translateBtn')" @click="emit('translate', msg)"><LunoIcon name="translate" :size="14" /></button>
+              <button :title="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :disabled="!translateConfigured" @click="emit('translate', msg)"><LunoIcon name="translate" :size="14" /></button>
               <button :title="t('mvReactHeart')" @click="emit('react', msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
               <button :title="t('mvReactLike')" @click="emit('react', msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
               <button :title="t('mvReply')" @click="emit('reply', msg)"><LunoIcon name="reply" :size="14" /></button>

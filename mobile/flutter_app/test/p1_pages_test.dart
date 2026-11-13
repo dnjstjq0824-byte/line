@@ -264,6 +264,8 @@ void main() {
     final session = _chatSession()
       ..autoTranslate = true
       ..targetTranslateLang = 'en'
+      ..translateConfigured = true
+      ..translateLanguages = const ['en', 'ko']
       ..messages = [
         {
           'id': 'm1',
@@ -280,5 +282,14 @@ void main() {
     expect(find.textContaining('자동 번역 켜짐 · EN'), findsOneWidget);
     expect(find.text('저장'), findsOneWidget);
     expect(find.byTooltip('파일'), findsOneWidget);
+  });
+
+  testWidgets('chat room banner shows the preparing notice while unconfigured',
+      (WidgetTester tester) async {
+    final session = _chatSession()..autoTranslate = true;
+    await tester.pumpWidget(
+        _wrap(session, const ChatRoomPage(conversationId: 'c1')));
+    await tester.pumpAndSettle();
+    expect(find.text('자동 번역 켜짐 · 번역 준비 중'), findsOneWidget);
   });
 }

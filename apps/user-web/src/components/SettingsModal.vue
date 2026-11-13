@@ -29,6 +29,8 @@ export interface DeviceItem {
 
 const props = defineProps<{
   devicesList: DeviceItem[]
+  translateConfigured: boolean
+  translateLanguages: string[]
 }>()
 
 const emit = defineEmits<{
@@ -236,9 +238,9 @@ onMounted(() => {
         <!-- 2. AI Translation Target Language (Article 10) -->
         <div class="setting-group">
           <strong>✨ {{ t('targetLangLabel') }}</strong>
-          <div class="locale-choice-grid">
+          <div v-if="translateConfigured" class="locale-choice-grid">
             <button
-              v-for="loc in SUPPORTED_LOCALES"
+              v-for="loc in SUPPORTED_LOCALES.filter((l) => translateLanguages.includes(l.code))"
               :key="'pref-target-' + loc.code"
               class="btn-locale-pill"
               :class="{ active: targetTranslateLang === loc.code }"
@@ -247,6 +249,7 @@ onMounted(() => {
               <span>{{ loc.flag }}</span> {{ loc.nativeName }}
             </button>
           </div>
+          <span v-else class="muted">{{ t('mvTranslatePending') }}</span>
         </div>
 
         <!-- 3. Accessible Font Scale (Article 6.2 & 17.3) -->

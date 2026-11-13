@@ -83,7 +83,12 @@ class SessionController extends ChangeNotifier {
   bool registerMode = false;
   bool showStickerPicker = false;
   bool autoTranslate = false;
-  String targetTranslateLang = 'ko'; // ko, en, th, ja, zh, es
+  String targetTranslateLang = 'ko'; // validated against translateLanguages
+  // T1: translation engine state from GET /api/v1/translate/languages.
+  // Empty list + false until the first successful load.
+  List<String> translateLanguages = const [];
+  bool translateConfigured = false;
+  bool _translateLangsLoaded = false;
 
   String error = '';
   String notice = '';
@@ -754,16 +759,44 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  // T1: load the server's translation language list once. Silent on any
+  // failure: translating must degrade to the "preparing" notice, never crash.
+  Future<void> ensureTranslateLanguages() async {
+    if (_translateLangsLoaded) return;
+    _translateLangsLoaded = true;
+    try {
+      final res = await api.call('/api/v1/translate/languages');
+      final langs = res['languages'];
+      if (res['configured'] == true && langs is List) {
+        translateLanguages =
+            langs.whereType<String>().map((l) => l.toLowerCase()).toList();
+        translateConfigured = translateLanguages.isNotEmpty;
+        if (translateConfigured &&
+            !translateLanguages.contains(targetTranslateLang)) {
+          targetTranslateLang = translateLanguages.first;
+        }
+      }
+    } catch (_) {
+      translateConfigured = false;
+    }
+    notifyListeners();
+  }
+
   Future<void> translateMessage(String msgId, String text) async {
     if (translations.containsKey(msgId)) {
       translations.remove(msgId);
       notifyListeners();
       return;
     }
+    await ensureTranslateLanguages();
+    if (!translateConfigured) {
+      translations[msgId] = {'loading': false, 'error': '번역 준비 중'};
+      notifyListeners();
+      return;
+    }
     translations[msgId] = {'loading': true};
     notifyListeners();
     try {
-      // No translation engine is configured: the server answers 503 -> catch below.
       final res = await api.call('/api/v1/translate', method: 'POST', data: {
         'text': text,
         'target_lang': targetTranslateLang,
@@ -774,7 +807,12 @@ class SessionController extends ChangeNotifier {
         'target_lang': res['target_lang'] ?? targetTranslateLang,
         'engine': res['engine'] ?? 'LUNO-Edge-AI',
       };
-    } catch (e) {
+    } on ApiException catch (e) {
+      translations[msgId] = {
+        'loading': false,
+        'error': e.statusCode == 503 ? '번역 준비 중' : '번역 실패'
+      };
+    } catch (_) {
       translations[msgId] = {'loading': false, 'error': '번역 실패'};
     }
     notifyListeners();

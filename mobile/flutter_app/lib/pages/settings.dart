@@ -95,27 +95,28 @@ class SettingsPage extends StatelessWidget {
                   ink: ink,
                   sub: sub,
                   dark: dark,
-                  trailing: DropdownButton<String>(
-                    value: session.targetTranslateLang,
-                    underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'ko', child: Text('한국어 (KO)')),
-                      DropdownMenuItem(
-                          value: 'en', child: Text('English (EN)')),
-                      DropdownMenuItem(value: 'th', child: Text('ไทย (TH)')),
-                      DropdownMenuItem(value: 'ja', child: Text('日本語 (JA)')),
-                      DropdownMenuItem(value: 'zh', child: Text('中文 (ZH)')),
-                      DropdownMenuItem(
-                          value: 'es', child: Text('Español (ES)')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        SessionScope.of(context, listen: false)
-                            .setTargetTranslateLang(v);
-                      }
-                    },
-                  ),
+                  trailing: session.translateConfigured
+                      ? DropdownButton<String>(
+                          value: session.translateLanguages
+                                  .contains(session.targetTranslateLang)
+                              ? session.targetTranslateLang
+                              : null,
+                          underline: const SizedBox(),
+                          items: [
+                            for (final lang in session.translateLanguages)
+                              DropdownMenuItem(
+                                  value: lang,
+                                  child: Text(_translateLangLabel(lang))),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) {
+                              SessionScope.of(context, listen: false)
+                                  .setTargetTranslateLang(v);
+                            }
+                          },
+                        )
+                      : Text('번역 준비 중',
+                          style: TextStyle(fontSize: 13, color: sub)),
                 ),
                 const _RowDivider(),
                 _ActionRow(
@@ -496,4 +497,18 @@ Future<void> _confirmDeleteAccount(
     if (confirmed == true && password.text.isNotEmpty) {
       await session.deleteAccount(password.text);
     }
+}
+
+// T1: server language codes get a short native label; unknown codes fall
+// back to the upper-cased code so a future engine never renders blank.
+String _translateLangLabel(String code) {
+  return const {
+    'ko': '한국어 (KO)',
+    'en': 'English (EN)',
+    'th': 'ไทย (TH)',
+    'ja': '日本語 (JA)',
+    'zh': '中文 (ZH)',
+    'es': 'Español (ES)',
+  }[code] ??
+      code.toUpperCase();
 }

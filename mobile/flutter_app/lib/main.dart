@@ -33,6 +33,7 @@ class _MessengerAppState extends State<MessengerApp> {
     _router = buildRouter(_session);
     _session.restore();
     _session.checkForUpdate();
+    _session.ensureTranslateLanguages();
   }
 
   @override
