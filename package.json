@@ -12,9 +12,9 @@
   ],
   "scripts": {
     "build": "node scripts/build_cf.js",
-    "deploy": "npx wrangler deploy",
-    "auto:deploy": "node scripts/watch_rebuild.js",
-    "rebuild:deploy": "node scripts/build_cf.js && npx wrangler deploy",
+    "deploy": "node --test \"scripts/*.test.mjs\" && node scripts/pre_deploy_gate.mjs && node scripts/build_cf.js && npx wrangler deploy",
+    "postdeploy": "node scripts/post_deploy_gate.mjs https://luno-messenger.dnjstjqppk.workers.dev",
+    "rebuild:deploy": "npm run deploy",
     "dev:user": "npm run dev -w @messenger/user-web",
     "dev:admin": "npm run dev -w @messenger/admin-console",
     "dev:partner": "npm run dev -w @messenger/partner-console",
