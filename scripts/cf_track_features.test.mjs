@@ -52,21 +52,17 @@ test('Track 4: Official Account Rich Menu & Chatbot CRM engine', async () => {
   assert.equal(menuData.rich_menu.account_id, 'oa-notice');
   assert.ok(menuData.rich_menu.tiles.length >= 6, 'Should have at least 6 tiles');
 
-  // 4. Send message matching bot rule keyword '공지'
+  // 4. C2: official rooms are read-only — user sends are rejected, so no
+  // bot trigger can fire here. (Bot rules + engine stay for F12's OA rooms.)
   const sendRes = await api(`/api/v1/conversations/${noticeConv.id}/messages`, token, 'POST', {
     kind: 'text',
     body: '공지사항 알려줘'
   });
-  assert.equal(sendRes.status, 201);
+  assert.equal(sendRes.status, 400);
 
-  // 5. Check that bot auto-replied
+  // 5. Notice room stays readable.
   const msgListRes = await api(`/api/v1/conversations/${noticeConv.id}/messages`, token);
   assert.equal(msgListRes.status, 200);
-  const { messages: msgs } = await msgListRes.json();
-  const botMsgs = msgs.filter(m => m.sender_id === 'oa-notice');
-  assert.ok(botMsgs.length > 0, 'Bot should have auto-replied');
-  const latestReply = botMsgs[botMsgs.length - 1];
-  assert.ok(latestReply.body.includes('[LUNO 공지]'), 'Bot reply should match configured keyword rule');
 
   // 6. Test Partner Bot Rules CRUD
   const adminLogin = await api('/api/v1/auth/login', null, 'POST', { email: 'admin@luno.local', password: 'Track4#Admin1' });
@@ -86,14 +82,12 @@ test('Track 4: Official Account Rich Menu & Chatbot CRM engine', async () => {
   const addData = await addRuleRes.json();
   assert.equal(addData.rule.reply, '배송 현황: 주문번호를 입력하시면 실시간 배송 조회가 가능합니다.');
 
-  // Test custom rule auto-reply
-  await api(`/api/v1/conversations/${noticeConv.id}/messages`, token, 'POST', {
+  // Custom rules are stored (see CRUD above); triggering them from the
+  // read-only notice room is rejected, same as any other send (C2).
+  assert.equal((await api(`/api/v1/conversations/${noticeConv.id}/messages`, token, 'POST', {
     kind: 'text',
     body: '배송조회 어떻게 하나요?'
-  });
-  const msgsAfterCustom = await (await api(`/api/v1/conversations/${noticeConv.id}/messages`, token)).json();
-  const customReplies = msgsAfterCustom.messages.filter(m => m.sender_id === 'oa-notice' && m.body.includes('배송 현황'));
-  assert.ok(customReplies.length > 0, 'Custom bot rule should trigger reply');
+  })).status, 400);
 
   // 7. Test CallKit payload in calls
   // Find a friend conversation with peer-k

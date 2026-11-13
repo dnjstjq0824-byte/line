@@ -3234,6 +3234,7 @@ async function extended(p, request, url, me, token) {
       return json({ messages: list.slice(-limit).map(x => decorateMessage(x, myId, cid)), has_more: list.length > limit });
     }
     if (method === 'POST') {
+      if (conv.official || conv.kind === 'official') return bad('공식계정 방은 읽기 전용입니다');
       if (!await rateLimit('rl:msg:' + myId, 300)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
       const b = await readJson(request);
       const kind = b.kind || 'text';
@@ -4426,6 +4427,7 @@ async function extended(p, request, url, me, token) {
       conv = await hydrateDurableConversation(roomId).catch(() => null);
     }
     if (!conv || !conv.members.includes(myId)) return json({ error: 'conversation not found' }, 404);
+    if (conv.official || conv.kind === 'official') return bad('공식계정 방에서는 그룹통화를 할 수 없습니다');
     if (!groupCallRooms.has(roomId)) groupCallRooms.set(roomId, new Set());
     const room = groupCallRooms.get(roomId);
     if (!room.has(myId) && room.size >= GROUP_CALL_MAX_PARTICIPANTS) return json({ error: 'group call is full' }, 409);

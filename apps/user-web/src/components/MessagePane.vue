@@ -189,8 +189,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
       </div>
 
       <div class="chat-topbar-actions">
-        <button class="btn-chat-action" :title="t('callVoice')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'voice')"><LunoIcon name="call-voice" :size="18" /></button>
-        <button class="btn-chat-action" :title="t('callVideo')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'video')"><LunoIcon name="call-video" :size="18" /></button>
+        <button v-if="!selectedChat?.official" class="btn-chat-action" :title="t('callVoice')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'voice')"><LunoIcon name="call-voice" :size="18" /></button>
+        <button v-if="!selectedChat?.official" class="btn-chat-action" :title="t('callVideo')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'video')"><LunoIcon name="call-video" :size="18" /></button>
         <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" @click="emit('drawer', 'notes')"><LunoIcon name="drawer" :size="18" /></button>
         <!-- C1: translate/theme/calendar live in the ⋯ menu so the bar stays one line -->
         <div class="chat-topbar-menu-wrap">
@@ -537,7 +537,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
     </button>
 
     <!-- Chat Input Composer -->
-    <footer class="pc-chat-input-dock">
+    <!-- C2: official rooms are read-only (no composer, no calls) -->
+    <footer v-if="!selectedChat?.official" class="pc-chat-input-dock">
       <!-- Reply Preview Banner -->
       <div v-if="replyToMessage" class="reply-composer-bar">
         <span>{{ t('mvReplyTo') }}<strong>{{ replyToMessage.body }}</strong></span>
