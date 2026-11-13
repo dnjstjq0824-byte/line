@@ -3724,10 +3724,15 @@ async function extended(p, request, url, me, token) {
     call.state = 'ended';
     const duration = call.connected_at ? Math.round((Date.parse(call.ended_at) - Date.parse(call.connected_at)) / 1000) : 0;
     call.result = call.connected_at ? 'completed' : (b.state === 'declined' ? 'declined' : (call.initiated_by === myId ? 'canceled' : 'missed'));
+    if (dbOf()) {
+      await ensureSchema();
+      await dbOf().prepare('INSERT OR IGNORE INTO call_logs (id, conversation_id, caller_id, kind, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(call.id, call.conversation_id, call.initiated_by, call.kind, call.started_at, call.ended_at, call.result).run();
+    }
     // A-5/A-14: the server mints the call_status bubble itself (clients are
     // forbidden from forging system kinds). Shape matches the /calls ledger.
+    // D5: persisted so the call ledger survives new isolates.
     const durText = Math.floor(duration / 60) + ':' + String(duration % 60).padStart(2, '0');
-    pushMessage(call.conversation_id, call.initiated_by, { kind: 'call_status', body: (call.kind === 'video' ? '영상통화' : '음성통화') + (duration > 0 ? ' ' + durText : ''), metadata: { call_id: call.id, call_type: call.kind, call_kind: call.kind, duration: durText, call_status: call.result, status: call.result } });
+    await pushPersistent(call.conversation_id, call.initiated_by, { kind: 'call_status', body: (call.kind === 'video' ? '영상통화' : '음성통화') + (duration > 0 ? ' ' + durText : ''), metadata: { call_id: call.id, call_type: call.kind, call_kind: call.kind, duration: durText, call_status: call.result, status: call.result } });
     broadcast({ type: 'call.state', call_id: call.id, state: 'ended', result: call.result });
     return json({ status: 'ended', result: call.result, duration });
   }
@@ -4160,21 +4165,31 @@ async function extended(p, request, url, me, token) {
       const b = await readJson(request);
       const tokenVal = clip(b.token, 500);
       if (!tokenVal) return bad('푸시 토큰이 필요합니다');
+      const platform = ['web', 'android', 'ios'].includes(b.platform) ? b.platform : 'web';
+      const deviceId = clip(b.device_id || '', 100);
       const list = pushTokens.get(myId) || [];
       const entry = {
         id: uid(),
         user_id: myId,
         token: tokenVal,
-        platform: ['web', 'android', 'ios'].includes(b.platform) ? b.platform : 'web',
-        device_id: clip(b.device_id || '', 100),
+        platform,
+        device_id: deviceId,
         created_at: now()
       };
       list.push(entry);
       pushTokens.set(myId, list);
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare('INSERT INTO push_tokens (user_id, device_id, platform, token, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, device_id) DO UPDATE SET platform = excluded.platform, token = excluded.token, updated_at = excluded.updated_at').bind(myId, deviceId, platform, tokenVal, entry.created_at).run();
+      }
       return json({ status: 'registered', id: entry.id }, 201);
     }
     if (method === 'DELETE') {
       pushTokens.delete(myId);
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare('DELETE FROM push_tokens WHERE user_id = ?').bind(myId).run();
+      }
       return json({ status: 'cleared' });
     }
   }

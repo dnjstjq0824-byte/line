@@ -431,6 +431,62 @@ test('D3: wallet keeps working without a database', async () => {
   assert.equal((await api('wallet/charge', 'POST', { amount: 5000 }, a.token)).status, 503, 'charge gated without a provider');
 });
 
+// ---------- D5: call logs, push tokens, settings ----------
+
+test('D5: ended calls record call_logs and stay listed on a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd5-ca@luno-test.local', 'd5_ca');
+    const b = await registerLogin(first.api, 'd5-cb@luno-test.local', 'd5_cb');
+    const cid = await makeRoom(first.api, a.token, [b.id], 'D5 Call Room');
+    const call = await (await first.api('calls', 'POST', { conversation_id: cid, kind: 'voice' }, a.token)).json();
+    assert.equal((await first.api(`calls/${call.id}/state`, 'POST', { state: 'connected' }, b.token)).status, 200);
+    const ended = await (await first.api(`calls/${call.id}/state`, 'POST', { state: 'ended' }, a.token)).json();
+    assert.equal(ended.result, 'completed');
+    const row = db.raw.prepare('SELECT * FROM call_logs WHERE id = ?').get(call.id);
+    assert.ok(row, 'call_logs row recorded');
+    assert.equal(row.caller_id, a.id);
+    assert.equal(row.status, 'completed');
+    const second = await stage4Isolate(db, DURABLE);
+    const a2 = await loginAs(second.api, 'd5-ca@luno-test.local');
+    const list = await (await second.api('calls', 'GET', null, a2.token)).json();
+    assert.ok(list.calls.some((c) => c.conversation_id === cid && c.result === 'completed'), 'ended call still listed');
+  } finally { db.raw.close(); }
+});
+
+test('D5: push token registration persists without sending', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db);
+    const a = await registerLogin(first.api, 'd5-pa@luno-test.local', 'd5_pa');
+    assert.equal((await first.api('push-tokens', 'POST', { token: 'fcm-probe-token', platform: 'android', device_id: 'dev-1' }, a.token)).status, 201);
+    const row = db.raw.prepare('SELECT * FROM push_tokens WHERE user_id = ?').get(a.id);
+    assert.ok(row, 'push_tokens row recorded');
+    assert.equal(row.token, 'fcm-probe-token');
+    assert.equal(row.platform, 'android');
+    assert.equal((await first.api('push-tokens', 'DELETE', null, a.token)).status, 200);
+    assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM push_tokens WHERE user_id = ?').get(a.id).n, 0, 'clear removes rows');
+  } finally { db.raw.close(); }
+});
+
+test('D5: settings survive a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db);
+    const a = await registerLogin(first.api, 'd5-sa@luno-test.local', 'd5_sa');
+    const patched = await (await first.api('me/settings', 'PATCH', { dark_mode: true, language: 'en', notifications: false }, a.token)).json();
+    assert.equal(patched.dark_mode, true);
+    const second = await stage4Isolate(db);
+    const a2 = await loginAs(second.api, 'd5-sa@luno-test.local');
+    const prefs = await (await second.api('me/settings', 'GET', null, a2.token)).json();
+    assert.equal(prefs.dark_mode, true);
+    assert.equal(prefs.language, 'en');
+    assert.equal(prefs.notifications, false);
+    assert.equal(prefs.theme, 'mint', 'untouched defaults kept');
+  } finally { db.raw.close(); }
+});
+
 test('D2: keep vault survives a new isolate per user', async () => {
   const db = makeD1();
   try {
