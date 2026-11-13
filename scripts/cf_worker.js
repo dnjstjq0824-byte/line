@@ -27,8 +27,6 @@ const polls = new Map();
 const pollVotes = new Map();
 const albums = new Map();
 const savedMessages = new Map();
-const communityRooms = new Map();
-const communityPosts = new Map();
 const partnerOrgs = new Map();
 const partnerAccounts = new Map();
 const partnerTickets = new Map();
@@ -58,15 +56,11 @@ const hiddenMsgs = new Map();
 const reactionStore = new Map();
 const noteStore = new Map();
 const eventStore = new Map();
-const timelinePosts = [];
-const voomPosts = [];
-const storyStore = [];
 const wallets = new Map();
 const ownedPacks = new Map();
 const ownedThemes = new Map();
 const officialAccounts = new Map();
 const followedOfficial = new Map();
-const roomMembers = new Map();
 const adminReports = [];
 // A-20/B-3: attachment bytes live in R2 (MEDIA_BUCKET); D1 keeps metadata
 // only. Base64 intake is kept so existing clients keep working.
@@ -164,6 +158,47 @@ const LUNO_SCHEMA = [
     id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL,
     expires_at INTEGER NOT NULL, consumed_at INTEGER, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_recovery_user ON luno_recovery_challenges(user_id)`,
+  // D4: feed, stories, VOOM and openchat live in D1 (no memory authority).
+  `CREATE TABLE IF NOT EXISTS luno_timeline_posts (
+    id TEXT PRIMARY KEY, author_id TEXT NOT NULL, body TEXT NOT NULL DEFAULT '',
+    bg TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'friends',
+    created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_timeline_author ON luno_timeline_posts(author_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS luno_timeline_comments (
+    id TEXT PRIMARY KEY, post_id TEXT NOT NULL, author_id TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_timeline_comments_post ON luno_timeline_comments(post_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_timeline_likes (
+    post_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (post_id, user_id))`,
+  `CREATE TABLE IF NOT EXISTS luno_stories (
+    id TEXT PRIMARY KEY, author_id TEXT NOT NULL, body TEXT NOT NULL DEFAULT '',
+    bg TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_stories_author ON luno_stories(author_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS luno_story_views (
+    story_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (story_id, user_id))`,
+  `CREATE TABLE IF NOT EXISTS luno_voom_posts (
+    id TEXT PRIMARY KEY, author_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
+    emoji TEXT NOT NULL DEFAULT '', bg TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_voom_author ON luno_voom_posts(author_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS luno_voom_likes (
+    post_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (post_id, user_id))`,
+  `CREATE TABLE IF NOT EXISTS luno_voom_comments (
+    id TEXT PRIMARY KEY, post_id TEXT NOT NULL, author_id TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_voom_comments_post ON luno_voom_comments(post_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_community_rooms (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+    visibility TEXT NOT NULL DEFAULT 'public', owner_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_community_members (
+    room_id TEXT NOT NULL, user_id TEXT NOT NULL, nickname TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (room_id, user_id))`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_community_members_room ON luno_community_members(room_id, user_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_community_posts (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL, author_id TEXT NOT NULL,
+    author_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_community_posts_room ON luno_community_posts(room_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS luno_community_post_likes (
+    post_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (post_id, user_id))`,
 ];
 const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -1635,15 +1670,13 @@ function hubFanOut(userIds, payload) {
   else task.catch(() => {});
 }
 
-// The recipients of a broadcast: conversation members, or the members of a
-// public community room.
+// The recipients of a broadcast: conversation members. (D4 removed the
+// community-room branch with the duplicate handlers; community fanout goes
+// through sendTo with D1 membership.)
 function broadcastRecipients(payload) {
   const conversationId = payload.conversation_id || callSessions.get(payload.call_id)?.conversation_id;
   const conversation = conversations.get(conversationId);
   if (conversation) return conversation.members || [];
-  if (payload.room_id && communityRooms.get(payload.room_id)?.visibility === 'public') {
-    return Array.from((roomMembers.get(payload.room_id) || new Map()).keys());
-  }
   return [];
 }
 
@@ -1665,10 +1698,9 @@ function broadcast(payload) {
   const msg = JSON.stringify(payload);
   const conversationId = payload.conversation_id || callSessions.get(payload.call_id)?.conversation_id;
   const conversation = conversations.get(conversationId);
-  const publicRoom = payload.room_id && communityRooms.get(payload.room_id)?.visibility === 'public';
-  if (!conversation && !publicRoom) return;
+  if (!conversation) return;
   for (const [ws, userId] of activeSockets) {
-    if (conversation && !conversation.members.includes(userId)) continue;
+    if (!conversation.members.includes(userId)) continue;
     try {
       ws.send(msg);
     } catch {
@@ -1719,19 +1751,8 @@ function ensureSeed(env) {
   }
 
 
-  // Pre-seed OpenChat room (U1: DEMO_MODE isolates only).
-  if (env && env.DEMO_MODE === 'true') {
-    communityRooms.set('room-1', {
-      id: 'room-1',
-      name: 'LUNO Global Developer Lounge',
-      description: 'Cloudflare Edge OpenChat for engineers and creators',
-      visibility: 'public',
-      created_at: new Date().toISOString()
-    });
-    communityPosts.set('room-1', [
-      { id: 'post-1', room_id: 'room-1', author_name: 'LineBot', body: 'Welcome to OpenChat on Cloudflare Edge!', created_at: new Date().toISOString() }
-    ]);
-  }
+  // D4: the room-1 openchat seed moved to D1 (seedDemoRoom in boot(), still
+  // DEMO_MODE-only); community rooms no longer have a memory store.
   seedExtras();
 }
 
@@ -2064,20 +2085,7 @@ function pollView(poll, viewerId) {
     options: poll.options.map(o => ({ id: o.id, text: o.text, votes: o.voters.size, voted: o.voters.has(viewerId) }))
   };
 }
-function timelineView(post, viewerId) {
-  return {
-    id: post.id, author: userBrief(post.author_id), body: post.body, bg: post.bg, visibility: post.visibility,
-    created_at: post.created_at, like_count: post.likes.length, liked: post.likes.includes(viewerId),
-    comments: post.comments.map(c => ({ ...c, author: userBrief(c.author_id) }))
-  };
-}
-function voomView(v, viewerId) {
-  return {
-    id: v.id, title: v.title, emoji: v.emoji, bg: v.bg, author: userBrief(v.author_id), created_at: v.created_at,
-    like_count: v.likes + v.liked_by.length, liked: v.liked_by.includes(viewerId),
-    comments: v.comments.map(c => ({ ...c, author: userBrief(c.author_id) }))
-  };
-}
+// D4: timelineView/voomView replaced by timelineRowView/voomRowView (D1 rows).
 const MESSAGE_KINDS = new Set(['text', 'sticker', 'image', 'video', 'voice', 'file', 'location', 'contact', 'pay', 'transfer', 'ciphertext', 'call_status', 'security_notice']);
 // A-5: server-minted kinds a client must never send directly.
 const FORGED_CLIENT_KINDS = new Set(['security_notice', 'pay', 'transfer', 'call_status', 'system']);
@@ -2471,6 +2479,85 @@ function ensureDemoConversationsForUser(userId) {
     ]);
     readCursors.set(`${woralakCid}:${userId}`, 1);
   }
+}
+
+// ---------- D4 social helpers (module level; D1-backed views) ----------
+async function socialDb() {
+  const db = dbOf();
+  if (!db) return null;
+  await ensureSchema();
+  return db;
+}
+async function likeMap(sdb, kind, postIds) {
+  const out = new Map();
+  if (!postIds.length) return out;
+  const ph = postIds.map(() => '?').join(',');
+  let sql = '';
+  if (kind === 'timeline') sql = `SELECT post_id, user_id FROM luno_timeline_likes WHERE post_id IN (${ph})`;
+  else if (kind === 'voom') sql = `SELECT post_id, user_id FROM luno_voom_likes WHERE post_id IN (${ph})`;
+  else if (kind === 'community') sql = `SELECT post_id, user_id FROM luno_community_post_likes WHERE post_id IN (${ph})`;
+  else throw new Error(`unknown like kind: ${kind}`);
+  const { results } = await sdb.prepare(sql).bind(...postIds).all();
+  for (const r of results || []) {
+    if (!out.has(r.post_id)) out.set(r.post_id, []);
+    out.get(r.post_id).push(r.user_id);
+  }
+  return out;
+}
+async function commentMap(sdb, kind, postIds) {
+  const out = new Map();
+  if (!postIds.length) return out;
+  const ph = postIds.map(() => '?').join(',');
+  let sql = '';
+  if (kind === 'timeline') sql = `SELECT * FROM luno_timeline_comments WHERE post_id IN (${ph}) ORDER BY created_at ASC, rowid ASC`;
+  else if (kind === 'voom') sql = `SELECT * FROM luno_voom_comments WHERE post_id IN (${ph}) ORDER BY created_at ASC, rowid ASC`;
+  else throw new Error(`unknown comment kind: ${kind}`);
+  const { results } = await sdb.prepare(sql).bind(...postIds).all();
+  for (const r of results || []) {
+    if (!out.has(r.post_id)) out.set(r.post_id, []);
+    out.get(r.post_id).push(r);
+  }
+  return out;
+}
+async function storyViewsById(sdb, storyIds) {
+  const out = new Map();
+  if (!storyIds.length) return out;
+  const ph = storyIds.map(() => '?').join(',');
+  const { results } = await sdb.prepare(`SELECT story_id, user_id FROM luno_story_views WHERE story_id IN (${ph})`).bind(...storyIds).all();
+  for (const r of results || []) {
+    if (!out.has(r.story_id)) out.set(r.story_id, []);
+    out.get(r.story_id).push(r.user_id);
+  }
+  return out;
+}
+function timelineRowView(row, likeIds, comments, viewerId) {
+  return {
+    id: row.id, author: userBrief(row.author_id), body: row.body, bg: row.bg, visibility: row.visibility,
+    created_at: row.created_at, like_count: likeIds.length, liked: likeIds.includes(viewerId),
+    comments: comments.map(c => ({ id: c.id, author_id: c.author_id, body: c.body, created_at: c.created_at, author: userBrief(c.author_id) }))
+  };
+}
+function voomRowView(row, likeIds, comments, viewerId) {
+  return {
+    id: row.id, title: row.title, emoji: row.emoji, bg: row.bg, author: userBrief(row.author_id), created_at: row.created_at,
+    like_count: likeIds.length, liked: likeIds.includes(viewerId),
+    comments: comments.map(c => ({ id: c.id, author_id: c.author_id, body: c.body, created_at: c.created_at, author: userBrief(c.author_id) }))
+  };
+}
+function communityPostRowView(row, likeIds, viewerId) {
+  return {
+    id: row.id, room_id: row.room_id, author_id: row.author_id, author_name: row.author_name,
+    body: row.body, created_at: row.created_at,
+    likes: likeIds.length, liked: likeIds.includes(viewerId)
+  };
+}
+function escapeLike(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+async function seedDemoRoom(db) {
+  const at = now();
+  await db.prepare(`INSERT OR IGNORE INTO luno_community_rooms (id, name, description, visibility, owner_id, created_at) VALUES ('room-1', 'LUNO Global Developer Lounge', 'Cloudflare Edge OpenChat for engineers and creators', 'public', '', ?)`).bind(at).run();
+  await db.prepare(`INSERT OR IGNORE INTO luno_community_posts (id, room_id, author_id, author_name, body, created_at) VALUES ('post-1', 'room-1', '', 'LineBot', 'Welcome to OpenChat on Cloudflare Edge!', ?)`).bind(at).run();
 }
 
 async function extended(p, request, url, me, token) {
@@ -3412,94 +3499,151 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'ended', result: call.result, duration });
   }
 
-  // ---------- Timeline, stories, VOOM ----------
+  // ---------- Timeline, stories, VOOM (D4: D1-backed, response shapes unchanged) ----------
   if (p === 'timeline') {
     if (method === 'GET') {
-      const visible = new Set([myId, ...friendIds(myId).filter(f => !fMeta(myId, f).hidden && !fMeta(myId, f).blocked)]);
-      const list = timelinePosts.filter(x => visible.has(x.author_id) && (x.visibility === 'friends' || x.author_id === myId)).slice().reverse().slice(0, 100);
-      return json({ posts: list.map(x => timelineView(x, myId)) });
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'timeline requires a configured database' }, 501);
+      const visible = [myId, ...friendIds(myId).filter(f => !fMeta(myId, f).hidden && !fMeta(myId, f).blocked)];
+      const ph = visible.map(() => '?').join(',');
+      const { results } = await sdb.prepare(
+        `SELECT * FROM luno_timeline_posts WHERE author_id IN (${ph}) AND (visibility = 'friends' OR author_id = ?) ORDER BY created_at DESC, rowid DESC LIMIT 100`
+      ).bind(...visible, myId).all();
+      const rows = results || [];
+      const ids = rows.map(r => r.id);
+      const likesByPost = await likeMap(sdb, 'timeline', ids);
+      const commentsByPost = await commentMap(sdb, 'timeline', ids);
+      return json({ posts: rows.map(r => timelineRowView(r, likesByPost.get(r.id) || [], commentsByPost.get(r.id) || [], myId)) });
     }
     if (method === 'POST') {
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'timeline requires a configured database' }, 501);
       const b = await readJson(request);
       const body = clip(b.body, 1000);
       if (!body) return bad('내용을 입력하세요');
       const bg = typeof b.bg === 'string' && /^(linear-gradient\([\w#%,\s().-]+\)|#[0-9a-fA-F]{6}|)$/.test(b.bg) ? b.bg : '';
-      const post = { id: uid(), author_id: myId, body, bg, visibility: b.visibility === 'me' ? 'me' : 'friends', created_at: now(), likes: [], comments: [] };
-      timelinePosts.push(post);
+      const post = { id: uid(), author_id: myId, body, bg, visibility: b.visibility === 'me' ? 'me' : 'friends', created_at: now() };
+      await sdb.prepare('INSERT INTO luno_timeline_posts (id, author_id, body, bg, visibility, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(post.id, post.author_id, post.body, post.bg, post.visibility, post.created_at).run();
       sendTo(friendIds(myId), { type: 'timeline.updated' });
-      return json(timelineView(post, myId), 201);
+      return json(timelineRowView(post, [], [], myId), 201);
     }
   }
   if ((m = p.match(/^timeline\/([\w-]+)$/)) && method === 'DELETE') {
-    const idx = timelinePosts.findIndex(x => x.id === m[1]);
-    if (idx < 0) return bad('게시물을 찾을 수 없습니다', 404);
-    if (timelinePosts[idx].author_id !== myId) return bad('삭제 권한이 없습니다', 403);
-    timelinePosts.splice(idx, 1);
+    const sdb = await socialDb();
+    if (!sdb) return json({ error: 'timeline requires a configured database' }, 501);
+    const post = await sdb.prepare('SELECT author_id FROM luno_timeline_posts WHERE id = ?').bind(m[1]).first();
+    if (!post) return bad('게시물을 찾을 수 없습니다', 404);
+    if (post.author_id !== myId) return bad('삭제 권한이 없습니다', 403);
+    await sdb.prepare('DELETE FROM luno_timeline_likes WHERE post_id = ?').bind(m[1]).run();
+    await sdb.prepare('DELETE FROM luno_timeline_comments WHERE post_id = ?').bind(m[1]).run();
+    await sdb.prepare('DELETE FROM luno_timeline_posts WHERE id = ?').bind(m[1]).run();
     return json({ status: 'deleted' });
   }
   if ((m = p.match(/^timeline\/([\w-]+)\/(like|comments)$/)) && method === 'POST') {
-    const post = timelinePosts.find(x => x.id === m[1]);
+    const sdb = await socialDb();
+    if (!sdb) return json({ error: 'timeline requires a configured database' }, 501);
+    const post = await sdb.prepare('SELECT * FROM luno_timeline_posts WHERE id = ?').bind(m[1]).first();
     if (!post || (post.author_id !== myId && !isFriend(myId, post.author_id))) return bad('게시물을 찾을 수 없습니다', 404);
     if (m[2] === 'like') {
-      const i = post.likes.indexOf(myId);
-      if (i >= 0) post.likes.splice(i, 1); else post.likes.push(myId);
-      return json(timelineView(post, myId));
+      const existing = await sdb.prepare('SELECT user_id FROM luno_timeline_likes WHERE post_id = ? AND user_id = ?').bind(m[1], myId).first();
+      if (existing) await sdb.prepare('DELETE FROM luno_timeline_likes WHERE post_id = ? AND user_id = ?').bind(m[1], myId).run();
+      else await sdb.prepare('INSERT INTO luno_timeline_likes (post_id, user_id) VALUES (?, ?)').bind(m[1], myId).run();
+    } else {
+      const b = await readJson(request);
+      const body = clip(b.body, 300);
+      if (!body) return bad('댓글을 입력하세요');
+      await sdb.prepare('INSERT INTO luno_timeline_comments (id, post_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)').bind(uid(), m[1], myId, body, now()).run();
     }
-    const b = await readJson(request);
-    const body = clip(b.body, 300);
-    if (!body) return bad('댓글을 입력하세요');
-    post.comments.push({ id: uid(), author_id: myId, body, created_at: now() });
-    return json(timelineView(post, myId), 201);
+    const likesByPost = await likeMap(sdb, 'timeline', [m[1]]);
+    const commentsByPost = await commentMap(sdb, 'timeline', [m[1]]);
+    return json(timelineRowView(post, likesByPost.get(m[1]) || [], commentsByPost.get(m[1]) || [], myId), m[2] === 'like' ? 200 : 201);
   }
   if (p === 'stories') {
     if (method === 'GET') {
-      const visible = new Set([myId, ...friendIds(myId).filter(f => !fMeta(myId, f).hidden && !fMeta(myId, f).blocked)]);
-      const cutoff = Date.now() - 24 * 3600 * 1000;
-      const list = storyStore.filter(x => visible.has(x.author_id) && Date.parse(x.created_at) > cutoff).slice().reverse();
-      return json({ stories: list.map(x => ({ id: x.id, author: userBrief(x.author_id), body: x.body, bg: x.bg, created_at: x.created_at, viewed: x.viewers.includes(myId), view_count: x.author_id === myId ? x.viewers.length : undefined })) });
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'stories require a configured database' }, 501);
+      const visible = [myId, ...friendIds(myId).filter(f => !fMeta(myId, f).hidden && !fMeta(myId, f).blocked)];
+      const ph = visible.map(() => '?').join(',');
+      const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const { results } = await sdb.prepare(
+        `SELECT * FROM luno_stories WHERE author_id IN (${ph}) AND created_at > ? ORDER BY created_at DESC, rowid DESC`
+      ).bind(...visible, cutoff).all();
+      const rows = results || [];
+      const viewsByStory = await storyViewsById(sdb, rows.map(r => r.id));
+      return json({ stories: rows.map(x => {
+        const viewers = viewsByStory.get(x.id) || [];
+        return { id: x.id, author: userBrief(x.author_id), body: x.body, bg: x.bg, created_at: x.created_at, viewed: viewers.includes(myId), view_count: x.author_id === myId ? viewers.length : undefined };
+      }) });
     }
     if (method === 'POST') {
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'stories require a configured database' }, 501);
       const b = await readJson(request);
       const body = clip(b.body, 200);
       if (!body) return bad('스토리 내용을 입력하세요');
       const bg = typeof b.bg === 'string' && /^(linear-gradient\([\w#%,\s().-]+\)|#[0-9a-fA-F]{6}|)$/.test(b.bg) ? b.bg : '';
-      const story = { id: uid(), author_id: myId, body, bg, created_at: now(), viewers: [] };
-      storyStore.push(story);
+      // D4: stories older than 7 days are purged on the write path (no cron).
+      const purgeBefore = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+      await sdb.prepare('DELETE FROM luno_story_views WHERE story_id IN (SELECT id FROM luno_stories WHERE created_at < ?)').bind(purgeBefore).run();
+      await sdb.prepare('DELETE FROM luno_stories WHERE created_at < ?').bind(purgeBefore).run();
+      const story = { id: uid(), author_id: myId, body, bg, created_at: now() };
+      await sdb.prepare('INSERT INTO luno_stories (id, author_id, body, bg, created_at) VALUES (?, ?, ?, ?, ?)').bind(story.id, story.author_id, story.body, story.bg, story.created_at).run();
       sendTo(friendIds(myId), { type: 'timeline.updated' });
       return json({ id: story.id }, 201);
     }
   }
   if ((m = p.match(/^stories\/([\w-]+)\/view$/)) && method === 'POST') {
-    const s = storyStore.find(x => x.id === m[1]);
-    if (s && s.author_id !== myId && isFriend(myId, s.author_id) && !s.viewers.includes(myId)) s.viewers.push(myId);
+    const sdb = await socialDb();
+    if (!sdb) return json({ error: 'stories require a configured database' }, 501);
+    const s = await sdb.prepare('SELECT author_id FROM luno_stories WHERE id = ?').bind(m[1]).first();
+    if (s && s.author_id !== myId && isFriend(myId, s.author_id)) {
+      await sdb.prepare('INSERT OR IGNORE INTO luno_story_views (story_id, user_id) VALUES (?, ?)').bind(m[1], myId).run();
+    }
     return json({ status: 'viewed' });
   }
   if (p === 'voom') {
-    if (method === 'GET') return json({ videos: voomPosts.slice().reverse().map(x => voomView(x, myId)) });
+    if (method === 'GET') {
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'voom requires a configured database' }, 501);
+      const { results } = await sdb.prepare('SELECT * FROM luno_voom_posts ORDER BY created_at DESC, rowid DESC').all();
+      const rows = results || [];
+      const ids = rows.map(r => r.id);
+      const likesByPost = await likeMap(sdb, 'voom', ids);
+      const commentsByPost = await commentMap(sdb, 'voom', ids);
+      return json({ videos: rows.map(x => voomRowView(x, likesByPost.get(x.id) || [], commentsByPost.get(x.id) || [], myId)) });
+    }
     if (method === 'POST') {
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'voom requires a configured database' }, 501);
       const b = await readJson(request);
       const title = clip(b.title, 100);
       if (!title) return bad('제목을 입력하세요');
       const emoji = clip(b.emoji || '🎬', 8) || '🎬';
       const bgs = ['linear-gradient(135deg,#4F7CFF,#0ea5e9)', 'linear-gradient(135deg,#f97316,#f43f5e)', 'linear-gradient(135deg,#6366f1,#ec4899)', 'linear-gradient(135deg,#14b8a6,#84cc16)'];
-      const v = { id: uid(), title, emoji, author_id: myId, bg: bgs[voomPosts.length % bgs.length], likes: 0, liked_by: [], comments: [], created_at: now() };
-      voomPosts.push(v);
-      return json(voomView(v, myId), 201);
+      const count = await sdb.prepare('SELECT COUNT(*) AS n FROM luno_voom_posts').first();
+      const v = { id: uid(), title, emoji, author_id: myId, bg: bgs[Number(count?.n || 0) % bgs.length], created_at: now() };
+      await sdb.prepare('INSERT INTO luno_voom_posts (id, author_id, title, emoji, bg, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(v.id, v.author_id, v.title, v.emoji, v.bg, v.created_at).run();
+      return json(voomRowView(v, [], [], myId), 201);
     }
   }
   if ((m = p.match(/^voom\/([\w-]+)\/(like|comments)$/)) && method === 'POST') {
-    const v = voomPosts.find(x => x.id === m[1]);
+    const sdb = await socialDb();
+    if (!sdb) return json({ error: 'voom requires a configured database' }, 501);
+    const v = await sdb.prepare('SELECT * FROM luno_voom_posts WHERE id = ?').bind(m[1]).first();
     if (!v) return bad('영상을 찾을 수 없습니다', 404);
     if (m[2] === 'like') {
-      const i = v.liked_by.indexOf(myId);
-      if (i >= 0) v.liked_by.splice(i, 1); else v.liked_by.push(myId);
-      return json(voomView(v, myId));
+      const existing = await sdb.prepare('SELECT user_id FROM luno_voom_likes WHERE post_id = ? AND user_id = ?').bind(m[1], myId).first();
+      if (existing) await sdb.prepare('DELETE FROM luno_voom_likes WHERE post_id = ? AND user_id = ?').bind(m[1], myId).run();
+      else await sdb.prepare('INSERT INTO luno_voom_likes (post_id, user_id) VALUES (?, ?)').bind(m[1], myId).run();
+    } else {
+      const b = await readJson(request);
+      const body = clip(b.body, 300);
+      if (!body) return bad('댓글을 입력하세요');
+      await sdb.prepare('INSERT INTO luno_voom_comments (id, post_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)').bind(uid(), m[1], myId, body, now()).run();
     }
-    const b = await readJson(request);
-    const body = clip(b.body, 300);
-    if (!body) return bad('댓글을 입력하세요');
-    v.comments.push({ id: uid(), author_id: myId, body, created_at: now() });
-    return json(voomView(v, myId), 201);
+    const likesByPost = await likeMap(sdb, 'voom', [m[1]]);
+    const commentsByPost = await commentMap(sdb, 'voom', [m[1]]);
+    return json(voomRowView(v, likesByPost.get(m[1]) || [], commentsByPost.get(m[1]) || [], myId), m[2] === 'like' ? 200 : 201);
   }
 
   // ---------- Pay wallet & shop ----------
@@ -3561,67 +3705,90 @@ async function extended(p, request, url, me, token) {
     return json({ order_id: orderId, status: 'completed', balance: w.balance }, 201);
   }
 
-  // ---------- OpenChat ----------
+  // ---------- OpenChat (D4: D1-backed) ----------
   if (p === 'community/rooms') {
     if (method === 'GET') {
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'openchat requires a configured database' }, 501);
       const q = clip(url.searchParams.get('q') || '', 50).toLowerCase();
-      const rooms = Array.from(communityRooms.values()).filter(r => !q || r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q))
-        .map(r => ({ ...r, member_count: (roomMembers.get(r.id) || new Map()).size, joined: (roomMembers.get(r.id) || new Map()).has(myId) }));
-      return json({ rooms });
+      const like = `%${escapeLike(q)}%`;
+      const { results } = q
+        ? await sdb.prepare(`SELECT r.*, COUNT(m.user_id) AS member_count, MAX(CASE WHEN m.user_id = ? THEN 1 ELSE 0 END) AS joined
+            FROM luno_community_rooms r LEFT JOIN luno_community_members m ON m.room_id = r.id
+            WHERE LOWER(r.name) LIKE ? ESCAPE '\\' OR LOWER(r.description) LIKE ? ESCAPE '\\' GROUP BY r.id`).bind(myId, like, like).all()
+        : await sdb.prepare(`SELECT r.*, COUNT(m.user_id) AS member_count, MAX(CASE WHEN m.user_id = ? THEN 1 ELSE 0 END) AS joined
+            FROM luno_community_rooms r LEFT JOIN luno_community_members m ON m.room_id = r.id GROUP BY r.id`).bind(myId).all();
+      return json({ rooms: (results || []).map(r => ({ id: r.id, name: r.name, description: r.description, visibility: r.visibility, owner_id: r.owner_id, created_at: r.created_at, member_count: Number(r.member_count || 0), joined: Number(r.joined || 0) === 1 })) });
     }
     if (method === 'POST') {
+      const sdb = await socialDb();
+      if (!sdb) return json({ error: 'openchat requires a configured database' }, 501);
       const b = await readJson(request);
       const name = clip(b.name, 50);
       if (!name) return bad('오픈채팅 이름을 입력하세요');
       const room = { id: uid(), name, description: clip(b.description || '', 200), visibility: 'public', owner_id: myId, created_at: now() };
-      communityRooms.set(room.id, room);
-      communityPosts.set(room.id, []);
-      roomMembers.set(room.id, new Map([[myId, clip(b.nickname || me.display_name, 20) || me.display_name]]));
+      const nickname = clip(b.nickname || me.display_name, 20) || me.display_name;
+      await sdb.prepare('INSERT INTO luno_community_rooms (id, name, description, visibility, owner_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(room.id, room.name, room.description, room.visibility, room.owner_id, room.created_at).run();
+      await sdb.prepare('INSERT INTO luno_community_members (room_id, user_id, nickname) VALUES (?, ?, ?)').bind(room.id, myId, nickname).run();
       return json({ ...room, member_count: 1, joined: true }, 201);
     }
   }
   if ((m = p.match(/^community\/rooms\/([\w-]+)\/(join|leave)$/)) && method === 'POST') {
-    const room = communityRooms.get(m[1]);
+    const sdb = await socialDb();
+    if (!sdb) return json({ error: 'openchat requires a configured database' }, 501);
+    const room = await sdb.prepare('SELECT id FROM luno_community_rooms WHERE id = ?').bind(m[1]).first();
     if (!room) return bad('오픈채팅을 찾을 수 없습니다', 404);
-    if (!roomMembers.has(room.id)) roomMembers.set(room.id, new Map());
-    const members = roomMembers.get(room.id);
     if (m[2] === 'join') {
       const b = await readJson(request);
-      members.set(myId, clip(b.nickname || me.display_name, 20) || me.display_name);
-      return json({ status: 'joined', nickname: members.get(myId), member_count: members.size }, 201);
+      const nickname = clip(b.nickname || me.display_name, 20) || me.display_name;
+      await sdb.prepare('INSERT INTO luno_community_members (room_id, user_id, nickname) VALUES (?, ?, ?) ON CONFLICT(room_id, user_id) DO UPDATE SET nickname = excluded.nickname').bind(m[1], myId, nickname).run();
+      const count = await sdb.prepare('SELECT COUNT(*) AS n FROM luno_community_members WHERE room_id = ?').bind(m[1]).first();
+      return json({ status: 'joined', nickname, member_count: Number(count?.n || 0) }, 201);
     }
-    members.delete(myId);
-    return json({ status: 'left', member_count: members.size });
+    await sdb.prepare('DELETE FROM luno_community_members WHERE room_id = ? AND user_id = ?').bind(m[1], myId).run();
+    const count = await sdb.prepare('SELECT COUNT(*) AS n FROM luno_community_members WHERE room_id = ?').bind(m[1]).first();
+    return json({ status: 'left', member_count: Number(count?.n || 0) });
   }
   if ((m = p.match(/^community\/rooms\/([\w-]+)\/posts$/))) {
-    const room = communityRooms.get(m[1]);
+    const sdb = await socialDb();
+    if (!sdb) return json({ error: 'openchat requires a configured database' }, 501);
+    const room = await sdb.prepare('SELECT id FROM luno_community_rooms WHERE id = ?').bind(m[1]).first();
     if (!room) return bad('오픈채팅을 찾을 수 없습니다', 404);
-    const members = roomMembers.get(room.id) || new Map();
-    const view = x => ({ ...x, liked_by: undefined, likes: (x.liked_by || []).length, liked: (x.liked_by || []).includes(myId) });
-    if (method === 'GET') return json({ posts: (communityPosts.get(room.id) || []).slice(0, 200).map(view), joined: members.has(myId), nickname: members.get(myId) || '' });
+    if (method === 'GET') {
+      const mine = await sdb.prepare('SELECT nickname FROM luno_community_members WHERE room_id = ? AND user_id = ?').bind(m[1], myId).first();
+      const { results } = await sdb.prepare('SELECT * FROM luno_community_posts WHERE room_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 200').bind(m[1]).all();
+      const rows = results || [];
+      const likesByPost = await likeMap(sdb, 'community', rows.map(r => r.id));
+      return json({ posts: rows.map(x => communityPostRowView(x, likesByPost.get(x.id) || [], myId)), joined: !!mine, nickname: mine?.nickname || '' });
+    }
     if (method === 'POST') {
-      if (!members.has(myId)) members.set(myId, clip(me.display_name, 20) || '익명');
+      await sdb.prepare('INSERT OR IGNORE INTO luno_community_members (room_id, user_id, nickname) VALUES (?, ?, ?)').bind(m[1], myId, clip(me.display_name, 20) || '익명').run();
       const b = await readJson(request);
       const body = clip(b.body, 1000);
       if (!body) return bad('메시지를 입력하세요');
-      const post = { id: uid(), room_id: room.id, author_id: myId, author_name: members.get(myId), body, liked_by: [], created_at: now() };
-      const list = communityPosts.get(room.id) || [];
-      list.unshift(post);
-      communityPosts.set(room.id, list);
-      sendTo(Array.from(members.keys()), { type: 'community.post', room_id: room.id, post: view(post) });
-      return json(view(post), 201);
+      const mine = await sdb.prepare('SELECT nickname FROM luno_community_members WHERE room_id = ? AND user_id = ?').bind(m[1], myId).first();
+      const post = { id: uid(), room_id: m[1], author_id: myId, author_name: mine?.nickname || '익명', body, created_at: now() };
+      await sdb.prepare('INSERT INTO luno_community_posts (id, room_id, author_id, author_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(post.id, post.room_id, post.author_id, post.author_name, post.body, post.created_at).run();
+      const memberRows = await sdb.prepare('SELECT user_id FROM luno_community_members WHERE room_id = ?').bind(m[1]).all();
+      sendTo((memberRows.results || []).map(r => r.user_id), { type: 'community.post', room_id: m[1], post: communityPostRowView(post, [], myId) });
+      return json(communityPostRowView(post, [], myId), 201);
     }
   }
   if ((m = p.match(/^community\/rooms\/([\w-]+)\/posts\/([\w-]+)\/like$/)) && method === 'POST') {
-    const members = roomMembers.get(m[1]) || new Map();
-    if (!members.has(myId)) members.set(myId, clip(me.display_name, 20) || '익명');
-    const post = (communityPosts.get(m[1]) || []).find(x => x.id === m[2]);
+    const sdb = await socialDb();
+    if (!sdb) return json({ error: 'openchat requires a configured database' }, 501);
+    const room = await sdb.prepare('SELECT id FROM luno_community_rooms WHERE id = ?').bind(m[1]).first();
+    if (!room) return bad('오픈채팅을 찾을 수 없습니다', 404);
+    await sdb.prepare('INSERT OR IGNORE INTO luno_community_members (room_id, user_id, nickname) VALUES (?, ?, ?)').bind(m[1], myId, clip(me.display_name, 20) || '익명').run();
+    const post = await sdb.prepare('SELECT id FROM luno_community_posts WHERE id = ? AND room_id = ?').bind(m[2], m[1]).first();
     if (!post) return bad('게시물을 찾을 수 없습니다', 404);
-    post.liked_by = post.liked_by || [];
-    const i = post.liked_by.indexOf(myId);
-    if (i >= 0) post.liked_by.splice(i, 1); else post.liked_by.push(myId);
-    sendTo(Array.from(members.keys()), { type: 'community.post_liked', room_id: m[1], post_id: post.id, likes: post.liked_by.length });
-    return json({ status: i >= 0 ? 'unliked' : 'liked', likes: post.liked_by.length });
+    const existing = await sdb.prepare('SELECT user_id FROM luno_community_post_likes WHERE post_id = ? AND user_id = ?').bind(m[2], myId).first();
+    if (existing) await sdb.prepare('DELETE FROM luno_community_post_likes WHERE post_id = ? AND user_id = ?').bind(m[2], myId).run();
+    else await sdb.prepare('INSERT INTO luno_community_post_likes (post_id, user_id) VALUES (?, ?)').bind(m[2], myId).run();
+    const memberRows = await sdb.prepare('SELECT user_id FROM luno_community_members WHERE room_id = ?').bind(m[1]).all();
+    const likes = await sdb.prepare('SELECT COUNT(*) AS n FROM luno_community_post_likes WHERE post_id = ?').bind(m[2]).first();
+    sendTo((memberRows.results || []).map(r => r.user_id), { type: 'community.post_liked', room_id: m[1], post_id: m[2], likes: Number(likes?.n || 0) });
+    return json({ status: existing ? 'unliked' : 'liked', likes: Number(likes?.n || 0) });
   }
 
   // ---------- Search & reports ----------
@@ -4091,6 +4258,9 @@ function boot(env) {
       await hashPendingPasswords();
       if (env && env.DB) {
         await syncFromD1(env.DB);
+        await ensureSchema();
+        // D4: the demo openchat seed lives in D1 (DEMO_MODE isolates only).
+        if (env.DEMO_MODE === 'true') await seedDemoRoom(env.DB);
       }
     })();
   }
@@ -5144,49 +5314,9 @@ const workerCore = {
         return json({ order_id: orderId, status: 'completed' }, 201);
       }
 
-      // 10. Community / OpenChat
-      if (p === 'community/rooms') {
-        if (request.method === 'GET') {
-          return json({ rooms: Array.from(communityRooms.values()) });
-        }
-        if (request.method === 'POST') {
-          const body = await request.json().catch(() => ({}));
-          const rid = crypto.randomUUID();
-          const room = { id: rid, name: body.name || 'OpenChat', description: body.description || '', visibility: 'public', created_at: new Date().toISOString() };
-          communityRooms.set(rid, room);
-          communityPosts.set(rid, []);
-          return json(room, 201);
-        }
-      }
-      const roomPostMatch = p.match(/^community\/rooms\/([a-zA-Z0-9_-]+)\/posts$/);
-      if (roomPostMatch) {
-        const rid = roomPostMatch[1];
-        if (request.method === 'GET') {
-          return json({ posts: communityPosts.get(rid) || [] });
-        }
-        if (request.method === 'POST') {
-          const body = await request.json().catch(() => ({}));
-          const pid = crypto.randomUUID();
-          const post = { id: pid, room_id: rid, author_name: authUser.display_name, body: body.body || '', created_at: new Date().toISOString() };
-          const plist = communityPosts.get(rid) || [];
-          plist.unshift(post);
-          communityPosts.set(rid, plist);
-          return json(post, 201);
-        }
-      }
-      const roomPostLikeMatch = p.match(/^community\/rooms\/([a-zA-Z0-9_-]+)\/posts\/([a-zA-Z0-9_-]+)\/like$/);
-      if (roomPostLikeMatch && request.method === 'POST') {
-        const rid = roomPostLikeMatch[1];
-        const pid = roomPostLikeMatch[2];
-        const plist = communityPosts.get(rid) || [];
-        const post = plist.find(item => item.id === pid);
-        if (post) {
-          post.likes = (post.likes || 0) + 1;
-          broadcast({ type: 'community.post_liked', room_id: rid, post_id: pid, likes: post.likes });
-          return json({ status: 'liked', likes: post.likes });
-        }
-        return json({ error: 'not found' }, 404);
-      }
+      // D4: the duplicate community/openchat handlers lived here. They were
+      // unreachable (extended() answers these routes first, with room checks
+      // the duplicates lacked) and are removed; extended() is the one impl.
 
       // 11. Partner Console
       if (p === 'partner/organizations') {

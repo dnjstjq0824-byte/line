@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { makeD1 } from './test_helpers.mjs'
 
 // Mobile P0 audit (2026-11-10): the app broke silently whenever the worker's
 // response keys drifted from what the client reads. This pins the shapes the
@@ -9,12 +10,13 @@ import test from 'node:test'
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
 
+const sharedDb = makeD1()
 async function api(path, token, method = 'GET', body) {
   const res = await worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
-  }), { ALLOW_LOCAL_DEMO: 'true' })
+  }), { ALLOW_LOCAL_DEMO: 'true', DB: sharedDb })
   let data = null
   try { data = await res.json() } catch { data = null }
   return { status: res.status, data }

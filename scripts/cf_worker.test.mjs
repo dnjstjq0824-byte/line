@@ -184,20 +184,6 @@ test('private chat access and one-use realtime tickets', async () => {
   assert.equal(sockets[1].events.length, bobEventCount + 1);
   assert.equal(sockets[2].events.length, outsiderEventCount);
 
-  // OpenChat Community test: create room, post, like
-  const roomRes = await api('community/rooms', alice, 'POST', { name: 'Developers Lounge', description: 'Tech talk' });
-  assert.equal(roomRes.status, 201);
-  const room = await roomRes.json();
-
-  const postRes = await api(`community/rooms/${room.id}/posts`, bob, 'POST', { body: 'Hello community' });
-  assert.equal(postRes.status, 201);
-  const post = await postRes.json();
-
-  const likeRes = await api(`community/rooms/${room.id}/posts/${post.id}/like`, alice, 'POST');
-  assert.equal(likeRes.status, 200);
-  const { likes } = await likeRes.json();
-  assert.equal(likes, 1);
-
   // Admin Moderation test
   const adminToken = await login('admin@luno.local', 'Worker#Admin1');
   const modRes = await api('admin/moderation/actions', adminToken, 'POST', {
@@ -206,6 +192,32 @@ test('private chat access and one-use realtime tickets', async () => {
     reason: 'Spam warning'
   });
   assert.equal(modRes.status, 200);
+});
+
+test('openchat community rooms persist on D1 (D4)', async () => {
+  const { default: dbWorker } = await import('./cf_worker.js?cfw-community');
+  const db = makeD1();
+  const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12', DB: db };
+  const call = (path, token, method = 'GET', body) => dbWorker.fetch(new Request(`http://localhost/api/v1/${path}`, {
+    method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }), env);
+  const setup = async (email, handle) => {
+    assert.equal((await call('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: handle, handle })).status, 201);
+    return (await (await call('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' })).json()).access_token;
+  };
+  const alice = await setup('comm-alice@luno-test.local', 'commalice');
+  const bob = await setup('comm-bob@luno-test.local', 'commbob');
+  const roomRes = await call('community/rooms', alice, 'POST', { name: 'Developers Lounge', description: 'Tech talk' });
+  assert.equal(roomRes.status, 201);
+  const room = await roomRes.json();
+  const postRes = await call(`community/rooms/${room.id}/posts`, bob, 'POST', { body: 'Hello community' });
+  assert.equal(postRes.status, 201);
+  const post = await postRes.json();
+  const likeRes = await call(`community/rooms/${room.id}/posts/${post.id}/like`, alice, 'POST');
+  assert.equal(likeRes.status, 200);
+  const { likes } = await likeRes.json();
+  assert.equal(likes, 1);
 });
 
 // The API surface is gated on the hostname: loopback and explicitly named

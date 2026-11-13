@@ -57,18 +57,33 @@ test('archive writes: notes events polls albums', async () => {
 })
 
 test('community rooms: create join posts like leave', async () => {
-  const room = await api('community/rooms', token, 'POST', { name: 'probe room', description: 'd' })
+  // D4: community lives in D1 — this flow runs on its own isolate + database.
+  const { default: dbWorker } = await import(`./cf_worker.js?cfp1-community`)
+  const db = makeD1()
+  const call = async (path, token, method = 'GET', body) => {
+    const res = await dbWorker.fetch(new Request(`http://localhost/api/v1/${path}`, {
+      method,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+    }), { ALLOW_LOCAL_DEMO: 'true', DB: db })
+    let data = null
+    try { data = await res.json() } catch { data = null }
+    return { status: res.status, data }
+  }
+  await call('auth/register', null, 'POST', { email: 'probe@luno-test.local', password: PW, display_name: 'Prober' })
+  const me = (await call('auth/login', null, 'POST', { email: 'probe@luno-test.local', password: PW })).data.access_token
+  const room = await call('community/rooms', me, 'POST', { name: 'probe room', description: 'd' })
   assert.equal(room.status, 201)
-  const join = await api(`community/rooms/${room.data.id}/join`, token, 'POST', { nickname: 'prober' })
+  const join = await call(`community/rooms/${room.data.id}/join`, me, 'POST', { nickname: 'prober' })
   assert.equal(join.status, 201)
-  const post = await api(`community/rooms/${room.data.id}/posts`, token, 'POST', { body: 'hello room' })
+  const post = await call(`community/rooms/${room.data.id}/posts`, me, 'POST', { body: 'hello room' })
   assert.equal(post.status, 201)
-  const like = await api(`community/rooms/${room.data.id}/posts/${post.data.id}/like`, token, 'POST')
+  const like = await call(`community/rooms/${room.data.id}/posts/${post.data.id}/like`, me, 'POST')
   assert.equal(like.status, 200)
-  const posts = await api(`community/rooms/${room.data.id}/posts`, token)
+  const posts = await call(`community/rooms/${room.data.id}/posts`, me)
   assert.equal(posts.status, 200)
   assert.ok(posts.data.posts.length >= 1 && posts.data.joined === true)
-  const leave = await api(`community/rooms/${room.data.id}/leave`, token, 'POST')
+  const leave = await call(`community/rooms/${room.data.id}/leave`, me, 'POST')
   assert.equal(leave.status, 200)
 })
 
