@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'design/v3.dart';
+import 'pages/call_overlay.dart';
 import 'router.dart';
 import 'state/session.dart';
 
@@ -22,7 +23,8 @@ class MessengerApp extends StatefulWidget {
   State<MessengerApp> createState() => _MessengerAppState();
 }
 
-class _MessengerAppState extends State<MessengerApp> {
+class _MessengerAppState extends State<MessengerApp>
+    with WidgetsBindingObserver {
   late final SessionController _session;
   late final GoRouter _router;
 
@@ -34,12 +36,23 @@ class _MessengerAppState extends State<MessengerApp> {
     _session.restore();
     _session.checkForUpdate();
     _session.ensureTranslateLanguages();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _session.disposeAll();
     super.dispose();
+  }
+
+  // N2-L: backgrounding ends any live call (no background hold).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _session.onAppBackgrounded();
+    }
   }
 
   @override
@@ -53,6 +66,9 @@ class _MessengerAppState extends State<MessengerApp> {
         darkTheme: LunoHarbor.theme(Brightness.dark),
         themeMode: ThemeMode.system,
         routerConfig: _router,
+        builder: (context, child) => Stack(
+          children: [child!, const CallOverlay()],
+        ),
       ),
     );
   }

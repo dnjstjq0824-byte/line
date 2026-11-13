@@ -22,8 +22,10 @@ export interface ChatSocketDeps {
   onAuthExpired: () => void
   activeCall: Ref<ActiveCallState | null>
   handleIncomingCallSignal: (data: any) => Promise<void>
+  handleIncomingRing: (data: any) => Promise<void>
   endCallLocally: () => void
   startCallTimer: () => void
+  clearNoAnswerTimer: () => void
 }
 
 export function useChatSocket(deps: ChatSocketDeps) {
@@ -31,7 +33,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
     selectedChatId, messages, messagesCanvasRef, scrollToBottom,
     autoTranslateEnabled, handleTranslateMessage, loadChats, loadPolls,
     loadKeep, onAuthExpired, activeCall, handleIncomingCallSignal,
-    endCallLocally, startCallTimer,
+    handleIncomingRing, endCallLocally, startCallTimer, clearNoAnswerTimer,
   } = deps
 
   // --- Realtime WebSocket ---
@@ -135,10 +137,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
               })
             }
           } else if (data.type === 'call.ringing') {
-            const ownEcho = (data.initiated_by && data.initiated_by === currentUser.value?.id) || activeCall.value?.id === data.call_id
-            if (!ownEcho) {
-              activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: data.caller_name || data.caller_handle || t('mvIncomingTitle'), direction: 'incoming' }
-            }
+            void handleIncomingRing(data)
           } else if (data.type === 'call.signal') {
             void handleIncomingCallSignal(data)
           } else if (data.type === 'call.state') {
@@ -146,6 +145,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
               endCallLocally()
             } else if (activeCall.value && activeCall.value.id === data.call_id) {
               activeCall.value.state = 'connected'
+              clearNoAnswerTimer()
               startCallTimer()
             }
           } else if (data.type === 'poll.updated' || data.type === 'poll.created' || data.type === 'poll.closed') {

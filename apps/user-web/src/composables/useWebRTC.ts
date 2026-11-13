@@ -6,7 +6,8 @@ import { ref, type ComputedRef, type Ref } from 'vue'
 import { api, currentUser, note, t, token, wrap } from '../store/session'
 import { request, type Chat } from '../../../shared/api'
 import { callRecordingName } from '../../../shared/call-fx'
-import { endWebRTCCall, startWebRTCCall } from '../messenger-utils'
+import { CALL_NO_ANSWER_MS, decideIncomingRing, noAnswerState } from '../../../shared/call_policy'
+import { endWebRTCCall, fetchIceServers, startWebRTCCall } from '../messenger-utils'
 
 export interface CallRecord {
   id: string
@@ -54,6 +55,7 @@ export function useWebRTC(deps: WebRTCDeps) {
   const callRecording = ref(false)
   const callVideoFilter = ref<'none' | 'warm' | 'cool' | 'mono'>('none')
   let callTimer: ReturnType<typeof setInterval> | null = null
+  let noAnswerTimer: ReturnType<typeof setTimeout> | null = null
   let callRemoteStream: MediaStream | null = null
   let callRecorder: { mr: MediaRecorder; ctx: AudioContext; chunks: BlobPart[]; callId: string } | null = null
 
@@ -61,11 +63,15 @@ export function useWebRTC(deps: WebRTCDeps) {
   let rtcSession: { pc: RTCPeerConnection; stream: MediaStream | null } | null = null
 
   async function initPeerSession(callId: string, kind: 'voice' | 'video') {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    // N2-L: ICE from the server; mute-while-ringing applies to late media too.
+    const iceServers = await fetchIceServers(request, token.value)
+    const pc = new RTCPeerConnection({ iceServers })
     let stream: MediaStream | null = null
     if (navigator.mediaDevices?.getUserMedia) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === 'video' })
+        stream.getAudioTracks().forEach(track => { track.enabled = !isCallMuted.value })
+        stream.getVideoTracks().forEach(track => { track.enabled = !isCallVideoOff.value })
         stream.getTracks().forEach(track => pc.addTrack(track, stream!))
         if (localVideoRef.value) localVideoRef.value.srcObject = stream
       } catch {}
@@ -116,6 +122,7 @@ export function useWebRTC(deps: WebRTCDeps) {
       callMediaIssue.value = webrtc.mediaFailed
       if (webrtc.mediaFailed) note.value = t('callMediaFailed')
       rtcSession = { pc: webrtc.pc, stream: webrtc.stream }
+      armNoAnswerTimer(webrtc.id, 'caller')
       if (localVideoRef.value) localVideoRef.value.srcObject = webrtc.stream
       webrtc.pc.ontrack = (ev) => {
         if (ev.streams[0]) {
@@ -136,6 +143,40 @@ export function useWebRTC(deps: WebRTCDeps) {
         sdp: webrtc.pc.localDescription?.sdp || ''
       }).catch(() => {})
     })
+  }
+
+  function clearNoAnswerTimer() {
+    if (noAnswerTimer) {
+      clearTimeout(noAnswerTimer)
+      noAnswerTimer = null
+    }
+  }
+
+  function armNoAnswerTimer(callId: string, role: 'caller' | 'callee') {
+    clearNoAnswerTimer()
+    noAnswerTimer = setTimeout(() => {
+      noAnswerTimer = null
+      if (!activeCall.value || activeCall.value.id !== callId || activeCall.value.state !== 'ringing') return
+      const state = noAnswerState(role)
+      void api(`/api/v1/calls/${callId}/state`, 'POST', { state }).catch(() => {}).finally(() => endCallLocally())
+    }, CALL_NO_ANSWER_MS)
+  }
+
+  async function handleIncomingRing(data: any) {
+    const decision = decideIncomingRing({
+      activeCallId: activeCall.value?.id ?? null,
+      incomingCallId: data.call_id,
+      selfId: currentUser.value?.id,
+      initiatedBy: data.initiated_by,
+    })
+    if (decision === 'ignore-own') return
+    if (decision === 'busy-decline') {
+      await api(`/api/v1/calls/${data.call_id}/state`, 'POST', { state: 'declined' }).catch(() => {})
+      note.value = t('mvCallBusy')
+      return
+    }
+    activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: data.caller_name || data.caller_handle || t('mvIncomingTitle'), direction: 'incoming' }
+    armNoAnswerTimer(data.call_id, 'callee')
   }
 
   async function handleIncomingCallSignal(data: any) {
@@ -184,14 +225,14 @@ export function useWebRTC(deps: WebRTCDeps) {
     } catch {}
   }
 
-  async function updateCallState(state: 'connected' | 'ended') {
+  async function updateCallState(state: 'connected' | 'ended' | 'declined') {
     if (!activeCall.value) return
     const cid = activeCall.value.id
     const prevCall = { ...activeCall.value }
     const durSec = callDuration.value
     await wrap(async () => {
       await api(`/api/v1/calls/${cid}/state`, 'POST', { state }).catch(() => {})
-      if (state === 'ended') {
+      if (state === 'ended' || state === 'declined') {
         const targetConvId = selectedChatId.value
         const durText = durSec > 0 ? formatDuration(durSec) : undefined
         const wasConnected = prevCall.state === 'connected' && durSec > 0
@@ -215,6 +256,7 @@ export function useWebRTC(deps: WebRTCDeps) {
         }
       } else if (activeCall.value) {
         activeCall.value.state = 'connected'
+        clearNoAnswerTimer()
         startCallTimer()
       }
     })
@@ -283,8 +325,31 @@ export function useWebRTC(deps: WebRTCDeps) {
     }
   }
 
+  async function cycleCallCamera() {
+    const sess = rtcSession
+    if (!sess?.stream || !navigator.mediaDevices?.getUserMedia) return
+    const video = sess.stream.getVideoTracks()[0]
+    if (!video) return
+    const nextFacing = video.getSettings().facingMode === 'user' ? 'environment' : 'user'
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: nextFacing } })
+      const freshTrack = fresh.getVideoTracks()[0]
+      if (!freshTrack) {
+        fresh.getTracks().forEach(t => t.stop())
+        return
+      }
+      const sender = sess.pc.getSenders().find(s => s.track?.kind === 'video')
+      if (sender) await sender.replaceTrack(freshTrack)
+      video.stop()
+      sess.stream.removeTrack(video)
+      sess.stream.addTrack(freshTrack)
+      if (localVideoRef.value) localVideoRef.value.srcObject = sess.stream
+    } catch {}
+  }
+
   function endCallLocally() {
     stopCallRecording(true)
+    clearNoAnswerTimer()
     callRemoteStream = null
     if (callTimer) {
       clearInterval(callTimer)
@@ -317,12 +382,15 @@ export function useWebRTC(deps: WebRTCDeps) {
     remoteVideoRef,
     isScreenSharing,
     startCall,
+    handleIncomingRing,
+    cycleCallCamera,
     handleIncomingCallSignal,
     toggleCallMute,
     toggleCallVideo,
     toggleScreenShare,
     updateCallState,
     startCallTimer,
+    clearNoAnswerTimer,
     stopCallTimer,
     toggleCallRecording,
     endCallLocally,

@@ -10,6 +10,7 @@ const webrtc = readFileSync('apps/user-web/src/composables/useWebRTC.ts', 'utf8'
 const socket = readFileSync('apps/user-web/src/composables/useChatSocket.ts', 'utf8')
 const callModal = readFileSync('apps/user-web/src/components/CallModal.vue', 'utf8')
 const i18n = readFileSync('apps/user-web/src/luno-i18n.ts', 'utf8')
+const policy = readFileSync('apps/shared/call_policy.ts', 'utf8')
 
 test('activeCall tracks call direction', () => {
   assert.match(webrtc, /direction: 'outgoing' \| 'incoming'/)
@@ -17,7 +18,8 @@ test('activeCall tracks call direction', () => {
 
 test('outgoing call sets direction outgoing, incoming sets incoming', () => {
   assert.match(webrtc, /direction: 'outgoing'/)
-  assert.match(socket, /direction: 'incoming'/)
+  assert.match(webrtc, /direction: 'incoming'/)
+  assert.match(socket, /void handleIncomingRing\(data\)/)
 })
 
 test('Answer button only renders for incoming ringing calls', () => {
@@ -30,8 +32,9 @@ test('ringing label distinguishes outgoing (mvCalling) from incoming', () => {
 })
 
 test('own outbound call.ringing echo does not flip UI to incoming', () => {
-  assert.match(socket, /data\.initiated_by && data\.initiated_by === currentUser\.value\?\.id/)
-  assert.match(socket, /activeCall\.value\?\.id === data\.call_id/)
+  assert.match(policy, /initiatedBy && args\.initiatedBy === args\.selfId\) return 'ignore-own'/)
+  assert.match(policy, /activeCallId === args\.incomingCallId\) return 'ignore-own'/)
+  assert.match(policy, /activeCallId\) return 'busy-decline'/)
 })
 
 test('call aborts honestly when mic/camera unavailable', () => {

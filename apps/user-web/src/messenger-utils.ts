@@ -17,7 +17,7 @@ export async function startWebRTCCall(convId: string, kind: 'voice' | 'video', t
       // Media is opportunistic: the call UI and signaling survive without it.
       mediaFailed = true
     }
-    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    pc = new RTCPeerConnection({ iceServers: await fetchIceServers(requestFn, token) })
     if (stream) stream.getTracks().forEach(track => pc!.addTrack(track, stream!))
     const offer = await pc.createOffer()
     await pc.setLocalDescription(offer)
@@ -34,6 +34,18 @@ export async function startWebRTCCall(convId: string, kind: 'voice' | 'video', t
 export function endWebRTCCall(pc: RTCPeerConnection | null, stream: MediaStream | null) {
   if (pc) pc.close()
   if (stream) stream.getTracks().forEach(t => t.stop())
+}
+
+// N2-L: ICE comes from the server (TURN appears when the operator sets it).
+// A hardcoded STUN fallback keeps same-network calls working if the fetch fails.
+export const FALLBACK_ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
+
+export async function fetchIceServers(requestFn: any, token?: string): Promise<RTCIceServer[]> {
+  try {
+    const res = await requestFn(`/api/v1/calls/ice-servers`, token, 'GET')
+    if (res && Array.isArray(res.ice_servers) && res.ice_servers.length > 0) return res.ice_servers
+  } catch {}
+  return FALLBACK_ICE_SERVERS
 }
 
 export async function generateE2EEKeyPair(): Promise<CryptoKeyPair> {

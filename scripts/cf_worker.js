@@ -4581,13 +4581,21 @@ async function extended(p, request, url, me, token) {
     });
   }
   if (p === 'calls/ice-servers' && method === 'GET') {
-    return json({
-      ice_servers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-      ]
-    });
+    // N2-L: STUN always; TURN entries appear only when the operator sets the
+    // TURN_* env vars (unset in this stage — same-Wi-Fi local calls only).
+    const servers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' }
+    ];
+    const turnEnv = (typeof CURRENT_ENV !== 'undefined' && CURRENT_ENV) ? CURRENT_ENV : {};
+    const turnUrls = String(turnEnv.TURN_URLS || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (turnUrls.length > 0 && turnEnv.TURN_USERNAME && turnEnv.TURN_CREDENTIAL) {
+      for (const urls of turnUrls) {
+        servers.push({ urls, username: turnEnv.TURN_USERNAME, credential: turnEnv.TURN_CREDENTIAL });
+      }
+    }
+    return json({ ice_servers: servers });
   }
   if (p === 'calls/group/join' && method === 'POST') {
     const b = await readJson(request);
@@ -5843,7 +5851,10 @@ const workerCore = {
           call_id: callSigMatch[1],
           from_user_id: authUser.id,
           signal_type: body.signal_type,
-          sdp: body.sdp
+          sdp: body.sdp,
+          // N2-L: relay ICE candidates too (web and app both trickle here);
+          // without this only offer/answer SDP ever arrived.
+          candidate: body.candidate
         });
         return json({ status: 'signaled' });
       }

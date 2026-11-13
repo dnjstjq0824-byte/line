@@ -170,12 +170,16 @@ void main() {
       // exercising the redial fail-close it was written for.
       PermissionGateway.debugOverride = _GrantedGateway();
       addTearDown(() => PermissionGateway.debugOverride = null);
+      // N2-L: same for the media stack — flutter_webrtc has no native side
+      // here and its internal channels poison the test zone, so fail media
+      // synchronously and keep testing the server fail-close below it.
       final s = _fixture([
         _call(
             title: 'K',
             cid: 'c1',
             startedAt: _iso(DateTime.now().subtract(const Duration(hours: 1)))),
       ]);
+      s.mediaFactory = () => throw StateError('no media in tests');
       await tester.pumpWidget(_wrap(s));
       await tester.pumpAndSettle();
       await tester

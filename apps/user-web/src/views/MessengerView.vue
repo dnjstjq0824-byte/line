@@ -1105,12 +1105,15 @@ const {
   remoteVideoRef,
   isScreenSharing,
   startCall,
+  handleIncomingRing,
+  cycleCallCamera,
   handleIncomingCallSignal,
   toggleCallMute,
   toggleCallVideo,
   toggleScreenShare,
   updateCallState,
   startCallTimer,
+  clearNoAnswerTimer,
   stopCallTimer,
   toggleCallRecording,
   endCallLocally,
@@ -2251,8 +2254,10 @@ const {
   onAuthExpired: () => clearLocalSession(),
   activeCall,
   handleIncomingCallSignal,
+  handleIncomingRing,
   endCallLocally,
   startCallTimer,
+  clearNoAnswerTimer,
 })
 
 // I-4: session lifecycle (names unchanged).
@@ -3448,9 +3453,11 @@ onBeforeUnmount(() => {
       v-model:call-video-filter="callVideoFilter"
       @mute="toggleCallMute"
       @video="toggleCallVideo"
+      @camera-switch="cycleCallCamera"
       @screenshare="toggleScreenShare"
       @record="toggleCallRecording"
       @answer="updateCallState('connected')"
+      @decline="updateCallState('declined')"
       @hangup="updateCallState('ended')"
     />
 

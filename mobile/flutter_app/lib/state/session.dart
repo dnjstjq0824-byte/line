@@ -21,6 +21,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../api/client.dart';
 import '../legacy_tokens.dart';
 import '../util/app_update.dart';
+import '../util/call_media.dart';
 import '../util/album_photos.dart';
 import '../util/attachments.dart';
 import '../util/channel_slot.dart';
@@ -158,6 +159,16 @@ class SessionController extends ChangeNotifier {
   String editingMsgId = '';
 
   Map<String, dynamic>? activeCall;
+  // N2-L: 1:1 call media + state. mediaFactory is the test seam (fake media).
+  CallMedia Function() mediaFactory = WebrtcCallMedia.new;
+  CallMedia? callMedia;
+  bool callMediaIssue = false;
+  bool callMuted = false;
+  bool callVideoOff = false;
+  bool callSpeaker = true;
+  int callSeconds = 0;
+  Timer? _noAnswerTimer;
+  Timer? _callTimer;
   WebSocketChannel? socket;
   StreamSubscription? wsSubscription;
   Timer? reconnectTimer;
@@ -379,11 +390,11 @@ class SessionController extends ChangeNotifier {
           } else if (data['type'] == 'conversation.read') {
             applyConversationRead(data);
           } else if (data['type'] == 'call.ringing') {
-            activeCall = data;
-            notifyListeners();
-          } else if (data['type'] == 'call.state' && data['state'] == 'ended') {
-            activeCall = null;
-            notifyListeners();
+            _handleIncomingRing(data);
+          } else if (data['type'] == 'call.signal') {
+            unawaited(_handleCallSignal(data));
+          } else if (data['type'] == 'call.state') {
+            _handleCallState(data);
           }
         } catch (_) {}
       }, onError: (_) {
@@ -626,12 +637,73 @@ class SessionController extends ChangeNotifier {
   Future<void> startCallIn(String conversationId, String kind) {
     if (conversationId.isEmpty) return Future.value();
     return run(() async {
+      // Media is opportunistic: the call UI and signaling survive without it.
+      CallMedia? media;
+      try {
+        media = mediaFactory();
+        await media.open(
+            video: kind == 'video', iceServers: await _loadIceServers());
+      } catch (_) {
+        media = null;
+        callMediaIssue = true;
+      }
+      callMedia = media;
+      var offerSdp = '';
+      if (media != null) {
+        try {
+          offerSdp = await media.createOffer();
+        } catch (_) {
+          callMediaIssue = true;
+        }
+      }
       final res = await api.call('/api/v1/calls', method: 'POST', data: {
         'conversation_id': conversationId,
-        // Signaling-only invite: no WebRTC media stack in this build, so no SDP is offered.
         'kind': kind,
+        if (offerSdp.isNotEmpty) 'sdp_offer': offerSdp,
       });
-      activeCall = res;
+      activeCall = {
+        ...res,
+        'conversation_id': conversationId,
+        'direction': 'outgoing',
+      };
+      final callId = '${activeCall!['id']}';
+      if (media != null && offerSdp.isNotEmpty) {
+        media.onIceCandidate(
+            (cand) => unawaited(postCallSignal(callId, 'ice-candidate',
+                candidate: jsonEncode(cand))));
+        media.onRemoteStream(() => notifyListeners());
+        await postCallSignal(callId, 'offer', sdp: offerSdp);
+      }
+      _armNoAnswerTimer(callId, true);
+      notifyListeners();
+    });
+  }
+
+  Future<void> acceptCall() {
+    final call = activeCall;
+    if (call == null) return Future.value();
+    return run(() async {
+      await _ensureCallMedia(call);
+      final callId = '${call['id'] ?? call['call_id']}';
+      await api.call('/api/v1/calls/$callId/state',
+          method: 'POST', data: {'state': 'connected'});
+      activeCall = {...call, 'state': 'connected'};
+      _cancelNoAnswerTimer();
+      _startCallTimer();
+      notifyListeners();
+    });
+  }
+
+  Future<void> declineCall() {
+    final call = activeCall;
+    if (call == null) return Future.value();
+    return run(() async {
+      final callId = '${call['id'] ?? call['call_id']}';
+      try {
+        await api.call('/api/v1/calls/$callId/state',
+            method: 'POST', data: {'state': 'declined'});
+      } catch (_) {}
+      _clearCallLocal();
     });
   }
 
@@ -639,10 +711,227 @@ class SessionController extends ChangeNotifier {
     if (activeCall == null) return Future.value();
     return run(() async {
       final callId = activeCall!['id'] ?? activeCall!['call_id'];
-      await api.call('/api/v1/calls/$callId/state',
-          method: 'POST', data: {'state': 'ended', 'end_reason': 'hangup'});
-      activeCall = null;
+      try {
+        await api.call('/api/v1/calls/$callId/state',
+            method: 'POST', data: {'state': 'ended', 'end_reason': 'hangup'});
+      } catch (_) {
+        // The peer already hung up, or the network dropped: clear anyway.
+      }
+      _clearCallLocal();
     });
+  }
+
+  /// N2-L: backgrounding ends the call and tells the peer (no bg hold).
+  void onAppBackgrounded() {
+    if (activeCall != null) unawaited(endCall());
+  }
+
+  Future<void> postCallSignal(String callId, String type,
+      {String? sdp, String? candidate}) async {
+    try {
+      await api.call('/api/v1/calls/$callId/signal', method: 'POST', data: {
+        'signal_type': type,
+        if (sdp != null) 'sdp': sdp,
+        if (candidate != null) 'candidate': candidate,
+      });
+    } catch (_) {
+      // Signaling is best-effort; the state machine survives a dropped trickle.
+    }
+  }
+
+  Future<void> setCallMuted(bool muted) async {
+    callMuted = muted;
+    try {
+      await callMedia?.setMuted(muted);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> setCallVideoOff(bool off) async {
+    callVideoOff = off;
+    try {
+      await callMedia?.setVideoOff(off);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> switchCallCamera() async {
+    try {
+      await callMedia?.switchCamera();
+    } catch (_) {}
+  }
+
+  Future<void> setCallSpeaker(bool on) async {
+    callSpeaker = on;
+    try {
+      await callMedia?.setSpeaker(on);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadIceServers() async {
+    try {
+      final res = await api.call('/api/v1/calls/ice-servers');
+      final servers = res['ice_servers'];
+      if (servers is List && servers.isNotEmpty) {
+        return servers
+            .whereType<Map>()
+            .map((s) => Map<String, dynamic>.from(s))
+            .toList();
+      }
+    } catch (_) {}
+    return const [
+      {'urls': 'stun:stun.l.google.com:19302'}
+    ];
+  }
+
+  Future<void> _ensureCallMedia(Map<String, dynamic> call) async {
+    if (callMedia != null) return;
+    try {
+      final media = mediaFactory();
+      await media.open(
+          video: call['kind'] == 'video', iceServers: await _loadIceServers());
+      final callId = '${call['id'] ?? call['call_id']}';
+      media.onIceCandidate((cand) => unawaited(
+          postCallSignal(callId, 'ice-candidate', candidate: jsonEncode(cand))));
+      media.onRemoteStream(() => notifyListeners());
+      callMedia = media;
+    } catch (_) {
+      callMediaIssue = true;
+    }
+  }
+
+  // Test-only entry points into the WS call branches (they delegate to the
+  // real private handlers, so behavior cannot drift from production).
+  @visibleForTesting
+  void debugIncomingRing(Map<String, dynamic> data) =>
+      _handleIncomingRing(data);
+
+  @visibleForTesting
+  Future<void> debugCallSignal(Map<String, dynamic> data) =>
+      _handleCallSignal(data);
+
+  @visibleForTesting
+  void debugCallState(Map<String, dynamic> data) => _handleCallState(data);
+
+  void _handleIncomingRing(Map<String, dynamic> data) {
+    final incomingId = '${data['call_id']}';
+    final currentId =
+        activeCall == null ? null : '${activeCall!['id'] ?? activeCall!['call_id']}';
+    // Own echo (broadcast reaches the caller too) or a duplicate ring.
+    if (data['initiated_by'] == selfId || currentId == incomingId) return;
+    if (currentId != null) {
+      // Busy on another call: auto-decline, keep the current one.
+      unawaited(api.call('/api/v1/calls/$incomingId/state',
+          method: 'POST',
+          data: {'state': 'declined'}).then((_) {
+        notice = '다른 통화 중입니다 (자동 거절)';
+        notifyListeners();
+      }).catchError((_) {}));
+      return;
+    }
+    activeCall = {
+      'id': incomingId,
+      'call_id': incomingId,
+      'conversation_id': data['conversation_id'],
+      'kind': data['kind'] ?? 'voice',
+      'state': 'ringing',
+      'direction': 'incoming',
+      'title': data['caller_name'] ?? data['caller_handle'] ?? '수신된 통화',
+    };
+    _armNoAnswerTimer(incomingId, false);
+    notifyListeners();
+  }
+
+  Future<void> _handleCallSignal(Map<String, dynamic> data) async {
+    final call = activeCall;
+    if (call == null) return;
+    if (data['from_user_id'] == selfId) return;
+    final callId = '${call['id'] ?? call['call_id']}';
+    if (data['call_id'] != null && '${data['call_id']}' != callId) return;
+    await _ensureCallMedia(call);
+    final media = callMedia;
+    if (media == null) return;
+    try {
+      final type = data['signal_type'];
+      if (type == 'offer' && data['sdp'] is String) {
+        final answer = await media.answerTo(data['sdp'] as String);
+        await postCallSignal(callId, 'answer', sdp: answer);
+      } else if (type == 'answer' && data['sdp'] is String) {
+        await media.applyAnswer(data['sdp'] as String);
+      } else if (type == 'ice-candidate' && data['candidate'] != null) {
+        final raw = data['candidate'];
+        final decoded = raw is String ? jsonDecode(raw) : raw;
+        if (decoded is Map) {
+          await media.addIceCandidate(Map<String, dynamic>.from(decoded));
+        }
+      }
+    } catch (_) {
+      callMediaIssue = true;
+      notifyListeners();
+    }
+  }
+
+  void _handleCallState(Map<String, dynamic> data) {
+    final call = activeCall;
+    if (call == null) return;
+    final callId = '${call['id'] ?? call['call_id']}';
+    if (data['call_id'] != null && '${data['call_id']}' != callId) return;
+    if (data['state'] == 'ended') {
+      _clearCallLocal();
+    } else if (data['state'] == 'connected') {
+      activeCall = {...call, 'state': 'connected'};
+      _cancelNoAnswerTimer();
+      _startCallTimer();
+      notifyListeners();
+    }
+  }
+
+  void _armNoAnswerTimer(String callId, bool caller) {
+    _cancelNoAnswerTimer();
+    _noAnswerTimer = Timer(callNoAnswerTimeout, () {
+      _noAnswerTimer = null;
+      final call = activeCall;
+      if (call == null) return;
+      if ('${call['id'] ?? call['call_id']}' != callId) return;
+      if (call['state'] != 'ringing') return;
+      // Caller hangs up their own unanswered invite; the callee records
+      // the unanswered ring as missed. Mirrors the web's noAnswerState.
+      unawaited(api.call('/api/v1/calls/$callId/state',
+          method: 'POST',
+          data: {'state': caller ? 'ended' : 'missed'}).then((_) {
+        _clearCallLocal();
+      }).catchError((_) {
+        _clearCallLocal();
+      }));
+    });
+  }
+
+  void _cancelNoAnswerTimer() {
+    _noAnswerTimer?.cancel();
+    _noAnswerTimer = null;
+  }
+
+  void _startCallTimer() {
+    _callTimer?.cancel();
+    callSeconds = 0;
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      callSeconds++;
+      notifyListeners();
+    });
+  }
+
+  void _clearCallLocal() {
+    _cancelNoAnswerTimer();
+    _callTimer?.cancel();
+    _callTimer = null;
+    final media = callMedia;
+    callMedia = null;
+    if (media != null) unawaited(media.dispose().catchError((_) {}));
+    activeCall = null;
+    callMediaIssue = false;
+    callSeconds = 0;
+    notifyListeners();
   }
 
   Future<void> send({String kind = 'text', String? customBody, String text = ''}) {
@@ -1567,8 +1856,13 @@ class SessionController extends ChangeNotifier {
 
   void disposeAll() {
     reconnectTimer?.cancel();
+    _noAnswerTimer?.cancel();
+    _callTimer?.cancel();
     wsSubscription?.cancel();
     socket?.sink.close();
+    final media = callMedia;
+    callMedia = null;
+    if (media != null) unawaited(media.dispose().catchError((_) {}));
     super.dispose();
   }
 }
