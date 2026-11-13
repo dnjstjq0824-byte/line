@@ -1121,8 +1121,11 @@ async function pushPersistent(cid, senderId, fields) {
 // A security notice exists only because a real login happened (never on read).
 async function recordLoginEvent(user, sessionId, info) {
   if (!user || !user.id || officialAccounts.has(user.id)) return;
-  ensureDefaultConversationsForUser(user.id);
+  // U1: the notice room (with its sample alerts) is demo-only. Real accounts
+  // keep only their Keep room until the official-account flow (F12) ships.
+  if (isDemoUser(CURRENT_ENV, user.id)) ensureDemoConversationsForUser(user.id);
   const cid = `conv-oa-notice-${user.id}`;
+  if (!conversations.has(cid)) return;
   await pushPersistent(cid, 'oa-notice', {
     kind: 'security_notice', body: '로그인 성공',
     metadata: { session_id: sessionId, ip: info.ip, location: info.location, device: info.device_name, platform: info.platform }
@@ -1716,17 +1719,19 @@ function ensureSeed(env) {
   }
 
 
-  // Pre-seed OpenChat room
-  communityRooms.set('room-1', {
-    id: 'room-1',
-    name: 'LUNO Global Developer Lounge',
-    description: 'Cloudflare Edge OpenChat for engineers and creators',
-    visibility: 'public',
-    created_at: new Date().toISOString()
-  });
-  communityPosts.set('room-1', [
-    { id: 'post-1', room_id: 'room-1', author_name: 'LineBot', body: 'Welcome to OpenChat on Cloudflare Edge!', created_at: new Date().toISOString() }
-  ]);
+  // Pre-seed OpenChat room (U1: DEMO_MODE isolates only).
+  if (env && env.DEMO_MODE === 'true') {
+    communityRooms.set('room-1', {
+      id: 'room-1',
+      name: 'LUNO Global Developer Lounge',
+      description: 'Cloudflare Edge OpenChat for engineers and creators',
+      visibility: 'public',
+      created_at: new Date().toISOString()
+    });
+    communityPosts.set('room-1', [
+      { id: 'post-1', room_id: 'room-1', author_name: 'LineBot', body: 'Welcome to OpenChat on Cloudflare Edge!', created_at: new Date().toISOString() }
+    ]);
+  }
   seedExtras();
 }
 
@@ -2136,16 +2141,20 @@ function resolveConversationId(cid, userId) {
   return cid;
 }
 
-function ensureDefaultConversationsForUser(userId) {
+// U1: demo content exists only for test envs — DEMO_MODE for whole isolates
+// (local harness/tests) or an explicit per-user allowlist. These flags must
+// never be enabled in deployed defaults (see the wrangler pin test).
+function isDemoUser(env, userId) {
+  env = env || {};
+  if (env.DEMO_MODE === 'true') return true;
+  if (!userId) return false;
+  const ids = String(env.DEMO_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return ids.includes(userId);
+}
+
+// The Keep memo room is a real feature: every account gets exactly this one.
+function ensureKeepMemo(userId) {
   if (!userId) return;
-  initPeerUsers();
-
-  // Ensure all peer friendships exist for this user
-  for (const p of PEER_USERS) {
-    friendships.set(`${userId}:${p.id}`, true);
-    friendships.set(`${p.id}:${userId}`, true);
-  }
-
   // 0. Keep 메모 (Self-chat memo room)
   const keepCid = `conv-keep-${userId}`;
   if (!conversations.has(keepCid)) {
@@ -2161,6 +2170,17 @@ function ensureDefaultConversationsForUser(userId) {
       { id: `m-keep-${userId}-1`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-1', sequence: 1, kind: 'text', body: '나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.', read_count: 1, created_at: '2026-08-01T11:00:00Z' },
       { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: 'https://luno-messenger.dnjstjqppk.workers.dev/ 프로덕션 점검 완료', read_count: 1, created_at: '2026-08-01T11:30:00Z' }
     ]);
+  }
+}
+
+function ensureDemoConversationsForUser(userId) {
+  if (!userId) return;
+  initPeerUsers();
+
+  // Ensure all peer friendships exist for this user
+  for (const p of PEER_USERS) {
+    friendships.set(`${userId}:${p.id}`, true);
+    friendships.set(`${p.id}:${userId}`, true);
   }
 
   // 1. Official Security Notice Channel
@@ -2447,7 +2467,8 @@ async function extended(p, request, url, me, token) {
   const method = request.method;
   let m;
   const myId = me.id;
-  ensureDefaultConversationsForUser(myId);
+  ensureKeepMemo(myId);
+  if (isDemoUser(CURRENT_ENV, myId)) ensureDemoConversationsForUser(myId);
 
   // ---------- Passkeys (WebAuthn registration) ----------
   if (p === 'passkeys/register/begin' && request.method === 'POST') {
@@ -2732,7 +2753,8 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Conversations ----------
   if (p === 'conversations/read-all' && method === 'POST') {
-    ensureDefaultConversationsForUser(myId);
+    ensureKeepMemo(myId);
+    if (isDemoUser(CURRENT_ENV, myId)) ensureDemoConversationsForUser(myId);
     await hydrateUserConversations(myId);
     for (const conv of conversations.values()) {
       if (conv.members.includes(myId)) {
@@ -2746,7 +2768,8 @@ async function extended(p, request, url, me, token) {
   }
   if (p === 'conversations') {
     if (method === 'GET') {
-      ensureDefaultConversationsForUser(myId);
+      ensureKeepMemo(myId);
+      if (isDemoUser(CURRENT_ENV, myId)) ensureDemoConversationsForUser(myId);
       await hydrateUserConversations(myId);
       const includeHidden = url.searchParams.get('include_hidden') === '1';
       const list = Array.from(conversations.values()).filter(c => c.members.includes(myId))
@@ -4729,7 +4752,8 @@ const workerCore = {
       // All conversation subresources share the same membership boundary.
       const conversationPath = p.match(/^conversations\/([^/]+)(?:\/|$)/);
       if (conversationPath && conversationPath[1] !== 'read-all') {
-        ensureDefaultConversationsForUser(authUser.id);
+        ensureKeepMemo(authUser.id);
+        if (isDemoUser(env, authUser.id)) ensureDemoConversationsForUser(authUser.id);
         const resolvedCid = resolveConversationId(conversationPath[1], authUser.id);
         await hydrateDurableConversation(resolvedCid);
         const conversation = conversations.get(resolvedCid);

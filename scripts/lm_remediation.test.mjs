@@ -14,7 +14,7 @@ function req(path, method = 'GET', body = null, token = null, headers = {}) {
 
 async function api(path, method = 'GET', body = null, token = null) {
   return worker.fetch(req(path, method, body, token), {
-    DEMO_INITIAL_PASSWORD: 'Lm#Demo12'
+    DEMO_INITIAL_PASSWORD: 'Lm#Demo12', DEMO_MODE: 'true'
   });
 }
 

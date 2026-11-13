@@ -14,7 +14,7 @@ async function api(path, token, method = 'GET', body, extraHeaders = {}) {
       ...extraHeaders
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), { DEMO_INITIAL_PASSWORD: 'Bugfix#Demo12' });
+  }), { DEMO_INITIAL_PASSWORD: 'Bugfix#Demo12', DEMO_MODE: 'true' });
 }
 
 async function login(email, password) {

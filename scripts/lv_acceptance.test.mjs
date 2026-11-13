@@ -32,7 +32,7 @@ function makeD1() {
 }
 
 const db = makeD1();
-const env = { DB: db, MEDIA_BUCKET: makeBucket() };
+const env = { DB: db, MEDIA_BUCKET: makeBucket(), DEMO_MODE: 'true' };
 let isoCounter = 0;
 async function isolate(extraEnv = {}, database = db) {
   const mod = await import(`./cf_worker.js?iso=${++isoCounter}`);

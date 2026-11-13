@@ -60,7 +60,7 @@ test('mvYesterday is translated in all four locales', () => {
 
 test('N badge derives from unread: read-all clears it for good', async () => {
   const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`);
-  const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' };
+  const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12', DEMO_MODE: 'true' };
   const call = (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -85,7 +85,7 @@ test('cleared N stays cleared on a fresh isolate (D1 cursors)', async () => {
   try {
     const apiFor = async () => {
       const { default: worker } = await import(`./cf_worker.js?readtime=${++readSerial}`);
-      const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12', DB: db };
+      const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12', DB: db, DEMO_MODE: 'true' };
       return (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
         method,
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },

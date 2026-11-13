@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.ADMIN_INITIAL_PASSWORD = 'Track4#Admin1';
+process.env.DEMO_MODE = 'true'; // U1: this track asserts the demo world
 process.env.STANDALONE_HOSTS = '127.0.0.1,localhost,luno-messenger.dnjstjqppk.workers.dev';
 
 const { default: worker } = await import('./cf_worker.js');
