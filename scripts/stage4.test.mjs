@@ -1,6 +1,7 @@
 // Stage 4 (D4/D2/D3/D5/D1/D6/D7): durable data survives new isolates.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { makeD1 } from './test_helpers.mjs';
 
@@ -468,6 +469,18 @@ test('D5: push token registration persists without sending', async () => {
     assert.equal((await first.api('push-tokens', 'DELETE', null, a.token)).status, 200);
     assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM push_tokens WHERE user_id = ?').get(a.id).n, 0, 'clear removes rows');
   } finally { db.raw.close(); }
+});
+
+test('D6: backup artifacts exist and backups stay untracked', () => {
+  const script = readFileSync(new URL('./d1_backup.mjs', import.meta.url), 'utf8');
+  assert.ok(script.includes("'d1', 'export'"), 'script exports via wrangler');
+  assert.ok(script.includes('--remote'), 'script targets remote read-only');
+  assert.ok(script.includes('backups'), 'script writes to backups/');
+  const gi = readFileSync(new URL('../.gitignore', import.meta.url), 'utf8');
+  assert.ok(/^backups\/$/m.test(gi), 'backups/ ignored');
+  const doc = readFileSync(new URL('../docs/BACKUP_RESTORE.md', import.meta.url), 'utf8');
+  assert.ok(doc.includes('time-travel'), 'doc covers time travel');
+  assert.ok(doc.includes('--local'), 'doc restores to local only');
 });
 
 test('D5: settings survive a new isolate', async () => {
