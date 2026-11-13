@@ -363,3 +363,28 @@ test('S4: revoked legacy passwords exist only as hashes', () => {
   assert.ok(entries.length >= 10, `revocation keeps all entries (${entries.length})`);
   for (const e of entries) assert.match(e, /^[0-9a-f]{64}$/, 'every entry is a sha256 hex digest');
 });
+
+// ---------- S5: release-script passwords from env only ----------
+
+test('S5: release script exits immediately without the signing env vars', async () => {
+  const { execFile } = await import('node:child_process');
+  const out = await new Promise((resolve) => {
+    execFile(process.execPath, [fileURLToPath(new URL('./build_mobile_release.mjs', import.meta.url))], {
+      cwd: fileURLToPath(new URL('../', import.meta.url)),
+      env: { ...process.env, LUNO_KEYSTORE_PASSWORD: '', LUNO_KEY_PASSWORD: '' },
+      timeout: 30000,
+    }, (error, stdout, stderr) => resolve({ error, stdout: String(stdout), stderr: String(stderr) }));
+  });
+  assert.ok(out.error, 'exits nonzero without env passwords');
+  assert.match(out.stderr + out.stdout, /LUNO_KEYSTORE_PASSWORD/, 'names the missing env var');
+  assert.ok(!/Checking release keystore/.test(out.stdout + out.stderr), 'fails before touching the keystore');
+});
+
+test('S5: release script carries no password literal', async () => {
+  const src = await readFile(new URL('./build_mobile_release.mjs', import.meta.url), 'utf8');
+  assert.ok(src.includes('process.env.LUNO_KEYSTORE_PASSWORD'), 'keystore password from env');
+  assert.ok(src.includes('process.env.LUNO_KEY_PASSWORD'), 'key password from env');
+  assert.ok(!/-storepass\s+"(?!\$)/.test(src), 'no literal storepass');
+  assert.ok(!/storePassword=[^$\n]/.test(src), 'no literal storePassword');
+  assert.ok(!/keyPassword=[^$\n]/.test(src), 'no literal keyPassword');
+});

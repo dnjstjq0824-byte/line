@@ -2,6 +2,15 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+// S5: signing passwords come from the operator environment only — this
+// repository is public, so literals must never appear here again.
+const keystorePassword = process.env.LUNO_KEYSTORE_PASSWORD || '';
+const keyPassword = process.env.LUNO_KEY_PASSWORD || '';
+if (!keystorePassword || !keyPassword) {
+  console.error('Missing LUNO_KEYSTORE_PASSWORD / LUNO_KEY_PASSWORD: refusing to continue without signing passwords.');
+  process.exit(1);
+}
+
 console.log('=== LUNO Mobile Store Release Packaging Pipeline ===');
 
 // 1. Verify Android Release Keystore
@@ -18,7 +27,7 @@ console.log('✅ Keystore found (Size:', fs.statSync(keystorePath).size, 'bytes)
 
 // 2. Validate keytool certificate fingerprint
 try {
-  const certInfo = execSync(`keytool -list -v -keystore "${keystorePath}" -storepass "LunoRelease#2026!KeyStore" -alias luno-release-key`, { encoding: 'utf8' });
+  const certInfo = execSync(`keytool -list -v -keystore "${keystorePath}" -storepass "${keystorePassword}" -alias luno-release-key`, { encoding: 'utf8' });
   const sha256Match = certInfo.match(/SHA256:\s*([A-F0-9:]+)/i);
   if (sha256Match) {
     console.log('✅ Certificate Fingerprint (SHA-256):', sha256Match[1]);
@@ -32,7 +41,7 @@ if (fs.existsSync(keyPropsPath)) {
   console.log('✅ android/key.properties configured for Gradle release build');
 } else {
   console.log('Writing android/key.properties...');
-  fs.writeFileSync(keyPropsPath, `storePassword=LunoRelease#2026!KeyStore\nkeyPassword=LunoRelease#2026!KeyStore\nkeyAlias=luno-release-key\nstoreFile=${keystorePath.replace(/\\/g, '/')}\n`, 'utf8');
+  fs.writeFileSync(keyPropsPath, `storePassword=${keystorePassword}\nkeyPassword=${keyPassword}\nkeyAlias=luno-release-key\nstoreFile=${keystorePath.replace(/\\/g, '/')}\n`, 'utf8');
 }
 
 // 4. Verify Android Manifest permissions
