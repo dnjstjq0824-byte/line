@@ -33,6 +33,7 @@ const CACHE = new Set([
   'friendships', 'friendMeta', 'conversations', 'messages', 'readCursors',
   'reactionStore', 'noteStore', 'eventStore', 'polls', 'pollVotes',
   'pinnedMessages', 'albums', 'savedMessages', 'hiddenMsgs',
+  'wallets', 'ownedPacks', 'ownedThemes',
   'pushTokens', 'deviceKeys', 'userKeys',
 ]);
 const UNBACKED = new Set([
@@ -41,7 +42,6 @@ const UNBACKED = new Set([
   'partnerTickets', 'partnerCampaigns', 'oaBotRules', 'devOrgs', 'devApps',
   'devWebhooks', 'devMiniApps', 'creatorProfiles', 'creatorPacks', 'creatorItems',
   'adsAdvertisers', 'adsCampaigns', 'adsGroups', 'userPrefs', 'chatMeta',
-  'wallets', 'ownedPacks', 'ownedThemes',
   'officialAccounts', 'followedOfficial', 'richMenus', 'creatorSettlements',
   'auditLogs', 'adminReports',
   'featureFlags',

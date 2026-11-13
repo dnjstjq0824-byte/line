@@ -208,6 +208,10 @@ const LUNO_SCHEMA = [
     user_id TEXT NOT NULL, message_id TEXT NOT NULL,
     PRIMARY KEY (user_id, message_id))`,
   `CREATE INDEX IF NOT EXISTS idx_luno_hidden_user ON luno_hidden_messages(user_id)`,
+  // D3: owned shop items (packs + themes).
+  `CREATE TABLE IF NOT EXISTS luno_owned_items (
+    user_id TEXT NOT NULL, item_type TEXT NOT NULL, item_id TEXT NOT NULL,
+    PRIMARY KEY (user_id, item_type, item_id))`,
 ];
 const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -242,7 +246,7 @@ const LUNO_SCHEMA_BASE = [
     user_id TEXT PRIMARY KEY, balance INTEGER DEFAULT 0, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS wallet_transactions (
     id TEXT PRIMARY KEY, from_user_id TEXT NOT NULL, to_user_id TEXT NOT NULL,
-    amount INTEGER NOT NULL, note TEXT DEFAULT '', created_at TEXT NOT NULL)`,
+    amount INTEGER NOT NULL, note TEXT DEFAULT '', kind TEXT DEFAULT '', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS keep_items (
     id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
     category TEXT DEFAULT 'text', created_at TEXT NOT NULL)`,
@@ -365,6 +369,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['attachments', 'name', "TEXT DEFAULT ''"],
   ['e2ee_keys', 'prekey_sig', "TEXT DEFAULT ''"],
   ['albums', 'created_by', "TEXT DEFAULT ''"],
+  ['wallet_transactions', 'kind', "TEXT DEFAULT ''"],
 ];
 async function ensurePhase1Columns(db) {
   for (const [table, column, ddl] of LUNO_SCHEMA_PHASE1_COLS) {
@@ -1530,6 +1535,35 @@ function hydrateUserPrefs(userId, prefsJson) {
 function walletOf(userId) {
   if (!wallets.has(userId)) wallets.set(userId, { balance: 0, tx: [] }); // new wallets start empty: no phantom seed money
   return wallets.get(userId);
+}
+// D3: one transfer row per money move; each side's entry derives from it.
+function walletTxView(row, viewerId) {
+  const base = { id: row.id, note: row.note || '', created_at: row.created_at };
+  if (row.kind === 'charge') return { ...base, type: 'charge', amount: Number(row.amount) };
+  if (row.kind === 'purchase') return { ...base, type: 'purchase', amount: -Number(row.amount) };
+  const outgoing = row.from_user_id === viewerId;
+  const other = outgoing ? row.to_user_id : row.from_user_id;
+  return { ...base, type: outgoing ? 'send' : 'receive', amount: outgoing ? -Number(row.amount) : Number(row.amount), counterparty: userBrief(other)?.display_name || '' };
+}
+async function hydrateWallet(userId) {
+  const db = dbOf();
+  if (!db || !userId) return;
+  await ensureSchema();
+  await db.prepare('INSERT OR IGNORE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, ?)').bind(userId, now()).run();
+  const bal = await db.prepare('SELECT balance FROM wallets WHERE user_id = ?').bind(userId).first();
+  const { results } = await db.prepare('SELECT * FROM wallet_transactions WHERE from_user_id = ? OR to_user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 50').bind(userId, userId).all();
+  wallets.set(userId, { balance: Number(bal?.balance || 0), tx: (results || []).map(r => walletTxView(r, userId)) });
+}
+async function hydrateOwned(userId) {
+  const db = dbOf();
+  if (!db || !userId) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT item_type, item_id FROM luno_owned_items WHERE user_id = ?').bind(userId).all();
+  const packs = new Set(['basic']);
+  const themes = new Set(THEME_CATALOG.filter(t => t.price_minor === 0).map(t => t.id));
+  for (const r of results || []) (r.item_type === 'theme' ? themes : packs).add(r.item_id);
+  ownedPacks.set(userId, packs);
+  ownedThemes.set(userId, themes);
 }
 function packsOf(userId) {
   if (!ownedPacks.has(userId)) ownedPacks.set(userId, new Set(['basic']));
@@ -3845,8 +3879,9 @@ async function extended(p, request, url, me, token) {
     return json(voomRowView(v, likesByPost.get(m[1]) || [], commentsByPost.get(m[1]) || [], myId), m[2] === 'like' ? 200 : 201);
   }
 
-  // ---------- Pay wallet & shop ----------
+  // ---------- Pay wallet & shop (D3: wallets + owned items in D1) ----------
   if (p === 'wallet' && method === 'GET') {
+    await hydrateWallet(myId);
     const w = walletOf(myId);
     return json({ balance: w.balance, currency: 'KRW', transactions: w.tx.slice(0, 50) });
   }
@@ -3854,35 +3889,66 @@ async function extended(p, request, url, me, token) {
     const b = await readJson(request);
     const amount = intIn(b.amount, 1000, 1000000);
     if (amount === null) return bad('충전 금액은 1,000원 ~ 1,000,000원입니다');
-    const w = walletOf(myId);
-    w.balance += amount;
-    w.tx.unshift({ id: uid(), type: 'charge', amount, note: '잔액 충전(시뮬레이션)', created_at: now() });
-    return json({ balance: w.balance }, 201);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateWallet(myId);
+      const at = now(), txid = uid();
+      await db.batch([
+        db.prepare('INSERT INTO wallet_transactions (id, from_user_id, to_user_id, amount, note, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(txid, '', myId, amount, '잔액 충전(시뮬레이션)', 'charge', at),
+        db.prepare('UPDATE wallets SET balance = balance + ?, updated_at = ? WHERE user_id = ?').bind(amount, at, myId),
+      ]);
+      await hydrateWallet(myId);
+    } else {
+      const w = walletOf(myId);
+      w.balance += amount;
+      w.tx.unshift({ id: uid(), type: 'charge', amount, note: '잔액 충전(시뮬레이션)', created_at: now() });
+    }
+    return json({ balance: walletOf(myId).balance }, 201);
   }
   if (p === 'wallet/send' && method === 'POST') {
     const b = await readJson(request);
     const amount = intIn(b.amount, 1, 500000);
     if (amount === null) return bad('송금 금액은 1원 ~ 500,000원입니다');
     if (!isFriend(myId, b.to_user_id) || fMeta(myId, b.to_user_id).blocked) return bad('친구에게만 송금할 수 있습니다', 403);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateWallet(myId);
+      await hydrateWallet(b.to_user_id);
+    }
     const mine = walletOf(myId);
     if (mine.balance < amount) return bad('잔액이 부족합니다', 402);
     const theirs = walletOf(b.to_user_id);
     const note = clip(b.note || '', 50);
-    mine.balance -= amount;
-    theirs.balance += amount;
     const at = now();
-    mine.tx.unshift({ id: uid(), type: 'send', amount: -amount, counterparty: userBrief(b.to_user_id)?.display_name, note, created_at: at });
-    theirs.tx.unshift({ id: uid(), type: 'receive', amount, counterparty: me.display_name, note, created_at: at });
+    if (db) {
+      const txid = uid();
+      await db.batch([
+        db.prepare('INSERT INTO wallet_transactions (id, from_user_id, to_user_id, amount, note, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(txid, myId, b.to_user_id, amount, note, 'send', at),
+        db.prepare('UPDATE wallets SET balance = balance - ?, updated_at = ? WHERE user_id = ?').bind(amount, at, myId),
+        db.prepare('UPDATE wallets SET balance = balance + ?, updated_at = ? WHERE user_id = ?').bind(amount, at, b.to_user_id),
+      ]);
+      await hydrateWallet(myId);
+      await hydrateWallet(b.to_user_id);
+    } else {
+      mine.balance -= amount;
+      theirs.balance += amount;
+      mine.tx.unshift({ id: uid(), type: 'send', amount: -amount, counterparty: userBrief(b.to_user_id)?.display_name, note, created_at: at });
+      theirs.tx.unshift({ id: uid(), type: 'receive', amount, counterparty: me.display_name, note, created_at: at });
+    }
     let conv = findDirect(myId, b.to_user_id);
     if (!conv) conv = createConversation({ kind: 'direct', title: '', members: [myId, b.to_user_id] });
     pushMessage(conv.id, myId, { kind: 'pay', body: note || '송금', metadata: { amount } });
-    return json({ balance: mine.balance }, 201);
+    return json({ balance: walletOf(myId).balance }, 201);
   }
   if (p === 'store/stickers' && method === 'GET') {
+    await hydrateOwned(myId);
     const owned = packsOf(myId);
     return json({ packs: STICKER_CATALOG.map(pk => ({ ...pk, owned: owned.has(pk.id), currency: 'KRW' })) });
   }
   if (p === 'store/themes' && method === 'GET') {
+    await hydrateOwned(myId);
     const owned = themesOf(myId);
     return json({ themes: THEME_CATALOG.map(t => ({ ...t, owned: owned.has(t.id), currency: 'KRW' })) });
   }
@@ -3892,16 +3958,33 @@ async function extended(p, request, url, me, token) {
     const theme = THEME_CATALOG.find(x => x.id === b.theme_id);
     const item = pack || theme;
     if (!item) return bad('상품을 찾을 수 없습니다', 404);
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      await hydrateOwned(myId);
+      await hydrateWallet(myId);
+    }
     const owned = pack ? packsOf(myId) : themesOf(myId);
     if (owned.has(item.id)) return bad('이미 보유한 상품입니다', 409);
     const w = walletOf(myId);
     if (w.balance < item.price_minor) return bad('잔액이 부족합니다. Pay에서 충전해 주세요', 402);
-    w.balance -= item.price_minor;
-    owned.add(item.id);
     const orderId = uid();
+    const at = now();
+    if (db) {
+      await db.batch([
+        db.prepare('INSERT INTO wallet_transactions (id, from_user_id, to_user_id, amount, note, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(orderId, myId, '', item.price_minor, item.title, 'purchase', at),
+        db.prepare('UPDATE wallets SET balance = balance - ?, updated_at = ? WHERE user_id = ?').bind(item.price_minor, at, myId),
+        db.prepare('INSERT OR IGNORE INTO luno_owned_items (user_id, item_type, item_id) VALUES (?, ?, ?)').bind(myId, pack ? 'pack' : 'theme', item.id),
+      ]);
+      await hydrateWallet(myId);
+      await hydrateOwned(myId);
+    } else {
+      w.balance -= item.price_minor;
+      owned.add(item.id);
+      w.tx.unshift({ id: orderId, type: 'purchase', amount: -item.price_minor, note: item.title, created_at: at });
+    }
     storeOrders.set(orderId, { id: orderId, buyer: myId, amount: item.price_minor });
-    w.tx.unshift({ id: orderId, type: 'purchase', amount: -item.price_minor, note: item.title, created_at: now() });
-    return json({ order_id: orderId, status: 'completed', balance: w.balance }, 201);
+    return json({ order_id: orderId, status: 'completed', balance: walletOf(myId).balance }, 201);
   }
 
   // ---------- OpenChat (D4: D1-backed) ----------
@@ -5440,21 +5523,9 @@ const workerCore = {
         return json({ id: attId, status: 'ready', original_name: body.original_name || 'file' }, 201);
       }
 
-      // 9. Store Orders & Stickers
-      if (p === 'store/stickers') {
-        return json({
-          packs: [
-            { id: 'pack-1', title: 'Luno Friends Special Edition', price_minor: 2500, currency: 'KRW' },
-            { id: 'pack-2', title: 'Brown & Cony Daily Life', price_minor: 2500, currency: 'KRW' }
-          ]
-        });
-      }
-      if (p === 'store/orders' && request.method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const orderId = crypto.randomUUID();
-        storeOrders.set(orderId, { id: orderId, buyer: authUser.id, amount: body.price_minor || 1000 });
-        return json({ order_id: orderId, status: 'completed' }, 201);
-      }
+      // D3: duplicate store handlers lived here. They were unreachable
+      // (extended() answers these routes first) and are removed; extended()
+      // is the one impl.
 
       // D4: the duplicate community/openchat handlers lived here. They were
       // unreachable (extended() answers these routes first, with room checks

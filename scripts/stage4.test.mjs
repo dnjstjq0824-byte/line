@@ -359,6 +359,78 @@ test('D2: hidden messages stay hidden on a new isolate', async () => {
   } finally { db.raw.close(); }
 });
 
+test('D3: money-in stays 503 without a verified provider', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage4Isolate(db);
+    const a = await registerLogin(api, 'd3-gate@luno-test.local', 'd3_gate');
+    assert.equal((await api('wallet/charge', 'POST', { amount: 10000 }, a.token)).status, 503);
+    assert.equal((await api('store/orders', 'POST', { pack_id: 'pack-1' }, a.token)).status, 503);
+  } finally { db.raw.close(); }
+});
+
+test('D3: balances and transactions survive a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db);
+    const a = await registerLogin(first.api, 'd3-wa@luno-test.local', 'd3_wa');
+    const b = await registerLogin(first.api, 'd3-wb@luno-test.local', 'd3_wb');
+    await befriend(first.api, a.token, 'd3_wb');
+    // Money-in is 503-gated, so the balance is seeded the way a provider
+    // settlement would; wallet/send (reachable) moves it afterwards.
+    db.raw.prepare('UPDATE wallets SET balance = 10000 WHERE user_id = ?').run(a.id);
+    assert.equal((await first.api('wallet/send', 'POST', { to_user_id: b.id, amount: 2000, note: 'lunch' }, a.token)).status, 201);
+    const second = await stage4Isolate(db);
+    const a2 = await loginAs(second.api, 'd3-wa@luno-test.local');
+    const wa = await (await second.api('wallet', 'GET', null, a2.token)).json();
+    assert.equal(wa.balance, 8000);
+    assert.equal(wa.transactions.length, 1);
+    assert.equal(wa.transactions[0].type, 'send');
+    assert.equal(wa.transactions[0].amount, -2000);
+    assert.equal(wa.transactions[0].note, 'lunch');
+    const b2 = await loginAs(second.api, 'd3-wb@luno-test.local');
+    const wb = await (await second.api('wallet', 'GET', null, b2.token)).json();
+    assert.equal(wb.balance, 2000);
+    assert.equal(wb.transactions[0].type, 'receive');
+    assert.equal(wb.transactions[0].amount, 2000);
+    assert.equal(wb.transactions[0].counterparty, 'd3_wa', 'receiver sees the sender');
+    assert.equal(wa.transactions[0].counterparty, 'd3_wb', 'sender sees the receiver');
+    assert.equal(db.raw.prepare('SELECT balance AS b FROM wallets WHERE user_id = ?').get(a.id).b, 8000, 'D1 balance is truth');
+  } finally { db.raw.close(); }
+});
+
+test('D3: owned packs and themes survive a new isolate', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db);
+    const a = await registerLogin(first.api, 'd3-sa@luno-test.local', 'd3_sa');
+    // Orders stay 503-gated, so ownership rows are seeded the way a future
+    // provider settlement would; the read path is what this pins.
+    db.raw.prepare('INSERT INTO luno_owned_items (user_id, item_type, item_id) VALUES (?, ?, ?)').run(a.id, 'pack', 'pack-1');
+    db.raw.prepare('INSERT INTO luno_owned_items (user_id, item_type, item_id) VALUES (?, ?, ?)').run(a.id, 'theme', 'sunset');
+    const second = await stage4Isolate(db);
+    const a2 = await loginAs(second.api, 'd3-sa@luno-test.local');
+    const packs = await (await second.api('store/stickers', 'GET', null, a2.token)).json();
+    assert.equal(packs.packs.find((p) => p.id === 'pack-1').owned, true);
+    assert.equal(packs.packs.find((p) => p.id === 'basic').owned, true, 'default pack kept');
+    assert.equal(packs.packs.find((p) => p.id === 'pack-2').owned, false);
+    const themes = await (await second.api('store/themes', 'GET', null, a2.token)).json();
+    assert.equal(themes.themes.find((t) => t.id === 'sunset').owned, true);
+    assert.equal(themes.themes.find((t) => t.id === 'mint').owned, true, 'free themes kept');
+  } finally { db.raw.close(); }
+});
+
+test('D3: wallet keeps working without a database', async () => {
+  const { api } = await stage4Isolate(null);
+  const a = await registerLogin(api, 'd3-ma@luno-test.local', 'd3_ma');
+  const b = await registerLogin(api, 'd3-mb@luno-test.local', 'd3_mb');
+  await befriend(api, a.token, 'd3_mb');
+  const w0 = await (await api('wallet', 'GET', null, a.token)).json();
+  assert.equal(w0.balance, 0, 'fresh wallet starts at zero');
+  assert.equal((await api('wallet/send', 'POST', { to_user_id: b.id, amount: 1000 }, a.token)).status, 402, 'overdraft rejected');
+  assert.equal((await api('wallet/charge', 'POST', { amount: 5000 }, a.token)).status, 503, 'charge gated without a provider');
+});
+
 test('D2: keep vault survives a new isolate per user', async () => {
   const db = makeD1();
   try {
