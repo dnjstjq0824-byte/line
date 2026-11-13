@@ -1,13 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap');
+/* UX1: the single external font load (was styles/luno-design-tokens.css). */
+:root,
+[data-theme="light"] {
+  /* Brand & Accent (LUNO Royal Blue) */
+  --luno-primary: #2563EB;
+  --luno-primary-hover: #1D4ED8;
+  --luno-primary-active: #1E40AF;
+  --luno-primary-soft: #EFF6FF;
+  --luno-unread-accent: #F59E0B; /* 읽음 카운트 '1' 전용 고시인성 앰버 */
+
+  /* Backgrounds & Surfaces */
+  --bg-app: #F8FAFC;             /* 전체 앱 배경 */
+  --bg-rail: #0F172A;            /* 좌측 글로벌 네비게이션 레일 (고정 다크 톤) */
+  --bg-panel: #FFFFFF;           /* 대화방/친구 리스트 패널 */
+  --bg-chat-room: #F1F5F9;       /* 대화방 메시지 스트림 배경 */
+  --surface-elevated: #FFFFFF;   /* 모달, 드로어, 바텀시트, 헤더 */
+  --surface-hover: #F1F5F9;      /* 리스트 아이템 호버 */
+  --surface-active: #E2E8F0;     /* 현재 선택된 대화방 */
+  --surface-input: #F8FAFC;      /* 메시지 입력창 배경 */
+
+  /* Chat Bubbles */
+  --bubble-mine-bg: #2563EB;
+  --bubble-mine-text: #FFFFFF;
+  --bubble-theirs-bg: #FFFFFF;
+  --bubble-theirs-text: #0F172A;
+  --bubble-system-bg: rgba(15, 23, 42, 0.06);
+  --bubble-system-text: #475569;
+
+  /* Typography Colors */
+  --text-primary: #0F172A;       /* 본문, 이름, 대화방 타이틀 */
+  --text-secondary: #475569;     /* 최근 메시지 미리보기, 부가 설명 */
+  --text-muted: #94A3B8;         /* 타임스탬프, 비활성 텍스트 */
+  --text-on-brand: #FFFFFF;
+
+  /* Semantic Status */
+  --status-online: #10B981;      /* 접속 중 (에메랄드 그린) */
+  --status-busy: #EF4444;        /* 통화 중 / 방해금지 / 오류 / 미읽음 배지 */
+  --status-away: #F59E0B;        /* 자리비움 / 재연결 중 */
+
+  /* Borders & Dividers */
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
+  --border-focus: #2563EB;
+
+  /* Radii & Shadows */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-bubble: 18px;
+  --radius-bubble-tail: 4px;     /* 연속 메시지 및 말풍선 끝단 포인트 */
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.14);
+
+  /* Layout Fixed Dimensions */
+  --nav-rail-width: 64px;
+  --list-pane-width: 340px;
+  --drawer-width: 320px;
+  --header-height: 60px;
+  --bottom-nav-height: 56px;
+
+  /* Typography (§7-2) — sizes/weights/leading are fixed; colors reuse --text-* */
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Noto Sans KR', sans-serif;
+  --text-title-size: 1rem;            /* 16px: room title / header title */
+  --text-title-weight: 600;
+  --text-title-leading: 1.35;
+  --text-list-name-size: 0.9375rem;   /* 15px: friend / chat-room name */
+  --text-list-name-weight: 600;
+  --text-list-name-leading: 1.4;
+  --text-bubble-size: 0.9375rem;      /* 15px: message bubble body */
+  --text-bubble-weight: 400;
+  --text-bubble-leading: 1.48;
+  --text-input-size: 1rem;            /* 16px FIXED: below 16px iOS Safari force-zooms on focus */
+  --text-sub-size: 0.8125rem;         /* 13px: recent-message preview */
+  --text-sub-weight: 400;
+  --text-stamp-size: 0.6875rem;       /* 11px: timestamps, read count '1' */
+  --text-stamp-weight: 500;
+  --text-stamp-leading: 1.2;
+
+  /* Bubble Grouping (§7-3) */
+  --bubble-gap-inner: 3px;            /* same-sender burst spacing */
+  --bubble-gap-break: 12px;           /* spacing when the sender changes */
+  --bubble-avatar-size: 36px;
+  --bubble-continued-indent: 44px;    /* avatar slot kept on continued rows */
+  --bubble-max-mobile: 76%;
+  --bubble-max-desktop: 520px;
+}
+
+/* Fixed-width numerals (§7-2): chat-list times, unread badges, read counts,
+   call timers must never wobble as digits change. */
+.ln-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme="dark"] {
+  /* Brand & Accent */
+  --luno-primary: #3B82F6;
+  --luno-primary-hover: #60A5FA;
+  --luno-primary-active: #2563EB;
+  --luno-primary-soft: rgba(59, 130, 246, 0.15);
+  --luno-unread-accent: #FBBF24;
+
+  /* Backgrounds & Surfaces (OLED 친화적 딥 슬레이트) */
+  --bg-app: #090D16;
+  --bg-rail: #05080F;
+  --bg-panel: #0F172A;
+  --bg-chat-room: #090D16;
+  --surface-elevated: #1E293B;
+  --surface-hover: #1E293B;
+  --surface-active: #334155;
+  --surface-input: #1E293B;
+
+  /* Chat Bubbles */
+  --bubble-mine-bg: #2563EB;
+  --bubble-mine-text: #FFFFFF;
+  --bubble-theirs-bg: #1E293B;
+  --bubble-theirs-text: #F8FAFC;
+  --bubble-system-bg: rgba(255, 255, 255, 0.08);
+  --bubble-system-text: #94A3B8;
+
+  /* Typography Colors */
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-on-brand: #FFFFFF;
+
+  /* Borders & Dividers */
+  --border-subtle: #1E293B;
+  --border-strong: #334155;
+  --border-focus: #3B82F6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.65);
+}
+
+/* UX1: prelude kept verbatim from shared/design-v2.css (no longer imported).
+   Everything below .page rules: user-web never used .page or .ln-theme-toggle. */
+body {margin:0;background:var(--ln-bg);color:var(--ln-text);font-family:var(--ln-font);-webkit-font-smoothing:antialiased}
+button,input,select,textarea {font:inherit}
+button,a,input,select,textarea {touch-action:manipulation}
+button {cursor:pointer}
+button:disabled {cursor:not-allowed;opacity:.5}
+/* Focus shadow half kept from styles/luno-design-tokens.css (deleted); the
+   outline half is v2's, which won before. */
+:focus-visible {outline:3px solid var(--ln-accent);outline-offset:3px;box-shadow:0 0 0 3px rgba(79,124,255,.35)}
+input,textarea {user-select:text}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+/* UX1 EXTRACTED from components/luno-design-tokens.css (deleted): the base
+   metrics everything inherits. 14px/1.5 kept literally so this card changes
+   no metrics; the 15px body step belongs to the UX2 size pass. */
+*, *::before, *::after {box-sizing:border-box}
+html, body, #app {margin:0;padding:0;width:100%;height:100%;font-size:14px;line-height:1.5;-webkit-tap-highlight-color:transparent}
+/* Scrollbar + selection kept from luno-theme-advanced.css (deleted; it won). */
+::-webkit-scrollbar {width:6px;height:6px}
+::-webkit-scrollbar-track {background:transparent}
+::-webkit-scrollbar-thumb {background:#cbd5e1;border-radius:3px}
+::-webkit-scrollbar-thumb:hover {background:#94a3b8}
+::selection {background:var(--ln-accent-soft);color:var(--ln-text)}
+body {overflow-x:hidden}
+a {color:var(--ln-accent);text-decoration:none}
+button {font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit}
+ul, ol {list-style:none;margin:0;padding:0}
+
 /* v2 application skin. Existing actions, data sources and route state are retained. */
 .luno-desktop-app {
-  --om-primary:var(--ln-accent);--om-primary-hover:var(--ln-accent-hover);--om-primary-light:var(--ln-accent-soft);
-  --om-bg:var(--ln-bg);--om-surface:var(--ln-surface);--om-text:var(--ln-text);--om-text-muted:var(--ln-muted);--om-border:var(--ln-line);--om-midnight:var(--ln-surface);
-  --line-green:var(--ln-accent)!important;--line-green-hover:var(--ln-accent-hover)!important;
-  --line-slate-bg:var(--ln-bg)!important;--line-rail-bg:var(--ln-surface)!important;
-  --line-side-bg:var(--ln-surface)!important;--line-border:var(--ln-line)!important;
-  --line-text-dark:var(--ln-text)!important;--line-text-sub:var(--ln-muted)!important;
-  --line-panel-bg:var(--ln-surface);--line-text:var(--ln-text);--line-text-muted:var(--ln-muted);
-  --line-bubble-mine:var(--ln-accent);--line-bubble-mine-text:var(--ln-on-accent);--line-bubble-other:var(--ln-surface);
   background:var(--ln-bg)!important;color:var(--ln-text)!important;font-family:var(--ln-font)!important;
 }
 .luno-desktop-app :is(button,input,select,textarea){font-family:var(--ln-font)}
@@ -527,3 +685,12 @@
 .luno-desktop-app .attach-panel-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;background:none;border:0;border-radius:10px;cursor:pointer;font-size:20px;color:inherit}
 .luno-desktop-app .attach-panel-item small{font-size:10px;color:var(--ln-muted,#64748b);white-space:nowrap}
 .luno-desktop-app .attach-panel-item:hover{background:var(--ln-accent-soft,#eef4ff)}
+/* UX1 EXTRACTED from components/luno-design-tokens.css (deleted): the only
+   rules live templates still used, with --line-* migrated to --ln-*. */
+.btn-primary{background-color:var(--ln-accent);color:var(--ln-on-accent)}
+.btn-primary:hover{background-color:var(--ln-accent-hover)}
+.btn-secondary{background-color:var(--ln-subtle);color:var(--ln-text)}
+.story-ring{width:64px;height:64px;border-radius:var(--ln-lamp-radius);border:3px solid var(--ln-line);display:flex;align-items:center;justify-content:center;font-size:var(--ln-fs-body);font-weight:700;color:var(--ln-text);background-color:var(--ln-surface)}
+.story-ring.viewed{border-color:var(--ln-muted)}
+.story-ring.new{border-color:var(--ln-accent);box-shadow:0 0 0 4px var(--ln-accent)}
+.story-ring.plus{border-color:var(--ln-accent);background-color:var(--ln-accent);color:var(--ln-on-accent)}

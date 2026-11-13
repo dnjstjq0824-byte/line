@@ -55,7 +55,6 @@ test('flutter breakpoints match the shared standard', async () => {
   assert.ok(dart.includes('tabletMax = 1100'), 'tabletMax 1100');
 });
 
-test('luno-theme.css does not import itself', async () => {
-  const css = await readFile(join(root, 'luno-theme.css'), 'utf8');
-  assert.ok(!css.includes("@import './luno-theme.css'"), 'self-import removed');
+test('luno-theme.css is deleted (UX1 single-skin import list)', async () => {
+  await assert.rejects(readFile(join(root, 'luno-theme.css'), 'utf8'), 'theme file gone');
 });

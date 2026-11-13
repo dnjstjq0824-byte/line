@@ -5,7 +5,8 @@ import { readFile } from 'node:fs/promises';
 // §7-2/§7-3 static contract: typography + bubble-grouping tokens exist in the
 // canonical CSS file and are actually referenced by the app styles and the
 // message template (burst lead/tail wiring).
-const tokens = await readFile(new URL('../apps/user-web/src/styles/design-tokens.css', import.meta.url), 'utf8');
+// UX1: design-tokens.css merged into styles/luno-v2.css (sole skin file).
+const tokens = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8');
 const appCss = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
 const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
 const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');

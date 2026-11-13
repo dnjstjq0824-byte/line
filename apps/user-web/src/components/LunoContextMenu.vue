@@ -105,7 +105,7 @@ onUnmounted(() => {
 
 .context-menu-item:hover {
   background-color: #f1f5f9;
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 
 .context-menu-item.danger {

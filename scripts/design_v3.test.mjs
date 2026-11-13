@@ -25,10 +25,14 @@ test('v3 radii stay varied and legacy v2 import order is preserved',async()=>{
   const tokens=JSON.parse(await readFile(new URL('../apps/shared/design-v3.tokens.json',import.meta.url),'utf8'));
   const radii=new Set(Object.values(tokens.radiusPx));
   assert.ok(radii.size>=4,'single-radius look forbidden');
-  const apps=['user-web','admin-console','partner-console','developer-console','creator-console','ads-console'];
+  const apps=['admin-console','partner-console','developer-console','creator-console','ads-console'];
   for(const app of apps){
     const main=await readFile(new URL(`../apps/${app}/src/main.ts`,import.meta.url),'utf8');
     const v2=main.indexOf(`shared/design-v2.css`),v3=main.indexOf('shared/design-v3.css');
     assert.ok(v2>=0 && v3>v2,`${app} must import v3 after v2`);
   }
+  // UX1: user-web imports exactly the v3 tokens + the single screen skin.
+  const userMain=await readFile(new URL('../apps/user-web/src/main.ts',import.meta.url),'utf8');
+  const cssImports=[...userMain.matchAll(/import '([^']+\.css)'/g)].map(m=>m[1]);
+  assert.deepEqual(cssImports,['../../shared/design-v3.css','./styles/luno-v2.css']);
 });

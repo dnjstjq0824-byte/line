@@ -2546,7 +2546,7 @@ onBeforeUnmount(() => {
         <div class="pc-rail-top">
           <!-- 1. My Profile Avatar with Online Dot -->
           <button type="button" class="pc-user-avatar-trigger" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
-            <div class="pc-avatar circle-36" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #2563EB)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
+            <div class="pc-avatar circle-36" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
             </div>
             <span v-if="realtimeState === 'connected'" class="pc-dot-online" :title="t('connection_connected')"></span>
           </button>
@@ -2751,7 +2751,7 @@ onBeforeUnmount(() => {
               <a href="./ads/" target="_blank" class="dropdown-item">{{ t('mvConsoleAds') }}</a>
               <div class="dropdown-sep"></div>
               <button class="dropdown-item" @click="showEcosystemHub = true">{{ t('mvEcosystemHub') }}</button>
-              <a href="./download.html" target="_blank" class="dropdown-item" style="color: var(--om-primary, #2563EB); font-weight: 700;">{{ t('mvDownloadApp') }}</a>
+              <a href="./download.html" target="_blank" class="dropdown-item" style="color: var(--ln-accent); font-weight: 700;">{{ t('mvDownloadApp') }}</a>
               <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
               <button class="dropdown-item logout" @click="logout">{{ t('mvLogout') }}</button>
             </div>
@@ -2983,7 +2983,7 @@ onBeforeUnmount(() => {
               <small>{{ t('mvAddStory') }}</small>
             </div>
             <div v-for="s in stories" :key="s.id" class="story-item">
-              <div class="story-ring" :style="{ background: s.bg || 'var(--om-primary, #2563EB)' }">{{ initialOf(s.author_name, 'L') }}</div>
+              <div class="story-ring" :style="{ background: s.bg || 'var(--ln-accent)' }">{{ initialOf(s.author_name, 'L') }}</div>
               <small>{{ s.author_name || t('navFriends') }}</small>
             </div>
           </div>
@@ -3262,7 +3262,7 @@ onBeforeUnmount(() => {
       <!-- Case B: Friend Profile Selected Preview (Screenshot 5) -->
       <section v-else-if="selectedFriendProfile" class="pc-friend-profile-viewport">
         <div class="pc-profile-preview-card">
-          <div class="profile-preview-avatar" :style="{ background: selectedFriendProfile.avatar_color || 'var(--om-primary, #2563EB)' }">
+          <div class="profile-preview-avatar" :style="{ background: selectedFriendProfile.avatar_color || 'var(--ln-accent)' }">
             {{ initialOf(selectedFriendProfile.display_name) }}
           </div>
           <h2 class="profile-preview-name">{{ selectedFriendProfile.display_name }}</h2>
@@ -3410,7 +3410,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="news-reader-content">
             <p>{{ activeNewsArticle.summary || activeNewsArticle.content }}</p>
-            <p style="margin-top: 12px; color: var(--om-text-secondary, #64748B); font-size: 13px; line-height: 1.6;">{{ t('mvNewsSeedNote') }}</p>
+            <p style="margin-top: 12px; color: var(--ln-muted); font-size: 13px; line-height: 1.6;">{{ t('mvNewsSeedNote') }}</p>
           </div>
 
           <!-- News Comments Section -->
@@ -3465,7 +3465,7 @@ onBeforeUnmount(() => {
     <!-- PROFILE MODAL (Full LUNO User Profile View) -->
     <div v-if="activeProfileUser" class="modal-backdrop" @click.self="activeProfileUser = null">
       <div class="profile-modal-card" role="dialog" aria-modal="true" :aria-label="t('profileTitle')">
-        <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || 'var(--om-primary, #2563EB)' }">
+        <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || 'var(--ln-accent)' }">
           <button class="btn-modal-close" @click="activeProfileUser = null">✕</button>
         </div>
         <div class="profile-avatar-center">
@@ -3779,7 +3779,7 @@ onBeforeUnmount(() => {
               class="quick-pick-friend-row"
               @click="addFriendById(u.id)"
             >
-              <div class="pc-avatar circle-34" :style="{ background: u.avatar_color || 'var(--om-primary, #2563EB)' }">
+              <div class="pc-avatar circle-34" :style="{ background: u.avatar_color || 'var(--ln-accent)' }">
                 {{ initialOf(u.display_name, '?') }}
               </div>
               <div class="friend-pick-meta">
@@ -3861,7 +3861,7 @@ onBeforeUnmount(() => {
               class="quick-pick-friend-row"
               @click="startDirectChat(f); showNewChatModal = false"
             >
-              <div class="pc-avatar circle-34" :style="{ background: f.avatar_color || 'var(--om-primary, #2563EB)' }">
+              <div class="pc-avatar circle-34" :style="{ background: f.avatar_color || 'var(--ln-accent)' }">
                 {{ initialOf(f.display_name) }}
               </div>
               <div class="friend-pick-meta">

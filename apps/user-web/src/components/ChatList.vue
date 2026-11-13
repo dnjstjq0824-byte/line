@@ -104,7 +104,7 @@ const channelSlotDismissed = ref(false)
         @click="emit('select', c.id)"
         @contextmenu.prevent="emit('chat-menu', $event, c)"
       >
-        <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--om-cyan, #8EC5FF)' : c.official ? '#4F7CFF' : 'var(--om-primary, #4F7CFF)' }">
+        <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--ln-info)' : c.official ? '#4F7CFF' : 'var(--ln-accent)' }">
           <span v-if="c.official">🛡️</span>
           <span v-else>{{ initialOf(c.title, 'L') }}</span>
         </div>

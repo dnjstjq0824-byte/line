@@ -132,7 +132,7 @@ function hideBrokenAvatar(ev: Event) {
       <!-- My Profile Card with Keep & Album Buttons (Screenshot 4 & 5) -->
       <div class="pc-my-profile-card">
         <div class="my-profile-top-row" @click="emit('profile')">
-          <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--om-primary, #4F7CFF)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
+          <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
           </div>
           <div class="my-profile-meta">
             <div class="my-name-text">{{ currentUser?.display_name }}</div>
@@ -170,7 +170,7 @@ function hideBrokenAvatar(ev: Event) {
             @dblclick="emit('direct-chat', fav)"
             @contextmenu.prevent="emit('friend-menu', $event, fav)"
           >
-            <div class="pc-avatar circle-38" :style="{ background: fav.avatar_color || 'var(--om-primary, #4F7CFF)' }">
+            <div class="pc-avatar circle-38" :style="{ background: fav.avatar_color || 'var(--ln-accent)' }">
               {{ initialOf(fav.display_name) }}
             </div>
             <div class="friend-item-meta">
@@ -195,7 +195,7 @@ function hideBrokenAvatar(ev: Event) {
             :class="{ selected: selectedChatId === grp.id }"
             @click="emit('select-chat', grp.id)"
           >
-            <div class="pc-avatar circle-38 group-avatar" style="background: var(--om-cyan, #8EC5FF);">
+            <div class="pc-avatar circle-38 group-avatar" style="background: var(--ln-info);">
               {{ initialOf(grp.title, 'G') }}
             </div>
             <div class="friend-item-meta">
@@ -249,7 +249,7 @@ function hideBrokenAvatar(ev: Event) {
             @dblclick="emit('direct-chat', f)"
             @contextmenu.prevent="emit('friend-menu', $event, f)"
           >
-            <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || 'var(--om-primary, #4F7CFF)' }">
+            <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || 'var(--ln-accent)' }">
               {{ initialOf(f.display_name) }}
             </div>
             <div class="friend-item-meta">

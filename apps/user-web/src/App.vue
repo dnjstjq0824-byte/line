@@ -23,17 +23,6 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* ==========================================================================
    AUTHENTIC LUNO PC DESKTOP DESIGN SYSTEM
    ========================================================================== */
-.luno-desktop-app {
-  --line-green: var(--om-primary, #2563EB);
-  --line-green-hover: var(--om-primary-hover, #1D4ED8);
-  --line-slate-bg: var(--om-bg, #F7F9FC);
-  --line-rail-bg: var(--om-midnight, #0B1020);
-  --line-side-bg: var(--om-surface, #FFFFFF);
-  --line-border: var(--om-border, #E2E8F0);
-  --line-text-dark: var(--om-text, #111827);
-  --line-text-sub: var(--om-text-muted, #64748B);
-}
-
 .pc-luno-logo { display: block; margin: 0 auto; max-width: 100%; object-fit: contain; }
 
 .luno-desktop-app {
@@ -42,9 +31,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
-  background: var(--line-rail-bg);
+  background: var(--ln-surface);
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", "Noto Sans KR", sans-serif);
-  color: var(--line-text-dark);
+  color: var(--ln-text);
   user-select: none;
 }
 
@@ -96,8 +85,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
   width: 760px;
   max-width: 96vw;
   min-height: 480px;
-  background: var(--om-surface, #ffffff);
-  border-radius: var(--om-radius-md, 10px);
+  background: var(--ln-surface);
+  border-radius: var(--ln-control-radius);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
   overflow: hidden;
   display: flex;
@@ -107,7 +96,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .pc-window-bar {
   height: 38px;
   background: #f8fafc;
-  border-bottom: 1px solid var(--om-border, #e2e8f0);
+  border-bottom: 1px solid var(--ln-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -208,7 +197,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .pc-auth-col-divider {
   width: 1px;
-  background: var(--om-border, #e2e8f0);
+  background: var(--ln-line);
 }
 
 [data-theme='dark'] .pc-auth-col-divider {
@@ -244,14 +233,14 @@ import { activeTheme, darkMode, error, note } from './store/session'
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 13px;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
   box-sizing: border-box;
   outline: none;
   transition: all 0.15s ease;
 }
 
 .pc-login-input:focus {
-  border-color: var(--om-primary, #2563EB);
+  border-color: var(--ln-accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
@@ -274,7 +263,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .btn-pc-submit-full {
   width: 100%;
   height: 44px;
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   border: none;
   border-radius: 6px;
@@ -286,7 +275,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .btn-pc-submit-full:hover:not(:disabled) {
-  background: var(--om-primary-hover, #1D4ED8);
+  background: var(--ln-accent-hover);
 }
 
 .btn-pc-submit-full:disabled {
@@ -313,7 +302,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .pc-custom-check input[type="checkbox"] {
-  accent-color: var(--om-primary, #2563EB);
+  accent-color: var(--ln-accent);
   cursor: pointer;
 }
 
@@ -327,11 +316,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
   text-decoration: none;
 }
 .btn-subtle-link:hover {
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
   text-decoration: underline;
 }
 .btn-subtle-link.accent {
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
   font-weight: 600;
 }
 
@@ -351,7 +340,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   padding: 0;
 }
 .btn-switch-auth-link:hover {
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 
 .pc-demo-chips-compact {
@@ -392,8 +381,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .btn-demo-pill:hover {
   background: #eff6ff;
-  border-color: var(--om-primary, #2563EB);
-  color: var(--om-primary, #2563EB);
+  border-color: var(--ln-accent);
+  color: var(--ln-accent);
 }
 
 /* Phone Composite Input */
@@ -470,7 +459,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .pc-qr-heading {
   font-size: 16px;
   font-weight: 800;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
   margin: 0 0 16px 0;
   letter-spacing: -0.3px;
 }
@@ -524,13 +513,13 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .pc-qr-timer-pill strong {
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 
 .btn-qr-reload {
   background: none;
   border: none;
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -560,8 +549,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 /* (Column 1) Leftmost Rail Dock (62px) */
 .pc-rail {
-  width: var(--om-rail-width, 62px);
-  background: var(--om-midnight, #0B1020);
+  width: 62px;
+  background: var(--ln-surface);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -618,8 +607,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
   right: 0;
   width: 10px;
   height: 10px;
-  background: var(--om-success, #22C55E);
-  border: 2px solid var(--om-midnight, #0B1020);
+  background: var(--ln-success);
+  border: 2px solid var(--ln-surface);
   border-radius: 50%;
 }
 
@@ -658,28 +647,28 @@ import { activeTheme, darkMode, error, note } from './store/session'
   left: 0;
   width: 3px;
   height: 24px;
-  background: var(--om-cyan, #22C7E8);
+  background: var(--ln-info);
   border-radius: 0 4px 4px 0;
 }
 .pc-unread-pill {
   position: absolute;
   top: 4px;
   right: 4px;
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
   padding: 1px 5px;
   border-radius: 10px;
-  border: 2px solid var(--om-midnight, #0B1020);
+  border: 2px solid var(--ln-surface);
 }
 
 /* Dropdown menus from rail */
 .pc-dropdown-menu {
   position: absolute;
   left: 64px;
-  background: var(--om-surface, #ffffff);
-  border: 1px solid var(--om-border, #e2e8f0);
+  background: var(--ln-surface);
+  border: 1px solid var(--ln-line);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   padding: 6px 0;
@@ -692,7 +681,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .dropdown-header {
   padding: 8px 14px;
 }
-.dropdown-header strong { display: block; font-size: 13px; color: var(--om-text, #111827); }
+.dropdown-header strong { display: block; font-size: 13px; color: var(--ln-text); }
 .dropdown-header small { color: #64748b; font-size: 11px; }
 .dropdown-heading {
   padding: 6px 14px;
@@ -702,7 +691,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .dropdown-sep {
   height: 1px;
-  background: var(--om-border-light, #f1f5f9);
+  background: var(--ln-line);
   margin: 4px 0;
 }
 .dropdown-item {
@@ -720,7 +709,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .dropdown-item:hover {
   background: #f1f5f9;
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 .dropdown-item.logout {
   color: #ef4444;
@@ -728,9 +717,9 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 /* (Column 2) Second Sidebar List Pane (~305px) */
 .pc-side-pane {
-  width: var(--om-panel-width, 305px);
-  background: var(--om-surface, #ffffff);
-  border-right: 1px solid var(--om-border, #e9edf1);
+  width: 305px;
+  background: var(--ln-surface);
+  border-right: 1px solid var(--ln-line);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -756,8 +745,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .pc-chat-subtabs-row {
   display: flex;
   height: 42px;
-  border-bottom: 1px solid var(--om-border, #e2e8f0);
-  background: var(--om-surface, #ffffff);
+  border-bottom: 1px solid var(--ln-line);
+  background: var(--ln-surface);
   align-items: center;
   overflow-x: auto;
 }
@@ -782,11 +771,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .btn-subtab:hover {
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
 }
 
 .btn-subtab.active {
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
   font-weight: 700;
 }
 
@@ -797,7 +786,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   left: 20%;
   right: 20%;
   height: 2.5px;
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   border-radius: 2px 2px 0 0;
 }
 
@@ -812,8 +801,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--om-border, #e2e8f0);
-  background: var(--om-surface, #ffffff);
+  border-bottom: 1px solid var(--ln-line);
+  background: var(--ln-surface);
 }
 
 .pc-search-box-wrap {
@@ -834,7 +823,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   background: none;
   outline: none;
   font-size: 12px;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
 }
 
 .btn-clear-search {
@@ -863,7 +852,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .btn-pane-sort:hover, .btn-pane-collapse:hover {
   background: #f1f5f9;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
 }
 
 /* Expand handle shown only while the side pane is collapsed (the in-flow
@@ -875,7 +864,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   z-index: 5;
   width: 28px;
   height: 28px;
-  background: var(--om-surface, #ffffff);
+  background: var(--ln-surface);
   border: 1px solid #cbd5e1;
   border-radius: 4px;
   color: #64748b;
@@ -888,7 +877,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .btn-pane-expand:hover {
   background: #f1f5f9;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
 }
 
 /* File inputs stay rendered (1px, transparent) so programmatic .click() opens
@@ -904,8 +893,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .btn-pane-sort.active {
   background: #eff6ff;
-  border-color: var(--om-primary, #2563EB);
-  color: var(--om-primary, #2563EB);
+  border-color: var(--ln-accent);
+  color: var(--ln-accent);
 }
 
 .pc-pane-scroll {
@@ -918,7 +907,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* My Profile Card (Screenshots 4 & 5) */
 .pc-my-profile-card {
   padding: 14px 14px 12px;
-  border-bottom: 1px solid var(--om-border, #e2e8f0);
+  border-bottom: 1px solid var(--ln-line);
 }
 
 .my-profile-top-row {
@@ -936,7 +925,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .my-name-text {
   font-size: 14px;
   font-weight: 700;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
 }
 
 .my-status-text {
@@ -973,7 +962,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .btn-profile-chip:hover {
   background: #e2e8f0;
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 
 /* Accordions (Screenshots 4 & 5) */
@@ -1030,7 +1019,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   font-size: var(--text-list-name-size, 0.9375rem);
   font-weight: var(--text-list-name-weight, 600);
   line-height: var(--text-list-name-leading, 1.4);
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1086,7 +1075,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   font-size: var(--text-list-name-size, 0.9375rem);
   font-weight: var(--text-list-name-weight, 600);
   line-height: var(--text-list-name-leading, 1.4);
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1129,7 +1118,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .chat-unread-pill {
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
@@ -1151,7 +1140,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   border: none;
   box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
@@ -1164,7 +1153,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .pc-floating-add-btn:hover {
-  background: var(--om-primary-hover, #1D4ED8);
+  background: var(--ln-accent-hover);
   transform: scale(1.06);
 }
 
@@ -1174,7 +1163,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   font-weight: 900;
   bottom: 7px;
   right: 7px;
-  background: var(--om-cyan, #22C7E8);
+  background: var(--ln-info);
   color: #0B1020;
   width: 15px;
   height: 15px;
@@ -1191,7 +1180,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--om-surface, #ffffff);
+  background: var(--ln-surface);
   height: 100vh;
 }
 
@@ -1221,7 +1210,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .profile-preview-name {
   font-size: 22px;
   font-weight: 800;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
   margin: 0 0 6px 0;
 }
 
@@ -1234,7 +1223,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .btn-start-chat-large {
   width: 160px;
   height: 44px;
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -1246,7 +1235,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .btn-start-chat-large:hover {
-  background: var(--om-primary-hover, #1D4ED8);
+  background: var(--ln-accent-hover);
   transform: translateY(-1px);
 }
 
@@ -1279,7 +1268,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .btn-subaction-pill:hover {
   background: #e2e8f0;
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 
 /* Ecosystem Hub Modal */
@@ -1296,7 +1285,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   margin: 0;
   font-size: 16px;
   font-weight: 800;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
 }
 .ecosystem-intro {
   font-size: 12px;
@@ -1323,11 +1312,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
   transition: all 0.15s ease;
 }
 .ecosystem-card:hover {
-  border-color: var(--om-primary, #2563EB);
+  border-color: var(--ln-accent);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
-.ecosystem-card.active { border-left: 3px solid var(--om-primary, #2563EB); }
-.ecosystem-card.beta { border-left: 3px solid var(--om-cyan, #22C7E8); }
+.ecosystem-card.active { border-left: 3px solid var(--ln-accent); }
+.ecosystem-card.beta { border-left: 3px solid var(--ln-info); }
 .ecosystem-card.preview { border-left: 3px solid #94a3b8; opacity: 0.85; }
 
 .ecosystem-card-header {
@@ -1343,7 +1332,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   border: 1px solid #cbd5e1;
   display: grid;
   place-items: center;
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
   flex-shrink: 0;
 }
 .svc-names {
@@ -1353,7 +1342,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .svc-names strong {
   display: block;
   font-size: 13px;
-  color: var(--om-text, #111827);
+  color: var(--ln-text);
 }
 .svc-ko {
   font-size: 10px;
@@ -1398,11 +1387,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .btn-svc-action:hover {
   background: #eff6ff;
-  border-color: var(--om-primary, #2563EB);
-  color: var(--om-primary, #2563EB);
+  border-color: var(--ln-accent);
+  color: var(--ln-accent);
 }
 .btn-svc-action.link {
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 
 /* New Chat Options */
@@ -1424,10 +1413,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .btn-new-chat-type:hover {
   background: #eff6ff;
-  border-color: var(--om-primary, #2563EB);
+  border-color: var(--ln-accent);
 }
 .type-icon { font-size: 24px; }
-.type-text strong { display: block; font-size: 13px; color: var(--om-text, #111827); }
+.type-text strong { display: block; font-size: 13px; color: var(--ln-text); }
 .type-text small { font-size: 11px; color: #64748b; }
 
 .quick-pick-friend-row {
@@ -1444,7 +1433,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .friend-pick-meta small { font-size: 10px; color: #64748b; }
 .btn-mini-chat {
   padding: 4px 10px;
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   border: none;
   border-radius: 4px;
@@ -1458,7 +1447,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--line-slate-bg);
+  background: var(--ln-bg);
   height: 100vh;
   height: 100dvh;
   position: relative;
@@ -1571,7 +1560,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   border-radius: var(--radius-bubble-tail, 4px) var(--radius-bubble, 18px) var(--radius-bubble, 18px) var(--radius-bubble, 18px);
 }
 .pc-msg-row.mine .pc-speech-bubble {
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   border-radius: var(--radius-bubble, 18px) var(--radius-bubble, 18px) var(--radius-bubble-tail, 4px) var(--radius-bubble, 18px);
 }
@@ -1700,7 +1689,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .btn-green-send {
   height: 28px;
   padding: 0 14px;
-  background: var(--om-primary, #2563EB);
+  background: var(--ln-accent);
   color: #ffffff;
   border: none;
   border-radius: 4px;
@@ -1710,7 +1699,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
   transition: background-color 0.15s ease;
 }
 .btn-green-send:hover:not(:disabled) {
-  background: var(--om-primary-hover, #1d4ed8);
+  background: var(--ln-accent-hover);
 }
 .btn-green-send:disabled {
   background: #e2e8f0;
@@ -1787,15 +1776,15 @@ import { activeTheme, darkMode, error, note } from './store/session'
   gap: 8px;
   margin-top: 10px;
 }
-.btn-primary { background: var(--om-primary, #2563EB); color: white; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.15s; }
-.btn-primary:hover { background: var(--om-primary-hover, #1d4ed8); }
+.btn-primary { background: var(--ln-accent); color: white; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 0.15s; }
+.btn-primary:hover { background: var(--ln-accent-hover); }
 .btn-secondary { background: #f1f5f9; color: #475569; border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
 
 /* Keep modal, Call modal, etc */
 .keep-modal { width: 440px; }
 .keep-filter-bar { display: flex; gap: 6px; padding: 10px 18px; border-bottom: 1px solid #f1f5f9; }
 .keep-filter-bar button { padding: 4px 10px; font-size: 11px; border: none; border-radius: 12px; background: #f1f5f9; cursor: pointer; }
-.keep-filter-bar button.active { background: var(--om-primary, #2563EB); color: white; }
+.keep-filter-bar button.active { background: var(--ln-accent); color: white; }
 .keep-search-input { width: calc(100% - 36px); margin: 8px 18px; padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; }
 .keep-scroll-content { max-height: 280px; overflow-y: auto; padding: 0 18px 18px; }
 .keep-card { padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
@@ -1808,7 +1797,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .call-controls-row { display: flex; justify-content: center; gap: 12px; margin-top: 18px; }
 .btn-call-circle { width: 44px; height: 44px; border-radius: 50%; background: #334155; border: none; color: white; cursor: pointer; font-size: 18px; display: grid; place-items: center; }
 .btn-call-circle.off { background: #ef4444; }
-.btn-call-answer { background: var(--om-success, #22c55e); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
+.btn-call-answer { background: var(--ln-success); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
 .btn-call-hangup { background: #ef4444; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; }
 
 /* Profile modal */
@@ -1826,8 +1815,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* VOOM & Stories */
 .stories-row { display: flex; gap: 10px; padding: 12px 16px; overflow-x: auto; border-bottom: 1px solid #f1f5f9; }
 .story-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font-size: 11px; }
-.story-ring { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--om-primary, #2563EB); display: grid; place-items: center; color: white; font-weight: 800; font-size: 14px; }
-.story-ring.plus { border-color: #cbd5e1; color: var(--om-primary, #2563EB); font-size: 18px; }
+.story-ring { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--ln-accent); display: grid; place-items: center; color: white; font-weight: 800; font-size: 14px; }
+.story-ring.plus { border-color: #cbd5e1; color: var(--ln-accent); font-size: 18px; }
 .voom-list { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .voom-card { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: white; }
 .voom-banner { height: 90px; display: grid; place-items: center; font-size: 32px; }
@@ -1839,17 +1828,17 @@ import { activeTheme, darkMode, error, note } from './store/session'
 /* OpenChat */
 .openchat-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .openchat-card { display: flex; gap: 10px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; }
-.openchat-card:hover { background: #f8fafc; border-color: var(--om-primary, #2563EB); }
+.openchat-card:hover { background: #f8fafc; border-color: var(--ln-accent); }
 .card-icon { font-size: 20px; }
 .card-info strong { font-size: 13px; }
 .card-info p { font-size: 11px; color: #64748b; margin: 2px 0 0; }
 
 /* Wallet Card */
-.luno-pay-card { margin: 12px; background: linear-gradient(135deg, var(--om-primary, #2563EB), var(--om-cyan, #22C7E8)); color: white; padding: 16px; border-radius: 12px; }
+.luno-pay-card { margin: 12px; background: linear-gradient(135deg, var(--ln-accent), var(--ln-info)); color: white; padding: 16px; border-radius: 12px; }
 .pay-top { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
 .pay-balance { font-size: 22px; font-weight: 900; margin: 10px 0; }
 .pay-actions { display: flex; gap: 8px; }
-.btn-pay-action { flex: 1; padding: 6px; background: white; color: var(--om-primary, #2563EB); font-weight: 700; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.btn-pay-action { flex: 1; padding: 6px; background: white; color: var(--ln-accent); font-weight: 700; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .btn-pay-action.secondary { background: rgba(255,255,255,0.2); color: white; }
 .services-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 12px 12px; }
 .service-box { background: #f8fafc; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; font-size: 11px; font-weight: 700; }
@@ -1860,7 +1849,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .sticker-popover { position: absolute; bottom: 140px; left: 16px; width: 280px; height: 180px; background: white; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow: hidden; z-index: 100; }
 .sticker-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #f1f5f9; padding: 4px; }
 .sticker-tabs button { flex: 1; padding: 4px; font-size: 11px; border: none; background: none; cursor: pointer; }
-.sticker-tabs button.active { font-weight: 700; color: var(--om-primary, #2563EB); border-bottom: 2px solid var(--om-primary, #2563EB); }
+.sticker-tabs button.active { font-weight: 700; color: var(--ln-accent); border-bottom: 2px solid var(--ln-accent); }
 .btn-close-sticker { background: none; border: none; cursor: pointer; font-size: 12px; color: #94a3b8; }
 .sticker-palette-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px; overflow-y: auto; }
 .sticker-choice-btn { font-size: 22px; background: none; border: none; cursor: pointer; border-radius: 6px; }
@@ -1927,7 +1916,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 
 .sticker-tabs button.active {
-  background-color: var(--om-primary, #2563EB);
+  background-color: var(--ln-accent);
   color: #ffffff;
   font-weight: 600;
 }
@@ -2012,7 +2001,7 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .btn-tool-icon.active {
   background-color: rgba(37, 99, 235, 0.1);
-  color: var(--om-primary, #2563EB);
+  color: var(--ln-accent);
 }
 
 .btn-tool-icon.recording {
