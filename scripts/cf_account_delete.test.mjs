@@ -107,7 +107,7 @@ test('D-04: password checks work on a fresh isolate (iteration count persisted)'
   assert.equal((await cold('auth/login', 'POST', { email, password })).status, 401, 'login after deletion fails');
 });
 
-test('D-05: legacy 3-segment rows (1000 iterations) still verify and upgrade', async () => {
+test('D-05: legacy 3-segment rows (1000 iterations) still verify without upgrade (S4)', async () => {
   const { subtle } = await import('node:crypto');
   const salt = 'ab'.repeat(16);
   const key = await subtle.importKey('raw', new TextEncoder().encode('Legacy#2026!'), 'PBKDF2', false, ['deriveBits']);
@@ -119,5 +119,5 @@ test('D-05: legacy 3-segment rows (1000 iterations) still verify and upgrade', a
   const login = await cold('auth/login', 'POST', { email, password: 'Legacy#2026!' });
   assert.equal(login.status, 200, 'legacy 3-segment login works');
   const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get(email);
-  assert.match(row.password_hash, /^pbkdf2\$\d+\$.+\$.+$/, 'legacy row upgraded to 4-segment on login');
+  assert.equal(row.password_hash, `pbkdf2$${salt}$${hash}`, 'legacy row never rewritten on login (S4: upgrade path removed)');
 });

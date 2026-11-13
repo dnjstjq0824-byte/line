@@ -62,14 +62,14 @@ async function signup(api, email, handle, password = 'Hard3n#Passw0rd') {
   return { id: (await reg.json()).id, ...(await login.json()) };
 }
 
-test('B1: register hashes at PBKDF2-100k (workerd cap); 1k rows migrate on login', async () => {
+test('B1: register hashes at PBKDF2-100k (workerd cap); 1k rows verify without rewrite (S4: no login-time upgrade)', async () => {
   const { api, db } = await isolate();
   const u = await signup(api, 'b1-pbkdf2@local.test', 'b1pbkdf2');
   assert.equal(u.expires_in, 900, 'access tokens live 15 minutes');
   assert.ok(u.refresh_token?.startsWith('cf-refresh-'), 'login issues a real refresh token');
   const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-pbkdf2@local.test');
   assert.match(row.password_hash, /^pbkdf2\$100000\$.+\$.+$/, 'register stores 100k digest');
-  // A pre-change 1k row verifies, then upgrades to 100k.
+  // A pre-change 1k row verifies; S4 removed the login-time upgrade, so the row is never rewritten.
   const { subtle } = await import('node:crypto');
   const salt = 'cd'.repeat(16);
   const key = await subtle.importKey('raw', new TextEncoder().encode('Old1k#Pass'), 'PBKDF2', false, ['deriveBits']);
@@ -79,8 +79,8 @@ test('B1: register hashes at PBKDF2-100k (workerd cap); 1k rows migrate on login
   const cold = await isolate(db);
   const login = await cold.api('auth/login', 'POST', { email: 'b1-old1k@local.test', password: 'Old1k#Pass' });
   assert.equal(login.status, 200, '1k digest still verifies');
-  const migrated = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-old1k@local.test');
-  assert.match(migrated.password_hash, /^pbkdf2\$100000\$.+\$.+$/, '1k row rehashed to 100k on login');
+  const kept = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-old1k@local.test');
+  assert.equal(kept.password_hash, `pbkdf2$1000$${salt}$${hash}`, '1k row untouched by login (S4: upgrade path removed)');
 });
 
 test('B1: refresh rotates single-use; reuse kills only its chain; expiry enforced', async () => {

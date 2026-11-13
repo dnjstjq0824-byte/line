@@ -3,7 +3,10 @@
 // register_duplicate.test.mjs pattern. One section per card.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { makeD1 } from './test_helpers.mjs';
 
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
@@ -293,4 +296,70 @@ test('S3: case-variant email on a stale isolate is 409', async () => {
     assert.equal((await stale.api('auth/register', 'POST', { email: 'S3-Case@Luno-Test.Local', password: 'Second#Pass99', display_name: 'second' })).status, 409);
     assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM users').get().n, 1, 'no second row');
   } finally { db.raw.close(); }
+});
+
+// ---------- S4: plaintext password rows ----------
+
+test('S4: PBKDF2 accounts log in; plaintext and sha256 rows get reset-required without migration', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await p0Isolate(db);
+    await register(api, 's4-good@luno-test.local', 'Good#Pass99');
+    assert.equal((await api('auth/login', 'POST', { email: 's4-good@luno-test.local', password: 'Good#Pass99' })).status, 200);
+    db.raw.prepare(`INSERT INTO users (id, email, handle, password_hash, display_name, created_at, updated_at)
+      VALUES ('s4-plain', 's4-plain@luno-test.local', 's4_plain', 'Plaintext#1', 'Plain', datetime('now'), datetime('now'))`).run();
+    db.raw.prepare(`INSERT INTO users (id, email, handle, password_hash, display_name, created_at, updated_at)
+      VALUES ('s4-sha', 's4-sha@luno-test.local', 's4_sha', 'sha256:deadbeefcafe', 'Sha', datetime('now'), datetime('now'))`).run();
+    const cold = await p0Isolate(db);
+    // Correct legacy password and wrong password fail closed identically.
+    for (const [email, pw] of [['s4-plain@luno-test.local', 'Plaintext#1'], ['s4-plain@luno-test.local', 'Wrong#Pass99'], ['s4-sha@luno-test.local', 'deadbeefcafe'], ['s4-sha@luno-test.local', 'Wrong#Pass99']]) {
+      const res = await cold.api('auth/login', 'POST', { email, password: pw });
+      assert.equal(res.status, 403, `legacy login ${email}`);
+      assert.equal((await res.json()).code, 'password_reset_required');
+    }
+    assert.equal(db.raw.prepare('SELECT password_hash AS h FROM users WHERE email = ?').get('s4-plain@luno-test.local').h, 'Plaintext#1', 'plaintext row never migrated');
+    assert.equal(db.raw.prepare('SELECT password_hash AS h FROM users WHERE email = ?').get('s4-sha@luno-test.local').h, 'sha256:deadbeefcafe', 'sha256 row never migrated');
+  } finally { db.raw.close(); }
+});
+
+test('S4: weak-but-valid PBKDF2 rows still verify and are never rewritten on login', async () => {
+  const db = makeD1();
+  try {
+    const boot = await p0Isolate(db);
+    await register(boot.api, 's4-boot@luno-test.local');
+    const { subtle } = await import('node:crypto');
+    const salt = 'ef'.repeat(16);
+    const key = await subtle.importKey('raw', new TextEncoder().encode('Weak1k#Pass'), 'PBKDF2', false, ['deriveBits']);
+    const bits = await subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(Buffer.from(salt, 'hex')), iterations: 1000 }, key, 256);
+    const digest = `pbkdf2$1000$${salt}$${Buffer.from(bits).toString('hex')}`;
+    db.raw.prepare('INSERT INTO users (id, email, handle, password_hash, display_name) VALUES (?, ?, ?, ?, ?)').run('s4-weak', 's4-weak@luno-test.local', 's4_weak', digest, 'Weak');
+    const cold = await p0Isolate(db);
+    assert.equal((await cold.api('auth/login', 'POST', { email: 's4-weak@luno-test.local', password: 'Weak1k#Pass' })).status, 200);
+    assert.equal(db.raw.prepare('SELECT password_hash AS h FROM users WHERE email = ?').get('s4-weak@luno-test.local').h, digest, 'weak digest never rewritten (no login-time upgrade)');
+  } finally { db.raw.close(); }
+});
+
+test('S4: no repo SQL file wipes the users table', () => {
+  const offenders = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) { walk(p); continue; }
+      if (!e.name.endsWith('.sql')) continue;
+      if (/DELETE\s+FROM\s+users\b/i.test(readFileSync(p, 'utf8'))) offenders.push(p);
+    }
+  };
+  const root = join(fileURLToPath(new URL('./', import.meta.url)), '..');
+  for (const d of ['database', 'docs', 'scripts']) walk(join(root, d));
+  assert.deepEqual(offenders, [], 'wiper SQL must never return');
+});
+
+test('S4: revoked legacy passwords exist only as hashes', () => {
+  assert.ok(!workerSource.includes('REVOKED_LEGACY_PASSWORDS'), 'plaintext revocation set is gone');
+  assert.ok(workerSource.includes('REVOKED_LEGACY_PASSWORD_HASHES'), 'hashed revocation set present');
+  const m = workerSource.match(/const REVOKED_LEGACY_PASSWORD_HASHES = new Set\(\[([^\]]*)\]\);/);
+  assert.ok(m, 'revocation set declaration found');
+  const entries = m[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, ''));
+  assert.ok(entries.length >= 10, `revocation keeps all entries (${entries.length})`);
+  for (const e of entries) assert.match(e, /^[0-9a-f]{64}$/, 'every entry is a sha256 hex digest');
 });

@@ -725,7 +725,7 @@ function parsePbkdf2(stored) {
     return Number.isInteger(iter) && iter > 0 && parts[2] && parts[3] ? { iter, salt: parts[2], hash: parts[3] } : null;
   }
   // 3-segment rows predate iteration storage: iter 0 means unknown (legacy 1000
-  // or register-written current). checkPassword retries both, then self-heals.
+  // or register-written current). checkPassword retries both, never rewriting.
   if (parts.length === 3 && parts[1] && parts[2]) return { iter: 0, salt: parts[1], hash: parts[2] };
   return null;
 }
@@ -928,7 +928,7 @@ async function deleteAccountData(userId) {
   if (gone) {
     gone.state = 'deleted';
     gone.display_name = '탈퇴한 사용자';
-    delete gone.pw_hash; delete gone.pw_salt; delete gone.pw_iter; delete gone.legacy_plain;
+    delete gone.pw_hash; delete gone.pw_salt; delete gone.pw_iter;
     gone.bio = ''; gone.status_message = ''; gone.avatar_url = ''; gone.phone = ''; gone.birthday = '';
   }
   for (const [email, u] of Array.from(users)) if (u.id === userId) users.delete(email);
@@ -1295,7 +1295,7 @@ const RESERVED_PEER_PREFIX = /^peer([-_.]|$)/;
 // form used 1,000 iterations and is upgraded on the next successful login.
 const PBKDF2_LEGACY_ITERATIONS = 1000;
 const PBKDF2_DEFAULT_ITERATIONS = 100000; // workerd caps PBKDF2 at 100k iterations; higher throws NotSupportedError on real Workers (local dev has no cap).
-const REVOKED_LEGACY_PASSWORDS = new Set(['LineAdmin#2026!', 'LineUser#2026!', 'Admin#2026!', 'User#2026!', 'LunoUser#Rotated$72mP', 'LunoAdmin#RotatedEdge$99xK', 'LunoAdmin#2026!', 'LunoUser#2026!', 'Alice#Rotated$48wT', 'Bob#Rotated$31qR']);
+const REVOKED_LEGACY_PASSWORD_HASHES = new Set(['685fbe49e51e664e063d6050937213dfe5379107d4ef451d0fc2ee0f1ad8eae6', 'cf515df07d60c8a9c79434e86808315bffee80da5c8b1511f306cc16dbd9f0d5', 'bbd95540ec1b1ec1632f30df9ab7957265768d386991925df88ed8619e8f05fd', '953a33067bb06e02bc7a84484c147a920922f574ebf49ef0e63da2fe39912d5c', '9a70c90403e672681e737fd4c9c77049d444a85dd791ee9dcc0bc8e7b729851e', 'bc5ab389af312062e3079f8bec52af6ea5bbcae0d0b9605e67979d8d65e6f083', 'f10b4023de5096dc8baa1fcd4388db652ff31cad283be13d3a46bd5ecfc92af8', 'd8488c30fc745977465e60f7b27530f9de84ca9c471df697baead130c0422e51', 'eec93217a4c087a81e335d6e4d8c2fcd71a583b6c65ef6b0ddefd1dc09ce4be0', '7cf74e271160b803dfa980737b8116c1a7ba86ccdec9d4a4f2f7ff282c88a47e']);
 function pbkdf2Iterations() {
   const configured = Number(CURRENT_ENV?.PBKDF2_ITERATIONS);
   return Number.isInteger(configured) && configured >= 10000 && configured <= 100000 ? configured : PBKDF2_DEFAULT_ITERATIONS;
@@ -1322,24 +1322,21 @@ function encodePasswordHash(user) {
   return `pbkdf2$${user.pw_iter || PBKDF2_LEGACY_ITERATIONS}$${user.pw_salt}$${user.pw_hash}`;
 }
 // Fills the password fields of a user object from a users.password_hash value.
-// A value that is not a PBKDF2 digest is a legacy plaintext row: it is kept only
-// to verify and immediately re-hash it on the next login, never compared as a hash.
+// S4: only PBKDF2 digests yield verifiable credentials. Anything else
+// (plaintext, sha256: rows) leaves the user without credentials, and login
+// rejects those rows with password_reset_required instead of accepting them.
 function applyStoredPassword(user, stored) {
   delete user.password; delete user.raw_password;
   const hashed = parsePbkdf2(stored);
   if (hashed) {
     user.pw_hash = hashed.hash; user.pw_salt = hashed.salt; user.pw_iter = hashed.iter;
-    delete user.legacy_plain;
-  } else if (typeof stored === 'string' && stored && !REVOKED_LEGACY_PASSWORDS.has(stored) && !REVOKED_LEGACY_PASSWORDS.has(stored.replace(/^sha256:/, ''))) {
-    user.legacy_plain = stored.startsWith('sha256:') ? stored.slice(7) : stored;
-    delete user.pw_hash; delete user.pw_salt; delete user.pw_iter;
   } else {
-    delete user.pw_hash; delete user.pw_salt; delete user.pw_iter; delete user.legacy_plain;
+    delete user.pw_hash; delete user.pw_salt; delete user.pw_iter;
   }
   return user;
 }
 async function setPassword(user, password) {
-  delete user.password; delete user.raw_password; delete user.legacy_plain;
+  delete user.password; delete user.raw_password;
   const salt = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
   const iterations = pbkdf2Iterations();
   const hash = await pbkdf2(password, salt, iterations);
@@ -1350,33 +1347,18 @@ async function setPassword(user, password) {
 }
 async function checkPassword(user, password) {
   if (!user || typeof password !== 'string' || !password) return false;
-  if (REVOKED_LEGACY_PASSWORDS.has(password)) return false;
-  let valid = false;
-  if (user.pw_hash && user.pw_salt) {
-    const iterKnown = !!user.pw_iter;
-    const hash = await pbkdf2(password, user.pw_salt, user.pw_iter || PBKDF2_LEGACY_ITERATIONS);
-    valid = !!hash && timingSafeEqualText(hash, user.pw_hash);
-    if (!valid && !iterKnown) {
-      const hash2 = await pbkdf2(password, user.pw_salt, pbkdf2Iterations());
-      valid = !!hash2 && timingSafeEqualText(hash2, user.pw_hash);
-      if (valid) user.pw_iter = pbkdf2Iterations();
-    }
-    if (!valid) return false;
-    if ((user.pw_iter || PBKDF2_LEGACY_ITERATIONS) >= pbkdf2Iterations()) {
-      if (!iterKnown) {
-        try { await persistPassword(user); } catch (err) { console.error('[LUNO password upgrade failed]', err?.message || err); }
-      }
-      return true;
-    }
-  } else if (typeof user.legacy_plain === 'string' && user.legacy_plain) {
-    if (!timingSafeEqualText(password, user.legacy_plain)) return false;
-    valid = true;
+  if (REVOKED_LEGACY_PASSWORD_HASHES.has(await sha256Hex(password))) return false;
+  // S4: pure verification — no legacy-plaintext acceptance and no login-time
+  // rehashing. Rows without PBKDF2 credentials never verify here; the login
+  // handler answers those with password_reset_required.
+  if (!user.pw_hash || !user.pw_salt) return false;
+  const hash = await pbkdf2(password, user.pw_salt, user.pw_iter || PBKDF2_LEGACY_ITERATIONS);
+  if (hash && timingSafeEqualText(hash, user.pw_hash)) return true;
+  if (!user.pw_iter) {
+    const hash2 = await pbkdf2(password, user.pw_salt, pbkdf2Iterations());
+    return !!hash2 && timingSafeEqualText(hash2, user.pw_hash);
   }
-  if (!valid) return false;
-  // Upgrade a weak or plaintext record now that the real password is known.
-  await setPassword(user, password);
-  try { await persistPassword(user); } catch (err) { console.error('[LUNO password upgrade failed]', err?.message || err); }
-  return true;
+  return false;
 }
 async function hashPendingPasswords() {
   for (const u of users.values()) {
@@ -4428,7 +4410,13 @@ const workerCore = {
           await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
-        if (REVOKED_LEGACY_PASSWORDS.has(body.password)) {
+        if (!user.pw_hash || !user.pw_salt) {
+          // S4: the row carries no PBKDF2 digest (legacy plaintext/sha256 row
+          // or credential-less husk) — the owner must go through recovery.
+          await recordLoginFailure(identifier, loginIp);
+          return json({ error: 'password reset required', code: 'password_reset_required' }, 403);
+        }
+        if (REVOKED_LEGACY_PASSWORD_HASHES.has(await sha256Hex(body.password || ''))) {
           await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
