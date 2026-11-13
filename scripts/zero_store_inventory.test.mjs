@@ -26,7 +26,7 @@ const STATIC = new Set([
 const EPHEMERAL = new Set([
   'activeSockets', 'AUTH_CTX', 'callSessions', 'groupCallRooms',
   'qrChallenges', 'phoneVerificationCodes', 'passkeyChallenges',
-  'recoveryChallenges',
+  'recoveryChallenges', 'recoveryMailOutbox',
 ]);
 const CACHE = new Set([
   'users', 'usersById', 'sessions', 'revokedTokens', 'wsTickets',

@@ -7,7 +7,7 @@ import (
 )
 
 func TestIdentityAccountLifecycle(t *testing.T) {
-	cfg := Config{DSN: "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "identity.db")), Secret: "0123456789abcdef0123456789abcdef", Service: "gateway"}
+	cfg := Config{DSN: "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "identity.db")), Secret: "0123456789abcdef0123456789abcdef", Service: "gateway", RecoveryMailProvider: "mock"}
 	app, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -50,16 +50,20 @@ func TestIdentityAccountLifecycle(t *testing.T) {
 	}
 	c2.token = out["access_token"].(string)
 
-	// recovery
+	// recovery (S1: the code is never in the response; the mock sender
+	// delivers it out-of-band and the client returns it from there).
 	st, out = c.req("POST", "/api/v1/auth/recover", map[string]any{"email": "acct@example.test"})
-	if st != 200 || out["status"] != "recovery_token_sent_if_account_exists" {
+	if st != 202 || out["status"] != "recovery_token_sent_if_account_exists" {
 		t.Fatalf("recover: %d %v", st, out)
 	}
 	challengeID, _ := out["challenge_id"].(string)
-	code, _ := out["recovery_code"].(string)
-	if challengeID == "" || code == "" {
-		t.Fatalf("missing recovery challenge: %v", out)
+	if _, leaked := out["recovery_code"]; leaked || challengeID == "" {
+		t.Fatalf("response must carry no code: %v", out)
 	}
+	if len(app.recoveryMailOutbox) != 1 {
+		t.Fatalf("mock mail deliveries: %d", len(app.recoveryMailOutbox))
+	}
+	code := app.recoveryMailOutbox[0].Code
 	// wrong code
 	if st, _ := c.req("POST", "/api/v1/auth/recover/verify", map[string]any{"challenge_id": challengeID, "recovery_code": code + "x", "new_password": "RecoveredStrong#2026!"}); st != 401 {
 		t.Fatalf("wrong recovery code: %d", st)
@@ -72,10 +76,18 @@ func TestIdentityAccountLifecycle(t *testing.T) {
 	if st, _ := c.req("POST", "/api/v1/auth/recover/verify", map[string]any{"challenge_id": challengeID, "recovery_code": code, "new_password": "AnotherStrong#2026!"}); st != 401 {
 		t.Fatalf("reused recovery challenge: %d", st)
 	}
-	// nonexistent email returns generic success without challenge
+	// nonexistent email answers exactly like a known one (no enumeration):
+	// same shape with a decoy challenge id, and no mail is delivered.
 	st, out = c.req("POST", "/api/v1/auth/recover", map[string]any{"email": "missing@example.test"})
-	if st != 200 || out["challenge_id"] != nil {
+	decoy, _ := out["challenge_id"].(string)
+	if st != 202 || decoy == "" || decoy == challengeID {
 		t.Fatalf("missing account recovery: %d %v", st, out)
+	}
+	if _, leaked := out["recovery_code"]; leaked {
+		t.Fatalf("response must carry no code: %v", out)
+	}
+	if len(app.recoveryMailOutbox) != 1 {
+		t.Fatalf("no mail may be sent for an unknown email: %d", len(app.recoveryMailOutbox))
 	}
 
 	// login with recovered password
@@ -97,5 +109,36 @@ func TestIdentityAccountLifecycle(t *testing.T) {
 	// authenticated access after deletion fails
 	if st, _ := c2.req("GET", "/api/v1/me", nil); st != 401 {
 		t.Fatalf("me after deletion: %d", st)
+	}
+}
+
+func TestRecoveryFailsClosedWithoutMailProvider(t *testing.T) {
+	cfg := Config{DSN: "sqlite://" + filepath.ToSlash(filepath.Join(t.TempDir(), "identity_noprov.db")), Secret: "0123456789abcdef0123456789abcdef", Service: "gateway"}
+	app, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler())
+	defer func() { srv.Close(); app.Close() }()
+
+	c := &apiClient{t: t, srv: srv}
+	if st, _ := c.req("POST", "/api/v1/auth/register", map[string]any{"email": "norecover@example.test", "password": "OldStrongPass#2026!", "display_name": "NoRecover"}); st != 201 {
+		t.Fatalf("register: %d", st)
+	}
+	// Known and unknown emails fail identically: 501, no code, no challenge.
+	for _, email := range []string{"norecover@example.test", "ghost@example.test"} {
+		st, out := c.req("POST", "/api/v1/auth/recover", map[string]any{"email": email})
+		if st != 501 || out["code"] != "recovery_unavailable" {
+			t.Fatalf("recover %s: %d %v", email, st, out)
+		}
+		if _, leaked := out["recovery_code"]; leaked {
+			t.Fatalf("recover %s must carry no code: %v", email, out)
+		}
+		if _, present := out["challenge_id"]; present {
+			t.Fatalf("recover %s must create no challenge: %v", email, out)
+		}
+	}
+	if len(app.recoveryMailOutbox) != 0 {
+		t.Fatalf("no mail may be delivered: %d", len(app.recoveryMailOutbox))
 	}
 }

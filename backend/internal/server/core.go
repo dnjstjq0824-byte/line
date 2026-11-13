@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/example/global-messenger/backend/internal/auth"
@@ -33,6 +34,7 @@ type Config struct {
 	APNsPrivateKey             string
 	APNsBundleID               string
 	APNsProduction             bool
+	RecoveryMailProvider       string
 }
 
 func ConfigFromEnv() (Config, error) {
@@ -52,6 +54,7 @@ func ConfigFromEnv() (Config, error) {
 		APNsPrivateKey:        os.Getenv("APNS_PRIVATE_KEY"),
 		APNsBundleID:          os.Getenv("APNS_BUNDLE_ID"),
 		APNsProduction:        os.Getenv("APNS_PRODUCTION") == "true",
+		RecoveryMailProvider:  os.Getenv("RECOVERY_MAIL_PROVIDER"),
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
@@ -76,6 +79,9 @@ type App struct {
 	relayCancel context.CancelFunc
 	instanceID  string
 	msgCipher   *messageCipher
+	// S1 test seam: mock/log recovery-mail deliveries.
+	recoveryMailMu     sync.Mutex
+	recoveryMailOutbox []RecoveryMail
 }
 
 func New(cfg Config) (*App, error) {

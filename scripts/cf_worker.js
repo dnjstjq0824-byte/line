@@ -16,6 +16,7 @@ const phoneVerificationCodes = new Map();
 const friendships = new Map();
 const passkeyChallenges = new Map(); // challenge -> { userId, purpose, expiresAt }
 const recoveryChallenges = new Map(); // id -> { userId, codeHash, expiresAt, consumedAt } (no-DB fallback; D1 otherwise)
+const recoveryMailOutbox = []; // S1 test seam: mock/log driver deliveries { email, code, created_at }
 const passkeyCreds = new Map(); // credentialIdB64 -> { userId, jwk, counter, transports, name, createdAt }
 const conversations = new Map();
 const messages = new Map();
@@ -1808,6 +1809,17 @@ async function withCors(request, env, res) {
   return new Response(nullBody ? null : res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
+// S1: recovery-mail driver seam. Real drivers (Resend) plug in here once a
+// sending domain exists; until then only the mock/log test drivers deliver
+// (into recoveryMailOutbox) and anything else fails closed.
+async function sendRecoveryMail(env, email, code) {
+  const provider = env.RECOVERY_MAIL_PROVIDER;
+  if (provider === 'mock' || provider === 'log') {
+    recoveryMailOutbox.push({ email, code, created_at: Date.now() });
+    return;
+  }
+  throw new Error(`recovery mail provider not implemented: ${provider}`);
+}
 // Authentication is session-backed only: a token is valid iff its digest exists in D1 (or the
 // in-memory store when no D1 is bound), has not been revoked and is inside its TTL. The old
 // stateless "cf-token-<userId>.*" fallback accepted any forged token and is removed.
@@ -4451,15 +4463,22 @@ const workerCore = {
       }
 
 
-      // 2c. Auth: password recovery (Go parity). No email sender is
-      // configured, so the single-use code is returned inline like Go's
-      // dev-mode response; challenges live in D1 when bound, memory otherwise.
+      // 2c. Auth: password recovery (Go parity). Fails closed without a
+      // configured mail sender: no challenge is created. With a sender, the
+      // single-use secret is delivered out-of-band and the HTTP response
+      // carries only the status and the challenge id, never the secret.
+      // Challenges live in D1 when bound, memory otherwise.
       if (p === 'auth/recover' && request.method === 'POST') {
         if (!await rateLimit('rl:recover:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
         const email = typeof body.email === 'string' ? body.email.toLowerCase().trim() : '';
         if (!email.includes('@')) return json({ error: 'invalid email' }, 400);
-        const quiet = () => json({ status: 'recovery_token_sent_if_account_exists' });
+        if (!env.RECOVERY_MAIL_PROVIDER) {
+          return json({ error: 'password recovery unavailable: mail provider not configured', code: 'recovery_unavailable' }, 501);
+        }
+        // Unknown accounts answer exactly like known ones (fresh decoy id, no
+        // mail, no row) so the endpoint never confirms whether an email exists.
+        const quiet = () => json({ status: 'recovery_token_sent_if_account_exists', challenge_id: crypto.randomUUID() }, 202);
         let user = users.get(email) || Array.from(users.values()).find(u => u.email && u.email.toLowerCase() === email);
         if (dbOf()) {
           await ensureSchema();
@@ -4471,12 +4490,17 @@ const workerCore = {
         const code = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().slice(0, 8);
         const codeHash = await sha256Hex(code);
         const expiresAt = Date.now() + 15 * 60 * 1000;
+        try {
+          await sendRecoveryMail(env, email, code);
+        } catch {
+          return json({ error: 'password recovery unavailable: mail provider not configured', code: 'recovery_unavailable' }, 501);
+        }
         if (dbOf()) {
           await dbOf().prepare('INSERT INTO luno_recovery_challenges (id, user_id, code_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)').bind(challengeId, user.id, codeHash, expiresAt, now()).run();
         } else {
           recoveryChallenges.set(challengeId, { userId: user.id, codeHash, expiresAt, consumedAt: 0 });
         }
-        return json({ status: 'recovery_token_sent_if_account_exists', challenge_id: challengeId, recovery_code: code });
+        return json({ status: 'recovery_token_sent_if_account_exists', challenge_id: challengeId }, 202);
       }
       if (p === 'auth/recover/verify' && request.method === 'POST') {
         if (!await rateLimit('rl:recoverv:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
@@ -4501,14 +4525,18 @@ const workerCore = {
         }
         const user = usersById.get(userId) || await loadUserFromD1(userId);
         if (!user || user.state === 'suspended' || user.state === 'deleted') return json({ error: 'invalid or expired recovery challenge' }, 401);
-        await setPassword(user, next);
-        await persistPassword(user);
+        // P1-20: consume the single-use challenge BEFORE changing the
+        // password, so a concurrent verify loses instead of double-spending.
         if (dbOf()) {
           const done = await dbOf().prepare('UPDATE luno_recovery_challenges SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL').bind(Date.now(), challengeId).run();
           if (!done.meta.changes) return json({ error: 'recovery challenge already consumed' }, 409);
         } else {
-          recoveryChallenges.get(challengeId).consumedAt = Date.now();
+          const entry = recoveryChallenges.get(challengeId);
+          if (!entry || entry.consumedAt) return json({ error: 'recovery challenge already consumed' }, 409);
+          entry.consumedAt = Date.now();
         }
+        await setPassword(user, next);
+        await persistPassword(user);
         await revokeOtherSessions(userId, '', userId);
         await revokeAllRefresh(userId, null);
         await persistAudit(userId, 'password.recover', userId, {});
@@ -5330,6 +5358,8 @@ export class UserSocketHub {
   }
 }
 
+// S1: test seam export (mock/log recovery-mail deliveries).
+export { recoveryMailOutbox };
 export default {
   async fetch(request, env, ctx) {
     CURRENT_ENV = env;

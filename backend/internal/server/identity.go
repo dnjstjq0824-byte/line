@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/example/global-messenger/backend/internal/auth"
+	"github.com/google/uuid"
 )
 
 func (a *App) register(w http.ResponseWriter, r *http.Request) {
@@ -691,6 +692,25 @@ func (a *App) changePassword(w http.ResponseWriter, r *http.Request) {
 	send(w, 200, map[string]string{"status": "password_changed"})
 }
 
+// RecoveryMail is one mock/log recovery-mail delivery (S1 test seam).
+type RecoveryMail struct {
+	Email string
+	Code  string
+}
+
+// sendRecoveryMail is the recovery-mail driver seam (edge-worker parity).
+// Real drivers plug in here once a sending domain exists; until then only
+// the mock/log test drivers deliver, and anything else fails closed.
+func (a *App) sendRecoveryMail(email, code string) error {
+	if a.cfg.RecoveryMailProvider != "mock" && a.cfg.RecoveryMailProvider != "log" {
+		return errors.New("recovery mail provider not implemented")
+	}
+	a.recoveryMailMu.Lock()
+	a.recoveryMailOutbox = append(a.recoveryMailOutbox, RecoveryMail{Email: email, Code: code})
+	a.recoveryMailMu.Unlock()
+	return nil
+}
+
 // recoverAccount initiates account recovery by creating a single-use recovery challenge.
 func (a *App) recoverAccount(w http.ResponseWriter, r *http.Request) {
 	var in struct {
@@ -701,14 +721,24 @@ func (a *App) recoverAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	// S1: fail closed without a configured mail sender (edge-worker parity):
+	// no challenge is created and the code never leaves in an HTTP response.
+	if a.cfg.RecoveryMailProvider == "" {
+		send(w, 501, map[string]string{"error": "password recovery unavailable: mail provider not configured", "code": "recovery_unavailable"})
+		return
+	}
 	var userID string
 	if e := a.db.QueryRowContext(r.Context(), "SELECT id FROM identity.users WHERE email=$1 AND state='active'", in.Email).Scan(&userID); e != nil {
-		send(w, 200, map[string]string{"status": "recovery_token_sent_if_account_exists"})
+		send(w, 202, map[string]string{"status": "recovery_token_sent_if_account_exists", "challenge_id": uuid.NewString()})
 		return
 	}
 	code, e := randomSecret(24)
 	if e != nil {
 		fail(w, 500, "recovery token generation failed")
+		return
+	}
+	if e := a.sendRecoveryMail(in.Email, code); e != nil {
+		send(w, 501, map[string]string{"error": "password recovery unavailable: mail provider not configured", "code": "recovery_unavailable"})
 		return
 	}
 	exp := time.Now().UTC().Add(15 * time.Minute).Format(time.RFC3339)
@@ -720,10 +750,9 @@ func (a *App) recoverAccount(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, "recovery challenge creation failed")
 		return
 	}
-	send(w, 200, map[string]string{
-		"status":        "recovery_token_sent_if_account_exists",
-		"challenge_id":  challengeID,
-		"recovery_code": code, // Remove in production; deliver via email/SMS
+	send(w, 202, map[string]string{
+		"status":       "recovery_token_sent_if_account_exists",
+		"challenge_id": challengeID,
 	})
 }
 

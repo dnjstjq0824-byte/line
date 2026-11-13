@@ -5,7 +5,7 @@ import LunoIcon from '../components/LunoIcon.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SUPPORTED_LOCALES } from '../luno-i18n'
-import { request, type LoginResult, type User } from '../../../shared/api'
+import { ApiError, request, type LoginResult, type User } from '../../../shared/api'
 import { makeLoginQrSvg } from '../../../shared/login_qr'
 import {
   api,
@@ -72,7 +72,6 @@ const demoLoginAvailable = computed(() => !appVersion.value.worker_version.start
 const showRecoverModal = ref(false)
 const recoverEmail = ref('')
 const recoverChallengeId = ref('')
-const recoverCodeShown = ref('')
 const recoverCodeInput = ref('')
 const recoverNewPassword = ref('')
 const recoverSent = ref(false)
@@ -82,19 +81,23 @@ function openRecoverModal() {
   recoverEmail.value = email.value
   recoverSent.value = false
   recoverChallengeId.value = ''
-  recoverCodeShown.value = ''
   recoverCodeInput.value = ''
   recoverNewPassword.value = ''
 }
 
 async function sendRecoverCode() {
   await wrap(async () => {
-    const res = await request<{ challenge_id?: string; recovery_code?: string }>('/api/v1/auth/recover', null, 'POST', {
-      email: recoverEmail.value.trim()
-    })
-    recoverSent.value = true
-    recoverChallengeId.value = res.challenge_id || ''
-    recoverCodeShown.value = res.recovery_code || ''
+    try {
+      const res = await request<{ challenge_id?: string }>('/api/v1/auth/recover', null, 'POST', {
+        email: recoverEmail.value.trim()
+      })
+      recoverSent.value = true
+      recoverChallengeId.value = res.challenge_id || ''
+    } catch (e) {
+      // S1: no mail sender is configured, so recovery is unavailable.
+      if (e instanceof ApiError && e.status === 501) throw new Error(t('mvRecoverUnavailable'))
+      throw e
+    }
   })
 }
 
@@ -532,8 +535,8 @@ onBeforeUnmount(() => {
               {{ t('mvRecoverSend') }}
             </button>
             <template v-else>
-              <p v-if="recoverCodeShown" class="ln-charge-notice" role="note">
-                {{ t('mvRecoverCodeHint') }} <code>{{ recoverCodeShown }}</code>
+              <p class="ln-charge-notice" role="note">
+                {{ t('mvRecoverCodeHint') }}
               </p>
               <label class="pc-input-row">
                 <span>{{ t('mvRecoverCode') }}</span>
