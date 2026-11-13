@@ -322,6 +322,15 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // M2: after a send, refresh only the conversation list (server-ordered, one
+  // call) instead of the 12-call full reload(). The sent message itself is
+  // already appended by the caller.
+  Future<void> refreshChatList() async {
+    final res = await api.call('/api/v1/conversations');
+    chats = res['conversations'] ?? [];
+    notifyListeners();
+  }
+
   Future<void> connect() async {
     reconnectTimer?.cancel();
     reconnectTimer = null;
@@ -576,7 +585,7 @@ class SessionController extends ChangeNotifier {
     if (selectedId.isEmpty) return Future.value();
     return run(() async {
       final lastSeq = messages.isNotEmpty ? messages.last['sequence'] : 0;
-      final x = await api.call('/api/v1/conversations/$selectedId/sync?after_sequence=$lastSeq');
+      final x = await api.call('/api/v1/conversations/$selectedId/sync?since_sequence=$lastSeq');
       final list = withoutUnsent(syncDeltaOf(x));
       for (final m in list) {
         if (!messages.any((old) => old['id'] == m['id'])) messages.add(m);
@@ -658,7 +667,7 @@ class SessionController extends ChangeNotifier {
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
         messages.add(x['message']);
       }
-      await reload();
+      await refreshChatList();
     });
   }
 
@@ -703,7 +712,7 @@ class SessionController extends ChangeNotifier {
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
         messages.add(x['message']);
       }
-      await reload();
+      await refreshChatList();
     });
   }
 
@@ -734,7 +743,7 @@ class SessionController extends ChangeNotifier {
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
         messages.add(x['message']);
       }
-      await reload();
+      await refreshChatList();
     });
   }
 
@@ -1191,7 +1200,7 @@ class SessionController extends ChangeNotifier {
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
         messages.add(x['message']);
       }
-      await reload();
+      await refreshChatList();
     });
   }
 
@@ -1257,7 +1266,7 @@ class SessionController extends ChangeNotifier {
         'note': '$selectedTitle 송금',
       });
       await openChat(selectedId, selectedTitle);
-      await reload();
+      await refreshChatList();
       notice = 'LUNO Pay ₩10,000 송금을 완료했습니다.';
     });
   }
