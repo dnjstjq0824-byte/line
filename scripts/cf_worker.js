@@ -1087,6 +1087,7 @@ async function hydrateConversation(cid) {
   const { results } = await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? ORDER BY sequence DESC LIMIT 500').bind(cid).all();
   applyRows(cid, (results || []).reverse());
   await hydrateReactions((results || []).map(r => r.id));
+  await hydrateUsersByIds((results || []).map(r => r.sender_id));
 }
 // D2: reaction + hidden caches are D1 write-through; hydration fills them so
 // the synchronous decoration paths keep working on cold isolates.
@@ -1552,7 +1553,14 @@ async function hydrateWallet(userId) {
   await db.prepare('INSERT OR IGNORE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, ?)').bind(userId, now()).run();
   const bal = await db.prepare('SELECT balance FROM wallets WHERE user_id = ?').bind(userId).first();
   const { results } = await db.prepare('SELECT * FROM wallet_transactions WHERE from_user_id = ? OR to_user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 50').bind(userId, userId).all();
-  wallets.set(userId, { balance: Number(bal?.balance || 0), tx: (results || []).map(r => walletTxView(r, userId)) });
+  const rows = results || [];
+  const others = new Set();
+  for (const r of rows) {
+    if (r.from_user_id && r.from_user_id !== userId) others.add(r.from_user_id);
+    if (r.to_user_id && r.to_user_id !== userId) others.add(r.to_user_id);
+  }
+  await hydrateUsersByIds([...others]);
+  wallets.set(userId, { balance: Number(bal?.balance || 0), tx: rows.map(r => walletTxView(r, userId)) });
 }
 async function hydrateOwned(userId) {
   const db = dbOf();
@@ -1964,6 +1972,19 @@ async function sendRecoveryMail(env, email, code) {
 // Authentication is session-backed only: a token is valid iff its digest exists in D1 (or the
 // in-memory store when no D1 is bound), has not been revoked and is inside its TTL. The old
 // stateless "cf-token-<userId>.*" fallback accepted any forged token and is removed.
+function cacheUserRow(row, granted) {
+  const u = applyStoredPassword({
+    id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
+    display_name: row.display_name || row.email.split('@')[0], role: granted,
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
+    state: row.state || undefined
+  }, row.password_hash);
+  if (isEnvAdmin(u.id)) u.role = 'admin';
+  users.set(row.email.toLowerCase(), u);
+  usersById.set(u.id, u);
+  hydrateUserPrefs(u.id, row.prefs_json);
+  return u;
+}
 async function loadUserFromD1(id, knownRole) {
   const db = dbOf();
   if (!db) return null;
@@ -1980,10 +2001,51 @@ async function loadUserFromD1(id, knownRole) {
   hydrateUserPrefs(u.id, row.prefs_json);
   return u;
 }
+// D7: batch-cache user rows by id (room members, message senders, authors).
+async function hydrateUsersByIds(ids) {
+  const missing = [...new Set(ids || [])].filter(id => id && !usersById.has(id) && !officialAccounts.has(id));
+  if (!missing.length) return;
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  const ph = missing.map(() => '?').join(',');
+  let rows = null;
+  if (!rolesTableAbsent) {
+    try {
+      const r = await db.prepare(`SELECT u.*, gr.role AS granted_role FROM users u LEFT JOIN luno_user_roles gr ON gr.user_id = u.id WHERE u.id IN (${ph})`).bind(...missing).all();
+      rows = r.results || [];
+    } catch (error) {
+      if (!missingRolesTable(error)) throw error;
+    }
+  }
+  if (!rows) {
+    const r = await db.prepare(`SELECT * FROM users WHERE id IN (${ph})`).bind(...missing).all();
+    rows = r.results || [];
+  }
+  for (const row of rows) cacheUserRow(row, grantedRole(row.granted_role));
+}
 // A-2: login-time D1 lookup by any identifier (email/handle/phone). The D1
 // row is authoritative: password changes, bans and deletions made on another
 // isolate are visible to this login. Returns null when D1 has no such user,
 // in which case the caller keeps its memory result (bootstrap seeds).
+// D7: D1 fallback for friend-add lookup now that boot no longer caches all
+// users. Preference order mirrors the memory path (handle, searchable
+// email, display name); H4 removes the display-name leg.
+async function findUserByHandleOrEmail(h) {
+  const db = dbOf();
+  if (!db || !h) return null;
+  await ensureSchema();
+  const byHandle = await db.prepare('SELECT id FROM users WHERE LOWER(handle) = ?').bind(h).first().catch(() => null);
+  if (byHandle) return loadUserFromD1(byHandle.id, undefined);
+  const byEmail = await db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').bind(h).first().catch(() => null);
+  if (byEmail) {
+    const u = await loadUserFromD1(byEmail.id, undefined);
+    if (u && prefsOf(u.id).searchable_by_email) return u;
+  }
+  const byName = await db.prepare('SELECT id FROM users WHERE LOWER(display_name) = ?').bind(h).first().catch(() => null);
+  if (byName) return loadUserFromD1(byName.id, undefined);
+  return null;
+}
 async function loadUserFromD1ByLogin(identifier) {
   const db = dbOf();
   if (!db || !identifier) return null;
@@ -2166,6 +2228,7 @@ async function hydrateDurableConversation(cid) {
   const previous = conversations.get(cid);
   const conv = { ...previous, id: row.id, kind: row.kind, title: row.title, notice: row.notice, avatar_url: row.avatar_url, owner_id: row.owner_id, members: (results || []).map(member => member.user_id), revision: row.revision, created_at: row.created_at, updated_at: row.updated_at, last_sequence: previous?.last_sequence || 0, _durable: true };
   conversations.set(cid, conv);
+  await hydrateUsersByIds(conv.members);
   return conv;
 }
 async function hydrateDurableConversations(userId) {
@@ -2783,6 +2846,11 @@ async function extended(p, request, url, me, token) {
         const h = String(b.handle).toLowerCase();
         if (!/^[a-z0-9_.]{3,20}$/.test(h)) return bad('ID는 영문 소문자·숫자·_ . 3~20자입니다');
         if (h !== me.handle && Array.from(users.values()).some(u => u.handle === h)) return bad('이미 사용 중인 ID입니다', 409);
+        if (h !== me.handle && dbOf()) {
+          await ensureSchema();
+          const taken = await dbOf().prepare('SELECT id FROM users WHERE LOWER(handle) = ? AND id != ?').bind(h, myId).first().catch(() => null);
+          if (taken) return bad('이미 사용 중인 ID입니다', 409);
+        }
         me.handle = h;
       }
       if (dbOf()) await dbOf().prepare("UPDATE users SET display_name = ?, bio = ?, status_message = ?, avatar_url = ?, cover_url = ?, handle = ?, birthday = ?, updated_at = ? WHERE id = ?").bind(me.display_name, me.bio || '', me.status_message || '', b.avatar_url === undefined ? (me.avatar_url || '') : b.avatar_url, b.cover_url === undefined ? (me.cover_url || '') : b.cover_url, me.handle || '', me.birthday || '', now(), myId).run();
@@ -2865,6 +2933,7 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Friends & users ----------
   if (p === 'friends') {
+    await hydrateSocialGraph(myId);
     if (method === 'GET') {
       const today = now().slice(5, 10);
       const list = friendIds(myId).map(id => {
@@ -2879,18 +2948,23 @@ async function extended(p, request, url, me, token) {
       if (!await rateLimit('rl:friend:' + myId, 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
       const b = await readJson(request);
       let target = null;
-      if (b.friend_id || b.target_user_id) target = usersById.get(b.friend_id || b.target_user_id);
-      else if (b.handle || b.qr_code) {
+      if (b.friend_id || b.target_user_id) {
+        target = usersById.get(b.friend_id || b.target_user_id);
+        if (!target && dbOf()) target = await loadUserFromD1(b.friend_id || b.target_user_id, undefined);
+      } else if (b.handle || b.qr_code) {
         const h = String(b.handle || String(b.qr_code).replace(/^(LINE-FRIEND|LUNO-FRIEND):/i, '')).trim().toLowerCase().replace(/^@/, '');
         const all = Array.from(users.values());
         target = all.find(u => u.handle === h)
           || all.find(u => u.email && u.email.toLowerCase() === h && prefsOf(u.id).searchable_by_email)
           || all.find(u => u.display_name && u.display_name.toLowerCase() === h);
+        if (!target && dbOf()) target = await findUserByHandleOrEmail(h);
       }
       if (!target || target.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);
       if (target.id === myId) return bad('자기 자신은 친구로 추가할 수 없습니다');
       if (isFriend(myId, target.id)) return json({ status: 'already_friends', friend: publicUser(target) });
-      if (!prefsOf(target.id).allow_friend_requests || fMeta(target.id, myId).blocked) return bad('친구 추가할 수 없는 사용자입니다', 403);
+      // D7: the reverse block check must hit D1 — only the requester's own
+      // blocks are hydrated, never another user's.
+      if (!prefsOf(target.id).allow_friend_requests || (await blockState(target.id, myId)).byMe) return bad('친구 추가할 수 없는 사용자입니다', 403);
       friendships.set(`${myId}:${target.id}`, true);
       friendships.set(`${target.id}:${myId}`, true);
       if (dbOf()) {
@@ -2904,6 +2978,7 @@ async function extended(p, request, url, me, token) {
     }
   }
   if ((m = p.match(/^friends\/([\w-]+)$/))) {
+    await hydrateSocialGraph(myId);
     const fid = m[1];
     if (!isFriend(myId, fid)) return bad('친구가 아닙니다', 404);
     if (method === 'PATCH') {
@@ -2938,17 +3013,35 @@ async function extended(p, request, url, me, token) {
     }
   }
   if (p === 'users' && method === 'GET') {
+    await hydrateSocialGraph(myId);
     const q = clip(url.searchParams.get('q') || url.searchParams.get('search') || '', 50).toLowerCase().replace(/^@/, '');
     if (q.length < 2) return json({ users: [] });
-    const found = Array.from(users.values()).filter(u => {
+    const matches = (u) => {
       if (u.id === myId || u.state === 'suspended' || u.role === 'admin') return false;
       const pr = prefsOf(u.id);
       return u.display_name.toLowerCase().includes(q) || (pr.searchable_by_id && u.handle === q) || (pr.searchable_by_email && u.email === q);
-    }).slice(0, 20).map(u => ({ ...publicUser(u), is_friend: isFriend(myId, u.id) }));
-    return json({ users: found });
+    };
+    const seen = new Map();
+    for (const u of users.values()) if (matches(u)) seen.set(u.id, u);
+    if (dbOf() && seen.size < 20) {
+      await ensureSchema();
+      const like = `%${escapeLike(q)}%`;
+      const { results } = await dbOf().prepare(
+        `SELECT id FROM users WHERE id != ? AND (state IS NULL OR state != 'suspended') AND (LOWER(display_name) LIKE ? ESCAPE '\\' OR LOWER(handle) = ? OR LOWER(email) = ?) LIMIT 50`
+      ).bind(myId, like, q, q).all().catch(() => ({ results: [] }));
+      for (const r of results || []) {
+        if (seen.has(r.id)) continue;
+        const u = await loadUserFromD1(r.id, undefined);
+        if (u && matches(u)) seen.set(u.id, u);
+        if (seen.size >= 20) break;
+      }
+    }
+    return json({ users: [...seen.values()].slice(0, 20).map(u => ({ ...publicUser(u), is_friend: isFriend(myId, u.id) })) });
   }
   if ((m = p.match(/^users\/([\w-]+)$/)) && method === 'GET') {
-    const u = usersById.get(m[1]);
+    await hydrateSocialGraph(myId);
+    let u = usersById.get(m[1]);
+    if (!u && dbOf()) u = await loadUserFromD1(m[1], undefined);
     if (!u || u.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);
     return json({ ...publicUser(u), is_friend: isFriend(myId, u.id) });
   }
@@ -3008,6 +3101,7 @@ async function extended(p, request, url, me, token) {
       return json({ conversations: list, unread_total });
     }
     if (method === 'POST') {
+      await hydrateSocialGraph(myId);
       const b = await readJson(request);
       const kind = b.kind === 'group' ? 'group' : 'direct';
       const ids = Array.from(new Set((Array.isArray(b.member_ids) ? b.member_ids : []).filter(x => typeof x === 'string' && x !== myId)));
@@ -3080,6 +3174,7 @@ async function extended(p, request, url, me, token) {
     return json({ status: 'updated', meta });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/members$/)) && method === 'POST') {
+    await hydrateSocialGraph(myId);
     const conv = conversations.get(resolveConversationId(m[1], myId));
     if (conv.kind !== 'group') return bad('그룹 채팅방에서만 초대할 수 있습니다');
     const b = await readJson(request);
@@ -3124,6 +3219,16 @@ async function extended(p, request, url, me, token) {
       const before = intIn(url.searchParams.get('before_sequence') || 0, 0, 1e9) || 0;
       const limit = intIn(url.searchParams.get('limit') || 50, 1, 100) || 50;
       const hs = hiddenMsgs.get(myId);
+      const db = dbOf();
+      if (db && before) {
+        // D7: deep history pages straight from D1 instead of the 500-message
+        // memory window, so rooms beyond 500 messages stay readable.
+        await ensureSchema();
+        const { results } = await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence < ? ORDER BY sequence DESC LIMIT ?').bind(cid, before, limit + 1).all();
+        const rows = (results || []).filter(r => !(hs && hs.has(r.id)));
+        await hydrateReactions(rows.map(r => r.id));
+        return json({ messages: rows.slice(0, limit).reverse().map(r => decorateMessage(rowToMessage(r), myId, cid)), has_more: rows.length > limit });
+      }
       let list = (messages.get(cid) || []).filter(x => !(hs && hs.has(x.id)));
       if (before) list = list.filter(x => x.sequence < before);
       return json({ messages: list.slice(-limit).map(x => decorateMessage(x, myId, cid)), has_more: list.length > limit });
@@ -3391,6 +3496,7 @@ async function extended(p, request, url, me, token) {
       const esc = q.replace(/[%_\\]/g, (ch) => '\\' + ch);
       const { results } = await db.prepare("SELECT * FROM luno_messages WHERE conversation_id = ? AND unsent = 0 AND kind <> 'sticker' AND body LIKE ? ESCAPE '\\' ORDER BY sequence DESC LIMIT 50").bind(cid, '%' + esc + '%').all();
       await hydrateReactions((results || []).map(r => r.id));
+      await hydrateUsersByIds((results || []).map(r => r.sender_id));
       const out = (results || []).filter(r => !(hs && hs.has(r.id))).map(r => decorateMessage(rowToMessage(r), myId, cid));
       return json({ messages: out });
     }
@@ -3482,7 +3588,10 @@ async function extended(p, request, url, me, token) {
       await hydrateNotes(cid);
     }
     const list = noteStore.get(cid) || [];
-    if (method === 'GET') return json({ notes: list.map(n => ({ ...n, author: userBrief(n.author_id) })) });
+    if (method === 'GET') {
+      await hydrateUsersByIds(list.map(n => n.author_id));
+      return json({ notes: list.map(n => ({ ...n, author: userBrief(n.author_id) })) });
+    }
     if (method === 'POST') {
       const b = await readJson(request);
       const title = clip(b.title, 80), body = clip(b.body, 3000);
@@ -3522,7 +3631,10 @@ async function extended(p, request, url, me, token) {
     }
     const list = eventStore.get(cid) || [];
     const view = e => ({ ...e, rsvps: Object.fromEntries(e.rsvps), my_rsvp: e.rsvps.get(myId) || '', creator: userBrief(e.created_by) });
-    if (method === 'GET') return json({ events: list.map(view) });
+    if (method === 'GET') {
+      await hydrateUsersByIds(list.map(e => e.created_by));
+      return json({ events: list.map(view) });
+    }
     if (method === 'POST') {
       const b = await readJson(request);
       const title = clip(b.title, 80);
@@ -3744,6 +3856,7 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Timeline, stories, VOOM (D4: D1-backed, response shapes unchanged) ----------
   if (p === 'timeline') {
+    await hydrateSocialGraph(myId);
     if (method === 'GET') {
       const sdb = await socialDb();
       if (!sdb) return json({ error: 'timeline requires a configured database' }, 501);
@@ -3756,6 +3869,7 @@ async function extended(p, request, url, me, token) {
       const ids = rows.map(r => r.id);
       const likesByPost = await likeMap(sdb, 'timeline', ids);
       const commentsByPost = await commentMap(sdb, 'timeline', ids);
+      await hydrateUsersByIds([...rows.map(r => r.author_id), ...[...commentsByPost.values()].flat().map(c => c.author_id)]);
       return json({ posts: rows.map(r => timelineRowView(r, likesByPost.get(r.id) || [], commentsByPost.get(r.id) || [], myId)) });
     }
     if (method === 'POST') {
@@ -3802,6 +3916,7 @@ async function extended(p, request, url, me, token) {
     return json(timelineRowView(post, likesByPost.get(m[1]) || [], commentsByPost.get(m[1]) || [], myId), m[2] === 'like' ? 200 : 201);
   }
   if (p === 'stories') {
+    await hydrateSocialGraph(myId);
     if (method === 'GET') {
       const sdb = await socialDb();
       if (!sdb) return json({ error: 'stories require a configured database' }, 501);
@@ -3812,6 +3927,7 @@ async function extended(p, request, url, me, token) {
         `SELECT * FROM luno_stories WHERE author_id IN (${ph}) AND created_at > ? ORDER BY created_at DESC, rowid DESC`
       ).bind(...visible, cutoff).all();
       const rows = results || [];
+      await hydrateUsersByIds(rows.map(r => r.author_id));
       const viewsByStory = await storyViewsById(sdb, rows.map(r => r.id));
       return json({ stories: rows.map(x => {
         const viewers = viewsByStory.get(x.id) || [];
@@ -3836,6 +3952,7 @@ async function extended(p, request, url, me, token) {
     }
   }
   if ((m = p.match(/^stories\/([\w-]+)\/view$/)) && method === 'POST') {
+    await hydrateSocialGraph(myId);
     const sdb = await socialDb();
     if (!sdb) return json({ error: 'stories require a configured database' }, 501);
     const s = await sdb.prepare('SELECT author_id FROM luno_stories WHERE id = ?').bind(m[1]).first();
@@ -3853,6 +3970,7 @@ async function extended(p, request, url, me, token) {
       const ids = rows.map(r => r.id);
       const likesByPost = await likeMap(sdb, 'voom', ids);
       const commentsByPost = await commentMap(sdb, 'voom', ids);
+      await hydrateUsersByIds([...rows.map(r => r.author_id), ...[...commentsByPost.values()].flat().map(c => c.author_id)]);
       return json({ videos: rows.map(x => voomRowView(x, likesByPost.get(x.id) || [], commentsByPost.get(x.id) || [], myId)) });
     }
     if (method === 'POST') {
@@ -3917,6 +4035,7 @@ async function extended(p, request, url, me, token) {
     return json({ balance: walletOf(myId).balance }, 201);
   }
   if (p === 'wallet/send' && method === 'POST') {
+    await hydrateSocialGraph(myId);
     const b = await readJson(request);
     const amount = intIn(b.amount, 1, 500000);
     if (amount === null) return bad('송금 금액은 1원 ~ 500,000원입니다');
@@ -4085,6 +4204,7 @@ async function extended(p, request, url, me, token) {
 
   // ---------- Search & reports ----------
   if (p === 'search' && method === 'GET') {
+    await hydrateSocialGraph(myId);
     const q = clip(url.searchParams.get('q') || '', 100).toLowerCase();
     if (q.length < 2) return json({ messages: [], users: [], chats: [], official_accounts: [] });
     const mine = Array.from(conversations.values()).filter(c => c.members.includes(myId));
@@ -4135,7 +4255,8 @@ async function extended(p, request, url, me, token) {
     if (p === 'admin/moderation/actions' && method === 'POST') {
       const b = await readJson(request);
       const uidTarget = b.subject_user_id || b.user_id;
-      const target = usersById.get(uidTarget);
+      let target = usersById.get(uidTarget);
+      if (!target && dbOf()) target = await loadUserFromD1(uidTarget, undefined);
       if (!target || !['warn', 'suspend', 'activate', 'dismiss'].includes(b.action)) return bad('잘못된 제재 요청입니다');
       if (target.role === 'admin') return bad('관리자 계정에는 제재를 적용할 수 없습니다', 403);
       if (b.action === 'suspend') {
@@ -4218,6 +4339,7 @@ async function extended(p, request, url, me, token) {
     const hasMore = delta.length > 500;
     delta = delta.slice(0, 500);
     if (db) await hydrateReactions(delta.map(x => x.id));
+    await hydrateUsersByIds(delta.map(x => x.sender_id));
     return json({
       conversation_id: cid,
       since_sequence: since,
@@ -4430,6 +4552,7 @@ async function extended(p, request, url, me, token) {
   // PHASE 6: Compliance & GDPR Data Portability
   // ==========================================
   if (p === 'me/export-data' && method === 'GET') {
+    await hydrateSocialGraph(myId);
     const mine = Array.from(conversations.values()).filter(c => c.members.includes(myId));
     const myMsgs = [];
     for (const c of mine) {
@@ -4492,49 +4615,44 @@ async function d1Run(db, query, ...params) {
 async function syncFromD1(db) {
   if (!db) return;
   try {
-    // Users and their grants in one query; a role lookup per user ran on every isolate start.
-    let userRows = null;
-    if (!rolesTableAbsent) try {
-      userRows = await db.prepare('SELECT u.*, r.role AS granted_role FROM users u LEFT JOIN luno_user_roles r ON r.user_id = u.id').all();
-    } catch (error) {
-      if (!missingRolesTable(error)) throw error;
-    }
-    if (!userRows) userRows = await db.prepare('SELECT * FROM users').all();
-    for (const row of userRows?.results || []) {
-      const dName = (row.display_name === 'LUNO Demo User' || !row.display_name) ? 'LUNO Demo User' : row.display_name;
-      const u = applyStoredPassword({
-        id: row.id,
-        email: row.email,
-        handle: row.handle || '',
-        birthday: row.birthday || '',
-        display_name: dName,
-        role: grantedRole(row.granted_role),
-        bio: (row.bio && !row.bio.includes('LINE')) ? row.bio : 'LUNO Global Messenger User',
-        status_message: row.status_message || '',
-        avatar_url: row.avatar_url || '',
-        cover_url: row.cover_url || '',
-        created_at: row.created_at,
-        state: row.state || undefined
-      }, row.password_hash);
-      users.set(row.email.toLowerCase(), u);
-      usersById.set(u.id, u);
-      hydrateUserPrefs(u.id, row.prefs_json);
-    }
-    const friendRows = await db.prepare("SELECT * FROM friends").all();
-    if (friendRows && friendRows.results) {
-      for (const f of friendRows.results) {
-        friendships.set(`${f.user_id}:${f.friend_id}`, true);
-        friendships.set(`${f.friend_id}:${f.user_id}`, true);
-        if (Number(f.is_favorite)) fMeta(f.user_id, f.friend_id).favorite = true;
-      }
-    }
-    const blockRows = await db.prepare("SELECT * FROM blocks").all().catch(() => null);
-    if (blockRows && blockRows.results) {
-      for (const bl of blockRows.results) fMeta(bl.blocker_id, bl.blocked_id).blocked = true;
-    }
+    // D7: boot no longer bulk-loads users/friends/blocks, so boot time stays
+    // flat in table size. Each request lazily loads its own user
+    // (getAuthUser), friendships (hydrateFriendships) and blocks (blockState
+    // already queries D1 on a cache miss).
+    await ensureSchema();
   } catch (err) {
     console.error('[D1 Sync Error]', err);
   }
+}
+async function hydrateSocialGraph(userId) {
+  const db = dbOf();
+  if (!db || !userId) return;
+  await ensureSchema();
+  let rows = null;
+  if (!rolesTableAbsent) {
+    try {
+      const r = await db.prepare(
+        `SELECT f.is_favorite AS fav, u.*, gr.role AS granted_role FROM friends f
+         JOIN users u ON u.id = f.friend_id LEFT JOIN luno_user_roles gr ON gr.user_id = u.id
+         WHERE f.user_id = ?`).bind(userId).all();
+      rows = r.results || [];
+    } catch (error) {
+      if (!missingRolesTable(error)) throw error;
+    }
+  }
+  if (!rows) {
+    const r = await db.prepare(
+      `SELECT f.is_favorite AS fav, u.* FROM friends f
+       JOIN users u ON u.id = f.friend_id WHERE f.user_id = ?`).bind(userId).all();
+    rows = r.results || [];
+  }
+  for (const row of rows) {
+    friendships.set(`${userId}:${row.id}`, true);
+    if (Number(row.fav)) fMeta(userId, row.id).favorite = true;
+    if (!usersById.has(row.id)) cacheUserRow(row, grantedRole(row.granted_role));
+  }
+  const blocks = await db.prepare('SELECT blocked_id FROM blocks WHERE blocker_id = ?').bind(userId).all().catch(() => null);
+  for (const r of blocks?.results || []) fMeta(userId, r.blocked_id).blocked = true;
 }
 
 // Latest Android build served from the LUNO URL (/download). Bumped on every
@@ -5673,6 +5791,16 @@ const workerCore = {
       }
       if (p === 'admin/users') {
         if (authUser.role !== 'admin') return json({ error: 'forbidden' }, 403);
+        if (dbOf()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT u.id, u.email, u.display_name, u.state, r.role AS granted_role FROM users u LEFT JOIN luno_user_roles r ON r.user_id = u.id').all().catch(() => ({ results: [] }));
+          const envAdmins = new Set(String(CURRENT_ENV?.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
+          const out = (results || []).map(r => ({ id: r.id, email: r.email, display_name: r.display_name, role: envAdmins.has(r.id) ? 'admin' : grantedRole(r.granted_role), state: r.state || 'active' }));
+          for (const u of users.values()) {
+            if (!out.some(o => o.id === u.id)) out.push({ id: u.id, email: u.email, display_name: u.display_name, role: u.role, state: u.state || 'active' });
+          }
+          return json({ users: out });
+        }
         return json({ users: Array.from(users.values()).map(u => ({ id: u.id, email: u.email, display_name: u.display_name, role: u.role, state: u.state || 'active' })) });
       }
       if (p === 'admin/moderation/actions' && request.method === 'POST') {

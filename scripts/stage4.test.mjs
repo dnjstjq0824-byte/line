@@ -533,6 +533,53 @@ test('D1: peer invites to durable rooms are skipped without FK errors', async ()
   } finally { db.raw.close(); }
 });
 
+// ---------- D7: lazy loading and deep paging ----------
+
+test('D7: message history pages past the 500-message window from D1', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db, DURABLE);
+    const a = await registerLogin(first.api, 'd7-pa@luno-test.local', 'd7_pa');
+    const b = await registerLogin(first.api, 'd7-pb@luno-test.local', 'd7_pb');
+    const cid = await makeRoom(first.api, a.token, [b.id], 'D7 Deep Room');
+    const at = new Date().toISOString();
+    const ins = db.raw.prepare('INSERT INTO luno_messages (id, conversation_id, sender_id, client_id, sequence, kind, body, created_at, unsent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)');
+    db.raw.exec('BEGIN');
+    for (let i = 2; i <= 601; i++) ins.run(`d7m${i}`, cid, a.id, `seed-${i}`, i, 'text', `seed message ${i}`, at);
+    db.raw.exec('COMMIT');
+    const second = await stage4Isolate(db, DURABLE);
+    const a2 = await loginAs(second.api, 'd7-pa@luno-test.local');
+    const deep = await (await second.api(`conversations/${cid}/messages?before_sequence=52&limit=50`, 'GET', null, a2.token)).json();
+    assert.equal(deep.messages.length, 50, 'sequences 2..51 readable past the window');
+    assert.equal(deep.messages[0].sequence, 2);
+    assert.equal(deep.messages[49].sequence, 51);
+    assert.equal(deep.has_more, true);
+    const tail = await (await second.api(`conversations/${cid}/messages?before_sequence=10&limit=50`, 'GET', null, a2.token)).json();
+    assert.equal(tail.messages.length, 9, 'sequences 1..9 at the very start');
+    assert.equal(tail.has_more, false);
+  } finally { db.raw.close(); }
+});
+
+test('D7: friends, search and friend-add work for never-cached users', async () => {
+  const db = makeD1();
+  try {
+    const first = await stage4Isolate(db);
+    const a = await registerLogin(first.api, 'd7-fa@luno-test.local', 'd7_fa');
+    const b = await registerLogin(first.api, 'd7-fb@luno-test.local', 'd7_fb');
+    await befriend(first.api, a.token, 'd7_fb');
+    await registerLogin(first.api, 'd7-fc@luno-test.local', 'd7_fc');
+    const second = await stage4Isolate(db);
+    const a2 = await loginAs(second.api, 'd7-fa@luno-test.local');
+    const friends = await (await second.api('friends', 'GET', null, a2.token)).json();
+    assert.ok(friends.friends.some((f) => f.id === b.id && f.display_name === 'd7_fb'), 'friend listed with brief');
+    const found = await (await second.api('users?q=d7_fc', 'GET', null, a2.token)).json();
+    assert.ok(found.users.some((u) => u.handle === 'd7_fc'), 'never-cached user searchable');
+    assert.equal((await second.api('friends', 'POST', { handle: 'd7_fc' }, a2.token)).status, 201, 'friend-add by handle');
+    const detail = await (await second.api(`users/${b.id}`, 'GET', null, a2.token)).json();
+    assert.equal(detail.display_name, 'd7_fb', 'user detail loads');
+  } finally { db.raw.close(); }
+});
+
 test('D2: keep vault survives a new isolate per user', async () => {
   const db = makeD1();
   try {

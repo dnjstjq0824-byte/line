@@ -33,12 +33,13 @@ test('email-derived role escalation is reproduced in pre-fix source on an isolat
   const db = database();
   try {
     const fixed = fs.readFileSync(new URL('./cf_worker.js', import.meta.url), 'utf8');
-    // Restore only the two former role-inference expressions, and bypass the
-    // new role rechecks, to reproduce the old authorization behavior in isolation.
+    // Restore the former role-inference expression, and bypass the new role
+    // rechecks, to reproduce the old authorization behavior in isolation.
+    // (D7 removed boot-time user loading, so there is no second inference
+    // site left to restore; the per-user loader alone reproduces the bug.)
     const emailRole = "role: row.email.includes('admin') ? 'admin' : 'user'";
     const patches = [
       ['role: knownRole === undefined ? await storedUserRole(row.id) : knownRole', emailRole],
-      ['role: grantedRole(row.granted_role)', emailRole],
       ['if (dbOf()) user.role = await storedUserRole(user.id);', ''],
       ['if (db) user.role = grantedRoleFromSession;', '']
     ];
