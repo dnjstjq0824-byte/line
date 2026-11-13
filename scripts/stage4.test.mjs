@@ -487,6 +487,39 @@ test('D5: settings survive a new isolate', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- D1: rooms and members durable (demo excluded) ----------
+
+test('D1: demo rooms never reach the durable tables', async () => {
+  const db = makeD1();
+  try {
+    const demo = await stage4Isolate(db, { DEMO_MODE: 'true', DURABLE_CONVERSATIONS: 'true' });
+    const a = await registerLogin(demo.api, 'd1-demo@luno-test.local', 'd1_demo');
+    const created = await demo.api('conversations', 'POST', { kind: 'group', title: 'Peer Room', member_ids: ['peer-k'] }, a.token);
+    assert.equal(created.status, 201, 'peer room still created via memory fallback');
+    const room = await created.json();
+    assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM luno_conversations WHERE id = ?').get(room.id).n, 0, 'peer room not durable');
+    assert.equal(db.raw.prepare("SELECT COUNT(*) AS n FROM luno_conversation_members WHERE user_id LIKE 'peer-%'").get().n, 0, 'no peer members durable');
+    const convos = await (await demo.api('conversations', 'GET', null, a.token)).json();
+    assert.ok(convos.conversations.length > 1, 'demo rooms listed');
+    assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM luno_conversations').get().n, 0, 'seeded demo rooms never durable');
+  } finally { db.raw.close(); }
+});
+
+test('D1: peer invites to durable rooms are skipped without FK errors', async () => {
+  const db = makeD1();
+  try {
+    const demo = await stage4Isolate(db, { DEMO_MODE: 'true', DURABLE_CONVERSATIONS: 'true' });
+    const a = await registerLogin(demo.api, 'd1-ia@luno-test.local', 'd1_ia');
+    const b = await registerLogin(demo.api, 'd1-ib@luno-test.local', 'd1_ib');
+    const cid = await makeRoom(demo.api, a.token, [b.id], 'Durable Room');
+    assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM luno_conversations WHERE id = ?').get(cid).n, 1, 'real room is durable');
+    const res = await demo.api(`conversations/${cid}/members`, 'POST', { member_ids: ['peer-k'] }, a.token);
+    assert.equal(res.status, 400, 'peer invite adds nothing');
+    assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM luno_conversation_members WHERE conversation_id = ?').get(cid).n, 2, 'membership unchanged');
+    assert.equal(db.raw.prepare('PRAGMA foreign_key_check').all().length, 0, 'no FK violations');
+  } finally { db.raw.close(); }
+});
+
 test('D2: keep vault survives a new isolate per user', async () => {
   const db = makeD1();
   try {

@@ -2176,7 +2176,9 @@ async function hydrateDurableConversations(userId) {
   for (const cid of ids) await hydrateDurableConversation(cid);
 }
 async function createDurableConversation(fields) {
-  if (!durableConversationsEnabled() || fields.members.some(id => officialAccounts.has(id))) return createConversation(fields);
+  // D1: rooms with demo (peer-) members stay in memory — peers have no users
+  // row, so the durable member FK would reject them (same as official rooms).
+  if (!durableConversationsEnabled() || fields.members.some(id => officialAccounts.has(id) || String(id).startsWith('peer-'))) return createConversation(fields);
   const db = dbOf(), at = now();
   const key = fields.kind === 'direct' ? [...fields.members].sort().join(':') : null;
   const cid = key ? `dm-${await sha256Hex(key)}` : uid();
@@ -3086,6 +3088,9 @@ async function extended(p, request, url, me, token) {
     for (const id of ids) {
       const u = usersById.get(id);
       if (!u || conv.members.includes(id) || !isFriend(myId, id) || fMeta(myId, id).blocked) continue;
+      // D1: demo identities have no users row; inviting one to a durable room
+      // would violate the member FK, so they stay out of durable rooms.
+      if (conv._durable && String(id).startsWith('peer-')) continue;
       conv.members.push(id);
       added.push(u.display_name);
     }
