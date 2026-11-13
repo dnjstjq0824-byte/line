@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeD1 } from './test_helpers.mjs';
+import { makeBucket, makeD1 } from './test_helpers.mjs';
 
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 
@@ -116,4 +116,59 @@ test('H1: QR approve and ws-ticket cap per user', async () => {
     const b = await registerLogin(api, 'h1-b@luno-test.local', 'h1_b');
     await capProbe(api, 'ws-ticket', 'POST', {}, b.token, 60, 200);
   } finally { db2.raw.close(); }
+});
+
+// ---------- H2: upload and room-creation quotas ----------
+
+test('H2: quota defaults live in one exported place', async () => {
+  const mod = await import(`./cf_worker.js?h2quota=${++stage5Serial}`);
+  assert.equal(mod.QUOTA_UPLOADS_PER_DAY, 200);
+  assert.equal(mod.QUOTA_UPLOAD_BYTES_PER_DAY, 1024 * 1024 * 1024);
+  assert.equal(mod.QUOTA_ROOMS_PER_DAY, 50);
+  assert.equal(mod.quotaWouldExceed(199, 1, 200), false);
+  assert.equal(mod.quotaWouldExceed(200, 1, 200), true);
+  assert.equal(mod.quotaWouldExceed(1024 ** 3 - 1, 1, 1024 ** 3), false);
+  assert.equal(mod.quotaWouldExceed(1024 ** 3, 1, 1024 ** 3), true);
+});
+
+test('H2: 201st upload of the day is 429, usage accumulates', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db, { MEDIA_BUCKET: makeBucket() });
+    const a = await registerLogin(api, 'h2-a@luno-test.local', 'h2_a');
+    const b = await registerLogin(api, 'h2-b@luno-test.local', 'h2_b');
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'H2', member_ids: [b.id] }, a.token)).json();
+    const payload = (i) => Buffer.from(`h2-${i}`).toString('base64');
+    let bytesSoFar = 0;
+    for (let i = 0; i < 200; i++) {
+      const body = { conversation_id: room.id, content_base64: payload(i), mime_type: 'text/plain', original_name: `h2-${i}.txt` };
+      const up = await api('attachments', 'POST', body, a.token);
+      assert.equal(up.status, 201, `upload ${i + 1} accepted`);
+      bytesSoFar += Buffer.from(`h2-${i}`).length;
+      const data = await up.json();
+      assert.equal(data.quota.uploads_today, i + 1);
+      assert.equal(data.quota.bytes_today, bytesSoFar);
+    }
+    const over = await api('attachments', 'POST', { conversation_id: room.id, content_base64: payload(200), mime_type: 'text/plain', original_name: 'h2-200.txt' }, a.token);
+    assert.equal(over.status, 429);
+    const overBody = await over.json();
+    assert.equal(overBody.code, 'QUOTA_EXCEEDED');
+    assert.equal(overBody.quota_reason, 'upload_count');
+  } finally { db.raw.close(); }
+});
+
+test('H2: 51st room of the day is 429', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    const a = await registerLogin(api, 'h2r-a@luno-test.local', 'h2r_a');
+    const b = await registerLogin(api, 'h2r-b@luno-test.local', 'h2r_b');
+    for (let i = 0; i < 50; i++) {
+      const r = await api('conversations', 'POST', { kind: 'group', title: `H2R-${i}`, member_ids: [b.id] }, a.token);
+      assert.equal(r.status, 201, `room ${i + 1} accepted`);
+    }
+    const over = await api('conversations', 'POST', { kind: 'group', title: 'H2R-50', member_ids: [b.id] }, a.token);
+    assert.equal(over.status, 429);
+    assert.equal((await over.json()).code, 'QUOTA_EXCEEDED');
+  } finally { db.raw.close(); }
 });

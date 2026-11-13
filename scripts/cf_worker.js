@@ -73,6 +73,10 @@ const ATTACHMENT_MIME_ALLOW = new Set([
   'application/pdf', 'text/plain',
 ]);
 const MAX_BODY = 20000;
+// H2: daily per-user quotas. All three defaults live here and nowhere else.
+const QUOTA_UPLOADS_PER_DAY = 200;
+const QUOTA_UPLOAD_BYTES_PER_DAY = 1024 * 1024 * 1024; // 1GB
+const QUOTA_ROOMS_PER_DAY = 50;
 
 // Unstamped placeholder for local runs and tests. scripts/build_cf.js never edits
 // this file: it writes a stamped copy to dist_worker/cf_worker.js, which is what
@@ -284,6 +288,10 @@ const LUNO_SCHEMA_PHASE1 = [
   `CREATE TABLE IF NOT EXISTS rate_limits (
     key TEXT NOT NULL, window_start INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (key, window_start))`,
+  `CREATE TABLE IF NOT EXISTS luno_daily_quotas (
+    user_id TEXT NOT NULL, day TEXT NOT NULL,
+    uploads INTEGER NOT NULL DEFAULT 0, upload_bytes INTEGER NOT NULL DEFAULT 0,
+    rooms INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))`,
   `CREATE TABLE IF NOT EXISTS blocks (
     blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at TEXT NOT NULL,
     PRIMARY KEY (blocker_id, blocked_id))`,
@@ -950,6 +958,39 @@ async function rateLimit(key, limit) {
   if (row && Number(row.count) >= limit) return false;
   await db.prepare('INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(key, window_start) DO UPDATE SET count = count + 1').bind(key, windowStart).run();
   return true;
+}
+// H2: daily quotas are D1-backed (UTC day) so every isolate sees the same
+// counters. Pure boundary check is exported for tests; without D1 (local
+// dev) quotas pass open, exactly like rateLimit above.
+function quotaDayUTC() {
+  return new Date().toISOString().slice(0, 10);
+}
+function quotaWouldExceed(used, amount, cap) {
+  return used + amount > cap;
+}
+async function quotaConsumeUpload(userId, byteLen) {
+  const db = dbOf();
+  if (!db) return { ok: true, uploads: 0, bytes: 0 };
+  await ensureSchema();
+  const day = quotaDayUTC();
+  const row = await db.prepare('SELECT uploads, upload_bytes FROM luno_daily_quotas WHERE user_id = ? AND day = ?').bind(userId, day).first() || {};
+  const uploads = Number(row.uploads) || 0;
+  const bytes = Number(row.upload_bytes) || 0;
+  if (quotaWouldExceed(uploads, 1, QUOTA_UPLOADS_PER_DAY)) return { ok: false, reason: 'upload_count', uploads, bytes };
+  if (quotaWouldExceed(bytes, byteLen, QUOTA_UPLOAD_BYTES_PER_DAY)) return { ok: false, reason: 'upload_bytes', uploads, bytes };
+  await db.prepare('INSERT INTO luno_daily_quotas (user_id, day, uploads, upload_bytes) VALUES (?, ?, 1, ?) ON CONFLICT(user_id, day) DO UPDATE SET uploads = uploads + 1, upload_bytes = upload_bytes + ?').bind(userId, day, byteLen, byteLen).run();
+  return { ok: true, uploads: uploads + 1, bytes: bytes + byteLen };
+}
+async function quotaConsumeRoom(userId) {
+  const db = dbOf();
+  if (!db) return { ok: true, rooms: 0 };
+  await ensureSchema();
+  const day = quotaDayUTC();
+  const row = await db.prepare('SELECT rooms FROM luno_daily_quotas WHERE user_id = ? AND day = ?').bind(userId, day).first() || {};
+  const rooms = Number(row.rooms) || 0;
+  if (quotaWouldExceed(rooms, 1, QUOTA_ROOMS_PER_DAY)) return { ok: false, rooms };
+  await db.prepare('INSERT INTO luno_daily_quotas (user_id, day, rooms) VALUES (?, ?, 1) ON CONFLICT(user_id, day) DO UPDATE SET rooms = rooms + 1').bind(userId, day).run();
+  return { ok: true, rooms: rooms + 1 };
 }
 async function revokeOtherSessions(userId, keepSid, by) {
   const db = dbOf();
@@ -3127,12 +3168,16 @@ async function extended(p, request, url, me, token) {
         const oa = isOA ? officialAccounts.get(ids[0]) : null;
         const targetUser = !isOA ? usersById.get(ids[0]) : null;
         const convTitle = (b.title || (oa ? oa.name : targetUser ? targetUser.display_name : '')).trim();
+        const dquota = await quotaConsumeRoom(myId);
+        if (!dquota.ok) return json({ error: 'daily room quota exceeded', code: 'QUOTA_EXCEEDED' }, 429);
         const c = await createDurableConversation({ kind: 'direct', title: convTitle, members: [myId, ids[0]] });
         sendTo(c.members, { type: 'conversation.updated', conversation_id: c.id });
         return json(chatSummary(c, myId), 201);
       }
       const title = clip(b.title, 50);
       if (!title) return bad('그룹 이름을 입력하세요');
+      const gquota = await quotaConsumeRoom(myId);
+      if (!gquota.ok) return json({ error: 'daily room quota exceeded', code: 'QUOTA_EXCEEDED' }, 429);
       const c = await createDurableConversation({ kind: 'group', title, members: [myId, ...ids], owner_id: myId });
       await systemMessage(c.id, `${me.display_name}님이 그룹을 만들었습니다.`);
       sendTo(c.members, { type: 'conversation.updated', conversation_id: c.id });
@@ -3721,11 +3766,13 @@ async function extended(p, request, url, me, token) {
     if (!bucket || !store) return json({ error: '미디어 스토리지가 아직 연결되지 않았습니다', code: 'MEDIA_UNAVAILABLE' }, 503);
     const bin = atob(b.content_base64);
     if (bin.length > MAX_ATTACHMENT_BYTES) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
+    const quota = await quotaConsumeUpload(myId, bin.length);
+    if (!quota.ok) return json({ error: 'daily upload quota exceeded', code: 'QUOTA_EXCEEDED', quota_reason: quota.reason }, 429);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, bytes };
     await persistAttachmentR2(att);
-    return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: bytes.length }, 201);
+    return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: bytes.length, quota: { uploads_today: quota.uploads, bytes_today: quota.bytes } }, 201);
   }
   if ((m = p.match(/^attachments\/([\w-]+)(?:\/content)?$/)) && method === 'GET') {
     const att = await loadAttachment(m[1]);
@@ -5954,6 +6001,7 @@ export class UserSocketHub {
 
 // S1: test seam export (mock/log recovery-mail deliveries).
 export { recoveryMailOutbox };
+export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };
 export default {
   async fetch(request, env, ctx) {
     CURRENT_ENV = env;
