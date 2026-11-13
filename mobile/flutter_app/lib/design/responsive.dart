@@ -538,6 +538,31 @@ class StatusStrip extends StatelessWidget {
                 color: dark ? HarborDark.ink : HarborLight.ink)),
       ));
     }
+    if (session.offline) {
+      rows.add(Container(
+        width: double.infinity,
+        color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text('오프라인 상태입니다. 연결 후 다시 시도해주세요.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: dark ? HarborDark.ink : HarborLight.ink)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(64, 34),
+              ),
+              onPressed: session.restore,
+              child: const Text('재시도'),
+            ),
+          ],
+        ),
+      ));
+    }
     final call = session.activeCall;
     if (call != null) {
       rows.add(Container(

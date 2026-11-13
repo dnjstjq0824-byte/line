@@ -64,9 +64,9 @@ List<dynamic> mergeDeltaMessages(List<dynamic> existing, List<dynamic> delta) {
 }
 
 class SessionController extends ChangeNotifier {
-  final Api api = Api();
+  final Api api;
 
-  SessionController() {
+  SessionController({http.Client? httpClient}) : api = Api(httpClient: httpClient) {
     api.onTokensRefreshed = (access, refresh) async {
       await storage.write(key: 'access_token', value: access);
       if (refresh != null) {
@@ -84,6 +84,9 @@ class SessionController extends ChangeNotifier {
 
   String error = '';
   String notice = '';
+  // M1: true when startup restore hit a network (or other non-401) error.
+  // Tokens are kept and the StatusStrip offers a retry.
+  bool offline = false;
   String selfId = '';
   String deviceId = '';
   String selfName = '';
@@ -198,17 +201,29 @@ class SessionController extends ChangeNotifier {
       selfAvatarUrl = me['avatar_url'] ?? '';
       selfCoverUrl = me['cover_url'] ?? '';
       selfBirthday = me['birthday'] ?? '';
+      offline = false;
+      error = '';
       notifyListeners();
       await loadPrefs();
       await reload();
       await connect();
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        // M1: the Api client already spent the refresh token and failed (or
+        // there was none to spend), so the grant is dead: log all the way out.
+        offline = false;
+        await logout();
+      } else {
+        offline = true;
+        error = '일시적인 오류입니다. 다시 시도해주세요.';
+        notifyListeners();
+      }
     } catch (_) {
-      await storage.delete(key: 'access_token');
-      await storage.delete(key: 'device_id');
-      await storage.delete(key: 'refresh_token');
-      api.token = null;
-      api.refreshToken = null;
-      deviceId = '';
+      // M1: network and unexpected errors keep the stored tokens; the user
+      // retries from the offline banner instead of being logged out.
+      offline = true;
+      error = '네트워크 연결 오류. 다시 시도해주세요.';
+      notifyListeners();
     }
   }
 
