@@ -1283,6 +1283,11 @@ const NEWS_SAMPLE = [
 ];
 
 
+// S2: handles that registration must never assign (compared lowercased).
+// System peer identities use the peer- prefix; handles cannot contain '-',
+// so the reservation is enforced as "peer" plus a separator (or exact).
+const RESERVED_HANDLES = new Set(['admin', 'luno', 'luno_notice']);
+const RESERVED_PEER_PREFIX = /^peer([-_.]|$)/;
 // ---------- Passwords ----------
 // Only PBKDF2 digests are ever compared. A stored digest is never accepted as the
 // password itself, and no plaintext copy is kept on the user object.
@@ -4269,26 +4274,60 @@ const workerCore = {
         if (users.has(email)) return json({ error: 'account already exists' }, 409);
 
         if (typeof body.password !== 'string' || body.password.length < 8) return json({ error: 'password must be at least 8 characters' }, 400);
+        // S2: handles follow the profile rule (same regex as PATCH me) and are
+        // stored lowercased. Reserved names are rejected outright.
+        let handle = null;
+        if (body.handle !== undefined && body.handle !== null && body.handle !== '') {
+          handle = String(body.handle).toLowerCase();
+          if (!/^[a-z0-9_.]{3,20}$/.test(handle)) return json({ error: 'handle must be 3-20 lowercase letters, digits, _ or .' }, 400);
+          if (RESERVED_HANDLES.has(handle) || RESERVED_PEER_PREFIX.test(handle)) return json({ error: 'handle is not available' }, 409);
+        }
+        if (env.DB) await ensureSchema();
+        const handleTaken = async (h) => {
+          if (Array.from(users.values()).some(u => (u.handle || '').toLowerCase() === h)) return true;
+          if (env.DB) {
+            const row = await env.DB.prepare('SELECT id FROM users WHERE LOWER(handle) = ?').bind(h).first().catch(() => null);
+            if (row) return true;
+          }
+          return false;
+        };
+        if (handle) {
+          if (await handleTaken(handle)) return json({ error: 'handle is already taken' }, 409);
+        } else {
+          // Auto-generated handles retry on collision instead of clobbering.
+          handle = '';
+          for (let tries = 0; tries < 5 && !handle; tries++) {
+            const candidate = `user_${crypto.randomUUID().slice(0, 6)}`;
+            if (!(await handleTaken(candidate))) handle = candidate;
+          }
+          if (!handle) return json({ error: 'could not allocate a unique handle' }, 500);
+        }
         const newUser = {
           id: crypto.randomUUID(),
           email,
           display_name: body.display_name || email.split('@')[0],
           role: 'user',
-          handle: body.handle || `user_${crypto.randomUUID().slice(0, 6)}`,
+          handle,
           bio: 'New Messenger User',
           created_at: new Date().toISOString()
         };
         await setPassword(newUser, body.password);
         if (!newUser.pw_hash || !newUser.pw_salt) return json({ error: 'internal_error' }, 500);
-        users.set(email, newUser);
-        usersById.set(newUser.id, newUser);
         if (env.DB) {
           // Passwords are persisted only as PBKDF2 digests; writes are awaited so a redeploy never loses the account.
-          await ensureSchema();
-          await env.DB.prepare("INSERT OR REPLACE INTO users (id, email, handle, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
-            .bind(newUser.id, newUser.email, newUser.handle, encodePasswordHash(newUser), newUser.display_name, newUser.bio).run();
-          await d1Run(env.DB, "INSERT OR REPLACE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, datetime('now'))", newUser.id);
+          // S2: plain INSERT is the final uniqueness defense — a concurrent
+          // registration loses with 409 instead of replacing the row.
+          try {
+            await env.DB.prepare("INSERT INTO users (id, email, handle, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
+              .bind(newUser.id, newUser.email, newUser.handle, encodePasswordHash(newUser), newUser.display_name, newUser.bio).run();
+          } catch (err) {
+            if (/UNIQUE constraint|unique/i.test(String(err && err.message))) return json({ error: 'account already exists' }, 409);
+            throw err;
+          }
+          await d1Run(env.DB, "INSERT OR IGNORE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, datetime('now'))", newUser.id);
         }
+        users.set(email, newUser);
+        usersById.set(newUser.id, newUser);
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);
       }
 

@@ -42,7 +42,7 @@ function mockCode(outbox, email) {
 }
 
 async function register(api, email) {
-  const reg = await api('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0] });
+  const reg = await api('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
   assert.equal(reg.status, 201);
   return (await reg.json()).id;
 }

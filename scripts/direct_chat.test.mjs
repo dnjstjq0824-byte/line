@@ -54,7 +54,7 @@ test('worker POST direct returns a top-level id the client can select immediatel
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), env);
   const register = async (email) => {
-    const reg = await call('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0] });
+    const reg = await call('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
     assert.equal(reg.status, 201);
     const id = (await reg.json()).id;
     const token = (await (await call('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' })).json()).access_token;

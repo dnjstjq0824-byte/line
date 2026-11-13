@@ -159,3 +159,104 @@ test('S1: web never displays the recovery code and explains 501 unavailability',
   const hits = i18nSource.match(/mvRecoverUnavailable\b/g) || [];
   assert.equal(hits.length, 4, 'mvRecoverUnavailable in all four locales');
 });
+
+// ---------- S2: register handle validation + plain INSERT ----------
+
+test('S2: fresh handle registers and is lowercased; rule violations are 400', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await p0Isolate(db);
+    const ok = await api('auth/register', 'POST', { email: 's2-fresh@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'fresh', handle: 'Fresh_Handle.9' });
+    assert.equal(ok.status, 201);
+    const row = db.raw.prepare('SELECT handle FROM users WHERE email = ?').get('s2-fresh@luno-test.local');
+    assert.equal(row.handle, 'fresh_handle.9', 'handle stored lowercased');
+    let n = 0;
+    for (const badHandle of ['ab', 'a'.repeat(21), 'with space', 'with-hyphen', 'with@at', 'UPPER-HYPHEN', 'under_score_ok?']) {
+      const res = await api('auth/register', 'POST', { email: `s2-bad${++n}@luno-test.local`, password: 'Str0ng!Passw0rd', display_name: 'bad', handle: badHandle });
+      assert.equal(res.status, 400, `handle ${JSON.stringify(badHandle)}`);
+    }
+  } finally { db.raw.close(); }
+});
+
+test('S2: reserved handles are rejected with 409', async () => {
+  const { api } = await p0Isolate(null);
+  let n = 0;
+  for (const reserved of ['admin', 'Admin', 'ADMIN', 'luno', 'LUNO', 'luno_notice', 'peer', 'peer_x', 'peer.9']) {
+    const res = await api('auth/register', 'POST', { email: `s2-rsv${++n}@luno-test.local`, password: 'Str0ng!Passw0rd', display_name: 'rsv', handle: reserved });
+    assert.equal(res.status, 409, `reserved ${reserved}`);
+  }
+  // Near-misses that are NOT the peer prefix stay available.
+  const near = await api('auth/register', 'POST', { email: 's2-rsv-near@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'rsv', handle: 'pearl_diver' });
+  assert.equal(near.status, 201, 'pearl_diver is not the peer prefix');
+});
+
+test('S2: existing handle in any case is 409 and the original row is untouched', async () => {
+  const db = makeD1();
+  try {
+    const first = await p0Isolate(db);
+    await register(first.api, 's2-owner@luno-test.local', 'Owner#Pass99', { handle: 'owner_handle' });
+    const before = db.raw.prepare('SELECT id, password_hash FROM users WHERE email = ?').get('s2-owner@luno-test.local');
+    const cold = await p0Isolate(db);
+    const again = await cold.api('auth/register', 'POST', { email: 's2-thief@luno-test.local', password: 'Thief#Pass99', display_name: 'thief', handle: 'Owner_Handle' });
+    assert.equal(again.status, 409, 'case-variant handle duplicate');
+    const rows = db.raw.prepare('SELECT * FROM users WHERE LOWER(handle) = ?').all('owner_handle');
+    assert.equal(rows.length, 1, 'exactly one row survives');
+    assert.equal(rows[0].id, before.id, 'row id untouched');
+    assert.equal(rows[0].password_hash, before.password_hash, 'password hash untouched');
+    assert.equal(rows[0].email, 's2-owner@luno-test.local', 'owner email untouched');
+    assert.equal((await cold.api('auth/login', 'POST', { email: 's2-owner@luno-test.local', password: 'Owner#Pass99' })).status, 200);
+  } finally { db.raw.close(); }
+});
+
+test('S2: same-isolate handle duplicate is 409', async () => {
+  const { api } = await p0Isolate(null);
+  await register(api, 's2-mem1@luno-test.local', 'Str0ng!Passw0rd', { handle: 'mem_handle' });
+  assert.equal((await api('auth/register', 'POST', { email: 's2-mem2@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'm2', handle: 'MEM_HANDLE' })).status, 409);
+});
+
+test('S2: auto-generated handles are valid and unique', async () => {
+  const { api } = await p0Isolate(null);
+  const seen = new Set();
+  for (let i = 0; i < 5; i++) {
+    const email = `s2-auto${i}@luno-test.local`;
+    assert.equal((await api('auth/register', 'POST', { email, password: 'Str0ng!Passw0rd', display_name: `auto${i}` })).status, 201);
+    const login = await (await api('auth/login', 'POST', { email, password: 'Str0ng!Passw0rd' })).json();
+    const me = await (await api('me', 'GET', null, login.access_token)).json();
+    assert.match(me.handle, /^[a-z0-9_.]{3,20}$/, 'auto handle follows the profile rule');
+    assert.ok(!seen.has(me.handle), 'auto handles are unique');
+    seen.add(me.handle);
+  }
+});
+
+test('S2: auto-generated handle collision retries instead of clobbering', async () => {
+  const { api } = await p0Isolate(null);
+  const cryptoObj = globalThis.crypto;
+  const fixedA = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+  const fixedB = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
+  cryptoObj.randomUUID = () => fixedA;
+  try {
+    await register(api, 's2-cola@luno-test.local');
+  } finally {
+    delete cryptoObj.randomUUID;
+  }
+  // id, handle try#1 (collides with user_aaaaaa), handle try#2 (free).
+  const seq = [fixedA, fixedA, fixedB, fixedB];
+  let n = 0;
+  cryptoObj.randomUUID = () => seq[Math.min(n++, seq.length - 1)];
+  let res;
+  try {
+    res = await api('auth/register', 'POST', { email: 's2-colb@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'colb' });
+  } finally {
+    delete cryptoObj.randomUUID;
+  }
+  assert.equal(res.status, 201, 'retry finds a free handle');
+  const login = await (await api('auth/login', 'POST', { email: 's2-colb@luno-test.local', password: 'Str0ng!Passw0rd' })).json();
+  const me = await (await api('me', 'GET', null, login.access_token)).json();
+  assert.equal(me.handle, 'user_bbbbbb', 'second candidate used after the collision');
+});
+
+test('S2: users INSERT fails on conflict; wallets INSERT ignores conflicts', () => {
+  assert.ok(!workerSource.includes('INSERT OR REPLACE INTO users'), 'no clobbering users write');
+  assert.ok(!workerSource.includes('INSERT OR REPLACE INTO wallets'), 'no clobbering wallets write');
+  assert.ok(workerSource.includes('INSERT OR IGNORE INTO wallets'), 'wallets write is OR IGNORE');
+});
