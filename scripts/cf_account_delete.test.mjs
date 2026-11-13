@@ -121,3 +121,27 @@ test('D-05: legacy 3-segment rows (1000 iterations) still verify without upgrade
   const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get(email);
   assert.equal(row.password_hash, `pbkdf2$${salt}$${hash}`, 'legacy row never rewritten on login (S4: upgrade path removed)');
 });
+
+test('B3: suspending accounts by SQL blocks login until reactivated', async () => {
+  const local = makeD1();
+  const api = await isolate({}, local);
+  const email = `suspend-${Date.now()}@local.test`;
+  const password = 'Suspend#2026!';
+  assert.equal((await api('auth/register', 'POST', { email, password, display_name: 'Susp' })).status, 201);
+  local.raw.prepare('INSERT INTO users (id, email, handle, password_hash, display_name) VALUES (?, ?, ?, ?, ?)').run('b3-plain', 'b3-plain@local.test', 'b3_plain', 'LegacyPlain#1', 'Plain');
+  const mine = local.raw.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  // Inspection query from the stage report: only the plaintext row matches.
+  const found = local.raw.prepare("SELECT id FROM users WHERE password_hash NOT LIKE 'pbkdf2$%'").all();
+  assert.deepEqual(found.map((r) => r.id), ['b3-plain']);
+  // Operator suspend SQL, verified against local D1.
+  local.raw.prepare('UPDATE users SET state = ? WHERE id IN (?, ?)').run('suspended', mine.id, 'b3-plain');
+  const cold = await isolate({}, local);
+  assert.equal((await cold('auth/login', 'POST', { email, password })).status, 401, 'suspended login rejected');
+  assert.equal((await cold('auth/login', 'POST', { email: 'b3-plain@local.test', password: 'LegacyPlain#1' })).status, 401, 'suspended plaintext login rejected');
+  const left = local.raw.prepare("SELECT COUNT(*) AS n FROM users WHERE password_hash NOT LIKE 'pbkdf2$%' AND (state IS NULL OR state <> 'suspended')").get();
+  assert.equal(Number(left.n), 0, 'no unsuspended plaintext rows remain');
+  // Revert path.
+  local.raw.prepare('UPDATE users SET state = ? WHERE id IN (?)').run('active', mine.id);
+  const back = await isolate({}, local);
+  assert.equal((await back('auth/login', 'POST', { email, password })).status, 200, 'reactivated login works');
+});
