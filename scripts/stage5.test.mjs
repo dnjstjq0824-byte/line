@@ -200,6 +200,67 @@ test('H3: a challenge created on one isolate approves on another', async () => {
   } finally { db.raw.close(); }
 });
 
+test('H4: display names no longer add friends', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    const adder = await registerLogin(api, 'h4-a@luno-test.local', 'h4_a');
+    const target = await registerAs(api, 'h4-t@luno-test.local', 'h4_target', 'H4 Display Name');
+    const byName = await api('friends', 'POST', { handle: 'H4 Display Name' }, adder.token);
+    assert.equal(byName.status, 404, 'exact display-name match must not resolve');
+    const byHandle = await api('friends', 'POST', { handle: 'h4_target' }, adder.token);
+    assert.equal(byHandle.status, 201, 'handle still resolves');
+    assert.equal((await byHandle.json()).friend.id, target.id);
+  } finally { db.raw.close(); }
+});
+
+test('H4: QR and opted-in email still add friends', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    const adder = await registerLogin(api, 'h4q-a@luno-test.local', 'h4q_a');
+    const qrTarget = await registerAs(api, 'h4q-t@luno-test.local', 'h4_qr', 'H4 Qr Name');
+    const viaQr = await api('friends', 'POST', { qr_code: 'LUNO-FRIEND:h4_qr' }, adder.token);
+    assert.equal(viaQr.status, 201, 'QR handle resolves');
+    assert.equal((await viaQr.json()).friend.id, qrTarget.id);
+    const mailTarget = await registerAs(api, 'h4m-t@luno-test.local', 'h4_mail', 'H4 Mail Name');
+    const beforeOptIn = await api('friends', 'POST', { handle: 'h4m-t@luno-test.local' }, adder.token);
+    assert.equal(beforeOptIn.status, 404, 'email without opt-in stays hidden');
+    const patched = await api('me/settings', 'PATCH', { searchable_by_email: true }, mailTarget.token);
+    assert.equal(patched.status, 200);
+    const viaMail = await api('friends', 'POST', { handle: 'h4m-t@luno-test.local' }, adder.token);
+    assert.equal(viaMail.status, 201, 'opted-in email resolves');
+    assert.equal((await viaMail.json()).friend.id, mailTarget.id);
+  } finally { db.raw.close(); }
+});
+
+test('H4: cross-isolate add ignores display names', async () => {
+  const db = makeD1();
+  try {
+    const nodeA = await stage5Isolate(db);
+    const nodeB = await stage5Isolate(db);
+    await registerAs(nodeA.api, 'h4x-a@luno-test.local', 'h4x_a', 'H4X Adder');
+    const target = await registerAs(nodeA.api, 'h4x-t@luno-test.local', 'h4x_target', 'H4X Display');
+    // Fresh isolate B: nobody is in memory, so resolution runs the D1 path.
+    const login = await nodeB.api('auth/login', 'POST', { email: 'h4x-a@luno-test.local', password: 'Str0ng!Passw0rd' });
+    const token = (await login.json()).access_token;
+    const byName = await nodeB.api('friends', 'POST', { handle: 'H4X Display' }, token);
+    assert.equal(byName.status, 404, 'D1 display-name fallback is gone');
+    const byHandle = await nodeB.api('friends', 'POST', { handle: 'h4x_target' }, token);
+    assert.equal(byHandle.status, 201, 'D1 handle lookup still works');
+    assert.equal((await byHandle.json()).friend.id, target.id);
+  } finally { db.raw.close(); }
+});
+
+async function registerAs(api, email, handle, displayName, password = 'Str0ng!Passw0rd') {
+  const reg = await api('auth/register', 'POST', { email, password, display_name: displayName, handle });
+  assert.equal(reg.status, 201, `register ${email}`);
+  const id = (await reg.json()).id;
+  const login = await api('auth/login', 'POST', { email, password });
+  assert.equal(login.status, 200, `login ${email}`);
+  return { id, token: (await login.json()).access_token };
+}
+
 test('H3: expired challenges are refused and reaped', async () => {
   const db = makeD1();
   try {

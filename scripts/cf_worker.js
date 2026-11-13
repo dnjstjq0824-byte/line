@@ -2150,8 +2150,7 @@ async function findUserByHandleOrEmail(h) {
     const u = await loadUserFromD1(byEmail.id, undefined);
     if (u && prefsOf(u.id).searchable_by_email) return u;
   }
-  const byName = await db.prepare('SELECT id FROM users WHERE LOWER(display_name) = ?').bind(h).first().catch(() => null);
-  if (byName) return loadUserFromD1(byName.id, undefined);
+  // H4: no display-name fallback — the function finally matches its name.
   return null;
 }
 async function loadUserFromD1ByLogin(identifier) {
@@ -3064,9 +3063,10 @@ async function extended(p, request, url, me, token) {
       } else if (b.handle || b.qr_code) {
         const h = String(b.handle || String(b.qr_code).replace(/^(LINE-FRIEND|LUNO-FRIEND):/i, '')).trim().toLowerCase().replace(/^@/, '');
         const all = Array.from(users.values());
+        // H4: display-name matching is gone — friend-add resolves by handle,
+        // QR (same handle after prefix strip), or opted-in email only.
         target = all.find(u => u.handle === h)
-          || all.find(u => u.email && u.email.toLowerCase() === h && prefsOf(u.id).searchable_by_email)
-          || all.find(u => u.display_name && u.display_name.toLowerCase() === h);
+          || all.find(u => u.email && u.email.toLowerCase() === h && prefsOf(u.id).searchable_by_email);
         if (!target && dbOf()) target = await findUserByHandleOrEmail(h);
       }
       if (!target || target.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);

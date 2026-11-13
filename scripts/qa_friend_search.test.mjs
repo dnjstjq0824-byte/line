@@ -4,7 +4,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 // QA-P0-3: the Add Friend UI promises ID-or-email search, so existing demo
-// users must be found by handle, email, and exact display name.
+// users must be found by handle and opted-in email. Since H4, exact display
+// names no longer resolve (they bypassed search restrictions).
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
@@ -44,10 +45,9 @@ test('add-friend by email honors searchable_by_email (private by default)', asyn
   assert.equal(r.status, 404)
 })
 
-test('add-friend finds Alice by exact display name', async () => {
+test('add-friend no longer resolves exact display names (H4)', async () => {
   const r = await api('friends', me.access_token, 'POST', { handle: 'Alice Kim' })
-  assert.equal(r.status, 200)
-  assert.equal(r.data.status, 'already_friends')
+  assert.equal(r.status, 404)
 })
 
 test('add-friend rejects partial names (no wrong-person add)', async () => {
@@ -61,8 +61,7 @@ test('email lookup honors searchable_by_email for ordinary users', async () => {
   const byEmail = await api('friends', me.access_token, 'POST', { handle: 'carol-qa@example.test' })
   assert.equal(byEmail.status, 404)
   const byName = await api('friends', me.access_token, 'POST', { handle: 'Carol QA' })
-  assert.equal(byName.status, 201)
-  assert.equal(byName.data.status, 'friend_added')
+  assert.equal(byName.status, 404, 'H4: display names stay unresolvable')
 })
 
 test('user search lists Alice for substring queries', async () => {
