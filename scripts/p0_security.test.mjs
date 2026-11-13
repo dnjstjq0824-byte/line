@@ -37,6 +37,25 @@ function codeFor(outbox, email) {
   return found.code;
 }
 
+async function registerAndLogin(api, email, password = 'Str0ng!Passw0rd') {
+  const reg = await api('auth/register', 'POST', { email, password, display_name: email.split('@')[0] });
+  assert.equal(reg.status, 201, `register ${email}`);
+  const login = await api('auth/login', 'POST', { email, password });
+  assert.equal(login.status, 200, `login ${email}`);
+  const body = await login.json();
+  return { id: body.user_id, token: body.access_token };
+}
+
+async function makeGroup(api, owner, memberIds, title = 'S6 Room') {
+  const res = await api('conversations', 'POST', { kind: 'group', title, member_ids: memberIds }, owner.token);
+  assert.equal(res.status, 201, 'group created');
+  return (await res.json()).id;
+}
+
+async function participantIds(joinRes) {
+  return (await joinRes.json()).participants.map((p) => p.id).sort();
+}
+
 // ---------- S1: recovery code in the response ----------
 
 test('S1: recover without a mail provider fails closed (501, no code, no challenge row)', async () => {
@@ -387,4 +406,78 @@ test('S5: release script carries no password literal', async () => {
   assert.ok(!/-storepass\s+"(?!\$)/.test(src), 'no literal storepass');
   assert.ok(!/storePassword=[^$\n]/.test(src), 'no literal storePassword');
   assert.ok(!/keyPassword=[^$\n]/.test(src), 'no literal keyPassword');
+});
+
+// ---------- S6: group-call authorization ----------
+
+test('S6: room members can join, signal, and leave a group call', async () => {
+  const { api } = await p0Isolate(null);
+  const a = await registerAndLogin(api, 's6-a@luno-test.local');
+  const b = await registerAndLogin(api, 's6-b@luno-test.local');
+  const roomId = await makeGroup(api, a, [b.id]);
+  assert.equal((await api('calls/group/join', 'POST', { room_id: roomId }, a.token)).status, 201);
+  const joinB = await api('calls/group/join', 'POST', { room_id: roomId }, b.token);
+  assert.equal(joinB.status, 201);
+  assert.deepEqual(await participantIds(joinB), [a.id, b.id].sort());
+  assert.equal((await api('calls/group/signal', 'POST', { room_id: roomId, target_user_id: b.id, signal: { type: 'offer', sdp: 'x' } }, a.token)).status, 200);
+  assert.equal((await api('calls/group/leave', 'POST', { room_id: roomId }, a.token)).status, 200);
+  assert.equal((await api('calls/group/leave', 'POST', { room_id: roomId }, b.token)).status, 200);
+});
+
+test('S6: non-member join is 404 and leaves no call state behind', async () => {
+  const { api } = await p0Isolate(null);
+  const a = await registerAndLogin(api, 's6-oa@luno-test.local');
+  const b = await registerAndLogin(api, 's6-ob@luno-test.local');
+  const c = await registerAndLogin(api, 's6-oc@luno-test.local');
+  const roomId = await makeGroup(api, a, [b.id]);
+  assert.equal((await api('calls/group/join', 'POST', { room_id: roomId }, c.token)).status, 404);
+  const joinA = await api('calls/group/join', 'POST', { room_id: roomId }, a.token);
+  assert.equal(joinA.status, 201);
+  assert.deepEqual(await participantIds(joinA), [a.id], 'rejected outsider is absent');
+  assert.equal((await api('calls/group/join', 'POST', { room_id: 'no-such-room' }, a.token)).status, 404);
+});
+
+test('S6: signal relays only between two participants of the same call room', async () => {
+  const { api } = await p0Isolate(null);
+  const a = await registerAndLogin(api, 's6-sa@luno-test.local');
+  const b = await registerAndLogin(api, 's6-sb@luno-test.local');
+  const c = await registerAndLogin(api, 's6-sc@luno-test.local');
+  const e = await registerAndLogin(api, 's6-se@luno-test.local');
+  const room1 = await makeGroup(api, a, [b.id], 'S6 Room 1');
+  const room2 = await makeGroup(api, a, [e.id], 'S6 Room 2');
+  await api('calls/group/join', 'POST', { room_id: room1 }, a.token);
+  await api('calls/group/join', 'POST', { room_id: room1 }, b.token);
+  await api('calls/group/join', 'POST', { room_id: room2 }, e.token);
+  assert.equal((await api('calls/group/signal', 'POST', { room_id: room1, target_user_id: b.id, signal: { type: 'offer' } }, a.token)).status, 200);
+  assert.equal((await api('calls/group/signal', 'POST', { room_id: room1, target_user_id: a.id, signal: { type: 'offer' } }, c.token)).status, 403, 'non-participant sender');
+  assert.equal((await api('calls/group/signal', 'POST', { room_id: room1, target_user_id: c.id, signal: { type: 'offer' } }, a.token)).status, 403, 'non-participant target');
+  assert.equal((await api('calls/group/signal', 'POST', { room_id: room1, target_user_id: e.id, signal: { type: 'offer' } }, a.token)).status, 403, 'cross-room target');
+  assert.equal((await api('calls/group/signal', 'POST', { room_id: 'no-such-room', target_user_id: b.id, signal: { type: 'offer' } }, a.token)).status, 404);
+  assert.equal((await api('calls/group/signal', 'POST', { target_user_id: b.id, signal: { type: 'offer' } }, a.token)).status, 400, 'room_id required');
+});
+
+test('S6: group calls cap at 8 participants with idempotent rejoin', async () => {
+  const { api } = await p0Isolate(null);
+  const users = [];
+  for (let i = 0; i < 9; i++) users.push(await registerAndLogin(api, `s6-cap${i}@luno-test.local`));
+  const roomId = await makeGroup(api, users[0], users.slice(1).map((u) => u.id), 'S6 Crowd');
+  for (let i = 0; i < 8; i++) {
+    assert.equal((await api('calls/group/join', 'POST', { room_id: roomId }, users[i].token)).status, 201, `join ${i}`);
+  }
+  assert.equal((await api('calls/group/join', 'POST', { room_id: roomId }, users[8].token)).status, 409, 'ninth join rejected');
+  assert.equal((await api('calls/group/join', 'POST', { room_id: roomId }, users[0].token)).status, 201, 'participant rejoin is idempotent');
+  assert.equal((await api('calls/group/leave', 'POST', { room_id: roomId }, users[0].token)).status, 200);
+  assert.equal((await api('calls/group/join', 'POST', { room_id: roomId }, users[8].token)).status, 201, 'freed slot can be taken');
+});
+
+test('S6: leave by a non-participant is a quiet no-op', async () => {
+  const { api } = await p0Isolate(null);
+  const a = await registerAndLogin(api, 's6-la@luno-test.local');
+  const b = await registerAndLogin(api, 's6-lb@luno-test.local');
+  const c = await registerAndLogin(api, 's6-lc@luno-test.local');
+  const roomId = await makeGroup(api, a, [b.id]);
+  await api('calls/group/join', 'POST', { room_id: roomId }, a.token);
+  assert.equal((await api('calls/group/leave', 'POST', { room_id: roomId }, c.token)).status, 200);
+  const joinB = await api('calls/group/join', 'POST', { room_id: roomId }, b.token);
+  assert.deepEqual(await participantIds(joinB), [a.id, b.id].sort(), 'outsider leave changed nothing');
 });

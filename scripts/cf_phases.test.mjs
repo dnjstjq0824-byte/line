@@ -83,17 +83,22 @@ test('key-bundle storage and group signaling metadata (no cryptographic or media
   const iceData = await iceRes.json();
   assert.ok(Array.isArray(iceData.ice_servers));
 
-  // 4. Group calling SFU join & leave
-  const joinRes = await api('calls/group/join', token, 'POST', { room_id: 'group_room_101' });
+  // 4. Group calling SFU join & leave (S6: members of a real conversation only)
+  const adminToken = await login('admin@luno.local', 'Phases#Admin1');
+  const adminMe = await (await api('me', adminToken)).json();
+  const room = await (await api('conversations', token, 'POST', { kind: 'group', title: 'Phase Call Room', member_ids: [adminMe.id] })).json();
+  const joinRes = await api('calls/group/join', token, 'POST', { room_id: room.id });
   assert.equal(joinRes.status, 201);
-  const leaveRes = await api('calls/group/leave', token, 'POST', { room_id: 'group_room_101' });
+  const leaveRes = await api('calls/group/leave', token, 'POST', { room_id: room.id });
   assert.equal(leaveRes.status, 200);
+  // A fabricated room id joins nothing.
+  assert.equal((await api('calls/group/join', token, 'POST', { room_id: 'group_room_101' })).status, 404);
 });
 
 test('speech transcription fails closed without a configured provider', async () => {
   const token = await login('user@luno.local', 'Phases#Demo12');
   const sttRes = await api('ai/stt', token, 'POST', {
-    mock_text: '?�늘 ?�의 준�??�료?�었?�니??',
+    mock_text: '?�늘 ?�의 준�??�료?�었?�니??',
     duration: 4.5
   });
   assert.equal(sttRes.status, 503);

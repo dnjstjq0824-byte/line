@@ -2070,6 +2070,8 @@ const pushTokens = new Map();
 const deviceKeys = new Map();
 const userKeys = new Map();
 const groupCallRooms = new Map();
+// S6: maximum live participants per group-call room.
+const GROUP_CALL_MAX_PARTICIPANTS = 8;
 const richMenus = new Map();
 const creatorSettlements = new Map();
 const REACTIONS = ['❤️', '😍', '😂', '😮', '😢', '👍'];
@@ -3790,10 +3792,18 @@ async function extended(p, request, url, me, token) {
   }
   if (p === 'calls/group/join' && method === 'POST') {
     const b = await readJson(request);
-    const roomId = b.room_id || b.conversation_id;
+    const roomId = resolveConversationId(b.room_id || b.conversation_id, myId);
     if (!roomId) return bad('room_id가 필요합니다');
+    // S6: only conversation members may join its group call. Memory first,
+    // then the durable fallback for rooms hydrated on another isolate.
+    let conv = conversations.get(roomId);
+    if (!conv || !conv.members.includes(myId)) {
+      conv = await hydrateDurableConversation(roomId).catch(() => null);
+    }
+    if (!conv || !conv.members.includes(myId)) return json({ error: 'conversation not found' }, 404);
     if (!groupCallRooms.has(roomId)) groupCallRooms.set(roomId, new Set());
     const room = groupCallRooms.get(roomId);
+    if (!room.has(myId) && room.size >= GROUP_CALL_MAX_PARTICIPANTS) return json({ error: 'group call is full' }, 409);
     room.add(myId);
     sendTo(Array.from(room), { type: 'call.group.user_joined', room_id: roomId, user_id: myId, user_name: me.display_name });
     return json({ status: 'joined', room_id: roomId, participants: Array.from(room).map(id => userBrief(id)) }, 201);
@@ -3802,16 +3812,25 @@ async function extended(p, request, url, me, token) {
     const b = await readJson(request);
     const targetId = b.target_user_id;
     if (!targetId) return bad('target_user_id가 필요합니다');
-    sendTo([targetId], { type: 'call.group.signal', from_user_id: myId, signal: b.signal, room_id: b.room_id });
+    const roomId = resolveConversationId(b.room_id || b.conversation_id, myId);
+    if (!roomId) return bad('room_id가 필요합니다');
+    // S6: relay only between two participants of the same live call room.
+    const room = groupCallRooms.get(roomId);
+    if (!room) return json({ error: 'call not found' }, 404);
+    if (!room.has(myId) || !room.has(targetId)) return json({ error: 'not a participant of this call' }, 403);
+    sendTo([targetId], { type: 'call.group.signal', from_user_id: myId, signal: b.signal, room_id: roomId });
     return json({ status: 'relayed' });
   }
   if (p === 'calls/group/leave' && method === 'POST') {
     const b = await readJson(request);
-    const roomId = b.room_id;
+    const roomId = resolveConversationId(b.room_id || b.conversation_id, myId);
     if (roomId && groupCallRooms.has(roomId)) {
       const room = groupCallRooms.get(roomId);
-      room.delete(myId);
-      sendTo(Array.from(room), { type: 'call.group.user_left', room_id: roomId, user_id: myId });
+      // S6: only a participant's leave fans out; anything else is a quiet no-op.
+      if (room.has(myId)) {
+        room.delete(myId);
+        sendTo(Array.from(room), { type: 'call.group.user_left', room_id: roomId, user_id: myId });
+      }
     }
     return json({ status: 'left' });
   }
@@ -4719,6 +4738,10 @@ const workerCore = {
         }
       }
       const callPath = p.match(/^calls\/([^/]+)(?:\/|$)/);
+      // S6: calls/group/* is excluded here because it carries its own checks
+      // inside extended(): join requires conversation membership, signal
+      // requires both ends in the same live call room, leave fans out only
+      // for participants. ice-servers stays public by design.
       if (callPath && !['ice-servers', 'group'].includes(callPath[1])) {
         const call = callSessions.get(callPath[1]);
         // A-12: member check falls back to D1 so a durable room hydrated on
