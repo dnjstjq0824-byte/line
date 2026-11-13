@@ -6,6 +6,9 @@ import test from 'node:test';
 // plus the narrow-width breaks found by the responsive probe. Each rule
 // below is pinned so a restyle cannot silently reintroduce the clip.
 const css = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
+const messengerView = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const messagePane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
+const v2 = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8');
 
 test('rail nav scrolls internally instead of pushing actions off-screen', () => {
   assert.match(css, /\.pc-rail-top \{\s*flex: 1 1 auto;\s*min-height: 0;\s*overflow-y: auto;/);
@@ -30,11 +33,39 @@ test('sticker picker overlays above the dock instead of squeezing in-flow', () =
   assert.match(css, /\.sticker-picker-popover \{[^}]*position: absolute; bottom: 100%;/);
 });
 
-test('mobile capsule fits six tabs without edge clipping', () => {
+test('mobile capsule fits five tabs without edge clipping (C1: profile moved to Home top)', () => {
   assert.match(css, /\.mobile-nav-item \{[^}]*padding: 6px 12px;[^}]*flex-shrink: 0;/);
   assert.match(css, /\.luno-mobile-floating-nav \{[^}]*overflow-x: auto;/);
+  const items = messengerView.match(/class="mobile-nav-item"/g) || [];
+  assert.equal(items.length, 5, 'exactly five bottom tabs');
 });
 
 test('message rows cannot slide content under the avatar', () => {
   assert.match(css, /\.pc-msg-bubble-group \{\s*display: flex;\s*flex-direction: column;\s*min-width: 0;/);
+});
+
+test('C1: chat header stays one line with translate/theme/calendar in the menu', () => {
+  assert.match(v2, /\.pc-chat-topbar\{[^}]*flex-wrap:nowrap/);
+  assert.match(v2, /\.chat-header-title\{[^}]*text-overflow:ellipsis;white-space:nowrap/);
+  assert.ok(messagePane.includes('chat-topbar-menu'), 'more menu exists');
+  const actionsBlock = messagePane.split('<div class="chat-topbar-actions">')[1].split('chat-topbar-menu-wrap')[0];
+  assert.ok(!actionsBlock.includes('ai-translate-tool-pill'), 'translate pill moved into the menu');
+  assert.ok(!actionsBlock.includes('cycle-wallpaper'), 'wallpaper moved into the menu');
+});
+
+test('C1: composer attachments collapse into the + panel (all nine kept)', () => {
+  assert.ok(messagePane.includes('attach-panel-popover'), 'attach panel exists');
+  const items = messagePane.match(/attach-panel-item"/g) || [];
+  assert.equal(items.length, 9, 'all nine attach actions kept');
+  for (const key of ['mvAttachSticker', 'mvAttachPhoto', 'mvAttachFile', 'mvMakePoll', 'mvAddEvent', 'mvLocationShare', 'mvShareContact', 'mvCapture', 'mvSend']) {
+    assert.ok(messagePane.includes(key), `panel labels ${key}`);
+  }
+});
+
+test('C1: chat touch targets meet 44px and bubbles cap at 70% on mobile', () => {
+  for (const sel of ['.btn-chat-action', '.btn-tool-icon', '.btn-mobile-back']) {
+    assert.match(v2, new RegExp(sel.replace(/\./g, '\\.') + '\\{[^}]*min-width:44px'));
+  }
+  assert.match(v2, /\.pc-msg-row\{max-width:70%/);
+  assert.match(v2, /\.pc-msg-row \.pc-speech-bubble\{max-width:70%/);
 });

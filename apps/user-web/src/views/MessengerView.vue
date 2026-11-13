@@ -3317,7 +3317,8 @@ onBeforeUnmount(() => {
           </div>
           <span class="nav-label">{{ t('mvCall') }}</span>
         </button>
-        <!-- Tab 5: 지갑 (Wallet) -->
+        <!-- Tab 5: 지갑 (Wallet). C1: 5 tabs only — the profile entry lives
+             at the top of Home (FriendPanel profile card). -->
         <button
           class="mobile-nav-item"
           :class="{ active: activeNav === 'wallet' }"
@@ -3328,7 +3329,6 @@ onBeforeUnmount(() => {
           </div>
           <span class="nav-label">{{ t('mvWallet') }}</span>
         </button>
-        <button class="mobile-nav-item" @click="activeProfileUser = currentUser" :aria-label="t('profileTitle')"><div class="nav-icon-wrap"><span class="mobile-profile-avatar"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span></div><span class="nav-label">{{ t('profileTitle') }}</span></button>
       </nav>
     </main>
 

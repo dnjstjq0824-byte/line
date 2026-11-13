@@ -155,13 +155,20 @@
 .luno-desktop-app .mobile-nav-item{color:var(--ln-muted)!important}.luno-desktop-app .mobile-nav-item.active{color:var(--ln-accent)!important}
 @media(max-width:1100px){.luno-desktop-app .pc-auth-col{padding:36px!important}.luno-desktop-app .pc-chat-messages-canvas{padding:24px!important}}
 @media(max-width:700px){
-  .luno-desktop-app .pc-chat-topbar{height:auto!important;min-height:64px;flex-wrap:wrap!important;padding:12px 16px!important;gap:10px!important;flex-shrink:0}
-  .luno-desktop-app .chat-topbar-left{width:100%;min-width:0;flex:1 1 100%;gap:10px}
-  .luno-desktop-app .chat-topbar-info{flex:1;min-width:0}
-  .luno-desktop-app .chat-topbar-info .title-row{min-width:0}
+  .luno-desktop-app .pc-chat-topbar{height:56px!important;min-height:56px;flex-wrap:nowrap!important;padding:0 12px!important;gap:8px!important;flex-shrink:0}
+  .luno-desktop-app .chat-topbar-left{min-width:0;flex:1 1 auto;gap:8px;overflow:hidden}
+  .luno-desktop-app .chat-topbar-info{flex:1;min-width:0;overflow:hidden}
+  .luno-desktop-app .chat-topbar-info .title-row{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .luno-desktop-app .chat-header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .luno-desktop-app .chat-topbar-actions{width:100%;min-width:0;overflow-x:auto;flex-shrink:0;justify-content:flex-start;scrollbar-width:thin}
+  .luno-desktop-app .chat-topbar-actions{min-width:0;flex-shrink:0;justify-content:flex-end;gap:2px!important}
   .luno-desktop-app .chat-topbar-actions>*{flex-shrink:0}
+  .luno-desktop-app .pc-msg-row{max-width:70%!important}
+  .luno-desktop-app .pc-msg-row .pc-speech-bubble{max-width:70%!important}
+  .luno-desktop-app .btn-chat-action{min-width:44px!important;min-height:44px!important}
+  .luno-desktop-app .btn-tool-icon{min-width:44px!important;min-height:44px!important}
+  .luno-desktop-app .btn-mobile-back{min-width:44px!important;min-height:44px!important}
+  .luno-desktop-app .btn-green-send{min-height:44px!important;padding-left:16px!important;padding-right:16px!important}
+  .luno-desktop-app .mobile-nav-item{min-height:52px!important}
   .luno-desktop-app .pc-chat-input-dock{flex-shrink:0;padding-bottom:max(12px,env(safe-area-inset-bottom))!important}
   .luno-desktop-app .pc-input-toolbar{overflow-x:auto;max-width:100%;flex-wrap:nowrap!important}
   .luno-desktop-app .pc-textarea-form textarea{min-height:56px!important;max-height:120px}
@@ -506,3 +513,17 @@
 .luno-desktop-app .call-dialog-box h3{color:#fff!important}
 .luno-desktop-app .hero-title{color:#fff!important}
 .luno-desktop-app input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']),.luno-desktop-app textarea,.luno-desktop-app select{font-size:16px!important}
+
+
+/* C1: header more-menu + composer attach panel (all widths). */
+.luno-desktop-app .chat-topbar-menu-wrap{position:relative;flex-shrink:0}
+.luno-desktop-app .chat-topbar-menu-layer{position:fixed;inset:0;z-index:90;background:transparent;border:0;padding:0}
+.luno-desktop-app .chat-topbar-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:91;display:flex;flex-direction:column;gap:4px;min-width:220px;background:var(--ln-surface,#fff);border:1px solid var(--ln-line,#e2e8f0);border-radius:14px;padding:8px;box-shadow:0 8px 24px rgba(15,23,42,.12)}
+.luno-desktop-app .chat-topbar-menu .ai-translate-tool-pill{justify-content:space-between;width:100%}
+.luno-desktop-app .chat-topbar-menu-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;background:none;border:0;border-radius:10px;cursor:pointer;font-size:14px;color:inherit;text-align:left}
+.luno-desktop-app .chat-topbar-menu-item:hover{background:var(--ln-accent-soft,#eef4ff)}
+.luno-desktop-app .pc-input-toolbar{position:relative}
+.luno-desktop-app .attach-panel-popover{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);z-index:91;display:grid;grid-template-columns:repeat(5,1fr);gap:6px;background:var(--ln-surface,#fff);border:1px solid var(--ln-line,#e2e8f0);border-radius:14px;padding:10px;box-shadow:0 8px 24px rgba(15,23,42,.12)}
+.luno-desktop-app .attach-panel-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;background:none;border:0;border-radius:10px;cursor:pointer;font-size:20px;color:inherit}
+.luno-desktop-app .attach-panel-item small{font-size:10px;color:var(--ln-muted,#64748b);white-space:nowrap}
+.luno-desktop-app .attach-panel-item:hover{background:var(--ln-accent-soft,#eef4ff)}

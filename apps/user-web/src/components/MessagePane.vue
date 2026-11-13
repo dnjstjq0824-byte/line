@@ -131,6 +131,9 @@ const editingMessageBody = defineModel<string>('editingMessageBody', { required:
 const effectChoice = defineModel<'none' | 'gray' | 'sepia'>('effectChoice', { required: true })
 
 const pinnedExpanded = ref(false)
+// C1: header ⋯ menu and composer + panel are pane-local UI state.
+const showTopbarMenu = ref(false)
+const showAttachPanel = ref(false)
 
 // FX-21: the jump button only earns its pixels while scrolled up.
 const showJumpBottom = ref(false)
@@ -186,30 +189,36 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
       </div>
 
       <div class="chat-topbar-actions">
-        <!-- AI Translation Bar Controls (Article 10) -->
-        <div class="ai-translate-tool-pill">
-          <button
-            class="btn-translate-switch"
-            :class="{ active: autoTranslateEnabled }"
-            :title="t('translateToggle')"
-            @click="autoTranslateEnabled = !autoTranslateEnabled"
-          >
-            <LunoIcon name="translate" :size="16" />
-            <span>{{ autoTranslateEnabled ? t('mvAiTranslateOn') : t('mvAiTranslate') }}</span>
-          </button>
-          <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language">
-            <option value="ko">KR</option>
-            <option value="en">EN</option>
-            <option value="th">TH</option>
-            <option value="ja">JA</option>
-          </select>
-        </div>
-
-        <button class="btn-chat-action" :title="t('mvWallpaperTitle')" @click="emit('cycle-wallpaper')">🎨</button>
         <button class="btn-chat-action" :title="t('callVoice')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'voice')"><LunoIcon name="call-voice" :size="18" /></button>
         <button class="btn-chat-action" :title="t('callVideo')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'video')"><LunoIcon name="call-video" :size="18" /></button>
-        <button class="btn-chat-action" :class="{ active: activeDrawer === 'events' }" :title="t('mvEventsCalendar')" @click="emit('drawer', 'events')"><LunoIcon name="calendar" :size="18" /></button>
         <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" @click="emit('drawer', 'notes')"><LunoIcon name="drawer" :size="18" /></button>
+        <!-- C1: translate/theme/calendar live in the ⋯ menu so the bar stays one line -->
+        <div class="chat-topbar-menu-wrap">
+          <button class="btn-chat-action" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" @click="showTopbarMenu = !showTopbarMenu">⋯</button>
+          <div v-if="showTopbarMenu" class="chat-topbar-menu-layer" @click="showTopbarMenu = false"></div>
+          <div v-if="showTopbarMenu" class="chat-topbar-menu" role="menu">
+            <!-- AI Translation Bar Controls (Article 10) -->
+            <div class="ai-translate-tool-pill" role="menuitem">
+              <button
+                class="btn-translate-switch"
+                :class="{ active: autoTranslateEnabled }"
+                :title="t('translateToggle')"
+                @click="autoTranslateEnabled = !autoTranslateEnabled"
+              >
+                <LunoIcon name="translate" :size="16" />
+                <span>{{ autoTranslateEnabled ? t('mvAiTranslateOn') : t('mvAiTranslate') }}</span>
+              </button>
+              <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language">
+                <option value="ko">KR</option>
+                <option value="en">EN</option>
+                <option value="th">TH</option>
+                <option value="ja">JA</option>
+              </select>
+            </div>
+            <button class="chat-topbar-menu-item" @click="emit('cycle-wallpaper'); showTopbarMenu = false"><span aria-hidden="true">🎨</span><span>{{ t('mvWallpaperTitle') }}</span></button>
+            <button class="chat-topbar-menu-item" @click="emit('drawer', 'events'); showTopbarMenu = false"><LunoIcon name="calendar" :size="18" /><span>{{ t('mvEventsCalendar') }}</span></button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -576,7 +585,23 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             </div>
           </div>
         </div>
-        <button class="btn-tool-icon" :title="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker">😊</button>
+        <!-- C1: attachments collapse into the + panel; voice stays out so a
+             recording can always be stopped without reopening anything. -->
+        <button class="btn-tool-icon btn-attach-plus" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" @click="showAttachPanel = !showAttachPanel">＋</button>
+        <button class="btn-tool-icon" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="emit('voice-toggle')">
+          {{ isRecordingVoice ? '⏹️' : '🎙️' }}
+        </button>
+        <div v-if="showAttachPanel" class="attach-panel-popover" role="menu">
+          <button class="attach-panel-item" @click="showStickerPicker = !showStickerPicker; showAttachPanel = false"><span aria-hidden="true">😊</span><small>{{ t('mvAttachSticker') }}</small></button>
+          <button class="attach-panel-item" :disabled="uploading" @click="emit('camera-open'); showAttachPanel = false"><span aria-hidden="true">📷</span><small>{{ t('mvAttachPhoto') }}</small></button>
+          <button class="attach-panel-item" :disabled="uploading" @click="emit('attach', 'file'); showAttachPanel = false"><span aria-hidden="true">📎</span><small>{{ t('mvAttachFile') }}</small></button>
+          <button class="attach-panel-item" @click="emit('poll-create'); showAttachPanel = false"><span aria-hidden="true">📊</span><small>{{ t('mvMakePoll') }}</small></button>
+          <button class="attach-panel-item" @click="emit('new-event'); showAttachPanel = false"><span aria-hidden="true">📅</span><small>{{ t('mvAddEvent') }}</small></button>
+          <button class="attach-panel-item" @click="emit('location'); showAttachPanel = false"><span aria-hidden="true">📍</span><small>{{ t('mvLocationShare') }}</small></button>
+          <button class="attach-panel-item" @click="emit('contact'); showAttachPanel = false"><span aria-hidden="true">👤</span><small>{{ t('mvShareContact') }}</small></button>
+          <button class="attach-panel-item" @click="emit('capture'); showAttachPanel = false"><span aria-hidden="true">✂️</span><small>{{ t('mvCapture') }}</small></button>
+          <button class="attach-panel-item" @click="emit('send-money'); showAttachPanel = false"><span aria-hidden="true">₩</span><small>{{ t('mvSend') }}</small></button>
+        </div>
         <div v-if="showCameraModal" class="fx-modal-backdrop" @click.self="emit('camera-close')">
           <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
             <h3>{{ t('camTitle') }}</h3>
@@ -596,17 +621,6 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             </div>
           </div>
         </div>
-        <button class="btn-tool-icon" :title="t('mvAttachPhoto')" :disabled="uploading" @click="emit('camera-open')">📷</button>
-        <button class="btn-tool-icon" :title="t('mvAttachFile')" :disabled="uploading" @click="emit('attach', 'file')">📎</button>
-        <button class="btn-tool-icon" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="emit('voice-toggle')">
-          {{ isRecordingVoice ? '⏹️' : '🎙️' }}
-        </button>
-        <button class="btn-tool-icon" :title="t('mvMakePoll')" @click="emit('poll-create')">📊</button>
-        <button class="btn-tool-icon" :title="t('mvAddEvent')" @click="emit('new-event')">📅</button>
-        <button class="btn-tool-icon" :title="t('mvLocationShare')" @click="emit('location')">📍</button>
-        <button class="btn-tool-icon" :title="t('mvShareContact')" @click="emit('contact')">👤</button>
-        <button class="btn-tool-icon" :title="t('mvCapture')" @click="emit('capture')">✂️</button>
-        <button class="btn-tool-icon" :title="t('mvSend')" @click="emit('send-money')">₩</button>
       </div>
 
       <!-- Textarea Form Area -->

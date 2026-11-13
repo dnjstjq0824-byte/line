@@ -79,12 +79,13 @@ test('file input is programmatically clickable (no hidden attribute)', () => {
 
 test('camera/file/voice entry points stay wired', () => {
   // I-4: the pane emits, the view handles — both halves must exist.
-  assert.match(pane, /@click="emit\('camera-open'\)"/)
+  // (C1: panel buttons may chain extra statements after the emit.)
+  assert.match(pane, /@click="[^"]*emit\('camera-open'\)[^"]*"/)
   assert.match(pane, /showCameraModal/)
   assert.match(vue, /@camera-open="openCamera"/)
-  assert.match(pane, /@click="emit\('attach', 'file'\)"/)
+  assert.match(pane, /@click="[^"]*emit\('attach', 'file'\)[^"]*"/)
   assert.match(vue, /@attach="chooseAttachment"/)
-  assert.match(pane, /@click="emit\('voice-toggle'\)"/)
+  assert.match(pane, /@click="[^"]*emit\('voice-toggle'\)[^"]*"/)
   assert.match(vue, /@voice-toggle="toggleVoiceRecording"/)
   assert.match(pane, /@change="emit\('file-change', \$event\)"/)
   assert.match(vue, /@file-change="uploadSelectedFile"/)
