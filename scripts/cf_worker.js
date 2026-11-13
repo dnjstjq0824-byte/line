@@ -1866,7 +1866,16 @@ function missingRolesTable(error) {
   if (missing) rolesTableAbsent = true;
   return missing;
 }
+// A1: operator-configured administrators (comma-separated user ids). Ids, not
+// emails: without email verification anyone could squat an admin address.
+// The luno_user_roles table stays authoritative alongside this list.
+function isEnvAdmin(userId) {
+  if (!userId) return false;
+  const ids = String(CURRENT_ENV?.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return ids.includes(userId);
+}
 async function storedUserRole(userId) {
+  if (isEnvAdmin(userId)) return 'admin';
   const db = dbOf();
   if (!db || rolesTableAbsent) return 'user';
   try {
@@ -1925,6 +1934,7 @@ async function getAuthUser(request) {
     return null;
   }
   if (db) user.role = grantedRoleFromSession;
+  if (db && isEnvAdmin(userId)) user.role = 'admin';
   AUTH_CTX.set(request, { token, session_id: session.device_id });
   return user;
 }

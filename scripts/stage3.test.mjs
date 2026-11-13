@@ -156,3 +156,34 @@ test('U2: notice dates render from actual timestamps; seed keys cleaned', () => 
   assert.ok(!webI18nSource.includes('mvSeedPress'), 'mvSeedPress removed');
   assert.ok(!webI18nSource.includes('mvSeedMinutes'), 'mvSeedMinutes removed');
 });
+
+// ---------- A1: administrators from config ----------
+
+test('A1: ADMIN_USER_IDS grants admin by user id', async () => {
+  const db = makeD1();
+  try {
+    const plain = await stage3Isolate(db);
+    const reg = await plain.api('auth/register', 'POST', { email: 'a1-admin@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'admin' });
+    const id = (await reg.json()).id;
+    const { api } = await stage3Isolate(db, { ADMIN_USER_IDS: ` ${id} ,` });
+    const login = await (await api('auth/login', 'POST', { email: 'a1-admin@luno-test.local', password: 'Str0ng!Passw0rd' })).json();
+    assert.equal(login.role, 'admin', 'login reports the env grant');
+    assert.equal((await api('admin/stats', 'GET', null, login.access_token)).status, 200, 'listed id reaches admin/stats');
+  } finally { db.raw.close(); }
+});
+
+test('A1: unlisted ids stay non-admin; emails grant nothing', async () => {
+  const db = makeD1();
+  try {
+    const plain = await stage3Isolate(db);
+    await plain.api('auth/register', 'POST', { email: 'a1-user@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'user' });
+    const attempt = async (extraEnv) => {
+      const { api } = await stage3Isolate(db, extraEnv);
+      const login = await (await api('auth/login', 'POST', { email: 'a1-user@luno-test.local', password: 'Str0ng!Passw0rd' })).json();
+      return api('admin/stats', 'GET', null, login.access_token);
+    };
+    assert.equal((await attempt({ ADMIN_USER_IDS: 'a1-user@luno-test.local' })).status, 403, 'email grants nothing');
+    assert.equal((await attempt({ ADMIN_USER_IDS: '00000000-0000-0000-0000-000000000000' })).status, 403, 'unlisted id stays user');
+    assert.equal((await attempt({})).status, 403, 'no var, no grant');
+  } finally { db.raw.close(); }
+});
