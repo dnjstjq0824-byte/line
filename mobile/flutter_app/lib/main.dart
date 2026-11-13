@@ -32,6 +32,7 @@ class _MessengerAppState extends State<MessengerApp> {
     _session = SessionController();
     _router = buildRouter(_session);
     _session.restore();
+    _session.checkForUpdate();
   }
 
   @override

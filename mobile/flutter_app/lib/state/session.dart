@@ -16,8 +16,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'package:package_info_plus/package_info_plus.dart';
+
 import '../api/client.dart';
 import '../legacy_tokens.dart';
+import '../util/app_update.dart';
 import '../util/album_photos.dart';
 import '../util/attachments.dart';
 import '../util/channel_slot.dart';
@@ -89,6 +92,10 @@ class SessionController extends ChangeNotifier {
   bool offline = false;
   String selfId = '';
   String deviceId = '';
+  // C3: app-update advisory from /api/v1/app/latest (none until checked).
+  UpdateKind appUpdate = UpdateKind.none;
+  String currentAppVersion = '';
+  String latestAppVersion = '';
   String selfName = '';
   String selfHandle = '';
   String selfStatusMessage = '';
@@ -1277,6 +1284,22 @@ class SessionController extends ChangeNotifier {
       final res = await api.call('/api/v1/me/export-data');
       notice = 'GDPR 데이터 백업 파일 생성 완료 (${res['stats']?['conversations_count'] ?? 0}개 대화)';
     });
+  }
+
+  // C3: compare the installed build against /api/v1/app/latest and stage an
+  // advisory for the settings page. Silent on any failure: an update check
+  // must never break the session.
+  Future<void> checkForUpdate() async {
+    try {
+      final res = await api.call('/api/v1/app/latest');
+      final info = await PackageInfo.fromPlatform();
+      currentAppVersion = '${info.version}+${info.buildNumber}';
+      latestAppVersion = '${res['version']}+${res['build']}';
+      appUpdate = compareAppVersions(currentAppVersion, latestAppVersion);
+    } catch (_) {
+      appUpdate = UpdateKind.none;
+    }
+    notifyListeners();
   }
 
   /// H-4: permanently delete the account (server DELETE /api/v1/me with

@@ -10,6 +10,7 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_update.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -144,6 +145,23 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
             _Section(
+              title: '앱 정보',
+              sub: sub,
+              children: [
+                _ActionRow(
+                  icon: Icons.system_update,
+                  title: '앱 업데이트',
+                  subtitle: _updateSubtitle(session),
+                  ink: ink,
+                  sub: sub,
+                  dark: dark,
+                  danger: session.appUpdate == UpdateKind.force,
+                  chevron: true,
+                  onTap: session.checkForUpdate,
+                ),
+              ],
+            ),
+            _Section(
               title: '계정',
               sub: sub,
               children: [
@@ -173,6 +191,18 @@ class SettingsPage extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+String _updateSubtitle(SessionController session) {
+  switch (session.appUpdate) {
+    case UpdateKind.force:
+      return '필수 업데이트가 있습니다 (${session.latestAppVersion})';
+    case UpdateKind.optional:
+      return '새 버전 ${session.latestAppVersion} 사용 가능';
+    case UpdateKind.none:
+      if (session.latestAppVersion.isEmpty) return '탭하여 새 버전 확인';
+      return '최신 버전입니다 (${session.currentAppVersion})';
   }
 }
 
