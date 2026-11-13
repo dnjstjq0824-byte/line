@@ -172,3 +172,52 @@ test('H2: 51st room of the day is 429', async () => {
     assert.equal((await over.json()).code, 'QUOTA_EXCEEDED');
   } finally { db.raw.close(); }
 });
+
+// ---------- H3: QR challenge persistence ----------
+
+test('H3: a challenge created on one isolate approves on another', async () => {
+  const db = makeD1();
+  try {
+    const nodeA = await stage5Isolate(db);
+    const nodeB = await stage5Isolate(db);
+    const user = await registerLogin(nodeA.api, 'h3-a@luno-test.local', 'h3_a');
+    const ch = await (await nodeA.api('auth/qr/challenge', 'POST', {})).json();
+    assert.ok(ch.challenge_id && ch.qr_token);
+    const approval = await nodeB.api('auth/qr/approve', 'POST', { challenge_id: ch.challenge_id, qr_token: ch.qr_token }, user.token);
+    assert.equal(approval.status, 200, 'approval lands from the isolate that never saw creation');
+    const polled = await (await nodeA.api('auth/qr/poll', 'POST', { challenge_id: ch.challenge_id, qr_token: ch.qr_token })).json();
+    assert.equal(polled.status, 'authenticated');
+    assert.ok(polled.access_token);
+    assert.equal(polled.user_id, user.id);
+    // Consumed on first use: re-poll is refused on either isolate.
+    const againA = await nodeA.api('auth/qr/poll', 'POST', { challenge_id: ch.challenge_id, qr_token: ch.qr_token });
+    assert.equal(againA.status, 401);
+    const againB = await nodeB.api('auth/qr/poll', 'POST', { challenge_id: ch.challenge_id, qr_token: ch.qr_token });
+    assert.equal(againB.status, 401);
+    // And the row is gone from the table, not just flipped.
+    const leftover = db.raw.prepare('SELECT challenge_id FROM luno_qr_challenges WHERE challenge_id = ?').get(ch.challenge_id);
+    assert.equal(leftover, undefined);
+  } finally { db.raw.close(); }
+});
+
+test('H3: expired challenges are refused and reaped', async () => {
+  const db = makeD1();
+  try {
+    const { api } = await stage5Isolate(db);
+    const user = await registerLogin(api, 'h3e-a@luno-test.local', 'h3e_a');
+    await api('auth/qr/challenge', 'POST', {}); // creates the table
+    const past = Math.floor(Date.now() / 1000) - 10;
+    db.raw.prepare('INSERT INTO luno_qr_challenges(challenge_id,qr_token,status,user_id,expires_at,created_at) VALUES (?,?,?,?,?,?)')
+      .run('expired-poll', 'qr-tok-expired-poll', 'pending', null, past, new Date().toISOString());
+    db.raw.prepare('INSERT INTO luno_qr_challenges(challenge_id,qr_token,status,user_id,expires_at,created_at) VALUES (?,?,?,?,?,?)')
+      .run('expired-approve', 'qr-tok-expired-approve', 'pending', null, past, new Date().toISOString());
+    const polled = await api('auth/qr/poll', 'POST', { challenge_id: 'expired-poll', qr_token: 'qr-tok-expired-poll' });
+    assert.equal(polled.status, 400);
+    assert.match((await polled.json()).error, /만료/);
+    const approval = await api('auth/qr/approve', 'POST', { challenge_id: 'expired-approve', qr_token: 'qr-tok-expired-approve' }, user.token);
+    assert.equal(approval.status, 400);
+    assert.match((await approval.json()).error, /만료/);
+    const leftovers = db.raw.prepare('SELECT challenge_id FROM luno_qr_challenges').all();
+    assert.deepEqual(leftovers.map((r) => r.challenge_id).filter((id) => id.startsWith('expired-')), []);
+  } finally { db.raw.close(); }
+});

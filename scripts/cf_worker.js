@@ -292,6 +292,10 @@ const LUNO_SCHEMA_PHASE1 = [
     user_id TEXT NOT NULL, day TEXT NOT NULL,
     uploads INTEGER NOT NULL DEFAULT 0, upload_bytes INTEGER NOT NULL DEFAULT 0,
     rooms INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))`,
+  `CREATE TABLE IF NOT EXISTS luno_qr_challenges (
+    challenge_id TEXT PRIMARY KEY, qr_token TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', user_id TEXT,
+    expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS blocks (
     blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at TEXT NOT NULL,
     PRIMARY KEY (blocker_id, blocked_id))`,
@@ -991,6 +995,69 @@ async function quotaConsumeRoom(userId) {
   if (quotaWouldExceed(rooms, 1, QUOTA_ROOMS_PER_DAY)) return { ok: false, rooms };
   await db.prepare('INSERT INTO luno_daily_quotas (user_id, day, rooms) VALUES (?, ?, 1) ON CONFLICT(user_id, day) DO UPDATE SET rooms = rooms + 1').bind(userId, day).run();
   return { ok: true, rooms: rooms + 1 };
+}
+// H3: QR login challenges persist in D1 (luno_qr_challenges) so approval and
+// polling work from any isolate. Same XOR shape as the passkey helpers above:
+// D1 when configured, the qrChallenges Map for local runs without a database.
+const QR_CHALLENGE_TTL_MS = 180000;
+async function qrIssueChallenge() {
+  const challId = crypto.randomUUID();
+  const qrToken = `qr-tok-${crypto.randomUUID()}`;
+  const expiresAt = Date.now() + QR_CHALLENGE_TTL_MS;
+  if (dbOf()) {
+    await ensureSchema();
+    await dbOf().prepare(
+      'INSERT INTO luno_qr_challenges(challenge_id,qr_token,status,user_id,expires_at,created_at) VALUES (?,?,?,?,?,?)'
+    ).bind(challId, qrToken, 'pending', null, Math.floor(expiresAt / 1000), now()).run();
+  } else {
+    qrChallenges.set(challId, { token: qrToken, status: 'pending', user_id: null, created_at: Date.now() });
+  }
+  return { challId, qrToken };
+}
+async function qrGetChallenge(challId) {
+  if (dbOf()) {
+    await ensureSchema();
+    const row = await dbOf().prepare(
+      'SELECT challenge_id, qr_token, status, user_id, expires_at FROM luno_qr_challenges WHERE challenge_id = ?'
+    ).bind(challId).first();
+    if (!row) return null;
+    return { id: row.challenge_id, token: row.qr_token, status: row.status, user_id: row.user_id, expiresAt: Number(row.expires_at) * 1000 };
+  }
+  const c = qrChallenges.get(challId);
+  if (!c) return null;
+  return { id: challId, token: c.token, status: c.status, user_id: c.user_id, expiresAt: c.created_at + QR_CHALLENGE_TTL_MS };
+}
+async function qrApproveChallenge(challId, userId) {
+  // 'ok' | 'missing' | 'expired'. Re-approving an unexpired challenge keeps
+  // the old overwrite semantics; expired rows are deleted like before.
+  if (dbOf()) {
+    await ensureSchema();
+    const nowSec = Math.floor(Date.now() / 1000);
+    const row = await dbOf().prepare(
+      `UPDATE luno_qr_challenges SET status='authenticated', user_id=? WHERE challenge_id=? AND expires_at>? RETURNING challenge_id`
+    ).bind(userId, challId, nowSec).first();
+    if (row) return 'ok';
+    const existing = await dbOf().prepare('SELECT expires_at FROM luno_qr_challenges WHERE challenge_id = ?').bind(challId).first();
+    if (!existing) return 'missing';
+    await dbOf().prepare('DELETE FROM luno_qr_challenges WHERE challenge_id = ?').bind(challId).run();
+    return 'expired';
+  }
+  const c = qrChallenges.get(challId);
+  if (!c) return 'missing';
+  if (Date.now() > c.created_at + QR_CHALLENGE_TTL_MS) {
+    qrChallenges.delete(challId);
+    return 'expired';
+  }
+  c.status = 'authenticated';
+  c.user_id = userId;
+  return 'ok';
+}
+async function qrDeleteChallenge(challId) {
+  if (dbOf()) {
+    await ensureSchema();
+    await dbOf().prepare('DELETE FROM luno_qr_challenges WHERE challenge_id = ?').bind(challId).run();
+  }
+  qrChallenges.delete(challId);
 }
 async function revokeOtherSessions(userId, keepSid, by) {
   const db = dbOf();
@@ -5310,10 +5377,9 @@ const workerCore = {
 
       // 3. Auth: QR Login
       if (p === 'auth/qr/challenge' && request.method === 'POST') {
+        // Creation rate limit (H1) doubles as H3's: 60/min per IP.
         if (!await rateLimit('rl:qrchall:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
-        const challId = crypto.randomUUID();
-        const qrToken = `qr-tok-${crypto.randomUUID()}`;
-        qrChallenges.set(challId, { token: qrToken, status: 'pending', user_id: null, created_at: Date.now() });
+        const { challId, qrToken } = await qrIssueChallenge();
         return json({ challenge_id: challId, qr_token: qrToken, expires_in: 180 }, 201);
       }
       if (p === 'auth/qr/approve' && request.method === 'POST') {
@@ -5321,30 +5387,31 @@ const workerCore = {
         if (!authUser) return json({ error: 'unauthorized' }, 401);
         if (!await rateLimit('rl:qrappr:' + authUser.id, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
-        const c = qrChallenges.get(body.challenge_id);
+        const c = await qrGetChallenge(body.challenge_id);
         if (!c || c.token !== body.qr_token) return json({ error: 'invalid qr challenge' }, 400);
-        if (Date.now() - c.created_at > 180000) {
-          qrChallenges.delete(body.challenge_id);
-          return bad('QR 코드가 만료되었습니다', 400);
-        }
-        c.status = 'authenticated';
-        c.user_id = authUser.id;
+        const approved = await qrApproveChallenge(body.challenge_id, authUser.id);
+        if (approved === 'expired') return bad('QR 코드가 만료되었습니다', 400);
+        if (approved === 'missing') return json({ error: 'invalid qr challenge' }, 400);
         return json({ status: 'approved' });
       }
       if (p === 'auth/qr/poll' && request.method === 'POST') {
         // H1: the web client polls every 2.5s (24/min), so poll gets headroom.
         if (!await rateLimit('rl:qrpoll:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
-        const c = qrChallenges.get(body.challenge_id);
+        const c = await qrGetChallenge(body.challenge_id);
         if (!c || c.token !== body.qr_token) return json({ error: 'invalid qr challenge' }, 401);
-        if (Date.now() - c.created_at > 180000) {
-          qrChallenges.delete(body.challenge_id);
+        if (Date.now() > c.expiresAt) {
+          await qrDeleteChallenge(body.challenge_id);
           return bad('QR 코드가 만료되었습니다', 400);
         }
         if (c.status === 'authenticated') {
-          const u = Array.from(users.values()).find(usr => usr.id === c.user_id);
+          // H3: the approver may live on another isolate — D1 fallback keeps
+          // the poll working there instead of crashing on an undefined user.
+          const u = Array.from(users.values()).find(usr => usr.id === c.user_id)
+            || (dbOf() ? await loadUserFromD1(c.user_id) : null);
+          if (!u) return bad('승인한 사용자를 찾을 수 없습니다', 400);
           const { token } = await createSession(u, request);
-          qrChallenges.delete(body.challenge_id); // Invalidate immediately upon consumption
+          await qrDeleteChallenge(body.challenge_id); // Invalidate immediately upon consumption
           return json({ status: 'authenticated', access_token: token, user_id: u.id, role: u.role });
         }
         return json({ status: 'pending' }, 202);
