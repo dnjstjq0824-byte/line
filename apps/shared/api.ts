@@ -59,6 +59,7 @@ export type Chat = {
   badge_n?: boolean
   member_count?: number
   members?: User[]
+  owner_id?: string | null
   updated_at?: string
   last_message?: {
     id: string
@@ -78,6 +79,7 @@ export type Message = {
   kind: string
   body: string
   sender_name?: string
+  sender_kind?: string
   reply_to?: string
   metadata?: Record<string, unknown>
   created_at: string

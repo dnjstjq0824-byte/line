@@ -8,6 +8,7 @@ import ChatList from '../components/ChatList.vue'
 import FriendPanel from '../components/FriendPanel.vue'
 import MessagePane from '../components/MessagePane.vue'
 import SettingsModal from '../components/SettingsModal.vue'
+import ApprovalBox from '../components/ApprovalBox.vue'
 import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
 import { parseStorePacks } from '../../../shared/shop'
 import { findDirectChatId } from '../../../shared/direct_chat'
@@ -899,6 +900,10 @@ const addFriendHandleInput = ref('')
 const addFriendResults = ref<User[]>([])
 const addFriendSearched = ref(false)
 const showSettingsModal = ref(false)
+// L-05: approval box state (room proposals + per-message decision states).
+const showApprovalBox = ref(false)
+const approvalProposals = ref<Array<{ message_id: string; body: string; author_id: string; author_name: string; created_at: string; state: string; decided_by: string | null }>>([])
+const proposalStates = ref<Record<string, string>>({})
 const showContactPicker = ref(false)
 const showPollCreateModal = ref(false)
 const newPollQuestion = ref('')
@@ -1253,6 +1258,7 @@ async function selectChat(convId: string) {
     }
     scrollToBottom()
     await Promise.all([loadChats(), loadPolls(convId)])
+    void loadProposalStates(convId)
   } catch (e: any) {
     if (selectedChatId.value === convId && version === chatSelectVersion && !messages.value.length) {
       conversationError.value = e?.message || t('mvLoadMsgsFailed')
@@ -1903,6 +1909,47 @@ async function unsendMessage(msgId: string) {
 }
 
 // Pin message as Announcement
+// L-05: approval box data + decide actions.
+async function loadProposalStates(convId: string) {
+  try {
+    const res = await api<{ proposals: Array<{ message_id: string; state: string }> }>(`/api/v1/conversations/${convId}/proposals`)
+    const map: Record<string, string> = {}
+    for (const p of res.proposals || []) map[p.message_id] = p.state
+    proposalStates.value = map
+  } catch {
+    proposalStates.value = {}
+  }
+}
+async function openApprovalBox() {
+  if (!selectedChatId.value) return
+  await wrap(async () => {
+    const res = await api<{ proposals: typeof approvalProposals.value }>(`/api/v1/conversations/${selectedChatId.value}/proposals`)
+    approvalProposals.value = res.proposals || []
+    showApprovalBox.value = true
+  })
+}
+function approvalCanDecide(): boolean {
+  const me = currentUser.value
+  const chat = selectedChat.value
+  if (!me || !chat) return false
+  if ((me as User).role === 'admin') return true
+  if (chat.kind === 'direct') return true
+  return (chat as Chat).owner_id === me.id
+}
+async function decideProposal(msgOrId: { id: string } | string, decision: 'approved' | 'rejected') {
+  if (!selectedChatId.value) return
+  const messageId = typeof msgOrId === 'string' ? msgOrId : msgOrId.id
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${selectedChatId.value}/messages/${messageId}/decide`, 'POST', { decision })
+    note.value = decision === 'approved' ? t('apprApprovedState') : t('apprRejectedState')
+    await selectChat(selectedChatId.value)
+    await loadProposalStates(selectedChatId.value)
+    if (showApprovalBox.value) {
+      const res = await api<{ proposals: typeof approvalProposals.value }>(`/api/v1/conversations/${selectedChatId.value}/proposals`).catch(() => ({ proposals: [] }))
+      approvalProposals.value = res.proposals || []
+    }
+  })
+}
 async function pinMessage(msgId: string) {
   if (!selectedChatId.value) return
   await wrap(async () => {
@@ -3172,6 +3219,7 @@ onBeforeUnmount(() => {
         :chat-media-list="chatMediaList"
         :chat-search-results="chatSearchResults"
         :messages="messages"
+        :proposal-states="proposalStates"
         :is-loading-messages="isLoadingMessages"
         :has-earlier-messages="hasEarlierMessages"
         :earlier-messages-loading="earlierMessagesLoading"
@@ -3239,6 +3287,8 @@ onBeforeUnmount(() => {
         @keep="saveToKeep"
         @pin="pinMessage"
         @unsend="unsendMessage"
+        @decide="decideProposal"
+        @approvals="openApprovalBox"
         @scroll-bottom="scrollToBottom"
         @sticker="sendSticker"
         @file-change="uploadSelectedFile"
@@ -3633,6 +3683,14 @@ onBeforeUnmount(() => {
 
     <!-- SETTINGS & THEMES MODAL -->
 
+    <ApprovalBox
+      v-if="showApprovalBox && selectedChat"
+      :proposals="approvalProposals"
+      :can-decide="approvalCanDecide()"
+      :room-title="selectedChat.title"
+      @close="showApprovalBox = false"
+      @decide="decideProposal"
+    />
     <SettingsModal
       v-if="showSettingsModal"
       :devices-list="devicesList"

@@ -3,7 +3,7 @@
 // from MessengerView.vue. Presentational: data and loaders stay in the view,
 // the pane owns only the pin-banner expand flag. Element refs arrive through
 // a holder (template expressions would unwrap the bare bindings).
-import { ref, type Ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
 
 import type { Chat, Message, User } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
@@ -39,6 +39,7 @@ const props = defineProps<{
   chatMediaList: MediaItem[]
   chatSearchResults: SearchHit[]
   messages: Message[]
+  proposalStates: Record<string, string>
   isLoadingMessages: boolean
   hasEarlierMessages: boolean
   earlierMessagesLoading: boolean
@@ -95,6 +96,8 @@ const emit = defineEmits<{
   keep: [msg: Message]
   pin: [msgId: string]
   unsend: [msgId: string]
+  decide: [msg: Message, decision: 'approved' | 'rejected']
+  approvals: []
   'scroll-bottom': []
   sticker: [stickerId: string]
   'file-change': [event: Event]
@@ -158,6 +161,17 @@ function jumpToSearchedMessage(id: string) {
   if (flashTimer) clearTimeout(flashTimer)
   flashTimer = setTimeout(() => { flashedMessageId.value = '' }, 1800)
 }
+// L-05: approvers mirror the server rule (owner, admin, or direct member).
+const canDecide = computed(() => {
+  const me = currentUser.value
+  if (!me) return false
+  if ((me as User).role === 'admin') return true
+  if (props.selectedChat.kind === 'direct') return true
+  return (props.selectedChat as Chat).owner_id === me.id
+})
+function proposalState(msg: Message): string {
+  return props.proposalStates[msg.id] || 'pending'
+}
 // Group rooms show the sender; direct rooms keep the (nickname-aware) title.
 function headerName(msg: Message): string {
   if (props.selectedChat.kind === 'group') return senderDisplayName(msg, props.selectedChat.members || [])
@@ -217,6 +231,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             </div>
             <button class="chat-topbar-menu-item" @click="emit('cycle-wallpaper'); showTopbarMenu = false"><span aria-hidden="true">🎨</span><span>{{ t('mvWallpaperTitle') }}</span></button>
             <button class="chat-topbar-menu-item" @click="emit('drawer', 'events'); showTopbarMenu = false"><LunoIcon name="calendar" :size="18" /><span>{{ t('mvEventsCalendar') }}</span></button>
+            <button class="chat-topbar-menu-item" @click="emit('approvals'); showTopbarMenu = false"><LunoIcon name="check" :size="18" /><span>{{ t('apprTitle') }}</span></button>
           </div>
         </div>
       </div>
@@ -486,6 +501,13 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <div v-else-if="msg.kind === 'proposal' || msg.kind === 'decision' || msg.kind === 'report'" class="bubble-text-content bubble-bot-kind">
                   <span class="badge-kind">{{ msg.kind === 'proposal' ? t('msgKindProposal') : msg.kind === 'decision' ? t('msgKindDecision') : t('msgKindReport') }}</span>
                   {{ msg.body }}
+                </div>
+                <div v-if="msg.kind === 'proposal' && canDecide && proposalState(msg) === 'pending'" class="bubble-decide-row">
+                  <button class="btn-decide-approve" @click="emit('decide', msg, 'approved')">{{ t('apprApprove') }}</button>
+                  <button class="btn-decide-reject" @click="emit('decide', msg, 'rejected')">{{ t('apprReject') }}</button>
+                </div>
+                <div v-else-if="msg.kind === 'proposal' && proposalState(msg) !== 'pending'" class="bubble-decided-mark">
+                  {{ proposalState(msg) === 'approved' ? t('apprApprovedState') : t('apprRejectedState') }}
                 </div>
                 <div v-else class="bubble-text-content">{{ msg.body }}</div>
 

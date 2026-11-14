@@ -109,6 +109,7 @@ class SessionController extends ChangeNotifier {
   String selfAvatarUrl = '';
   String selfCoverUrl = '';
   String selfBirthday = '';
+  String selfRole = 'user';
   Map<String, dynamic> myPrefs = {};
   bool prefsLoaded = false;
 
@@ -230,6 +231,7 @@ class SessionController extends ChangeNotifier {
       selfAvatarUrl = me['avatar_url'] ?? '';
       selfCoverUrl = me['cover_url'] ?? '';
       selfBirthday = me['birthday'] ?? '';
+      selfRole = me['role'] ?? 'user';
       offline = false;
       error = '';
       notifyListeners();
@@ -300,6 +302,7 @@ class SessionController extends ChangeNotifier {
       selfAvatarUrl = me['avatar_url'] ?? '';
       selfCoverUrl = me['cover_url'] ?? '';
       selfBirthday = me['birthday'] ?? '';
+      selfRole = me['role'] ?? 'user';
       notifyListeners();
       await loadPrefs();
       await reload();
@@ -649,6 +652,7 @@ class SessionController extends ChangeNotifier {
         api.call('/api/v1/conversations/$id/events').catchError((_) => <String, dynamic>{'events': []}),
         api.call('/api/v1/conversations/$id/polls').catchError((_) => <String, dynamic>{'polls': []}),
         api.call('/api/v1/conversations/$id/albums').catchError((_) => <String, dynamic>{'albums': []}),
+        api.call('/api/v1/conversations/$id/proposals').catchError((_) => <String, dynamic>{'proposals': []}),
       ]);
       messages = withoutUnsent(List<dynamic>.from(resultsList[0]['messages'] ?? []));
       pins = resultsList[1]['pins'] ?? [];
@@ -656,6 +660,7 @@ class SessionController extends ChangeNotifier {
       events = resultsList[3]['events'] ?? [];
       polls = resultsList[4]['polls'] ?? [];
       albums = resultsList[5]['albums'] ?? [];
+      proposals = resultsList[6]['proposals'] ?? [];
       notifyListeners();
       if (messages.isNotEmpty) {
         await api.call('/api/v1/conversations/$id/read',
@@ -1202,6 +1207,50 @@ class SessionController extends ChangeNotifier {
       await api.call('/api/v1/conversations/$selectedId/messages/$msgId/reactions',
           method: 'POST', data: {'reaction': emoji});
       notice = '$emoji 리액션을 남겼습니다.';
+    });
+  }
+
+  /// L-05: approval box. Proposals of the open room with decision states.
+  List<dynamic> proposals = [];
+
+  String proposalState(String messageId) {
+    for (final p in proposals) {
+      if (p is Map && '${p['message_id']}' == messageId) {
+        return '${p['state'] ?? 'pending'}';
+      }
+    }
+    return 'pending';
+  }
+
+  /// Approvers mirror the server rule: room owner, global admin, or -- in
+  /// direct rooms with no owner -- any member.
+  bool canDecideIn(Map<String, dynamic>? room) {
+    if (room == null) return false;
+    if (selfRole == 'admin') return true;
+    if ('${room['kind']}' == 'direct') return true;
+    return '${room['owner_id'] ?? ''}' == selfId && selfId.isNotEmpty;
+  }
+
+  Future<void> loadProposals(String roomId) async {
+    try {
+      final res = await api.call('/api/v1/conversations/$roomId/proposals');
+      proposals = (res['proposals'] as List?) ?? [];
+    } catch (_) {
+      proposals = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> decideProposal(
+      String roomId, String messageId, String decision) {
+    return run(() async {
+      await api.call(
+          '/api/v1/conversations/$roomId/messages/$messageId/decide',
+          method: 'POST',
+          data: {'decision': decision});
+      notice = decision == 'approved' ? '승인했습니다.' : '거절했습니다.';
+      await loadProposals(roomId);
+      await openChat(roomId);
     });
   }
 

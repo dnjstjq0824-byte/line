@@ -533,6 +533,84 @@ test('L-04: no update or delete path touches decisions', async () => {
   assert.ok(!/DELETE\s+FROM\s+luno_decisions/i.test(source), 'no DELETE on luno_decisions');
 });
 
+// ---------- L-05: approval box ----------
+
+test('L-05: one approval writes one decision and posts one message', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const owner = await registerAndLogin(admin.api, 'l05-owner@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Propose Bot', handle: 'propose_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'Approve Room', member_ids: [bot.id] }, owner.token)).json();
+    const propTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['propose'] })).token;
+    const prop = await (await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'Ship it?' }, propTok)).json();
+    const propId = prop.message.id;
+    const dec = await admin.api(`conversations/${room.id}/messages/${propId}/decide`, 'POST', { decision: 'approved' }, owner.token);
+    assert.equal(dec.status, 201);
+    const body = await dec.json();
+    assert.ok(body.id, 'decision id returned');
+    assert.ok(body.message_id, 'decision message id returned');
+    const rows = db.raw.prepare('SELECT * FROM luno_decisions WHERE proposal_message_id = ?').all(propId);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].decision, 'approved');
+    assert.equal(rows[0].decided_by, owner.id);
+    const history = await (await admin.api(`conversations/${room.id}/messages`, 'GET', null, owner.token)).json();
+    const posted = history.messages.find((m) => m.id === body.message_id);
+    assert.ok(posted, 'decision message in room');
+    assert.equal(posted.kind, 'decision');
+    const again = await admin.api(`conversations/${room.id}/messages/${propId}/decide`, 'POST', { decision: 'rejected' }, owner.token);
+    assert.equal(again.status, 409, 'no double decision');
+  } finally { db.raw.close(); }
+});
+
+test('L-05: only privileged members decide; proposals only', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const owner = await registerAndLogin(admin.api, 'l05-o2@luno-test.local');
+    const plain = await registerAndLogin(admin.api, 'l05-plain@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Gate Bot', handle: 'gate_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'Gate Room', member_ids: [bot.id, plain.id] }, owner.token)).json();
+    const propTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['propose'] })).token;
+    const prop = await (await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'Gate?' }, propTok)).json();
+    assert.equal((await admin.api(`conversations/${room.id}/messages/${prop.message.id}/decide`, 'POST', { decision: 'approved' }, plain.token)).status, 403, 'plain member forbidden');
+    const text = await (await admin.api(`conversations/${room.id}/messages`, 'POST', { body: 'just chat' }, owner.token)).json();
+    assert.equal((await admin.api(`conversations/${room.id}/messages/${text.message.id}/decide`, 'POST', { decision: 'approved' }, owner.token)).status, 400, 'text is not decidable');
+    assert.equal((await admin.api(`conversations/${room.id}/messages/no-such-msg/decide`, 'POST', { decision: 'approved' }, owner.token)).status, 404, 'unknown message');
+    assert.equal((await admin.api(`conversations/${room.id}/messages/${prop.message.id}/decide`, 'POST', { decision: 'maybe' }, owner.token)).status, 400, 'bad decision value');
+  } finally { db.raw.close(); }
+});
+
+test('L-05: proposals list shows pending with decision state', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const owner = await registerAndLogin(admin.api, 'l05-o3@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'List Bot', handle: 'list_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'List Room', member_ids: [bot.id] }, owner.token)).json();
+    const propTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['propose'] })).token;
+    const p1 = await (await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'First' }, propTok)).json();
+    await (await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'Second' }, propTok)).json();
+    await admin.api(`conversations/${room.id}/messages/${p1.message.id}/decide`, 'POST', { decision: 'rejected' }, owner.token);
+    const list = await (await admin.api(`conversations/${room.id}/proposals`, 'GET', null, owner.token)).json();
+    assert.equal(list.proposals.length, 2);
+    const states = Object.fromEntries(list.proposals.map((p) => [p.body, p.state]));
+    assert.deepEqual(states, { First: 'rejected', Second: 'pending' });
+    assert.equal(list.proposals[0].body, 'Second', 'pending first');
+  } finally { db.raw.close(); }
+});
+
+test('L-05: web approval box is wired from bubbles to modal', async () => {
+  const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
+  const box = await readFile(new URL('../apps/user-web/src/components/ApprovalBox.vue', import.meta.url), 'utf8');
+  const shell = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+  assert.ok(pane.includes('bubble-decide-row') && pane.includes("emit('decide'"), 'bubble buttons emit decide');
+  assert.ok(pane.includes("emit('approvals')"), 'menu opens the approval box');
+  assert.ok(box.includes("emit('decide'") && box.includes('approval-row'), 'modal lists and decides');
+  assert.ok(shell.includes('<ApprovalBox') && shell.includes('@decide="decideProposal"'), 'view wires the modal');
+  assert.ok(shell.includes('proposal-states="proposalStates"') || shell.includes(':proposal-states'), 'view feeds decision states');
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');

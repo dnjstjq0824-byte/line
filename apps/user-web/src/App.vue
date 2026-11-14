@@ -3199,6 +3199,18 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .badge-bot { background: #dbeafe; color: #1d4ed8; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
 /* L-03: proposal/decision/report kind tag inside the standard bubble. */
 .badge-kind { background: #f1f5f9; color: #475569; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; margin-right: 6px; white-space: nowrap; }
+/* L-05: proposal approve/reject row (44px touch targets) and decided mark. */
+.bubble-decide-row { display: flex; gap: 8px; margin-top: 8px; }
+.btn-decide-approve, .btn-decide-reject { flex: 1; min-height: 44px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; border: 1px solid var(--ln-line); }
+.btn-decide-approve { background: var(--ln-accent); color: #fff; border-color: var(--ln-accent); }
+.btn-decide-reject { background: var(--ln-surface); color: var(--ln-text); }
+.bubble-decided-mark { margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--ln-muted); }
+/* L-05: approval box list rows. */
+.approval-row { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--ln-line); border-radius: 14px; margin: 0 0 10px; background: var(--ln-surface); }
+.approval-row-head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ln-muted); }
+.approval-row-body { font-size: 15px; color: var(--ln-text); }
+.approval-row-actions { display: flex; gap: 8px; }
+.approval-row-actions .btn-decide-approve, .approval-row-actions .btn-decide-reject { flex: 1; }
 .pin-icon, .pin-toggle { font-size: 12px; }
 .btn-unpin-inline { background: none; border: none; color: #94a3b8; cursor: pointer; margin-left: auto; font-size: 11px; }
 .other-avatar, .luno-official-avatar { flex-shrink: 0; }

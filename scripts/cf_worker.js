@@ -3774,6 +3774,52 @@ async function extended(p, request, url, me, token) {
       return json({ status: 'recalled', message_id: msg.id });
     }
   }
+  // ---------- L-05 approval box ----------
+  if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)\/decide$/)) && method === 'POST') {
+    const cid = resolveConversationId(m[1], myId);
+    const conv = conversations.get(cid);
+    const b = await readJson(request);
+    if (b.decision !== 'approved' && b.decision !== 'rejected') return bad('decision must be approved or rejected', 400);
+    await hydrateConversation(cid);
+    const target = (messages.get(cid) || []).find(x => x.id === m[2]);
+    if (!target) return bad('제안 메시지를 찾을 수 없습니다', 404);
+    if (target.kind !== 'proposal' || target.unsent) return bad('제안 메시지에만 결정할 수 있습니다', 400);
+    // Approvers: room owner, global admins, or — in direct rooms with no
+    // owner — any member. Everyone else 403s.
+    const privileged = me.role === 'admin' || (conv && conv.owner_id === myId) || (conv && conv.kind === 'direct');
+    if (!privileged) return json({ error: 'forbidden' }, 403);
+    const db = dbOf();
+    if (!db) return json({ error: 'decisions require a configured database' }, 501);
+    await ensureSchema();
+    const prior = await db.prepare('SELECT id FROM luno_decisions WHERE proposal_message_id = ?').bind(target.id).first().catch(() => null);
+    if (prior) return json({ error: 'proposal already decided' }, 409);
+    const decisionId = await recordDecision({ roomId: cid, proposalMessageId: target.id, decidedBy: myId, decision: b.decision });
+    if (!decisionId) return json({ error: 'proposal already decided' }, 409);
+    const verdict = b.decision === 'approved' ? '승인되었습니다' : '거절되었습니다';
+    const posted = await pushPersistent(cid, target.sender_id, { kind: 'decision', body: `제안 '${clip(target.body, 120)}'이 ${verdict}.` });
+    return json({ id: decisionId, message_id: posted.id, state: b.decision }, 201);
+  }
+  if ((m = p.match(/^conversations\/([\w-]+)\/proposals$/)) && method === 'GET') {
+    const cid = resolveConversationId(m[1], myId);
+    const db = dbOf();
+    if (!db) return json({ error: 'decisions require a configured database' }, 501);
+    await ensureSchema();
+    await hydrateConversation(cid);
+    const decided = {};
+    const rows = (await db.prepare('SELECT proposal_message_id, decision, decided_by, created_at FROM luno_decisions WHERE room_id = ?').bind(cid).all().catch(() => ({ results: [] }))).results || [];
+    for (const r of rows) decided[r.proposal_message_id] = r;
+    const proposals = (messages.get(cid) || [])
+      .filter(x => x.kind === 'proposal' && !x.unsent)
+      .map(x => ({
+        message_id: x.id, body: x.body, author_id: x.sender_id,
+        author_name: userBrief(x.sender_id)?.display_name || '',
+        created_at: x.created_at,
+        state: decided[x.id] ? decided[x.id].decision : 'pending',
+        decided_by: decided[x.id] ? decided[x.id].decided_by : null
+      }))
+      .sort((a, b2) => ((a.state === 'pending' ? 0 : 1) - (b2.state === 'pending' ? 0 : 1)) || String(b2.created_at).localeCompare(String(a.created_at)));
+    return json({ proposals });
+  }
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)\/hide$/)) && method === 'POST') {
     const db = dbOf();
     if (db) {

@@ -301,6 +301,12 @@ class _DeckHeader extends StatelessWidget {
                 onPressed: session.sendPayInChat,
               ),
               IconButton(
+                tooltip: '승인함',
+                icon: Icon(Icons.fact_check_outlined,
+                    color: dark ? HarborDark.ink : Colors.white),
+                onPressed: () => approvalsSheet(context, conversationId),
+              ),
+              IconButton(
                 tooltip: '오프라인 동기화',
                 icon: Icon(Icons.sync, color: dark ? HarborDark.ink : Colors.white),
                 onPressed: session.syncOffline,
@@ -420,6 +426,15 @@ class _SignalBubble extends StatelessWidget {
     final readCount = (m['read_count'] as num?)?.toInt() ?? 0;
     final msgId = '${m['id'] ?? ''}';
     final trans = session.translations[msgId];
+    // L-05: proposal decision affordances for privileged members.
+    Map<String, dynamic>? decideRoom;
+    for (final c in session.chats) {
+      if (c is Map && '${c['id']}' == session.selectedId) {
+        decideRoom = Map<String, dynamic>.from(c);
+      }
+    }
+    final canDecide = session.canDecideIn(decideRoom);
+    final proposalState = session.proposalState(msgId);
     final bubble = mine
         ? (dark ? LunoDark.bubbleMineBg : LunoLight.bubbleMineBg)
         : (dark ? LunoDark.bubbleTheirsBg : LunoLight.bubbleTheirsBg);
@@ -503,6 +518,30 @@ class _SignalBubble extends StatelessWidget {
                         m['kind'] == 'proposal' ? '제안' : m['kind'] == 'decision' ? '결정' : '보고',
                         style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: ink)),
                     ),
+                  ),
+                if (m['kind'] == 'proposal' && canDecide && proposalState == 'pending')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton(
+                          onPressed: () => session.decideProposal(session.selectedId, msgId, 'approved'),
+                          child: const Text('승인'),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: () => session.decideProposal(session.selectedId, msgId, 'rejected'),
+                          child: const Text('거절'),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (m['kind'] == 'proposal' && proposalState != 'pending')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(proposalState == 'approved' ? '승인됨' : '거절됨',
+                        style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: faint)),
                   ),
                 if (m['kind'] == 'sticker')
                   StickerBubble(
@@ -960,6 +999,89 @@ class _SecurityNoticeCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// L-05: approval box bottom sheet. Lists the room's proposals with
+// decision states; privileged members decide inline.
+Future<void> approvalsSheet(BuildContext context, String conversationId) async {
+  final session = SessionScope.of(context, listen: false);
+  await session.loadProposals(conversationId);
+  if (!context.mounted) return;
+  Map<String, dynamic>? room;
+  for (final c in session.chats) {
+    if (c is Map && '${c['id']}' == conversationId) {
+      room = Map<String, dynamic>.from(c);
+    }
+  }
+  final canDecide = session.canDecideIn(room);
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheet) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      builder: (sheet, controller) => ListenableBuilder(
+        listenable: session,
+        builder: (sheet, _) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('승인함', style: Theme.of(sheet).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Expanded(
+                child: session.proposals.isEmpty
+                    ? const Center(child: Text('대기 중인 제안이 없습니다'))
+                    : ListView(
+                        controller: controller,
+                        children: [
+                          for (final p in session.proposals)
+                            if (p is Map)
+                              Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text('${p['author_name'] ?? ''} · ${p['state'] == 'approved' ? '승인됨' : p['state'] == 'rejected' ? '거절됨' : '대기 중'}',
+                                          style: Theme.of(sheet).textTheme.bodySmall),
+                                      const SizedBox(height: 4),
+                                      Text('${p['body'] ?? ''}'),
+                                      if ('${p['state']}' == 'pending' && canDecide) ...[
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: FilledButton(
+                                                onPressed: () => session.decideProposal(conversationId, '${p['message_id']}', 'approved'),
+                                                child: const Text('승인'),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: OutlinedButton(
+                                                onPressed: () => session.decideProposal(conversationId, '${p['message_id']}', 'rejected'),
+                                                child: const Text('거절'),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 Future<void> _passwordDialog(BuildContext context) async {
