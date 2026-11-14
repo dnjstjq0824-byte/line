@@ -1247,6 +1247,10 @@ import { activeTheme, darkMode, error, note } from './store/session'
   gap: 8px;
   margin-top: 16px;
   padding-bottom: 4px;
+  /* UX5: cap the row at the card so scrolled-out pills stay reachable by
+     swipe (FX-14 keeps nowrap+scroll); without this the row itself pushes
+     past narrow viewports. */
+  max-width: 100%;
 }
 
 .btn-subaction-pill {
@@ -3256,6 +3260,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 }
 .setting-group { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
 .setting-toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; padding: 4px 0; }
+/* UX5: checkbox rows toggle by tapping anywhere on a 44px row. */
+.setting-check-row { min-height: 44px; cursor: pointer; }
 .flex-row { display: flex; align-items: center; gap: 8px; }
 .select-friends-scroll { max-height: 160px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
 .friend-check-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-size: 13px; cursor: pointer; }

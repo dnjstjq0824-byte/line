@@ -291,14 +291,14 @@ onMounted(() => {
             <span>{{ t('mvConnSecurity') }}</span>
             <span class="badge-status-on">{{ t('mvServerVerify') }}</span>
           </div>
-          <div class="setting-toggle-row">
+          <label class="setting-toggle-row setting-check-row">
             <span>{{ t('mvReadReceipts') }}</span>
             <input type="checkbox" checked />
-          </div>
-          <div class="setting-toggle-row">
+          </label>
+          <label class="setting-toggle-row setting-check-row">
             <span>{{ t('mvSoundNotif') }}</span>
             <input type="checkbox" checked />
-          </div>
+          </label>
           <!-- Phase 1: Push Notifications -->
           <div class="setting-toggle-row">
             <span>{{ t('mvPushNotif') }}</span>

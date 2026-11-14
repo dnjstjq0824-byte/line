@@ -350,6 +350,22 @@ ul, ol {list-style:none;margin:0;padding:0}
   .luno-desktop-app .pc-profile-preview-card{padding:24px!important}
   .luno-desktop-app .modal-body-form{padding:18px!important}
   .luno-desktop-app .setting-group .flex-row{flex-wrap:wrap}
+  /* UX5: 44px minimum touch targets on finger widths. */
+  .luno-desktop-app :is(.btn-chat-head-tool,.btn-pc-header-tool,.btn-hero-nav,.btn-scan-qr-search,.btn-pane-collapse){min-width:44px!important;min-height:44px!important}
+  .luno-desktop-app :is(.btn-subtab,.btn-profile-chip,.btn-subaction-pill,.btn-pay-action,.btn-new-call-labeled){min-height:44px!important}
+  .luno-desktop-app .pc-pane-search-input{min-height:44px!important}
+  .luno-desktop-app .pc-search-box-wrap{min-width:0}
+  .luno-desktop-app .pc-pane-search-input{min-width:0}
+  .luno-desktop-app .btn-subtab.filter-btn{min-width:44px!important}
+  .luno-desktop-app .pc-bubble-toolbar{flex-wrap:wrap!important;max-width:calc(100vw - 32px)!important}
+  .luno-desktop-app .pc-bubble-toolbar button{min-width:44px!important;min-height:44px!important}
+  .luno-desktop-app :is(.btn-modal-close){min-width:44px!important;min-height:44px!important}
+  .luno-desktop-app :is(.btn-locale-pill,.btn-scale-chip){min-height:44px!important}
+  .luno-desktop-app .settings-modal .btn-secondary{min-width:44px!important;min-height:44px!important}
+  .luno-desktop-app :is(.btn-primary,.btn-delete-keep){min-height:44px!important}
+  .luno-desktop-app .btn-delete-keep{min-width:44px!important}
+  .luno-desktop-app .settings-modal a{display:inline-flex!important;align-items:center;min-height:44px!important}
+  .luno-desktop-app .settings-modal input:not([type=checkbox]):not([type=radio]){min-height:44px!important}
 }
 @media(min-width:700px) and (max-width:1099px){
   .luno-desktop-app .pc-workspace{flex-direction:row!important}
