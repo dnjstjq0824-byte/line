@@ -141,6 +141,7 @@ const LUNO_SCHEMA = [
     sequence INTEGER NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', metadata TEXT,
     reply_to TEXT, created_at TEXT NOT NULL, unsent INTEGER NOT NULL DEFAULT 0, edited_at TEXT)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_luno_messages_seq ON luno_messages(conversation_id, sequence)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_luno_messages_client ON luno_messages(conversation_id, sender_id, client_id)`,
   `CREATE TABLE IF NOT EXISTS luno_read_cursors (
     conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, sequence INTEGER NOT NULL, updated_at TEXT NOT NULL,
     PRIMARY KEY (conversation_id, user_id))`,
@@ -1603,7 +1604,15 @@ async function pushPersistent(cid, senderId, fields) {
       messages.set(cid, (messages.get(cid) || []).filter(m => m.id !== msg.id));
       const conv = conversations.get(cid);
       if (conv) conv.last_sequence = msg.sequence - 1;
-      if (attempt < 4 && /UNIQUE|constraint/i.test(String(err && err.message))) continue;
+      if (/UNIQUE|constraint/i.test(String(err && err.message))) {
+        const clash = msg.client_id ? await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? AND sender_id = ? AND client_id = ?').bind(cid, senderId, msg.client_id).first().catch(() => null) : null;
+        if (clash) {
+          const orig = rowToMessage(clash);
+          orig._duplicate = true;
+          return orig;
+        }
+        if (attempt < 4) continue;
+      }
       throw err;
     }
     msg.persisted = true;
@@ -4181,6 +4190,10 @@ async function fetchLinkPreview(target) {
       if (b.client_id) {
         const dup = (messages.get(cid) || []).find(x => x.client_id === b.client_id && x.sender_id === myId);
         if (dup) return json({ message: decorateMessage(dup, myId, cid), duplicate: true }, 200);
+        if (dbOf()) {
+          const hit = await dbOf().prepare('SELECT * FROM luno_messages WHERE conversation_id = ? AND sender_id = ? AND client_id = ?').bind(cid, myId, String(b.client_id)).first().catch(() => null);
+          if (hit) return json({ message: decorateMessage(rowToMessage(hit), myId, cid), duplicate: true }, 200);
+        }
       }
       let body = typeof b.body === 'string' ? b.body : '';
       let metadata = {};
@@ -4248,6 +4261,11 @@ async function fetchLinkPreview(target) {
         replyTo = b.reply_to;
       }
       const msg = await pushPersistent(cid, myId, { client_id: b.client_id, kind, body, reply_to: replyTo, metadata: Object.keys(metadata).length ? metadata : undefined });
+      if (msg._duplicate === true) {
+        delete msg._duplicate;
+        const raced = decorateMessage(msg, myId, cid);
+        return json({ ...raced, message: raced, duplicate: true }, 200);
+      }
       await persistCursor(cid, myId, msg.sequence);
       // L-02: bot mentions become jobs. Routing must never break messaging,
       // so failures are logged, not thrown.

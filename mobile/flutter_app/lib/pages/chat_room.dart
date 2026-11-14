@@ -206,10 +206,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           ),
         _Composer(
           controller: message,
-          onSend: () {
+          onSend: () async {
             final text = message.text;
-            message.clear();
-            session.send(text: text);
+            if (await session.send(text: text)) message.clear();
           },
         ),
       ],
@@ -1670,7 +1669,7 @@ void _pickImageSource(BuildContext context) {
 
 class _Composer extends StatelessWidget {
   final TextEditingController controller;
-  final VoidCallback onSend;
+  final Future<void> Function() onSend;
   const _Composer({required this.controller, required this.onSend});
 
   @override

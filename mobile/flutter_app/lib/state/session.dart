@@ -241,6 +241,8 @@ class SessionController extends ChangeNotifier {
       await loadPrefs();
       await reload();
       await connect();
+      await loadOutbox();
+      await flushOutbox();
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
         // M1: the Api client already spent the refresh token and failed (or
@@ -354,6 +356,8 @@ class SessionController extends ChangeNotifier {
       await loadPrefs();
       await reload();
       await connect();
+      await loadOutbox();
+      await flushOutbox();
     });
   }
 
@@ -1076,16 +1080,97 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> send({String kind = 'text', String? customBody, String text = ''}) {
-    if (selectedId.isEmpty) return Future.value();
+  // F10: offline outbox. Network failures queue the message (persisted,
+  // owner-scoped) instead of losing it; the same client_id dedups the
+  // retry server-side. Server rejections (ApiException) are real errors
+  // and surface instead of queueing.
+  List<Map<String, dynamic>> outbox = [];
+
+  Future<void> _saveOutbox() async {
+    try {
+      await storage.write(key: 'pending_outbox', value: jsonEncode(outbox));
+    } catch (_) {}
+  }
+
+  Future<void> loadOutbox() async {
+    try {
+      final raw = await storage.read(key: 'pending_outbox');
+      if (raw == null || raw.isEmpty) {
+        outbox = [];
+        return;
+      }
+      final list = (jsonDecode(raw) as List)
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .where((m) => '${m['owner_id'] ?? ''}' == selfId)
+          .toList();
+      outbox = list;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Flushes my queued messages in order. Stops at the first network
+  /// failure (the rest stay queued); drops server rejections after one
+  /// honest attempt so a poison message cannot wedge the queue.
+  Future<void> flushOutbox() async {
+    if (outbox.isEmpty || selfId.isEmpty) return;
+    var sent = 0;
+    var dropped = 0;
+    while (outbox.isNotEmpty) {
+      final item = outbox.first;
+      if ('${item['owner_id'] ?? ''}' != selfId) {
+        outbox.removeAt(0);
+        continue;
+      }
+      try {
+        final x = await api.call(
+            '/api/v1/conversations/${item['conversation_id']}/messages',
+            method: 'POST',
+            data: {
+              'client_id': '${item['client_id']}',
+              'kind': '${item['kind'] ?? 'text'}',
+              'body': '${item['body'] ?? ''}',
+              if ('${item['reply_to'] ?? ''}'.isNotEmpty)
+                'reply_to': '${item['reply_to']}',
+            });
+        outbox.removeAt(0);
+        sent++;
+        final mid = x['message']?['id'];
+        if ('${item['conversation_id']}' == selectedId &&
+            mid != null &&
+            !messages.any((m) => m['id'] == mid)) {
+          messages.add(x['message']);
+        }
+      } on ApiException {
+        outbox.removeAt(0);
+        dropped++;
+      } catch (_) {
+        break;
+      }
+    }
+    await _saveOutbox();
+    if (sent > 0) {
+      notice = '대기 중이던 메시지 $sent건을 보냈습니다.';
+      await refreshChatList();
+    } else if (dropped > 0) {
+      error = '거부된 대기 메시지 $dropped건을 버렸습니다.';
+    }
+    notifyListeners();
+  }
+
+  /// True when the text is safe (sent or queued) and the composer may
+  /// clear; false when nothing was kept (empty input, rejection, no room).
+  Future<bool> send(
+      {String kind = 'text', String? customBody, String text = ''}) async {
+    if (selectedId.isEmpty) return false;
     final body = customBody ?? text.trim();
-    if (body.isEmpty) return Future.value();
+    if (body.isEmpty) return false;
 
     if (editingMsgId.isNotEmpty && customBody == null) {
       final targetId = editingMsgId;
       editingMsgId = '';
       notifyListeners();
-      return run(() async {
+      await run(() async {
         await api.call('/api/v1/conversations/$selectedId/messages/$targetId',
             method: 'PATCH', data: {'body': body});
         for (final m in messages) {
@@ -1093,25 +1178,47 @@ class SessionController extends ChangeNotifier {
         }
         notice = '메시지를 수정했습니다.';
       });
+      return error.isEmpty;
     }
 
     final reply = replyToId;
     replyToId = '';
     showStickerPicker = false;
     notifyListeners();
-    return run(() async {
-      final x = await api.call('/api/v1/conversations/$selectedId/messages',
-          method: 'POST', data: {
-        'client_id': uuid(),
-        'kind': kind,
-        'body': body,
-        if (reply.isNotEmpty) 'reply_to': reply,
-      });
-      if (!messages.any((m) => m['id'] == x['message']['id'])) {
-        messages.add(x['message']);
+    final clientId = uuid();
+    var kept = false;
+    await run(() async {
+      try {
+        final x = await api.call('/api/v1/conversations/$selectedId/messages',
+            method: 'POST', data: {
+          'client_id': clientId,
+          'kind': kind,
+          'body': body,
+          if (reply.isNotEmpty) 'reply_to': reply,
+        });
+        if (!messages.any((m) => m['id'] == x['message']['id'])) {
+          messages.add(x['message']);
+        }
+        kept = true;
+        await refreshChatList();
+        await flushOutbox();
+      } on ApiException {
+        rethrow;
+      } catch (_) {
+        outbox.add({
+          'owner_id': selfId,
+          'conversation_id': selectedId,
+          'client_id': clientId,
+          'kind': kind,
+          'body': body,
+          if (reply.isNotEmpty) 'reply_to': reply,
+        });
+        await _saveOutbox();
+        notice = '오프라인 — 메시지를 대기열에 저장했습니다.';
+        kept = true;
       }
-      await refreshChatList();
     });
+    return kept;
   }
 
   Future<PickedImage?> pickChatImage(ImageSource source) async {

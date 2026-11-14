@@ -564,6 +564,32 @@ class StatusStrip extends StatelessWidget {
         ),
       ));
     }
+    // F10: queued outbound messages with a manual resend entry.
+    if (session.outbox.isNotEmpty) {
+      rows.add(Container(
+        width: double.infinity,
+        color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text('전송 대기 중 ${session.outbox.length}건',
+                  style: TextStyle(
+                      fontSize: HarborType.small,
+                      fontWeight: FontWeight.w600,
+                      color: dark ? HarborDark.ink : HarborLight.ink)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(64, 34),
+              ),
+              onPressed: session.busy ? null : session.flushOutbox,
+              child: const Text('재전송'),
+            ),
+          ],
+        ),
+      ));
+    }
     final call = session.activeCall;
     if (call != null) {
       rows.add(Container(
