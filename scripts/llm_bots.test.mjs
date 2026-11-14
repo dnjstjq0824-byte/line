@@ -747,6 +747,57 @@ test('L-11: decisions are logged, human chatter is not', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- L-15: acceptance scenario (fake LLM end to end) ----------
+
+test('L-15: mention to decision record passes with zero real LLM calls', async () => {
+  const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
+  assert.ok(!/openai\.com|anthropic\.com|chat\/completions|generativelanguage|api\.groq/i.test(workerSource),
+    'worker cannot reach any LLM by construction');
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const { api } = await llmIsolate(db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: admin.id });
+    const adminTok = (await (await api('auth/login', 'POST', { email: 'llm-admin@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
+    // 1. Issue a bot and open a room with it.
+    const owner = await registerAndLogin(api, 'l15-owner@luno-test.local');
+    const bot = await (await api('admin/bots', 'POST', { display_name: 'Accept Bot', handle: 'accept_bot' }, adminTok)).json();
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'Accept Room', member_ids: [bot.id] }, owner.token)).json();
+    await allowRoomUser(api, adminTok, room.id, owner.id);
+    const tok = (await mintBotToken(api, adminTok, bot.id, { rooms: [room.id], ops: ['read', 'post', 'propose'] })).token;
+    // 2. @bot mention routes exactly one job.
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'help plan this', metadata: { mentions: [bot.id] } }, owner.token);
+    assert.equal(jobCount(db, bot.id), 1);
+    // 3. Runner claims, reads context, fake-LLM drafts a proposal (no network).
+    const claimed = await (await api('bot/jobs/claim', 'POST', {}, tok)).json();
+    assert.equal(claimed.job.kind, 'mention');
+    const sync = await (await api(`conversations/${room.id}/sync?since_sequence=0`, 'GET', null, tok)).json();
+    assert.ok(sync.delta_messages.length >= 1, 'runner reads context');
+    const fakeDraft = `초안: ${claimed.job.payload.body} (가짜 LLM)`;
+    const prop = await (await api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: fakeDraft }, tok)).json();
+    assert.equal(prop.message.kind, 'proposal');
+    const done = await api(`bot/jobs/${claimed.job.id}/complete`, 'POST', { status: 'done', usage: { tokens: 42 }, result: { proposal_id: prop.message.id } }, tok);
+    assert.equal(done.status, 200);
+    // 4. Owner approves from the approval box.
+    const pending = await (await api(`conversations/${room.id}/proposals`, 'GET', null, owner.token)).json();
+    assert.equal(pending.proposals.length, 1);
+    assert.equal(pending.proposals[0].state, 'pending');
+    const dec = await api(`conversations/${room.id}/messages/${prop.message.id}/decide`, 'POST', { decision: 'approved' }, owner.token);
+    assert.equal(dec.status, 201);
+    // 5. Every artifact exists: decision row, decision message, usage, audit.
+    const decRow = db.raw.prepare('SELECT * FROM luno_decisions WHERE proposal_message_id = ?').get(prop.message.id);
+    assert.equal(decRow.decision, 'approved');
+    assert.equal(decRow.decided_by, owner.id);
+    const history = await (await api(`conversations/${room.id}/messages`, 'GET', null, owner.token)).json();
+    assert.ok(history.messages.some((m) => m.kind === 'decision'), 'decision posted to the room');
+    const usage = db.raw.prepare('SELECT requests, tokens FROM luno_bot_usage WHERE bot_id = ?').get(bot.id);
+    assert.deepEqual([usage.requests, usage.tokens], [1, 42]);
+    const audit = db.raw.prepare("SELECT DISTINCT action FROM luno_audit WHERE actor = ?").all(bot.id).map((r) => r.action).sort();
+    assert.deepEqual(audit, ['bot.propose', 'bot.read']);
+    const jobRow = db.raw.prepare('SELECT status FROM luno_bot_jobs WHERE id = ?').get(claimed.job.id);
+    assert.equal(jobRow.status, 'done');
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
