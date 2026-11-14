@@ -27,5 +27,25 @@ void main() {
       expect(senderNameOf({'sender_id': 'u1'}, []), '');
       expect(senderNameOf({}, members), '');
     });
+
+    test('L-01: bot senders get a [BOT] suffix', () {
+      expect(
+          senderNameOf(
+              {'sender_id': 'u1', 'sender_name': 'Alice R.', 'sender_kind': 'bot'},
+              members),
+          'Alice R. [BOT]');
+      expect(
+          senderNameOf(
+              {'sender_id': 'u9'},
+              [
+                {'id': 'u9', 'display_name': 'Helper', 'kind': 'bot'}
+              ]),
+          'Helper [BOT]');
+      expect(
+          senderNameOf(
+              {'sender_id': 'u1', 'sender_name': 'Alice R.', 'sender_kind': 'user'},
+              members),
+          'Alice R.');
+    });
   });
 }

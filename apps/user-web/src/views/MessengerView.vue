@@ -3267,7 +3267,7 @@ onBeforeUnmount(() => {
           <div class="profile-preview-avatar" :style="{ background: selectedFriendProfile.avatar_color || 'var(--ln-accent)' }">
             {{ initialOf(selectedFriendProfile.display_name) }}
           </div>
-          <h2 class="profile-preview-name">{{ selectedFriendProfile.display_name }}</h2>
+          <h2 class="profile-preview-name">{{ selectedFriendProfile.display_name }} <span v-if="(selectedFriendProfile as any).kind === 'bot'" class="badge-bot">BOT</span></h2>
           <p v-if="selectedFriendProfile.status_message || selectedFriendProfile.bio" class="profile-preview-bio">
             {{ selectedFriendProfile.status_message || selectedFriendProfile.bio }}
           </p>
@@ -3481,7 +3481,7 @@ onBeforeUnmount(() => {
           <p v-if="photoError" role="alert" class="ln-profile-error">{{ photoError }}</p>
         </div>
         <div class="profile-body-center">
-          <h2>{{ activeProfileUser.display_name }}</h2>
+          <h2>{{ activeProfileUser.display_name }} <span v-if="(activeProfileUser as any).kind === 'bot'" class="badge-bot">BOT</span></h2>
           <div v-if="activeProfileUser.handle" class="user-handle">@{{ activeProfileUser.handle }}</div>
           <p class="user-status-text">{{ activeProfileUser.status_message || activeProfileUser.bio || t('profile_empty') }}</p>
           <p v-if="activeProfileUser.id === currentUser?.id && currentUser?.email" class="user-handle">{{ currentUser?.email }}</p>

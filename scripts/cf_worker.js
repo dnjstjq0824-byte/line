@@ -227,7 +227,7 @@ const LUNO_SCHEMA_BASE = [
     password_hash TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '',
     cover_url TEXT DEFAULT '', prefs_json TEXT DEFAULT '',
     status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
-    birthday TEXT DEFAULT '', state TEXT DEFAULT 'active',
+    birthday TEXT DEFAULT '', state TEXT DEFAULT 'active', kind TEXT DEFAULT 'user',
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
@@ -381,6 +381,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'bio', "TEXT DEFAULT ''"],
   ['users', 'phone_number', "TEXT DEFAULT ''"],
   ['users', 'state', "TEXT DEFAULT 'active'"],
+  ['users', 'kind', "TEXT DEFAULT 'user'"],
   ['users', 'password_hash', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'display_name', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'created_at', "TEXT NOT NULL DEFAULT ''"],
@@ -421,6 +422,10 @@ async function ensurePhase1Columns(db) {
   try {
     await db.prepare(`UPDATE users SET display_name = substr(email, 1, instr(email, '@') - 1) WHERE display_name = ''`).run();
   } catch (_) { /* ancient row without email stays blank */ }
+  // L-01: rows that predate kind are human accounts.
+  try {
+    await db.prepare(`UPDATE users SET kind = 'user' WHERE kind IS NULL`).run();
+  } catch (_) { /* column still missing on exotic builds; helper defaults to user */ }
 }
 
 let schemaReady = null;
@@ -1684,7 +1689,8 @@ function publicUser(u) {
   return {
     id: u.id, display_name: u.display_name, handle: u.handle, bio: u.bio || '',
     status_message: u.status_message || '', avatar_color: u.avatar_color || '#4F7CFF',
-    birthday: u.birthday || '', avatar_url: u.avatar_url || '', cover_url: u.cover_url || ''
+    birthday: u.birthday || '', avatar_url: u.avatar_url || '', cover_url: u.cover_url || '',
+    kind: userKind(u)
   };
 }
 function userBrief(id) {
@@ -1798,6 +1804,7 @@ function decorateMessage(msg, viewerId, cid) {
     .map(m => readCursors.get(`${cid}:${m}`) || 0);
   const out = { ...msg, reactions: reactionCounts(msg.id), read_count: cursorSeqs.filter(s => s >= msg.sequence).length };
   out.sender_name = userBrief(msg.sender_id)?.display_name || '';
+  out.sender_kind = userBrief(msg.sender_id)?.kind || 'user';
   const mine = [];
   const r = reactionStore.get(msg.id);
   if (r) for (const [emoji, set] of r) if (set.has(viewerId)) mine.push(emoji);
@@ -2148,7 +2155,7 @@ function cacheUserRow(row, granted) {
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: granted,
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
-    state: row.state || undefined
+    state: row.state || undefined, kind: row.kind || 'user'
   }, row.password_hash);
   if (isEnvAdmin(u.id)) u.role = 'admin';
   users.set(row.email.toLowerCase(), u);
@@ -2165,7 +2172,7 @@ async function loadUserFromD1(id, knownRole) {
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
-    state: row.state || undefined
+    state: row.state || undefined, kind: row.kind || 'user'
   }, row.password_hash);
   users.set(row.email.toLowerCase(), u);
   usersById.set(u.id, u);
@@ -2237,6 +2244,32 @@ async function isBanned(userId) {
 // Email, demo seed data and the role copied into an old session are not grants.
 const GRANTABLE_ROLES = ['user', 'admin', 'partner', 'developer', 'creator', 'ads'];
 function grantedRole(role) { return GRANTABLE_ROLES.includes(role) ? role : 'user'; }
+// L-01: account kind. Anything that is not an issued bot is a human user,
+// including seeds, peers and rows that predate the kind column.
+function userKind(u) { return u && u.kind === 'bot' ? 'bot' : 'user'; }
+// S2 handle rules shared by public register and admin bot issuance.
+// Returns 'shape' | 'reserved' | null (usable).
+function handleRuleError(h) {
+  if (!/^[a-z0-9_.]{3,20}$/.test(h)) return 'shape';
+  if (RESERVED_HANDLES.has(h) || RESERVED_PEER_PREFIX.test(h)) return 'reserved';
+  return null;
+}
+async function handleTaken(h) {
+  if (Array.from(users.values()).some(u => (u.handle || '').toLowerCase() === h)) return true;
+  const db = dbOf();
+  if (db) {
+    const row = await db.prepare('SELECT id FROM users WHERE LOWER(handle) = ?').bind(h).first().catch(() => null);
+    if (row) return true;
+  }
+  return false;
+}
+async function allocateHandle(prefix) {
+  for (let tries = 0; tries < 5; tries++) {
+    const candidate = `${prefix}${crypto.randomUUID().slice(0, 6)}`;
+    if (!(await handleTaken(candidate))) return candidate;
+  }
+  return '';
+}
 // Legacy databases have no grants: fail closed until the approved migration
 // and explicit administrator provisioning have been completed.
 // Once an isolate sees the table is absent it stops querying it (still failing closed
@@ -4494,6 +4527,46 @@ async function extended(p, request, url, me, token) {
         open_reports: adminReports.filter(r => r.state === 'open').length, calls: callSessions.size, orders: storeOrders.size
       } });
     }
+    // L-01: admin-only bot issuance. Bots carry no password material and
+    // authenticate with L-06 scope tokens only. The admin guard above
+    // already returned 403 for non-admins.
+    if (p === 'admin/bots' && method === 'POST') {
+      if (!await rateLimit('rl:adminbots:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+      const b = await readJson(request);
+      const displayName = clip(String(b.display_name || ''), 40);
+      if (!displayName) return bad('display_name is required', 400);
+      let botHandle = '';
+      if (b.handle !== undefined && b.handle !== null && b.handle !== '') {
+        botHandle = String(b.handle).toLowerCase();
+        const rule = handleRuleError(botHandle);
+        if (rule === 'shape') return json({ error: 'handle must be 3-20 lowercase letters, digits, _ or .' }, 400);
+        if (rule === 'reserved') return json({ error: 'handle is not available' }, 409);
+        if (await handleTaken(botHandle)) return json({ error: 'handle is already taken' }, 409);
+      } else {
+        botHandle = await allocateHandle('bot_');
+        if (!botHandle) return json({ error: 'could not allocate a unique handle' }, 500);
+      }
+      const bot = {
+        id: uid(), email: `${botHandle}@bots.invalid`, handle: botHandle,
+        display_name: displayName, role: 'user', kind: 'bot',
+        bio: 'LUNO bot', created_at: new Date().toISOString()
+      };
+      const db = dbOf();
+      if (db) {
+        await ensureSchema();
+        try {
+          await db.prepare("INSERT INTO users (id, email, handle, password_hash, display_name, bio, kind, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?, 'bot', datetime('now'), datetime('now'))")
+            .bind(bot.id, bot.email, bot.handle, bot.display_name, bot.bio).run();
+        } catch (err) {
+          if (/UNIQUE constraint|unique/i.test(String(err && err.message))) return json({ error: 'handle is already taken' }, 409);
+          throw err;
+        }
+        await d1Run(db, "INSERT OR IGNORE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, datetime('now'))", bot.id);
+      }
+      users.set(bot.email, bot);
+      usersById.set(bot.id, bot);
+      return json({ id: bot.id, email: bot.email, handle: bot.handle, display_name: bot.display_name, kind: 'bot' }, 201);
+    }
     if (p === 'admin/reports' && method === 'GET') return json({ reports: adminReports.slice(0, 100) });
     if (p === 'admin/audit-logs' && method === 'GET') return json({ audit_logs: auditLogs.slice(0, 100) });
     if (p === 'admin/feature-flags' && method === 'PUT') {
@@ -5195,33 +5268,24 @@ const workerCore = {
         let handle = null;
         if (body.handle !== undefined && body.handle !== null && body.handle !== '') {
           handle = String(body.handle).toLowerCase();
-          if (!/^[a-z0-9_.]{3,20}$/.test(handle)) return json({ error: 'handle must be 3-20 lowercase letters, digits, _ or .' }, 400);
-          if (RESERVED_HANDLES.has(handle) || RESERVED_PEER_PREFIX.test(handle)) return json({ error: 'handle is not available' }, 409);
+          const rule = handleRuleError(handle);
+          if (rule === 'shape') return json({ error: 'handle must be 3-20 lowercase letters, digits, _ or .' }, 400);
+          if (rule === 'reserved') return json({ error: 'handle is not available' }, 409);
         }
-        const handleTaken = async (h) => {
-          if (Array.from(users.values()).some(u => (u.handle || '').toLowerCase() === h)) return true;
-          if (env.DB) {
-            const row = await env.DB.prepare('SELECT id FROM users WHERE LOWER(handle) = ?').bind(h).first().catch(() => null);
-            if (row) return true;
-          }
-          return false;
-        };
         if (handle) {
           if (await handleTaken(handle)) return json({ error: 'handle is already taken' }, 409);
         } else {
           // Auto-generated handles retry on collision instead of clobbering.
-          handle = '';
-          for (let tries = 0; tries < 5 && !handle; tries++) {
-            const candidate = `user_${crypto.randomUUID().slice(0, 6)}`;
-            if (!(await handleTaken(candidate))) handle = candidate;
-          }
+          handle = await allocateHandle('user_');
           if (!handle) return json({ error: 'could not allocate a unique handle' }, 500);
         }
+        // L-01: public signup always mints human accounts; body.kind is ignored.
         const newUser = {
           id: crypto.randomUUID(),
           email,
           display_name: body.display_name || email.split('@')[0],
           role: 'user',
+          kind: 'user',
           handle,
           bio: 'New Messenger User',
           created_at: new Date().toISOString()
@@ -5336,6 +5400,11 @@ const workerCore = {
           await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
+        // L-01: bots authenticate with L-06 scope tokens only, never passwords.
+        if (userKind(user) === 'bot') {
+          await recordLoginFailure(identifier, loginIp);
+          return json({ error: 'invalid credentials' }, 401);
+        }
         if (dbOf() && await isBanned(user.id)) {
           await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
@@ -5447,7 +5516,8 @@ const workerCore = {
           const fresh = await loadUserFromD1ByLogin(email);
           if (fresh) user = fresh;
         }
-        if (!user || user.state === 'suspended' || user.state === 'deleted') return quiet();
+        // L-01: bots have no password to recover — same quiet shape, no challenge, no mail.
+        if (!user || user.state === 'suspended' || user.state === 'deleted' || userKind(user) === 'bot') return quiet();
         const challengeId = crypto.randomUUID();
         const code = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().slice(0, 8);
         const codeHash = await sha256Hex(code);

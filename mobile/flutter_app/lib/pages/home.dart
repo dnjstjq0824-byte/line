@@ -238,7 +238,7 @@ class _HomePageState extends State<HomePage> {
                       dark ? HarborDark.harbor : HarborLight.harbor),
                   size: 44,
                 ),
-                title: Text('${u['is_favorite'] == true ? '★ ' : ''}${u['display_name']}',
+                title: Text('${u['is_favorite'] == true ? '★ ' : ''}${u['display_name']}${u['kind'] == 'bot' ? ' [BOT]' : ''}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(
                     '${u['status_message'] ?? '@${u['handle'] ?? ''}'}',

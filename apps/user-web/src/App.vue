@@ -3195,6 +3195,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .chat-topbar-info { display: flex; flex-direction: column; min-width: 0; }
 .title-row { display: flex; align-items: center; gap: 6px; }
 .badge-verified { background: #dcfce7; color: #15803d; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
+/* L-01: bot identity pill (blue, distinct from the green official badge). */
+.badge-bot { background: #dbeafe; color: #1d4ed8; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
 .pin-icon, .pin-toggle { font-size: 12px; }
 .btn-unpin-inline { background: none; border: none; color: #94a3b8; cursor: pointer; margin-left: auto; font-size: 11px; }
 .other-avatar, .luno-official-avatar { flex-shrink: 0; }

@@ -174,7 +174,7 @@ function hideBrokenAvatar(ev: Event) {
               {{ initialOf(fav.display_name) }}
             </div>
             <div class="friend-item-meta">
-              <div class="friend-item-name">★ {{ fav.display_name }}</div>
+              <div class="friend-item-name">★ {{ fav.display_name }} <span v-if="(fav as any).kind === 'bot'" class="badge-bot">BOT</span></div>
               <div class="friend-item-sub">{{ fav.status_message || fav.bio || t('mvFavFallback') }}</div>
             </div>
           </div>
@@ -256,6 +256,7 @@ function hideBrokenAvatar(ev: Event) {
               <div class="friend-item-name">
                 <span v-if="(f as any).is_favorite" class="fav-star-inline">★</span>
                 {{ f.display_name }}
+                <span v-if="(f as any).kind === 'bot'" class="badge-bot">BOT</span>
                 <span v-if="(f as any).birthday_today" class="bday-badge" :title="t('mvBirthdayToday')">🎂</span>
               </div>
               <div class="friend-item-sub">{{ f.status_message || f.bio || t('mvFriendFallback') }}</div>

@@ -56,4 +56,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('최근 검색어'), findsOneWidget);
   });
+
+  testWidgets('L-01: bot friends carry a [BOT] suffix',
+      (WidgetTester tester) async {
+    final s = _fixture()
+      ..friends = [
+        {'id': 'u-bot', 'display_name': 'Helper', 'kind': 'bot'},
+        {'id': 'u-hu', 'display_name': 'Mina', 'kind': 'user'},
+      ];
+    await _pumpHome(tester, s);
+    expect(find.text('Helper [BOT]'), findsOneWidget);
+    expect(find.text('Mina'), findsOneWidget);
+  });
 }

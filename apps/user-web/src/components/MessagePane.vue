@@ -406,6 +406,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <div class="pc-msg-bubble-group">
               <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
                 {{ headerName(msg) }}
+                <span v-if="(msg as any).sender_kind === 'bot'" class="badge-bot">BOT</span>
               </div>
               <div
                 class="pc-call-status-bubble"
@@ -449,6 +450,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <div class="pc-msg-bubble-group">
               <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-sender-header">
                 {{ headerName(msg) }}
+                <span v-if="(msg as any).sender_kind === 'bot'" class="badge-bot">BOT</span>
               </div>
 
               <!-- Speech Bubble -->
