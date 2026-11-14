@@ -22,6 +22,11 @@ const reports = ref<Array<Record<string, string>>>([])
 const auditLogs = ref<Array<Record<string, string>>>([])
 const featureFlags = ref<Array<Record<string, unknown>>>([])
 const newFlagKey = ref(''), newFlagEnabled = ref(false)
+// F12: admin-managed official accounts + news.
+const oaList = ref<Array<Record<string, string>>>([])
+const newsList = ref<Array<Record<string, string>>>([])
+const newOaName = ref(''), newOaHandle = ref(''), newOaDesc = ref('')
+const newNewsTitle = ref(''), newNewsPress = ref(''), newNewsCat = ref(''), newNewsSummary = ref('')
 const userColumns = computed(() => [
   { key: 'display_name', label: t('admin.colName') },
   { key: 'email', label: t('admin.colEmail') },
@@ -52,18 +57,22 @@ async function login() {
 
 async function load() {
   await run(async () => {
-    const [m, u, r, a, f] = await Promise.all([
+    const [m, u, r, a, f, oa, nw] = await Promise.all([
       request<{ metrics: Record<string, number> }>('/api/v1/admin/stats', token.value),
       request<{ users: Array<Record<string, string>> }>('/api/v1/admin/users', token.value),
       request<{ reports: Array<Record<string, string>> }>('/api/v1/admin/reports', token.value),
       request<{ audit_logs: Array<Record<string, string>> }>('/api/v1/admin/audit-logs', token.value),
       request<{ feature_flags: Array<Record<string, unknown>> }>('/api/v1/admin/feature-flags', token.value),
+      request<{ accounts: Array<Record<string, string>> }>('/api/v1/admin/official-accounts', token.value),
+      request<{ articles: Array<Record<string, string>> }>('/api/v1/admin/news', token.value),
     ])
     metrics.value = m.metrics
     users.value = u.users
     reports.value = r.reports
     auditLogs.value = a.audit_logs
     featureFlags.value = f.feature_flags
+    oaList.value = oa.accounts
+    newsList.value = nw.articles
   })
 }
 
@@ -91,6 +100,56 @@ async function saveFeatureFlag() {
     newFlagKey.value = ''
     newFlagEnabled.value = false
     note.value = t('admin.flagSaved')
+    await load()
+  })
+}
+
+async function saveOfficialAccount() {
+  if (!newOaName.value.trim()) return
+  await run(async () => {
+    await request('/api/v1/admin/official-accounts', token.value, 'POST', {
+      name: newOaName.value.trim(),
+      handle: newOaHandle.value.trim(),
+      description: newOaDesc.value.trim(),
+    })
+    newOaName.value = ''
+    newOaHandle.value = ''
+    newOaDesc.value = ''
+    note.value = t('admin.oaSaved')
+    await load()
+  })
+}
+
+async function deleteOfficialAccount(id: string) {
+  await run(async () => {
+    await request(`/api/v1/admin/official-accounts/${id}`, token.value, 'DELETE')
+    note.value = t('admin.oaDeleted')
+    await load()
+  })
+}
+
+async function saveNewsArticle() {
+  if (!newNewsTitle.value.trim()) return
+  await run(async () => {
+    await request('/api/v1/admin/news', token.value, 'POST', {
+      title: newNewsTitle.value.trim(),
+      press: newNewsPress.value.trim(),
+      category: newNewsCat.value.trim(),
+      summary: newNewsSummary.value.trim(),
+    })
+    newNewsTitle.value = ''
+    newNewsPress.value = ''
+    newNewsCat.value = ''
+    newNewsSummary.value = ''
+    note.value = t('admin.newsSaved')
+    await load()
+  })
+}
+
+async function deleteNewsArticle(id: string) {
+  await run(async () => {
+    await request(`/api/v1/admin/news/${id}`, token.value, 'DELETE')
+    note.value = t('admin.newsDeleted')
     await load()
   })
 }
@@ -183,6 +242,38 @@ async function saveFeatureFlag() {
         <div v-for="f in featureFlags" :key="String(f.key)" class="item-line">
           <code>{{ f.key }}</code>
           <BaseBadge :tone="f.enabled ? 'success' : 'danger'">{{ f.enabled ? 'ON' : 'OFF' }}</BaseBadge>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>{{ t('admin.oa') }}</h2>
+        <form @submit.prevent="saveOfficialAccount" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <input v-model="newOaName" :placeholder="t('admin.oaNamePh')" required />
+          <input v-model="newOaHandle" :placeholder="t('admin.oaHandlePh')" />
+          <input v-model="newOaDesc" :placeholder="t('admin.oaDescPh')" />
+          <BaseButton type="submit" variant="primary">{{ t('admin.oaAdd') }}</BaseButton>
+        </form>
+        <div v-for="o in oaList" :key="o.id" class="item-line">
+          <span><strong>{{ o.name }}</strong> <code>{{ o.handle }}</code> <small class="muted">{{ o.description }}</small></span>
+          <span style="display:inline-flex;gap:6px;align-items:center">
+            <BaseBadge v-if="o.id === 'oa-notice'" tone="info">{{ t('admin.oaSystem') }}</BaseBadge>
+            <BaseButton v-else size="sm" variant="danger" @click="deleteOfficialAccount(o.id)">{{ t('admin.oaDelete') }}</BaseButton>
+          </span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>{{ t('admin.news') }}</h2>
+        <form @submit.prevent="saveNewsArticle" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <input v-model="newNewsTitle" :placeholder="t('admin.newsTitlePh')" required />
+          <input v-model="newNewsPress" :placeholder="t('admin.newsPressPh')" />
+          <input v-model="newNewsCat" :placeholder="t('admin.newsCatPh')" />
+          <input v-model="newNewsSummary" :placeholder="t('admin.newsSummaryPh')" />
+          <BaseButton type="submit" variant="primary">{{ t('admin.newsAdd') }}</BaseButton>
+        </form>
+        <div v-for="n in newsList" :key="n.id" class="item-line">
+          <span><strong>{{ n.title }}</strong> <small class="muted">{{ n.press }} · {{ n.category }}</small></span>
+          <BaseButton size="sm" variant="danger" @click="deleteNewsArticle(n.id)">{{ t('admin.newsDelete') }}</BaseButton>
         </div>
       </section>
 

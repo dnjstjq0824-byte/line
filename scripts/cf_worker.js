@@ -245,6 +245,19 @@ const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS luno_link_previews (
     url TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
     image_url TEXT NOT NULL DEFAULT '', ok INTEGER NOT NULL DEFAULT 0, fetched_at INTEGER NOT NULL DEFAULT 0)`,
+  // F12: admin-managed official accounts, follows and news (no seeds).
+  `CREATE TABLE IF NOT EXISTS luno_official_accounts (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, handle TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT '#4F7CFF',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_official_follows (
+    user_id TEXT NOT NULL, account_id TEXT NOT NULL, conversation_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL, PRIMARY KEY (user_id, account_id))`,
+  `CREATE TABLE IF NOT EXISTS luno_news (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, press TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '', published_at TEXT NOT NULL DEFAULT '',
+    image_url TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
     avatar_url TEXT DEFAULT '', official INTEGER DEFAULT 0, owner_id TEXT DEFAULT '',
@@ -3879,27 +3892,59 @@ async function fetchLinkPreview(target) {
   }
 
   // ---------- Official accounts ----------
+// F12: D1-backed editorial content. oa-notice stays a code-defined system
+// account; admin-created accounts/news and all follows persist in D1.
+// D1 accounts hydrate into the memory map so briefs, replies and room
+// exemptions treat them exactly like the built-in account.
+async function listOfficialAccounts() {
+  if (dbOf()) {
+    await ensureSchema();
+    const { results } = await dbOf().prepare('SELECT * FROM luno_official_accounts ORDER BY created_at').all().catch(() => ({ results: [] }));
+    for (const r of results || []) officialAccounts.set(r.id, { id: r.id, name: r.name, handle: r.handle, description: r.description, color: r.color });
+  }
+  return officialAccounts;
+}
+async function followedMap(userId) {
+  if (!followedOfficial.has(userId)) followedOfficial.set(userId, new Map());
+  const mine = followedOfficial.get(userId);
+  if (dbOf()) {
+    await ensureSchema();
+    const { results } = await dbOf().prepare('SELECT account_id, conversation_id FROM luno_official_follows WHERE user_id = ?').bind(userId).all().catch(() => ({ results: [] }));
+    for (const r of results || []) mine.set(r.account_id, r.conversation_id);
+  }
+  return mine;
+}
   if (p === 'official-accounts' && method === 'GET') {
-    const mine = followedOfficial.get(myId) || new Map();
-    return json({ accounts: Array.from(officialAccounts.values()).map(o => ({ id: o.id, name: o.name, handle: o.handle, description: o.description, color: o.color, followed: mine.has(o.id) })) });
+    const all = await listOfficialAccounts();
+    const mine = await followedMap(myId);
+    return json({ accounts: Array.from(all.values()).map(o => ({ id: o.id, name: o.name, handle: o.handle, description: o.description, color: o.color, followed: mine.has(o.id) })) });
   }
   if ((m = p.match(/^official-accounts\/([\w-]+)\/follow$/))) {
-    const acct = officialAccounts.get(m[1]);
+    const all = await listOfficialAccounts();
+    const acct = all.get(m[1]);
     if (!acct) return bad('공식계정을 찾을 수 없습니다', 404);
-    if (!followedOfficial.has(myId)) followedOfficial.set(myId, new Map());
-    const mine = followedOfficial.get(myId);
+    const mine = await followedMap(myId);
     if (method === 'POST') {
-      if (mine.has(acct.id)) return json({ status: 'already_following', conversation_id: mine.get(acct.id) });
+      const existing = mine.get(acct.id);
+      if (existing && conversations.get(existing)) return json({ status: 'already_following', conversation_id: existing });
       const c = createConversation({ kind: 'official', title: acct.name, members: [myId, acct.id], official: true });
       mine.set(acct.id, c.id);
-      pushMessage(c.id, acct.id, { kind: 'text', body: `${acct.name} 공식계정을 추가해 주셔서 감사합니다! 🎉 '도움말'을 입력해 보세요.` });
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare('INSERT INTO luno_official_follows (user_id, account_id, conversation_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, account_id) DO UPDATE SET conversation_id = excluded.conversation_id').bind(myId, acct.id, c.id, now()).run();
+      }
+      if (!existing) pushMessage(c.id, acct.id, { kind: 'text', body: `${acct.name} 공식계정을 추가해 주셔서 감사합니다! 🎉 '도움말'을 입력해 보세요.` });
       sendTo([myId], { type: 'conversation.updated', conversation_id: c.id });
-      return json({ status: 'following', conversation_id: c.id }, 201);
+      return json({ status: existing ? 'already_following' : 'following', conversation_id: c.id }, existing ? 200 : 201);
     }
     if (method === 'DELETE') {
       const cid = mine.get(acct.id);
       if (cid) cMeta(cid, myId).hidden = true;
       mine.delete(acct.id);
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare('DELETE FROM luno_official_follows WHERE user_id = ? AND account_id = ?').bind(myId, acct.id).run();
+      }
       return json({ status: 'unfollowed' });
     }
   }
@@ -4889,6 +4934,11 @@ async function deleteAttachmentEverywhere(attId) {
     return json({ calls: rows.slice(0, 100) });
   }
   if (p === 'news' && method === 'GET') {
+    if (dbOf()) {
+      await ensureSchema();
+      const { results } = await dbOf().prepare('SELECT * FROM luno_news ORDER BY published_at DESC, created_at DESC LIMIT 50').all().catch(() => ({ results: [] }));
+      if (results && results.length) return json({ sample: false, hero: results, popular: [], fetched_at: now() });
+    }
     const withRank = NEWS_SAMPLE.filter(a => a.rank);
     return json({
       sample: true,
@@ -5399,6 +5449,76 @@ async function deleteAttachmentEverywhere(attId) {
         messages: Array.from(messages.values()).reduce((n, l) => n + l.length, 0),
         open_reports: adminReports.filter(r => r.state === 'open').length, calls: callSessions.size, orders: storeOrders.size
       } });
+    }
+    // F12: admin-managed official accounts and news (D1, no seeds).
+    if (p === 'admin/official-accounts' && method === 'GET') {
+      const all = await listOfficialAccounts();
+      return json({ accounts: Array.from(all.values()) });
+    }
+    if (p === 'admin/official-accounts' && method === 'POST') {
+      if (!dbOf()) return bad('official accounts unavailable', 503);
+      const b = await readJson(request);
+      const name = clip(String(b.name || ''), 40);
+      if (!name) return bad('이름을 입력하세요');
+      const color = /^#[0-9a-fA-F]{6}$/.test(String(b.color || '')) ? b.color : '#4F7CFF';
+      const id = `oa-${uid()}`;
+      const at = now();
+      await ensureSchema();
+      await dbOf().prepare('INSERT INTO luno_official_accounts (id, name, handle, description, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, name, clip(String(b.handle || ''), 30), clip(String(b.description || ''), 200), color, at, at).run();
+      officialAccounts.set(id, { id, name, handle: clip(String(b.handle || ''), 30), description: clip(String(b.description || ''), 200), color });
+      return json({ id, name, handle: clip(String(b.handle || ''), 30), description: clip(String(b.description || ''), 200), color }, 201);
+    }
+    if ((m = p.match(/^admin\/official-accounts\/([\w-]+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
+      if (!dbOf()) return bad('official accounts unavailable', 503);
+      await ensureSchema();
+      const row = await dbOf().prepare('SELECT * FROM luno_official_accounts WHERE id = ?').bind(m[1]).first().catch(() => null);
+      if (!row) return bad('공식계정을 찾을 수 없습니다', 404);
+      if (method === 'DELETE') {
+        await dbOf().prepare('DELETE FROM luno_official_follows WHERE account_id = ?').bind(m[1]).run();
+        await dbOf().prepare('DELETE FROM luno_official_accounts WHERE id = ?').bind(m[1]).run();
+        officialAccounts.delete(m[1]);
+        return json({ status: 'deleted' });
+      }
+      const b = await readJson(request);
+      const name = b.name === undefined ? row.name : clip(String(b.name), 40);
+      if (!name) return bad('이름을 입력하세요');
+      const color = b.color === undefined ? row.color : (/^#[0-9a-fA-F]{6}$/.test(String(b.color)) ? b.color : row.color);
+      await dbOf().prepare('UPDATE luno_official_accounts SET name = ?, handle = ?, description = ?, color = ?, updated_at = ? WHERE id = ?').bind(name, b.handle === undefined ? row.handle : clip(String(b.handle), 30), b.description === undefined ? row.description : clip(String(b.description), 200), color, now(), m[1]).run();
+      const upd = await dbOf().prepare('SELECT * FROM luno_official_accounts WHERE id = ?').bind(m[1]).first();
+      officialAccounts.set(m[1], { id: upd.id, name: upd.name, handle: upd.handle, description: upd.description, color: upd.color });
+      return json({ id: upd.id, name: upd.name, handle: upd.handle, description: upd.description, color: upd.color });
+    }
+    if (p === 'admin/news' && method === 'GET') {
+      if (!dbOf()) return json({ articles: [] });
+      await ensureSchema();
+      const { results } = await dbOf().prepare('SELECT * FROM luno_news ORDER BY published_at DESC, created_at DESC LIMIT 100').all().catch(() => ({ results: [] }));
+      return json({ articles: results || [] });
+    }
+    if (p === 'admin/news' && method === 'POST') {
+      if (!dbOf()) return bad('news unavailable', 503);
+      const b = await readJson(request);
+      const title = clip(String(b.title || ''), 200);
+      if (!title) return bad('제목을 입력하세요');
+      const id = `news-${uid()}`;
+      const at = now();
+      await ensureSchema();
+      await dbOf().prepare('INSERT INTO luno_news (id, title, press, category, published_at, image_url, summary, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, title, clip(String(b.press || ''), 60), clip(String(b.category || ''), 30), clip(String(b.published_at || at), 30), clip(String(b.image_url || ''), 2000), clip(String(b.summary || ''), 500), clip(String(b.content || ''), 20000), at).run();
+      return json({ id, title }, 201);
+    }
+    if ((m = p.match(/^admin\/news\/([\w-]+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
+      if (!dbOf()) return bad('news unavailable', 503);
+      await ensureSchema();
+      const row = await dbOf().prepare('SELECT * FROM luno_news WHERE id = ?').bind(m[1]).first().catch(() => null);
+      if (!row) return bad('기사를 찾을 수 없습니다', 404);
+      if (method === 'DELETE') {
+        await dbOf().prepare('DELETE FROM luno_news WHERE id = ?').bind(m[1]).run();
+        return json({ status: 'deleted' });
+      }
+      const b = await readJson(request);
+      const title = b.title === undefined ? row.title : clip(String(b.title), 200);
+      if (!title) return bad('제목을 입력하세요');
+      await dbOf().prepare('UPDATE luno_news SET title = ?, press = ?, category = ?, published_at = ?, image_url = ?, summary = ?, content = ? WHERE id = ?').bind(title, b.press === undefined ? row.press : clip(String(b.press), 60), b.category === undefined ? row.category : clip(String(b.category), 30), b.published_at === undefined ? row.published_at : clip(String(b.published_at), 30), b.image_url === undefined ? row.image_url : clip(String(b.image_url), 2000), b.summary === undefined ? row.summary : clip(String(b.summary), 500), b.content === undefined ? row.content : clip(String(b.content), 20000), m[1]).run();
+      return json({ id: row.id, title });
     }
     // L-01: admin-only bot issuance. Bots carry no password material and
     // authenticate with L-06 scope tokens only. The admin guard above
