@@ -516,6 +516,23 @@ test('L-03: web renders the three kinds with labels', async () => {
   }
 });
 
+// ---------- L-04: append-only decision record ----------
+
+test('L-04: decisions table has the exact append-only shape', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const cols = db.raw.prepare('PRAGMA table_info(luno_decisions)').all().map((r) => r.name);
+    assert.deepEqual(cols, ['id', 'room_id', 'proposal_message_id', 'decided_by', 'decision', 'created_at']);
+  } finally { db.raw.close(); }
+});
+
+test('L-04: no update or delete path touches decisions', async () => {
+  const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
+  assert.ok(!/UPDATE\s+luno_decisions/i.test(source), 'no UPDATE on luno_decisions');
+  assert.ok(!/DELETE\s+FROM\s+luno_decisions/i.test(source), 'no DELETE on luno_decisions');
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');

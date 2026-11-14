@@ -387,7 +387,13 @@ const LUNO_SCHEMA_PHASE1 = [
     locked_by TEXT, lock_expires_at INTEGER NOT NULL DEFAULT 0,
     result_json TEXT DEFAULT '', error TEXT DEFAULT '',
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-  `CREATE INDEX IF NOT EXISTS idx_bot_jobs_claim ON luno_bot_jobs(bot_id, status, created_at)`
+  `CREATE INDEX IF NOT EXISTS idx_bot_jobs_claim ON luno_bot_jobs(bot_id, status, created_at)`,
+  // L-04: append-only decision record. One decision per proposal (unique);
+  // no UPDATE/DELETE path may ever touch this table (pinned by test).
+  `CREATE TABLE IF NOT EXISTS luno_decisions (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL, proposal_message_id TEXT NOT NULL UNIQUE,
+    decided_by TEXT NOT NULL, decision TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_decisions_room ON luno_decisions(room_id, created_at)`
 ];
 // Additive columns for tables that predate Phase 1. Applied with a
 // PRAGMA guard because SQLite has no idempotent ADD COLUMN.
@@ -2435,6 +2441,23 @@ async function routeBotMentions(conv, authorId, msg) {
     await enqueueBotJob({ botId: targetId, roomId: conv.id, kind: 'mention',
       payload: { message_id: msg.id, author_id: authorId, body: String(msg.body || '').slice(0, 4000) } });
   }
+}
+// L-04: append one decision. Called by approvals (L-05) only. Returns the
+// decision id, or null when the proposal was already decided.
+async function recordDecision({ roomId, proposalMessageId, decidedBy, decision }) {
+  const db = dbOf();
+  if (!db) return null;
+  if (decision !== 'approved' && decision !== 'rejected') return null;
+  await ensureSchema();
+  const id = uid();
+  try {
+    await db.prepare(`INSERT INTO luno_decisions (id, room_id, proposal_message_id, decided_by, decision, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))`).bind(id, roomId, proposalMessageId, decidedBy, decision).run();
+  } catch (err) {
+    if (/UNIQUE constraint|unique/i.test(String(err && err.message))) return null;
+    throw err;
+  }
+  return id;
 }
 // L-07: enqueue one unit of bot work. Internal only — routing (L-02) calls
 // it; runners use claim/complete. Returns the job id or null without D1.
