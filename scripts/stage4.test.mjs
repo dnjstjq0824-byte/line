@@ -373,7 +373,8 @@ test('D3: money-in stays 503 without a verified provider', async () => {
 test('D3: balances and transactions survive a new isolate', async () => {
   const db = makeD1();
   try {
-    const first = await stage4Isolate(db);
+    // F13: send mechanics run only with the operator flag on.
+    const first = await stage4Isolate(db, { PAYMENTS_ENABLED: 'true' });
     const a = await registerLogin(first.api, 'd3-wa@luno-test.local', 'd3_wa');
     const b = await registerLogin(first.api, 'd3-wb@luno-test.local', 'd3_wb');
     await befriend(first.api, a.token, 'd3_wb');
@@ -422,14 +423,18 @@ test('D3: owned packs and themes survive a new isolate', async () => {
 });
 
 test('D3: wallet keeps working without a database', async () => {
-  const { api } = await stage4Isolate(null);
+  // F13: send mechanics run only with the operator flag on; charge stays
+  // gated on a flag-off isolate.
+  const { api } = await stage4Isolate(null, { PAYMENTS_ENABLED: 'true' });
   const a = await registerLogin(api, 'd3-ma@luno-test.local', 'd3_ma');
   const b = await registerLogin(api, 'd3-mb@luno-test.local', 'd3_mb');
   await befriend(api, a.token, 'd3_mb');
   const w0 = await (await api('wallet', 'GET', null, a.token)).json();
   assert.equal(w0.balance, 0, 'fresh wallet starts at zero');
   assert.equal((await api('wallet/send', 'POST', { to_user_id: b.id, amount: 1000 }, a.token)).status, 402, 'overdraft rejected');
-  assert.equal((await api('wallet/charge', 'POST', { amount: 5000 }, a.token)).status, 503, 'charge gated without a provider');
+  const off = await stage4Isolate(null);
+  const c = await registerLogin(off.api, 'd3-mc@luno-test.local', 'd3_mc');
+  assert.equal((await off.api('wallet/charge', 'POST', { amount: 5000 }, c.token)).status, 503, 'charge gated without a provider');
 });
 
 // ---------- D5: call logs, push tokens, settings ----------

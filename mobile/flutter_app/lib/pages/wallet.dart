@@ -17,6 +17,14 @@ class _WalletPageState extends State<WalletPage> {
   String? localError;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SessionScope.of(context, listen: false).loadPaymentsFlag();
+    });
+  }
+
+  @override
   void dispose() {
     amount.dispose();
     super.dispose();
@@ -87,48 +95,55 @@ class _WalletPageState extends State<WalletPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: amount,
-                              keyboardType: TextInputType.number,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
-                              decoration: const InputDecoration(
-                                filled: true,
-                                fillColor: Colors.white,
-                                isDense: true,
-                                hintText: '충전 금액',
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
+                      if (!session.paymentsEnabled)
+                        const Text('결제 기능은 준비 중입니다.',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700)),
+                      if (session.paymentsEnabled)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: amount,
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700),
+                                decoration: const InputDecoration(
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  isDense: true,
+                                  hintText: '충전 금액',
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: dark
-                                  ? HarborDark.beacon
-                                  : HarborLight.beacon,
-                              foregroundColor: Colors.white,
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: dark
+                                    ? HarborDark.beacon
+                                    : HarborLight.beacon,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                final parsed =
+                                    int.tryParse(amount.text.trim());
+                                if (parsed == null || parsed <= 0) {
+                                  setState(() => localError =
+                                      '충전 금액을 숫자로 입력해 주세요.');
+                                  return;
+                                }
+                                setState(() => localError = null);
+                                session.chargeWallet(parsed);
+                                amount.clear();
+                              },
+                              child: const Text('+ 충전'),
                             ),
-                            onPressed: () {
-                              final parsed =
-                                  int.tryParse(amount.text.trim());
-                              if (parsed == null || parsed <= 0) {
-                                setState(() =>
-                                    localError = '충전 금액을 숫자로 입력해 주세요.');
-                                return;
-                              }
-                              setState(() => localError = null);
-                              session.chargeWallet(parsed);
-                              amount.clear();
-                            },
-                            child: const Text('+ 충전'),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                       if (localError != null) ...[
                         const SizedBox(height: 8),
                         Text(localError!,

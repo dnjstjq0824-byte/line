@@ -116,6 +116,9 @@ const DEFAULT_PREFS = {
   allow_friend_requests: true, notifications: true, notification_preview: true,
   letter_sealing: false, wallpaper: 'default', link_previews: true
 };
+// F13: plan vocabulary for future tiers (no billing code lives here).
+const ACCOUNT_PLANS = ['personal', 'developer', 'business'];
+const PLAN_GRANTS = { personal: [], developer: [], business: [] };
 
 function now() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
@@ -228,7 +231,7 @@ const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, handle TEXT UNIQUE,
     password_hash TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '',
-    cover_url TEXT DEFAULT '', avatar_color TEXT DEFAULT '#4F7CFF', prefs_json TEXT DEFAULT '',
+    cover_url TEXT DEFAULT '', avatar_color TEXT DEFAULT '#4F7CFF', plan TEXT DEFAULT 'personal', prefs_json TEXT DEFAULT '',
     status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
     birthday TEXT DEFAULT '', state TEXT DEFAULT 'active', kind TEXT DEFAULT 'user',
     email_verified INTEGER DEFAULT 0, deleted_at TEXT DEFAULT '', deletion_reason TEXT DEFAULT '',
@@ -439,6 +442,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'avatar_url', "TEXT DEFAULT ''"],
   ['users', 'cover_url', "TEXT DEFAULT ''"],
   ['users', 'avatar_color', "TEXT DEFAULT '#4F7CFF'"],
+  ['users', 'plan', "TEXT DEFAULT 'personal'"],
   ['users', 'prefs_json', "TEXT DEFAULT ''"],
   ['users', 'status_message', "TEXT DEFAULT ''"],
   ['users', 'bio', "TEXT DEFAULT ''"],
@@ -2390,7 +2394,7 @@ function cacheUserRow(row, granted) {
   const u = applyStoredPassword({
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: granted,
-    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', created_at: row.created_at,
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', plan: row.plan || 'personal', created_at: row.created_at,
     state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
     deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
   }, row.password_hash);
@@ -2408,7 +2412,7 @@ async function loadUserFromD1(id, knownRole) {
   const u = applyStoredPassword({
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
-    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', created_at: row.created_at,
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', plan: row.plan || 'personal', created_at: row.created_at,
     state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
     deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
   }, row.password_hash);
@@ -3550,7 +3554,7 @@ async function extended(p, request, url, me, token) {
       const row = await dbOf().prepare('SELECT * FROM users WHERE id = ?').bind(myId).first();
       if (row) { me.avatar_url = row.avatar_url || ''; me.cover_url = row.cover_url || ''; me.avatar_color = row.avatar_color || '#4F7CFF'; }
     }
-    if (method === 'GET') return json({ ...publicUser(me), email: me.email, role: me.role });
+    if (method === 'GET') return json({ ...publicUser(me), email: me.email, role: me.role, plan: accountPlan(me) });
     if (method === 'PATCH') {
       const b = await readJson(request);
       for (const [key, which, label, code] of [['avatar_url', 'avatar', 'Profile photo', 'INVALID_AVATAR'], ['cover_url', 'cover', 'Cover photo', 'INVALID_COVER']]) {
@@ -5142,7 +5146,19 @@ async function deleteAttachmentEverywhere(attId) {
     const w = walletOf(myId);
     return json({ balance: w.balance, currency: 'KRW', transactions: w.tx.slice(0, 50) });
   }
+// F13: money moves only with an explicit operator flag. Default off:
+// charge/send/orders answer 503 and no balance path runs.
+function paymentsEnabled() { return CURRENT_ENV && CURRENT_ENV.PAYMENTS_ENABLED === 'true'; }
+function paymentsGate() { return json({ error: '결제 기능은 준비 중입니다', code: 'PAYMENTS_DISABLED' }, 503); }
+// Account plan + feature entitlement. Plans exist so future
+// personal/developer/business tiers can attach; no billing code lives here.
+function accountPlan(u) { return u && ACCOUNT_PLANS.includes(u.plan) ? u.plan : 'personal'; }
+function entitled(u, feature) {
+  if (feature === 'payments') return paymentsEnabled();
+  return (PLAN_GRANTS[accountPlan(u)] || []).includes(feature);
+}
   if (p === 'wallet/charge' && method === 'POST') {
+    if (!entitled(me, 'payments')) return paymentsGate();
     const b = await readJson(request);
     const amount = intIn(b.amount, 1000, 1000000);
     if (amount === null) return bad('충전 금액은 1,000원 ~ 1,000,000원입니다');
@@ -5164,6 +5180,7 @@ async function deleteAttachmentEverywhere(attId) {
     return json({ balance: walletOf(myId).balance }, 201);
   }
   if (p === 'wallet/send' && method === 'POST') {
+    if (!entitled(me, 'payments')) return paymentsGate();
     await hydrateSocialGraph(myId);
     const b = await readJson(request);
     const amount = intIn(b.amount, 1, 500000);
@@ -5211,6 +5228,7 @@ async function deleteAttachmentEverywhere(attId) {
     return json({ themes: THEME_CATALOG.map(t => ({ ...t, owned: owned.has(t.id), currency: 'KRW' })) });
   }
   if (p === 'store/orders' && method === 'POST') {
+    if (!entitled(me, 'payments')) return paymentsGate();
     const b = await readJson(request);
     const pack = STICKER_CATALOG.find(x => x.id === b.pack_id);
     const theme = THEME_CATALOG.find(x => x.id === b.theme_id);
@@ -6138,8 +6156,8 @@ function gatewayOriginFor(request, env) {
 const workerCore = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-	if ((url.pathname === '/api/v1/store/orders' || url.pathname === '/api/v1/wallet/charge') && request.method === 'POST') {
-	  return json({ error: 'payments unavailable: verified provider integration required' }, 503);
+	if ((url.pathname === '/api/v1/store/orders' || url.pathname === '/api/v1/wallet/charge') && request.method === 'POST' && env.PAYMENTS_ENABLED !== 'true') {
+	  return json({ error: 'payments unavailable: verified provider integration required', code: 'PAYMENTS_DISABLED' }, 503);
 	}
     // Route the complete API to one persistent backend; never mix its identities
     // with the isolate-local demo or fall back to demo data on upstream failure.
@@ -6204,7 +6222,7 @@ const workerCore = {
 
     // Health / Readyz / Metrics / Version
     if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
-      return json(BUILD_INFO);
+      return json({ ...BUILD_INFO, payments_enabled: !!(env && env.PAYMENTS_ENABLED === 'true') });
     }
     if (url.pathname === '/api/v1/app/latest' && request.method === 'GET') {
       const b = LATEST_ANDROID_BUILD;

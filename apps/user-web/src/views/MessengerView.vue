@@ -30,6 +30,7 @@ import {
   fetchAppVersion,
   isDarkMode,
   note,
+  paymentsEnabled,
   readStoredDeviceId,
   readStoredToken,
   setLocale,
@@ -3748,6 +3749,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="modal-body-form">
           <p class="muted" style="margin: 0; font-size: 11.5px; color: #64748b;">{{ t('mvSandboxNotice') }}</p>
+          <p v-if="!paymentsEnabled" class="muted" style="margin: 0; font-size: 12px; color: #b45309;">{{ t('mvPaymentsPreparing') }}</p>
           <div v-if="sendTargetFriend" class="send-target-info">
             {{ t('mvSendTo') }} <strong>{{ sendTargetFriend.display_name }}</strong>
           </div>
@@ -3763,7 +3765,7 @@ onBeforeUnmount(() => {
           <input v-model="sendMemoInput" :placeholder="t('mvMemoPh')" />
           <div class="modal-actions-right">
             <button class="btn-secondary" @click="showSendMoneyModal = false">{{ t('mvCancel') }}</button>
-            <button class="btn-primary" @click="executeSendMoney">{{ t('mvMockSend') }}</button>
+            <button class="btn-primary" :disabled="!paymentsEnabled" @click="executeSendMoney">{{ t('mvMockSend') }}</button>
           </div>
         </div>
       </div>
@@ -3779,12 +3781,12 @@ onBeforeUnmount(() => {
         <div class="modal-body-form">
           <p>{{ t('mvChargePick') }}</p>
           <p class="ln-charge-notice" role="note">{{ t('mvChargeNotice') }}</p>
-          <p class="ln-charge-preparing" role="note">{{ t('mvPreparing') }}</p>
+          <p v-if="!paymentsEnabled" class="ln-charge-preparing" role="note">{{ t('mvPreparing') }}</p>
           <div class="charge-options-grid">
-            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge10k') }}</button>
-            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge30k') }}</button>
-            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge50k') }}</button>
-            <button class="btn-charge-option" disabled :title="t('mvChargeDisabledTitle')">{{ t('mvCharge100k') }}</button>
+            <button class="btn-charge-option" :disabled="!paymentsEnabled" :title="t('mvChargeDisabledTitle')" @click="executeChargeMoney(10000)">{{ t('mvCharge10k') }}</button>
+            <button class="btn-charge-option" :disabled="!paymentsEnabled" :title="t('mvChargeDisabledTitle')" @click="executeChargeMoney(30000)">{{ t('mvCharge30k') }}</button>
+            <button class="btn-charge-option" :disabled="!paymentsEnabled" :title="t('mvChargeDisabledTitle')" @click="executeChargeMoney(50000)">{{ t('mvCharge50k') }}</button>
+            <button class="btn-charge-option" :disabled="!paymentsEnabled" :title="t('mvChargeDisabledTitle')" @click="executeChargeMoney(100000)">{{ t('mvCharge100k') }}</button>
           </div>
         </div>
       </div>

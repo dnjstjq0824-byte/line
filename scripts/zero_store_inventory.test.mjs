@@ -22,6 +22,7 @@ const STATIC = new Set([
   'LUNO_SCHEMA', 'LUNO_SCHEMA_BASE', 'LUNO_SCHEMA_PHASE1', 'LUNO_SCHEMA_PHASE1_COLS',
   'ATTACHMENT_MIME_ALLOW',
   'NEWS_SAMPLE', 'GRANTABLE_ROLES', 'REACTIONS', 'PEER_USERS', 'READY_TABLES', 'DELETE_REASONS',
+  'ACCOUNT_PLANS', // F13: frozen plan vocabulary (PLAN_GRANTS is a plain object, not a scanned store)
   'translateProviders', // T1: provider registry, populated once at module load
   'pushProviders', // N1-L: push provider registry, populated once at module load
 ]);

@@ -51,6 +51,8 @@ export const appVersion = ref({
   build_time: '',
   env: 'production'
 })
+// F13: money UI stays in "preparing" state unless the server says on.
+export const paymentsEnabled = ref(false)
 
 export async function fetchAppVersion() {
   try {
@@ -58,6 +60,7 @@ export async function fetchAppVersion() {
     if (res && res.commit) {
       appVersion.value = res
     }
+    paymentsEnabled.value = res?.payments_enabled === true
   } catch {}
 }
 

@@ -2146,6 +2146,19 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  // F13: money UI stays in "preparing" state unless /version says on.
+  bool paymentsEnabled = false;
+
+  Future<void> loadPaymentsFlag() async {
+    try {
+      final res = await api.call('/api/v1/version');
+      paymentsEnabled = res['payments_enabled'] == true;
+    } catch (_) {
+      paymentsEnabled = false;
+    }
+    notifyListeners();
+  }
+
   Future<void> chargeWallet(int amount) {
     return run(() async {
       await api.call('/api/v1/wallet/charge', method: 'POST', data: {'amount': amount});
@@ -2163,6 +2176,11 @@ class SessionController extends ChangeNotifier {
     final peerId = sendPeerIdOf(conversation: conversation, selfId: selfId);
     if (peerId == null) {
       notice = '1:1 대화방에서만 송금할 수 있습니다.';
+      notifyListeners();
+      return Future.value();
+    }
+    if (!paymentsEnabled) {
+      notice = '결제 기능은 준비 중입니다.';
       notifyListeners();
       return Future.value();
     }
