@@ -2423,6 +2423,8 @@ function botScopeAllows(me, op, roomId) {
 function isBotApiRoute(p, method) {
   if (/^conversations\/[\w-]+\/messages$/.test(p)) return method === 'GET' || method === 'POST';
   if (method === 'GET' && /^conversations\/[\w-]+$/.test(p)) return true;
+  // L-08: runners re-read mention context through the delta sync (read op).
+  if (method === 'GET' && /^conversations\/[\w-]+\/sync$/.test(p)) return true;
   if (method === 'POST' && p === 'bot/jobs/claim') return true;
   if (method === 'POST' && /^bot\/jobs\/[\w-]+\/complete$/.test(p)) return true;
   return false;
@@ -4948,6 +4950,7 @@ async function extended(p, request, url, me, token) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
+    if (userKind(me) === 'bot' && !botScopeAllows(me, 'read', cid)) return json({ error: 'forbidden' }, 403);
     const since = intIn(url.searchParams.get('since_sequence') || 0, 0, 1e9) || 0;
     const db = dbOf();
     let delta;

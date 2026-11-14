@@ -1,7 +1,8 @@
-// LUNO agent sidecar (@muse). Polls the messenger server for new direct
-// messages from whitelisted users and replies via an OpenAI-compatible
-// chat API. --echo runs the full poll/reply loop without any LLM key.
-// Standard library only: go run . / go build ./...
+// LUNO agent sidecar. Claims mention jobs from the messenger server queue
+// (L-07), answers through a pluggable LLM provider, and completes the job.
+// Auth is a bot scope token (L-06); password login cannot work for bots.
+// Providers: echo (default), fake (fixed reply + token counts for tests),
+// openai (explicit opt-in only, off by default). Standard library only.
 package main
 
 import (
@@ -19,28 +20,27 @@ import (
 
 type config struct {
 	baseURL    string
-	email      string
-	password   string
+	botToken   string
 	whitelist  map[string]bool
 	pollEvery  time.Duration
-	echo       bool
+	provider   string
 	llmBaseURL string
 	llmKey     string
 	llmModel   string
-	cursorFile string
 }
 
 func loadConfig(echoFlag bool) (config, error) {
 	c := config{
 		baseURL:    envOr("LUNO_BASE_URL", "http://localhost:8080"),
-		email:      os.Getenv("LUNO_BOT_EMAIL"),
-		password:   os.Getenv("LUNO_BOT_PASSWORD"),
+		botToken:   os.Getenv("LUNO_BOT_TOKEN"),
 		whitelist:  map[string]bool{},
-		echo:       echoFlag,
+		provider:   envOr("LLM_PROVIDER", "echo"),
 		llmBaseURL: strings.TrimSuffix(envOr("LLM_BASE_URL", "https://api.openai.com/v1"), "/"),
 		llmKey:     os.Getenv("LLM_API_KEY"),
 		llmModel:   envOr("LLM_MODEL", "gpt-4o-mini"),
-		cursorFile: envOr("AGENT_CURSOR_FILE", "cursors.json"),
+	}
+	if echoFlag {
+		c.provider = "echo"
 	}
 	for _, id := range strings.Split(os.Getenv("LUNO_WHITELIST"), ",") {
 		if id = strings.TrimSpace(id); id != "" {
@@ -56,11 +56,11 @@ func loadConfig(echoFlag bool) (config, error) {
 		secs = n
 	}
 	c.pollEvery = time.Duration(secs) * time.Second
-	if c.email == "" || c.password == "" {
-		return c, fmt.Errorf("LUNO_BOT_EMAIL and LUNO_BOT_PASSWORD are required")
+	if c.botToken == "" {
+		return c, fmt.Errorf("LUNO_BOT_TOKEN is required (bot scope token, not a password)")
 	}
-	if !c.echo && c.llmKey == "" {
-		return c, fmt.Errorf("LLM_API_KEY is required (or run with --echo)")
+	if _, err := selectProvider(c); err != nil {
+		return c, err
 	}
 	return c, nil
 }
@@ -70,6 +70,89 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// llmProvider answers one prompt. tokens is the provider-reported usage
+// (fake providers report made-up counts so cost caps stay testable).
+type llmProvider interface {
+	complete(text string) (reply string, tokens int, err error)
+}
+
+type echoProvider struct{}
+
+func (echoProvider) complete(text string) (string, int, error) {
+	return "echo: " + text, 0, nil
+}
+
+type fakeProvider struct{}
+
+func (fakeProvider) complete(text string) (string, int, error) {
+	trimmed := strings.TrimSpace(text)
+	if len(trimmed) > 120 {
+		trimmed = trimmed[:120]
+	}
+	return "LUNO 봇 응답(가짜): " + trimmed, len(text)/4 + 8, nil
+}
+
+type openaiProvider struct {
+	baseURL string
+	key     string
+	model   string
+	http    *http.Client
+}
+
+func (p openaiProvider) complete(text string) (string, int, error) {
+	req, err := http.NewRequest("POST", p.baseURL+"/chat/completions", bytes.NewReader(mustJSON(map[string]any{
+		"model":    p.model,
+		"messages": []map[string]string{{"role": "user", "content": text}},
+	})))
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.key)
+	res, err := p.http.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Usage struct {
+			TotalTokens int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", 0, err
+	}
+	if res.StatusCode >= 300 || len(out.Choices) == 0 {
+		return "", 0, fmt.Errorf("llm status %d", res.StatusCode)
+	}
+	return out.Choices[0].Message.Content, out.Usage.TotalTokens, nil
+}
+
+// selectProvider resolves LLM_PROVIDER. Only echo and fake are available
+// without extra credentials; the OpenAI-compatible path stays off unless
+// explicitly selected with a key. No other providers exist by design.
+func selectProvider(cfg config) (llmProvider, error) {
+	switch cfg.provider {
+	case "", "echo":
+		return echoProvider{}, nil
+	case "fake":
+		return fakeProvider{}, nil
+	case "openai":
+		if cfg.llmKey == "" {
+			return nil, fmt.Errorf("LLM_API_KEY is required for LLM_PROVIDER=openai")
+		}
+		return openaiProvider{baseURL: cfg.llmBaseURL, key: cfg.llmKey, model: cfg.llmModel, http: &http.Client{Timeout: 60 * time.Second}}, nil
+	default:
+		return nil, fmt.Errorf("unknown LLM_PROVIDER %q (want echo, fake, or openai)", cfg.provider)
+	}
 }
 
 type client struct {
@@ -108,23 +191,59 @@ func (c *client) call(method, path string, body any) (int, map[string]any, error
 	return res.StatusCode, out, nil
 }
 
-func login(c *client, email, password string) (userID string, err error) {
-	st, out, err := c.call("POST", "/api/v1/auth/login", map[string]any{
-		"email": email, "password": password, "platform": "bot", "device_name": "muse-sidecar",
-	})
+type job struct {
+	ID        string
+	BotID     string
+	RoomID    string
+	Kind      string
+	MessageID string
+	AuthorID  string
+	Body      string
+}
+
+func claimJob(c *client) (*job, error) {
+	st, out, err := c.call("POST", "/api/v1/bot/jobs/claim", map[string]any{})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if st != 200 {
-		return "", fmt.Errorf("login status %d: %v", st, out["error"])
+		return nil, fmt.Errorf("claim status %d: %v", st, out["error"])
 	}
-	token, _ := out["access_token"].(string)
-	userID, _ = out["user_id"].(string)
-	if token == "" || userID == "" {
-		return "", fmt.Errorf("login response missing token/user_id")
+	raw, _ := out["job"].(map[string]any)
+	if raw == nil {
+		return nil, nil
 	}
-	c.token = token
-	return userID, nil
+	payload, _ := raw["payload"].(map[string]any)
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	return &job{
+		ID:        str(raw["id"]),
+		BotID:     str(raw["bot_id"]),
+		RoomID:    str(raw["room_id"]),
+		Kind:      str(raw["kind"]),
+		MessageID: str(payload["message_id"]),
+		AuthorID:  str(payload["author_id"]),
+		Body:      str(payload["body"]),
+	}, nil
+}
+
+func completeJob(c *client, id, status string, result map[string]any, errText string) error {
+	body := map[string]any{"status": status}
+	if result != nil {
+		body["result"] = result
+	}
+	if errText != "" {
+		body["error"] = errText
+	}
+	st, out, err := c.call("POST", "/api/v1/bot/jobs/"+id+"/complete", body)
+	if err != nil {
+		return err
+	}
+	if st != 200 {
+		return fmt.Errorf("complete status %d: %v", st, out["error"])
+	}
+	return nil
 }
 
 type message struct {
@@ -135,8 +254,10 @@ type message struct {
 	Body     string
 }
 
-func syncMessages(c *client, convID string, after int64) ([]message, error) {
-	st, out, err := c.call("GET", "/api/v1/conversations/"+convID+"/sync?after_sequence="+strconv.FormatInt(after, 10), nil)
+// syncMessages reads the room delta after a cursor. The server contract is
+// since_sequence in, delta_messages out (M2/L-08).
+func syncMessages(c *client, convID string, since int64) ([]message, error) {
+	st, out, err := c.call("GET", "/api/v1/conversations/"+convID+"/sync?since_sequence="+strconv.FormatInt(since, 10), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +265,7 @@ func syncMessages(c *client, convID string, after int64) ([]message, error) {
 		return nil, fmt.Errorf("sync status %d", st)
 	}
 	var msgs []message
-	for _, raw := range toSlice(out["messages"]) {
+	for _, raw := range toSlice(out["delta_messages"]) {
 		m, _ := raw.(map[string]any)
 		if m == nil {
 			continue
@@ -163,147 +284,96 @@ func syncMessages(c *client, convID string, after int64) ([]message, error) {
 	return msgs, nil
 }
 
-func listConversations(c *client) ([]string, error) {
-	st, out, err := c.call("GET", "/api/v1/conversations", nil)
-	if err != nil {
-		return nil, err
-	}
-	if st != 200 {
-		return nil, fmt.Errorf("conversations status %d", st)
-	}
-	var ids []string
-	for _, raw := range toSlice(out["conversations"]) {
-		m, _ := raw.(map[string]any)
-		if m == nil {
-			continue
-		}
-		if id := str(m["id"]); id != "" {
-			ids = append(ids, id)
-		}
-	}
-	return ids, nil
-}
-
-func postMessage(c *client, convID, body string) error {
-	st, out, err := c.call("POST", "/api/v1/conversations/"+convID+"/messages", map[string]any{
+func postMessage(c *client, convID, body, replyTo string) (string, error) {
+	payload := map[string]any{
 		"client_id": "muse-" + strconv.FormatInt(time.Now().UnixNano(), 10),
 		"kind":      "text",
 		"body":      body,
-	})
+	}
+	if replyTo != "" {
+		payload["reply_to"] = replyTo
+	}
+	st, out, err := c.call("POST", "/api/v1/conversations/"+convID+"/messages", payload)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if st != 201 {
-		return fmt.Errorf("post status %d: %v", st, out["error"])
+		return "", fmt.Errorf("post status %d: %v", st, out["error"])
 	}
-	return nil
+	if id := str(out["id"]); id != "" {
+		return id, nil
+	}
+	if nested, _ := out["message"].(map[string]any); nested != nil {
+		return str(nested["id"]), nil
+	}
+	return "", fmt.Errorf("post response missing id")
 }
 
-func chatComplete(c *client, cfg config, text string) (string, error) {
-	if cfg.echo {
-		return "echo: " + text, nil
-	}
-	req, err := http.NewRequest("POST", cfg.llmBaseURL+"/chat/completions", bytes.NewReader(mustJSON(map[string]any{
-		"model":    cfg.llmModel,
-		"messages": []map[string]string{{"role": "user", "content": text}},
-	})))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.llmKey)
-	res, err := c.http.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	var out struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return "", err
-	}
-	if res.StatusCode >= 300 || len(out.Choices) == 0 {
-		return "", fmt.Errorf("llm status %d", res.StatusCode)
-	}
-	return out.Choices[0].Message.Content, nil
-}
-
-// runOnce polls every conversation and replies to new whitelisted text
-// messages. Cursors advance past every seen message, replied or not.
-func runOnce(c *client, cfg config, botID string, cursors map[string]int64) error {
-	ids, err := listConversations(c)
+// runClaimCycle claims one job and works it to completion: mention jobs
+// re-read the mentioned message for fresh context, answer through the LLM
+// provider, post the reply, and complete the job. Empty queue returns nil.
+func runClaimCycle(c *client, cfg config, llm llmProvider) error {
+	j, err := claimJob(c)
 	if err != nil {
 		return err
 	}
-	for _, id := range ids {
-		msgs, err := syncMessages(c, id, cursors[id])
-		if err != nil {
-			return err
-		}
-		for _, m := range msgs {
-			if m.Sequence > cursors[id] {
-				cursors[id] = m.Sequence
-			}
-			if m.Kind != "text" || m.Body == "" || m.SenderID == botID || !cfg.whitelist[m.SenderID] {
-				continue
-			}
-			reply, err := chatComplete(c, cfg, m.Body)
-			if err != nil {
-				return err
-			}
-			if err := postMessage(c, id, reply); err != nil {
-				return err
-			}
-		}
+	if j == nil {
+		return nil
 	}
-	return nil
-}
-
-func loadCursors(path string) map[string]int64 {
-	cursors := map[string]int64{}
-	raw, err := os.ReadFile(path)
+	if j.Kind != "mention" {
+		return completeJob(c, j.ID, "failed", nil, "unknown job kind "+j.Kind)
+	}
+	if j.AuthorID == j.BotID {
+		return completeJob(c, j.ID, "done", map[string]any{"skipped": "self mention"}, "")
+	}
+	if len(cfg.whitelist) > 0 && !cfg.whitelist[j.AuthorID] {
+		return completeJob(c, j.ID, "done", map[string]any{"skipped": "author not whitelisted"}, "")
+	}
+	body := j.Body
+	msgs, err := syncMessages(c, j.RoomID, 0)
 	if err != nil {
-		return cursors
+		return completeJob(c, j.ID, "failed", nil, "sync: "+err.Error())
 	}
-	_ = json.Unmarshal(raw, &cursors)
-	return cursors
-}
-
-func saveCursors(path string, cursors map[string]int64) {
-	raw, err := json.Marshal(cursors)
+	found := false
+	for _, m := range msgs {
+		if m.ID == j.MessageID {
+			body = m.Body
+			found = true
+			break
+		}
+	}
+	if !found {
+		return completeJob(c, j.ID, "failed", nil, "message not found")
+	}
+	reply, tokens, err := llm.complete(body)
 	if err != nil {
-		return
+		return completeJob(c, j.ID, "failed", nil, "llm: "+err.Error())
 	}
-	_ = os.WriteFile(path, raw, 0600)
+	replyID, err := postMessage(c, j.RoomID, reply, j.MessageID)
+	if err != nil {
+		return completeJob(c, j.ID, "failed", nil, "post: "+err.Error())
+	}
+	return completeJob(c, j.ID, "done", map[string]any{"reply_id": replyID, "tokens": tokens}, "")
 }
 
 func main() {
-	echoFlag := flag.Bool("echo", false, "reply with echo instead of calling an LLM (no key needed)")
-	onceFlag := flag.Bool("once", false, "single poll cycle, then exit")
+	echoFlag := flag.Bool("echo", false, "reply with echo instead of the configured provider (no key needed)")
+	onceFlag := flag.Bool("once", false, "single claim cycle, then exit")
 	flag.Parse()
 	cfg, err := loadConfig(*echoFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)
 		os.Exit(2)
 	}
-	c := &client{base: strings.TrimSuffix(cfg.baseURL, "/"), http: &http.Client{Timeout: 20 * time.Second}}
-	botID, err := login(c, cfg.email, cfg.password)
+	llm, err := selectProvider(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "login:", err)
-		os.Exit(1)
+		fmt.Fprintln(os.Stderr, "config:", err)
+		os.Exit(2)
 	}
-	cursors := loadCursors(cfg.cursorFile)
+	c := &client{base: strings.TrimSuffix(cfg.baseURL, "/"), token: cfg.botToken, http: &http.Client{Timeout: 20 * time.Second}}
 	for {
-		if err := runOnce(c, cfg, botID, cursors); err != nil {
-			fmt.Fprintln(os.Stderr, "poll:", err)
-		} else {
-			saveCursors(cfg.cursorFile, cursors)
+		if err := runClaimCycle(c, cfg, llm); err != nil {
+			fmt.Fprintln(os.Stderr, "cycle:", err)
 		}
 		if *onceFlag {
 			return

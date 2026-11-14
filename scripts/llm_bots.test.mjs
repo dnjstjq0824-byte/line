@@ -611,6 +611,27 @@ test('L-05: web approval box is wired from bubbles to modal', async () => {
   assert.ok(shell.includes('proposal-states="proposalStates"') || shell.includes(':proposal-states'), 'view feeds decision states');
 });
 
+// ---------- L-08: runner sync access (read op, room scope) ----------
+
+test('L-08: bots sync in-scope rooms with delta_messages', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const a = await registerAndLogin(admin.api, 'l08-a@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Sync Bot', handle: 'sync_bot' }, admin.token)).json();
+    const roomA = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'SA', member_ids: [bot.id] }, a.token)).json();
+    const roomB = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'SB', member_ids: [bot.id] }, a.token)).json();
+    await admin.api(`conversations/${roomA.id}/messages`, 'POST', { body: 'hello' }, a.token);
+    const tok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [roomA.id], ops: ['read'] })).token;
+    const ok = await admin.api(`conversations/${roomA.id}/sync?since_sequence=0`, 'GET', null, tok);
+    assert.equal(ok.status, 200);
+    const body = await ok.json();
+    assert.ok(Array.isArray(body.delta_messages), 'delta_messages key');
+    assert.ok(body.delta_messages.length >= 1, 'delta carries messages');
+    assert.equal((await admin.api(`conversations/${roomB.id}/sync?since_sequence=0`, 'GET', null, tok)).status, 403, 'out of scope');
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
