@@ -867,6 +867,11 @@ function openFriendContextMenu(e: MouseEvent, friend: User) {
       label: isBlk ? t('mvUnblock') : t('mvBlock'),
       danger: !isBlk,
       action: () => toggleFriendBlock(friend)
+    },
+    {
+      label: t('mvReportUser'),
+      danger: true,
+      action: () => openReportModal(friend)
     }
   ]
 
@@ -900,6 +905,12 @@ const addFriendHandleInput = ref('')
 const addFriendResults = ref<User[]>([])
 const addFriendSearched = ref(false)
 const showSettingsModal = ref(false)
+// F4: user report dialog + own history.
+const showReportModal = ref(false)
+const reportTarget = ref<User | null>(null)
+const reportCategory = ref('spam')
+const reportDetails = ref('')
+const myReports = ref<Array<{ id: string; subject_user_id: string; category: string; details: string; state: string; created_at: string }>>([])
 // L-05: approval box state (room proposals + per-message decision states).
 const showApprovalBox = ref(false)
 const approvalProposals = ref<Array<{ message_id: string; body: string; author_id: string; author_name: string; created_at: string; state: string; decided_by: string | null }>>([])
@@ -1928,6 +1939,40 @@ async function openApprovalBox() {
     showApprovalBox.value = true
   })
 }
+// F4: report dialog actions + own history.
+function openReportModal(friend: User) {
+  reportTarget.value = friend
+  reportCategory.value = 'spam'
+  reportDetails.value = ''
+  showReportModal.value = true
+}
+async function submitReport() {
+  if (!reportTarget.value) return
+  await wrap(async () => {
+    await api('/api/v1/reports', 'POST', {
+      subject_user_id: reportTarget.value!.id,
+      category: reportCategory.value,
+      details: reportDetails.value
+    })
+    note.value = t('reportDoneNote')
+    showReportModal.value = false
+    await loadMyReports()
+  })
+}
+async function loadMyReports() {
+  try {
+    const res = await api<{ reports: typeof myReports.value }>('/api/v1/reports/mine')
+    myReports.value = res.reports || []
+  } catch {
+    myReports.value = []
+  }
+}
+function reportStateLabel(state: string): string {
+  if (state === 'resolved') return t('reportStateResolved')
+  if (state === 'dismissed') return t('reportStateDismissed')
+  return t('reportStateOpen')
+}
+watch(showSettingsModal, (open) => { if (open) void loadMyReports() })
 function approvalCanDecide(): boolean {
   const me = currentUser.value
   const chat = selectedChat.value
@@ -3693,6 +3738,32 @@ onBeforeUnmount(() => {
 
     <!-- SETTINGS & THEMES MODAL -->
 
+    <div v-if="showReportModal" class="modal-backdrop" @click.self="showReportModal = false">
+      <div class="standard-modal-box" role="dialog" :aria-label="t('reportTitle')">
+        <div class="modal-header">
+          <h3>{{ t('reportTitle') }}</h3>
+          <button class="btn-modal-close" @click="showReportModal = false">✕</button>
+        </div>
+        <div class="modal-body-form">
+          <label class="pc-input-row">
+            <span>{{ t('reportCategory') }}</span>
+            <select v-model="reportCategory" class="pc-login-input">
+              <option value="spam">{{ t('reportCatSpam') }}</option>
+              <option value="abuse">{{ t('reportCatAbuse') }}</option>
+              <option value="harassment">{{ t('reportCatHarassment') }}</option>
+              <option value="other">{{ t('reportCatOther') }}</option>
+            </select>
+          </label>
+          <label class="pc-input-row">
+            <span>{{ t('reportDetails') }}</span>
+            <textarea v-model="reportDetails" class="pc-login-input" rows="3" maxlength="2000" />
+          </label>
+          <button class="btn-pc-submit-full" type="button" @click="submitReport">
+            {{ t('reportSubmit') }}
+          </button>
+        </div>
+      </div>
+    </div>
     <ApprovalBox
       v-if="showApprovalBox && selectedChat"
       :proposals="approvalProposals"
@@ -3704,6 +3775,7 @@ onBeforeUnmount(() => {
     <SettingsModal
       v-if="showSettingsModal"
       :devices-list="devicesList"
+      :my-reports="myReports"
       :translate-configured="translateConfigured"
       :translate-languages="translateLanguages"
       v-model:target-translate-lang="targetTranslateLang"

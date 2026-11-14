@@ -28,10 +28,20 @@ export interface DeviceItem {
   last_seen_at?: string
 }
 
+export interface ReportHistoryItem {
+  id: string
+  subject_user_id: string
+  category: string
+  details: string
+  state: string
+  created_at: string
+}
+
 const props = defineProps<{
   devicesList: DeviceItem[]
   translateConfigured: boolean
   translateLanguages: string[]
+  myReports: ReportHistoryItem[]
 }>()
 
 const emit = defineEmits<{
@@ -357,6 +367,17 @@ onMounted(() => {
           <div class="flex-row" style="margin-top:6px;gap:8px">
             <button class="btn-secondary" style="flex:1" @click="emit('export')">{{ t('mvBackupData') }}</button>
             <button class="btn-secondary" style="flex:1;color:#ef4444" @click="emit('delete')">{{ t('mvDeleteAccount') }}</button>
+          </div>
+        </div>
+        <div class="setting-group" style="margin-top:8px">
+          <strong>{{ t('reportHistoryTitle') }}</strong>
+          <p v-if="!props.myReports.length" class="muted" style="font-size:12px">{{ t('reportHistoryEmpty') }}</p>
+          <div v-for="r in props.myReports" :key="r.id" class="approval-row" style="margin-top:6px">
+            <div class="approval-row-head">
+              <span class="badge-kind">{{ r.category }}</span>
+              <span>{{ r.state === 'resolved' ? t('reportStateResolved') : r.state === 'dismissed' ? t('reportStateDismissed') : t('reportStateOpen') }}</span>
+            </div>
+            <div v-if="r.details" class="approval-row-body">{{ r.details }}</div>
           </div>
         </div>
 

@@ -254,6 +254,9 @@ class _HomePageState extends State<HomePage> {
                     } else if (v == 'block') {
                       session.toggleBlockFriend(
                           '${u['id']}', u['is_blocked'] != true);
+                    } else if (v == 'report') {
+                      reportUserSheet(context, session, '${u['id']}',
+                          '${u['display_name'] ?? ''}');
                     }
                   },
                   itemBuilder: (_) => [
@@ -267,6 +270,8 @@ class _HomePageState extends State<HomePage> {
                         child: Text(u['is_blocked'] == true
                             ? '차단 해제'
                             : '차단하기')),
+                    const PopupMenuItem(
+                        value: 'report', child: Text('신고하기')),
                   ],
                 ),
                 onTap: () async {
@@ -370,4 +375,61 @@ class _QrApproveDialogState extends State<_QrApproveDialog> {
       ],
     );
   }
+}
+
+// F4: report-a-user sheet from the friend row menu.
+Future<void> reportUserSheet(BuildContext context, SessionController session,
+    String userId, String displayName) async {
+  final details = TextEditingController();
+  String category = 'spam';
+  const labels = {
+    'spam': '스팸',
+    'abuse': '욕설·비방',
+    'harassment': '괴롭힘',
+    'other': '기타',
+  };
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheet) => StatefulBuilder(
+      builder: (sheet, setSheet) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            16, 12, 16, 24 + MediaQuery.of(sheet).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('사용자 신고${displayName.isEmpty ? '' : ' · $displayName'}',
+                style: Theme.of(sheet).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: category,
+              decoration: const InputDecoration(labelText: '사유'),
+              items: [
+                for (final e in labels.entries)
+                  DropdownMenuItem(value: e.key, child: Text(e.value)),
+              ],
+              onChanged: (v) => setSheet(() => category = v ?? 'spam'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: details,
+              decoration:
+                  const InputDecoration(labelText: '상세 내용 (선택)'),
+              maxLines: 3,
+              maxLength: 2000,
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(sheet).pop();
+                session.reportUser(userId, category, details.text);
+              },
+              child: const Text('신고 접수'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

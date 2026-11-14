@@ -329,6 +329,7 @@ const LUNO_SCHEMA_PHASE1 = [
   `CREATE TABLE IF NOT EXISTS reports (
     id TEXT PRIMARY KEY, reporter_id TEXT NOT NULL, target_type TEXT NOT NULL,
     target_id TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '',
+    details TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_reports_target ON reports(target_type, target_id)`,
   `CREATE TABLE IF NOT EXISTS user_bans (
@@ -433,6 +434,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['friends', 'is_favorite', 'INTEGER DEFAULT 0'],
   ['friends', 'is_hidden', 'INTEGER DEFAULT 0'],
   ['friends', 'nickname', "TEXT DEFAULT ''"],
+  ['reports', 'details', "TEXT DEFAULT ''"],
   ['friends', 'status', "TEXT DEFAULT 'accepted'"],
   ['friends', 'created_at', 'TEXT'],
   ['conversations', 'owner_id', "TEXT DEFAULT ''"],
@@ -4907,13 +4909,30 @@ async function extended(p, request, url, me, token) {
     const oaFound = Array.from(officialAccounts.values()).filter(o => o.name.toLowerCase().includes(q) || o.handle.includes(q));
     return json({ messages: foundMsgs.slice(-30).reverse(), users: friendsFound, chats: chatsFound, official_accounts: oaFound });
   }
+  // F4: reports persist to D1 (memory mirror kept for the no-DB path).
+  function reportView(r) {
+    return { id: r.id, reporter_id: r.reporter_id, subject_user_id: r.target_id || r.subject_user_id, category: r.reason || r.category, details: r.details || '', state: r.status || r.state, created_at: r.created_at };
+  }
   if (p === 'reports' && method === 'POST') {
     const b = await readJson(request);
     const category = clip(b.category, 80);
     if (!usersById.has(b.subject_user_id) || category.length < 3) return bad('신고 정보가 올바르지 않습니다');
     const rep = { id: uid(), reporter_id: myId, subject_user_id: b.subject_user_id, category, details: clip(b.details || '', 2000), state: 'open', created_at: now() };
     adminReports.unshift(rep);
+    if (dbOf()) {
+      await ensureSchema();
+      await dbOf().prepare('INSERT INTO reports (id, reporter_id, target_type, target_id, reason, details, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(rep.id, rep.reporter_id, 'user', rep.subject_user_id, rep.category, rep.details, 'open', rep.created_at).run();
+    }
     return json({ id: rep.id }, 201);
+  }
+  if (p === 'reports/mine' && method === 'GET') {
+    if (dbOf()) {
+      await ensureSchema();
+      const rows = (await dbOf().prepare('SELECT * FROM reports WHERE reporter_id = ? ORDER BY created_at DESC LIMIT 100').bind(myId).all().catch(() => ({ results: [] }))).results || [];
+      return json({ reports: rows.map(reportView) });
+    }
+    return json({ reports: adminReports.filter(r => r.reporter_id === myId).map(reportView) });
   }
 
   // ---------- L-07 bot jobs (claim/complete; bots only, rooms in scope) ----------
@@ -5100,7 +5119,14 @@ async function extended(p, request, url, me, token) {
         .bind('kill', b.stopped ? '1' : '0', b.stopped ? '1' : '0').run();
       return json({ stopped: b.stopped }, 200);
     }
-    if (p === 'admin/reports' && method === 'GET') return json({ reports: adminReports.slice(0, 100) });
+    if (p === 'admin/reports' && method === 'GET') {
+      if (dbOf()) {
+        await ensureSchema();
+        const rows = (await dbOf().prepare('SELECT * FROM reports ORDER BY created_at DESC LIMIT 100').all().catch(() => ({ results: [] }))).results || [];
+        return json({ reports: rows.map(r => ({ id: r.id, reporter_id: r.reporter_id, subject_user_id: r.target_id, category: r.reason, details: r.details || '', state: r.status, created_at: r.created_at })) });
+      }
+      return json({ reports: adminReports.slice(0, 100) });
+    }
     if (p === 'admin/audit-logs' && method === 'GET') return json({ audit_logs: auditLogs.slice(0, 100) });
     if (p === 'admin/feature-flags' && method === 'PUT') {
       const b = await readJson(request);
@@ -5137,6 +5163,10 @@ async function extended(p, request, url, me, token) {
       if (b.report_id) {
         const rep = adminReports.find(r => r.id === b.report_id);
         if (rep) rep.state = b.action === 'dismiss' ? 'dismissed' : 'resolved';
+        if (dbOf()) {
+          await ensureSchema();
+          await dbOf().prepare('UPDATE reports SET status = ? WHERE id = ?').bind(b.action === 'dismiss' ? 'dismissed' : 'resolved', b.report_id).run().catch(() => null);
+        }
       }
       addAudit(myId, `moderation.${b.action}`, target.id);
       return json({ status: 'action_applied', user_id: target.id, action: b.action });

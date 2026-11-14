@@ -1285,6 +1285,33 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// F4: user reports. History of my own filings with states.
+  List<dynamic> myReports = [];
+
+  Future<void> reportUser(String userId, String category, String details) {
+    return run(() async {
+      await api.call('/api/v1/reports',
+          method: 'POST',
+          data: {
+            'subject_user_id': userId,
+            'category': category,
+            'details': details
+          });
+      notice = '신고가 접수되었습니다.';
+      await loadMyReports();
+    });
+  }
+
+  Future<void> loadMyReports() async {
+    try {
+      final res = await api.call('/api/v1/reports/mine');
+      myReports = (res['reports'] as List?) ?? [];
+    } catch (_) {
+      myReports = [];
+    }
+    notifyListeners();
+  }
+
   Future<void> decideProposal(
       String roomId, String messageId, String decision) {
     return run(() async {

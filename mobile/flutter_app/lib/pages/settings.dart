@@ -72,6 +72,17 @@ class SettingsPage extends StatelessWidget {
                   chevron: true,
                   onTap: () => context.go('/privacy'),
                 ),
+                const _RowDivider(),
+                _ActionRow(
+                  icon: Icons.shield_outlined,
+                  title: '내 신고 내역',
+                  subtitle: '접수한 신고와 처리 상태',
+                  ink: ink,
+                  sub: sub,
+                  dark: dark,
+                  chevron: true,
+                  onTap: () => context.go('/reports'),
+                ),
               ],
             ),
             _Section(

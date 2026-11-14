@@ -25,6 +25,7 @@ import 'pages/news_article.dart';
 import 'pages/privacy.dart';
 import 'pages/profile.dart';
 import 'pages/qr_scan.dart';
+import 'pages/reports.dart';
 import 'pages/search.dart';
 import 'pages/settings.dart';
 import 'pages/shop.dart';
@@ -123,6 +124,7 @@ GoRouter buildRouter(SessionController session) {
           GoRoute(path: '/search', pageBuilder: (c, s) => harborPage(c, s, const SearchPage())),
           GoRoute(path: '/privacy', pageBuilder: (c, s) => harborPage(c, s, const PrivacyPage())),
           GoRoute(path: '/qr/scan', pageBuilder: (c, s) => harborPage(c, s, const QrScanPage())),
+        GoRoute(path: '/reports', pageBuilder: (c, s) => harborPage(c, s, const ReportsPage())),
           GoRoute(path: '/keep', pageBuilder: (c, s) => harborPage(c, s, const KeepPage())),
           GoRoute(path: '/more', pageBuilder: (c, s) => harborPage(c, s, const MorePage())),
           GoRoute(path: '/apps', pageBuilder: (c, s) => harborPage(c, s, const AppsPage())),
