@@ -2421,6 +2421,21 @@ function isBotApiRoute(p, method) {
   if (method === 'POST' && /^bot\/jobs\/[\w-]+\/complete$/.test(p)) return true;
   return false;
 }
+// L-02: direct bot mentions become mention jobs — one per mentioned bot per
+// message. Skipped when the switch/allowlist (L-17) denies, the bot is not a
+// member, or the mention is '@all' (broadcasts never page bots).
+async function routeBotMentions(conv, authorId, msg) {
+  const mentions = (msg.metadata && Array.isArray(msg.metadata.mentions) ? msg.metadata.mentions : []).filter(x => x && x !== 'all');
+  if (!mentions.length) return;
+  if (!(await botMayAct(conv.id, authorId))) return;
+  for (const targetId of new Set(mentions)) {
+    if (!conv.members.includes(targetId)) continue;
+    const target = usersById.get(targetId) || await loadUserFromD1(targetId, 'user');
+    if (!target || userKind(target) !== 'bot') continue;
+    await enqueueBotJob({ botId: targetId, roomId: conv.id, kind: 'mention',
+      payload: { message_id: msg.id, author_id: authorId, body: String(msg.body || '').slice(0, 4000) } });
+  }
+}
 // L-07: enqueue one unit of bot work. Internal only — routing (L-02) calls
 // it; runners use claim/complete. Returns the job id or null without D1.
 async function enqueueBotJob({ botId, roomId, kind, payload, maxAttempts = 5 }) {
@@ -3672,6 +3687,9 @@ async function extended(p, request, url, me, token) {
       }
       const msg = await pushPersistent(cid, myId, { client_id: b.client_id, kind, body, reply_to: replyTo, metadata: Object.keys(metadata).length ? metadata : undefined });
       await persistCursor(cid, myId, msg.sequence);
+      // L-02: bot mentions become jobs. Routing must never break messaging,
+      // so failures are logged, not thrown.
+      try { await routeBotMentions(conv, myId, msg); } catch (err) { console.error('[LUNO bot route failed]', err && err.message ? err.message : err); }
       // N1-L: fan the message out to the notification provider leg.
       await notify(notifyEnv(), conv.members, {
         kind: 'message',

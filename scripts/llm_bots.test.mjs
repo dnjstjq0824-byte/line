@@ -368,6 +368,102 @@ test('L-07: claim respects token rooms and bot-only access', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- L-02: mention -> bot routing ----------
+
+async function allowRoomUser(api, adminToken, roomId, userId) {
+  await api('admin/llm/allowlist', 'POST', { kind: 'room', ref_id: roomId }, adminToken);
+  await api('admin/llm/allowlist', 'POST', { kind: 'user', ref_id: userId }, adminToken);
+}
+
+function jobCount(db, botId) {
+  return db.raw.prepare('SELECT COUNT(*) AS n FROM luno_bot_jobs WHERE bot_id = ?').get(botId).n;
+}
+
+test('L-02: bot mention creates exactly one claimable job', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const { api } = await llmIsolate(db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: admin.id });
+    const login = async (email) => (await (await api('auth/login', 'POST', { email, password: 'Str0ng!Passw0rd' })).json()).access_token;
+    const adminTok = await login('llm-admin@luno-test.local');
+    const a = await registerAndLogin(api, 'l02-a@luno-test.local');
+    const bot = await (await api('admin/bots', 'POST', { display_name: 'Mention Bot', handle: 'mention_bot' }, adminTok)).json();
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'Mention Room', member_ids: [bot.id] }, a.token)).json();
+    await allowRoomUser(api, adminTok, room.id, a.id);
+    const post = await api(`conversations/${room.id}/messages`, 'POST', { body: 'hey @bot', metadata: { mentions: [bot.id] } }, a.token);
+    assert.equal(post.status, 201);
+    assert.equal(jobCount(db, bot.id), 1, 'one mention, one job');
+    const tok = (await mintBotToken(api, adminTok, bot.id, { rooms: [room.id], ops: ['read'] })).token;
+    const claimed = await (await api('bot/jobs/claim', 'POST', {}, tok)).json();
+    assert.equal(claimed.job.kind, 'mention');
+    assert.equal(claimed.job.room_id, room.id);
+    assert.equal(claimed.job.payload.author_id, a.id);
+    assert.ok(claimed.job.payload.message_id, 'payload carries the message');
+  } finally { db.raw.close(); }
+});
+
+test('L-02: retries and repeated ids never duplicate jobs', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const { api } = await llmIsolate(db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: admin.id });
+    const adminTok = (await (await api('auth/login', 'POST', { email: 'llm-admin@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
+    const a = await registerAndLogin(api, 'l02-b@luno-test.local');
+    const bot = await (await api('admin/bots', 'POST', { display_name: 'Dup Bot', handle: 'dup_bot' }, adminTok)).json();
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'Dup Room', member_ids: [bot.id] }, a.token)).json();
+    await allowRoomUser(api, adminTok, room.id, a.id);
+    const body = { body: 'ping', client_id: 'dup-1', metadata: { mentions: [bot.id, bot.id] } };
+    assert.equal((await api(`conversations/${room.id}/messages`, 'POST', body, a.token)).status, 201);
+    assert.equal((await api(`conversations/${room.id}/messages`, 'POST', body, a.token)).status, 200, 'client retry deduped');
+    assert.equal(jobCount(db, bot.id), 1, 'still one job');
+  } finally { db.raw.close(); }
+});
+
+test('L-02: non-member bots, unlisted rooms/authors and humans route nothing', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const { api } = await llmIsolate(db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: admin.id });
+    const adminTok = (await (await api('auth/login', 'POST', { email: 'llm-admin@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
+    const a = await registerAndLogin(api, 'l02-c@luno-test.local');
+    const b = await registerAndLogin(api, 'l02-d@luno-test.local');
+    const bot = await (await api('admin/bots', 'POST', { display_name: 'Out Bot', handle: 'out_bot' }, adminTok)).json();
+    // Non-member: mention stripped at post, nothing enqueued.
+    const solo = await (await api('conversations', 'POST', { kind: 'group', title: 'Solo', member_ids: [b.id] }, a.token)).json();
+    await allowRoomUser(api, adminTok, solo.id, a.id);
+    const m1 = await (await api(`conversations/${solo.id}/messages`, 'POST', { body: 'yo', metadata: { mentions: [bot.id] } }, a.token)).json();
+    assert.deepEqual(m1.message.metadata?.mentions || m1.metadata?.mentions || [], [], 'non-member mention stripped');
+    assert.equal(jobCount(db, bot.id), 0);
+    // Member but unlisted room, then unlisted author.
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'Gated', member_ids: [bot.id, b.id] }, a.token)).json();
+    await api('admin/llm/allowlist', 'POST', { kind: 'user', ref_id: a.id }, adminTok);
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'ping', metadata: { mentions: [bot.id] } }, a.token);
+    assert.equal(jobCount(db, bot.id), 0, 'unlisted room ignored');
+    await api('admin/llm/allowlist', 'POST', { kind: 'room', ref_id: room.id }, adminTok);
+    await api('admin/llm/allowlist', 'DELETE', { kind: 'user', ref_id: a.id }, adminTok);
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'ping', metadata: { mentions: [bot.id] } }, a.token);
+    assert.equal(jobCount(db, bot.id), 0, 'unlisted author ignored');
+    // Human mentions and @all never page bots.
+    await api('admin/llm/allowlist', 'POST', { kind: 'user', ref_id: a.id }, adminTok);
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'hi human', metadata: { mentions: [b.id] } }, a.token);
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'hi all', metadata: { mentions: ['all'] } }, a.token);
+    assert.equal(jobCount(db, bot.id), 0, 'humans and @all route nothing');
+  } finally { db.raw.close(); }
+});
+
+test('L-02: switch off routes nothing', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const a = await registerAndLogin(admin.api, 'l02-e@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Off Bot', handle: 'off_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'Off', member_ids: [bot.id] }, a.token)).json();
+    await allowRoomUser(admin.api, admin.token, room.id, a.id);
+    await admin.api(`conversations/${room.id}/messages`, 'POST', { body: 'ping', metadata: { mentions: [bot.id] } }, a.token);
+    assert.equal(jobCount(db, bot.id), 0, 'LLM_ENABLED unset routes nothing');
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
