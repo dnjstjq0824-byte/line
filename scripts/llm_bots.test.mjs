@@ -632,6 +632,74 @@ test('L-08: bots sync in-scope rooms with delta_messages', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- L-09: cost caps + killswitch ----------
+
+function todayUTC() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+test('L-09: completions count requests and reported tokens per bot per day', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Meter Bot', handle: 'meter_bot' }, admin.token)).json();
+    const tok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    db.raw.exec(`INSERT INTO luno_bot_jobs (id, bot_id, room_id, kind, payload_json, status, attempts, max_attempts, locked_by, lock_expires_at, created_at, updated_at)
+      VALUES ('mj-1', '${bot.id}', 'room-1', 'mention', '{}', 'running', 1, 5, 'tok-holder', 9999999999999, datetime('now'), datetime('now'))`);
+    const holder = db.raw.prepare('SELECT id FROM luno_bot_tokens').get().id;
+    db.raw.exec(`UPDATE luno_bot_jobs SET locked_by = '${holder}' WHERE id = 'mj-1'`);
+    assert.equal((await admin.api('bot/jobs/mj-1/complete', 'POST', { status: 'done', usage: { tokens: 120 } }, tok)).status, 200);
+    let row = db.raw.prepare('SELECT requests, tokens FROM luno_bot_usage WHERE bot_id = ? AND day = ?').get(bot.id, todayUTC());
+    assert.equal(row.requests, 1, 'one completion counts one request');
+    assert.equal(row.tokens, 120, 'reported tokens counted');
+    assert.equal((await admin.api('bot/jobs/mj-1/complete', 'POST', { status: 'done', usage: { tokens: -5 } }, tok)).status, 409, 'terminal stays terminal');
+    row = db.raw.prepare('SELECT requests, tokens FROM luno_bot_usage WHERE bot_id = ? AND day = ?').get(bot.id, todayUTC());
+    assert.deepEqual([row.requests, row.tokens], [1, 120], 'rejected complete counts nothing');
+  } finally { db.raw.close(); }
+});
+
+test('L-09: exhausted quota refuses claims and new jobs', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const { api } = await llmIsolate(db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: admin.id });
+    const adminTok = (await (await api('auth/login', 'POST', { email: 'llm-admin@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
+    const a = await registerAndLogin(api, 'l09-a@luno-test.local');
+    const bot = await (await api('admin/bots', 'POST', { display_name: 'Cap Bot', handle: 'cap_bot' }, adminTok)).json();
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'Cap', member_ids: [bot.id] }, a.token)).json();
+    await allowRoomUser(api, adminTok, room.id, a.id);
+    const tok = (await mintBotToken(api, adminTok, bot.id, { rooms: [room.id], ops: ['read', 'post'] })).token;
+    db.raw.exec(`INSERT INTO luno_bot_usage (bot_id, day, requests, tokens) VALUES ('${bot.id}', '${todayUTC()}', 1000, 0)`);
+    assert.equal((await api('bot/jobs/claim', 'POST', {}, tok)).status, 429, 'capped bot refused at claim');
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'ping', metadata: { mentions: [bot.id] } }, a.token);
+    assert.equal(jobCount(db, bot.id), 0, 'capped bot enqueues nothing');
+  } finally { db.raw.close(); }
+});
+
+test('L-09: killswitch halts new work immediately, release resumes', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const { api } = await llmIsolate(db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: admin.id });
+    const adminTok = (await (await api('auth/login', 'POST', { email: 'llm-admin@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
+    const user = await registerAndLogin(api, 'l09-u@luno-test.local');
+    const bot = await (await api('admin/bots', 'POST', { display_name: 'Kill Bot', handle: 'kill_bot' }, adminTok)).json();
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'Kill', member_ids: [bot.id] }, user.token)).json();
+    await allowRoomUser(api, adminTok, room.id, user.id);
+    const tok = (await mintBotToken(api, adminTok, bot.id, { rooms: [room.id], ops: ['read', 'post'] })).token;
+    assert.equal((await api('admin/llm/kill', 'PUT', { stopped: true }, user.token)).status, 403, 'users cannot kill');
+    assert.equal((await api('admin/llm/kill', 'PUT', { stopped: true }, adminTok)).status, 200);
+    const killed = await (await api('admin/llm/allowlist', 'GET', null, adminTok)).json();
+    assert.equal(killed.killed, true);
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'ping', metadata: { mentions: [bot.id] } }, user.token);
+    assert.equal(jobCount(db, bot.id), 0, 'no new jobs while killed');
+    assert.equal((await api('bot/jobs/claim', 'POST', {}, tok)).status, 403, 'claims halted');
+    assert.equal((await api('admin/llm/kill', 'PUT', { stopped: false }, adminTok)).status, 200);
+    await api(`conversations/${room.id}/messages`, 'POST', { body: 'ping', metadata: { mentions: [bot.id] } }, user.token);
+    assert.equal(jobCount(db, bot.id), 1, 'release resumes routing');
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');

@@ -228,8 +228,8 @@ func claimJob(c *client) (*job, error) {
 	}, nil
 }
 
-func completeJob(c *client, id, status string, result map[string]any, errText string) error {
-	body := map[string]any{"status": status}
+func completeJob(c *client, id, status string, result map[string]any, errText string, tokens int) error {
+	body := map[string]any{"status": status, "usage": map[string]any{"tokens": tokens}}
 	if result != nil {
 		body["result"] = result
 	}
@@ -321,18 +321,18 @@ func runClaimCycle(c *client, cfg config, llm llmProvider) error {
 		return nil
 	}
 	if j.Kind != "mention" {
-		return completeJob(c, j.ID, "failed", nil, "unknown job kind "+j.Kind)
+		return completeJob(c, j.ID, "failed", nil, "unknown job kind "+j.Kind, 0)
 	}
 	if j.AuthorID == j.BotID {
-		return completeJob(c, j.ID, "done", map[string]any{"skipped": "self mention"}, "")
+		return completeJob(c, j.ID, "done", map[string]any{"skipped": "self mention"}, "", 0)
 	}
 	if len(cfg.whitelist) > 0 && !cfg.whitelist[j.AuthorID] {
-		return completeJob(c, j.ID, "done", map[string]any{"skipped": "author not whitelisted"}, "")
+		return completeJob(c, j.ID, "done", map[string]any{"skipped": "author not whitelisted"}, "", 0)
 	}
 	body := j.Body
 	msgs, err := syncMessages(c, j.RoomID, 0)
 	if err != nil {
-		return completeJob(c, j.ID, "failed", nil, "sync: "+err.Error())
+		return completeJob(c, j.ID, "failed", nil, "sync: "+err.Error(), 0)
 	}
 	found := false
 	for _, m := range msgs {
@@ -343,17 +343,17 @@ func runClaimCycle(c *client, cfg config, llm llmProvider) error {
 		}
 	}
 	if !found {
-		return completeJob(c, j.ID, "failed", nil, "message not found")
+		return completeJob(c, j.ID, "failed", nil, "message not found", 0)
 	}
 	reply, tokens, err := llm.complete(body)
 	if err != nil {
-		return completeJob(c, j.ID, "failed", nil, "llm: "+err.Error())
+		return completeJob(c, j.ID, "failed", nil, "llm: "+err.Error(), 0)
 	}
 	replyID, err := postMessage(c, j.RoomID, reply, j.MessageID)
 	if err != nil {
-		return completeJob(c, j.ID, "failed", nil, "post: "+err.Error())
+		return completeJob(c, j.ID, "failed", nil, "post: "+err.Error(), tokens)
 	}
-	return completeJob(c, j.ID, "done", map[string]any{"reply_id": replyID, "tokens": tokens}, "")
+	return completeJob(c, j.ID, "done", map[string]any{"reply_id": replyID, "tokens": tokens}, "", tokens)
 }
 
 func main() {

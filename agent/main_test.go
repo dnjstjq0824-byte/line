@@ -93,6 +93,10 @@ func TestClaimCycleEchoRepliesAndCompletes(t *testing.T) {
 	if len(f.completes) != 1 || f.completes[0]["status"] != "done" {
 		t.Fatalf("expected one done complete, got %v", f.completes)
 	}
+	usage, _ := f.completes[0]["usage"].(map[string]any)
+	if usage == nil {
+		t.Fatalf("complete must report usage, got %v", f.completes[0])
+	}
 	if err := runClaimCycle(testClient(srv), cfg, echoProvider{}); err != nil {
 		t.Fatal(err)
 	}

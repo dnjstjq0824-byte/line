@@ -393,7 +393,12 @@ const LUNO_SCHEMA_PHASE1 = [
   `CREATE TABLE IF NOT EXISTS luno_decisions (
     id TEXT PRIMARY KEY, room_id TEXT NOT NULL, proposal_message_id TEXT NOT NULL UNIQUE,
     decided_by TEXT NOT NULL, decision TEXT NOT NULL, created_at TEXT NOT NULL)`,
-  `CREATE INDEX IF NOT EXISTS idx_decisions_room ON luno_decisions(room_id, created_at)`
+  `CREATE INDEX IF NOT EXISTS idx_decisions_room ON luno_decisions(room_id, created_at)`,
+  // L-09: per-bot per-day usage counters and the kill switch flag.
+  `CREATE TABLE IF NOT EXISTS luno_bot_usage (
+    bot_id TEXT NOT NULL, day TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0,
+    tokens INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (bot_id, day))`,
+  `CREATE TABLE IF NOT EXISTS luno_bot_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`
 ];
 // Additive columns for tables that predate Phase 1. Applied with a
 // PRAGMA guard because SQLite has no idempotent ADD COLUMN.
@@ -2309,8 +2314,33 @@ async function botAllowListed(kind, refId) {
 }
 async function botMayAct(roomId, authorId) {
   if (!llmEnabled()) return false;
+  if (await botKilled()) return false;
   if (!(await botAllowListed('room', roomId))) return false;
   return botAllowListed('user', authorId);
+}
+// L-09: daily cost caps per bot (single place; F23 consolidates these with
+// the H2/T1 caps). Requests count completions (+explicit extras), tokens
+// count runner-reported LLM usage.
+const BOT_DAILY_REQUESTS = 1000;
+const BOT_DAILY_TOKENS = 1000000;
+function botDayUTC(d = new Date()) { return d.toISOString().slice(0, 10); }
+async function botUsage(botId, day) {
+  const db = dbOf();
+  if (!db) return { requests: 0, tokens: 0 };
+  await ensureSchema();
+  const row = await db.prepare('SELECT requests, tokens FROM luno_bot_usage WHERE bot_id = ? AND day = ?').bind(botId, day).first().catch(() => null);
+  return { requests: Number(row?.requests || 0), tokens: Number(row?.tokens || 0) };
+}
+async function botQuotaOk(botId) {
+  const u = await botUsage(botId, botDayUTC());
+  return u.requests < BOT_DAILY_REQUESTS && u.tokens < BOT_DAILY_TOKENS;
+}
+async function botKilled() {
+  const db = dbOf();
+  if (!db) return false;
+  await ensureSchema();
+  const row = await db.prepare('SELECT value FROM luno_bot_config WHERE key = ?').bind('kill').first().catch(() => null);
+  return row?.value === '1';
 }
 // Legacy databases have no grants: fail closed until the approved migration
 // and explicit administrator provisioning have been completed.
@@ -2440,6 +2470,7 @@ async function routeBotMentions(conv, authorId, msg) {
     if (!conv.members.includes(targetId)) continue;
     const target = usersById.get(targetId) || await loadUserFromD1(targetId, 'user');
     if (!target || userKind(target) !== 'bot') continue;
+    if (!(await botQuotaOk(targetId))) continue;
     await enqueueBotJob({ botId: targetId, roomId: conv.id, kind: 'mention',
       payload: { message_id: msg.id, author_id: authorId, body: String(msg.body || '').slice(0, 4000) } });
   }
@@ -4713,6 +4744,8 @@ async function extended(p, request, url, me, token) {
     const db = dbOf();
     if (!db) return json({ error: 'job queue requires a configured database' }, 501);
     await ensureSchema();
+    if (await botKilled()) return json({ error: 'bot work halted by operator', code: 'LLM_KILLED' }, 403);
+    if (!(await botQuotaOk(myId))) return json({ error: 'daily bot quota exceeded', code: 'BOT_QUOTA_EXCEEDED' }, 429);
     const rooms = (me.botScope && me.botScope.rooms) || [];
     if (!rooms.length) return json({ job: null });
     // Exhausted jobs fail out instead of clogging the queue.
@@ -4747,6 +4780,12 @@ async function extended(p, request, url, me, token) {
     const job = await db.prepare('SELECT id, bot_id, status, locked_by FROM luno_bot_jobs WHERE id = ?').bind(m[1]).first().catch(() => null);
     if (!job || job.bot_id !== myId) return json({ error: 'job not found' }, 404);
     if (job.status !== 'running' || job.locked_by !== me.botScope.id) return json({ error: 'job is not locked by this runner' }, 409);
+    const usage = (b.usage && typeof b.usage === 'object') ? b.usage : {};
+    const reqN = usage.requests === undefined ? 1 : Number(usage.requests);
+    const tokN = usage.tokens === undefined ? 0 : Number(usage.tokens);
+    if (!Number.isInteger(reqN) || !Number.isInteger(tokN) || reqN < 0 || tokN < 0 || reqN > 1e9 || tokN > 1e9) {
+      return bad('usage.requests and usage.tokens must be integers 0..1000000000', 400);
+    }
     if (b.status === 'done') {
       await db.prepare(`UPDATE luno_bot_jobs SET status = 'done', result_json = ?, locked_by = NULL, lock_expires_at = 0, updated_at = datetime('now') WHERE id = ?`)
         .bind(clip(JSON.stringify(b.result ?? null), 4000), m[1]).run();
@@ -4754,6 +4793,10 @@ async function extended(p, request, url, me, token) {
       await db.prepare(`UPDATE luno_bot_jobs SET status = 'failed', error = ?, locked_by = NULL, lock_expires_at = 0, updated_at = datetime('now') WHERE id = ?`)
         .bind(clip(String(b.error || 'failed'), 500), m[1]).run();
     }
+    const day = botDayUTC();
+    await db.prepare(`INSERT INTO luno_bot_usage (bot_id, day, requests, tokens) VALUES (?, ?, ?, ?)
+      ON CONFLICT (bot_id, day) DO UPDATE SET requests = requests + ?, tokens = tokens + ?`)
+      .bind(myId, day, reqN, tokN, reqN, tokN).run().catch(() => null);
     return json({ status: b.status, id: m[1] }, 200);
   }
 
@@ -4845,6 +4888,7 @@ async function extended(p, request, url, me, token) {
       const rows = (await db.prepare('SELECT kind, ref_id FROM luno_bot_allowlist').all().catch(() => ({ results: [] }))).results || [];
       return json({
         enabled: llmEnabled(),
+        killed: await botKilled(),
         rooms: rows.filter(r => r.kind === 'room').map(r => r.ref_id),
         users: rows.filter(r => r.kind === 'user').map(r => r.ref_id)
       });
@@ -4864,6 +4908,18 @@ async function extended(p, request, url, me, token) {
       }
       await db.prepare('DELETE FROM luno_bot_allowlist WHERE kind = ? AND ref_id = ?').bind(kind, refId).run();
       return json({ status: 'removed', kind, ref_id: refId }, 200);
+    }
+    // L-09: killswitch. Stopped halts enqueue (routing) and claims at once;
+    // in-flight jobs may still complete so runners drain cleanly.
+    if (p === 'admin/llm/kill' && method === 'PUT') {
+      const db = dbOf();
+      if (!db) return json({ error: 'killswitch requires a configured database' }, 501);
+      const b = await readJson(request);
+      if (typeof b.stopped !== 'boolean') return bad('stopped must be boolean', 400);
+      await ensureSchema();
+      await db.prepare('INSERT INTO luno_bot_config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = ?')
+        .bind('kill', b.stopped ? '1' : '0', b.stopped ? '1' : '0').run();
+      return json({ stopped: b.stopped }, 200);
     }
     if (p === 'admin/reports' && method === 'GET') return json({ reports: adminReports.slice(0, 100) });
     if (p === 'admin/audit-logs' && method === 'GET') return json({ audit_logs: auditLogs.slice(0, 100) });
