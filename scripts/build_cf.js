@@ -85,11 +85,27 @@ if (!buildInfoPattern.test(workerCode)) {
 }
 fs.rmSync(workerOutDir, { recursive: true, force: true });
 fs.mkdirSync(workerOutDir, { recursive: true });
-fs.writeFileSync(
-  workerOut,
-  workerCode.replace(buildInfoPattern, `const BUILD_INFO = ${JSON.stringify(versionData, null, 2)};`),
-  'utf8'
-);
+// workerd rejects non-function named exports at boot ("not of type
+// 'function or ExportedHandler'"), so the node-test seams below are stripped
+// from the deployed copy. Tests import scripts/cf_worker.js (seams intact);
+// wrangler serves dist_worker/cf_worker.js (seams removed).
+const testSeams = [
+  'export { recoveryMailOutbox };',
+  'export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };',
+  'export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };',
+];
+let stamped = workerCode.replace(buildInfoPattern, `const BUILD_INFO = ${JSON.stringify(versionData, null, 2)};`);
+for (const seam of testSeams) {
+  if (!stamped.includes(seam)) {
+    throw new Error(`test seam missing from scripts/cf_worker.js, refusing a half-stripped worker: ${seam}`);
+  }
+  stamped = stamped.replace(seam, '// (test seam stripped for workerd)');
+}
+const leftover = stamped.match(/^export \{[^}]*\};?$/m);
+if (leftover) {
+  throw new Error(`unknown named export would break workerd boot, add it to testSeams or remove it: ${leftover[0]}`);
+}
+fs.writeFileSync(workerOut, stamped, 'utf8');
 
 console.log(`✅ Combined Cloudflare distribution prepared in ./dist_cf (Commit: ${versionData.short_commit})`);
 

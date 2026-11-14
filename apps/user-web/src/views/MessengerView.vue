@@ -2495,7 +2495,6 @@ function syncKeyboardOpen() {
 }
 
 onMounted(async () => {
-  void ensureTranslateLanguages()
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // Reconcile durable messages when an edge isolate cannot fan out to another one.
   startMessageSyncLoop()
@@ -2514,6 +2513,9 @@ onMounted(async () => {
     try {
       if (!currentUser.value) currentUser.value = await api<User>('/api/v1/me')
       await loadInitialData()
+      // After the token is restored: firing earlier sends this request
+      // without auth and logs a 401 on every screen load.
+      void ensureTranslateLanguages()
       await connectRealtime()
     } catch {
       clearLocalSession()

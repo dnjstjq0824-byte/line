@@ -77,3 +77,28 @@ test('UX2: tokens, app and web share one breakpoint scale', async () => {
     assert.ok(!new RegExp(`\\((min|max)-width\\s*:\\s*${px}px`).test(skin), `no ${px}px media bound in the skin`);
   }
 });
+
+test('UX3: tablet keeps rail 76, list 340, inline conversation, no floating nav', async () => {
+  const skin = await readFile(join(root, 'styles', 'luno-v2.css'), 'utf8');
+  const m = skin.match(/@media\(min-width:700px\) and \(max-width:1099px\)\{([\s\S]*?)\n\}/);
+  assert.ok(m, 'tablet 700-1099 media block present');
+  const block = m[1];
+  assert.ok(block.includes('.pc-side-pane{width:340px!important'), 'list pane 340px on tablet');
+  assert.ok(!/max-width:42vw/.test(block), 'no vw clamp shrinking the list below spec');
+  assert.ok(block.includes('.luno-mobile-floating-nav{display:none!important}'), 'floating bottom nav hidden on tablet');
+  assert.ok(block.includes('.pc-chat-viewport{position:relative!important'), 'conversation renders inline next to the list');
+  assert.ok(block.includes('.pc-friend-profile-viewport{flex:1;min-width:0'), 'friend profile stays inside its tablet slot');
+  assert.ok(block.includes('.pc-profile-preview-card{max-width:100%!important}'), 'friend card capped so its action row scrolls instead of clipping');
+  assert.ok(block.includes('.pc-rail-bottom{display:flex!important}'), 'rail bottom row visible on tablet');
+  assert.ok(skin.includes('.pc-rail{width:76px!important'), 'rail 76px shared by tablet and desktop');
+});
+
+test('UX3: translate languages load only after the token is restored (no 401 on boot)', async () => {
+  const view = await readFile(join(root, 'views', 'MessengerView.vue'), 'utf8');
+  const mounted = view.indexOf('onMounted(async () => {');
+  assert.ok(mounted >= 0, 'mounted hook present');
+  const restore = view.indexOf('token.value = savedToken', mounted);
+  const fire = view.indexOf('void ensureTranslateLanguages()', mounted);
+  assert.ok(restore >= 0 && fire >= 0, 'restore and translate kickoff both present');
+  assert.ok(fire > restore, 'translate kickoff runs after token restore');
+});

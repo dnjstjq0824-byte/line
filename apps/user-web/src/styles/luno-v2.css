@@ -353,12 +353,14 @@ ul, ol {list-style:none;margin:0;padding:0}
 }
 @media(min-width:700px) and (max-width:1099px){
   .luno-desktop-app .pc-workspace{flex-direction:row!important}
-  .luno-desktop-app .pc-side-pane{width:310px!important;height:100dvh!important;padding-bottom:0!important}
+  .luno-desktop-app .pc-side-pane{width:340px!important;min-width:280px;max-width:340px;height:100dvh!important;padding-bottom:0!important}
   .luno-desktop-app .pc-rail{display:flex!important;flex-direction:column!important;height:100dvh!important}
   .luno-desktop-app .pc-rail-top{flex-direction:column!important;justify-content:flex-start!important;gap:6px!important}
   .luno-desktop-app .pc-rail-bottom{display:flex!important}
   .luno-desktop-app .luno-mobile-floating-nav{display:none!important}
   .luno-desktop-app .pc-chat-viewport{position:relative!important;inset:auto!important;flex:1;width:auto!important;height:100dvh!important;min-width:0}
+  .luno-desktop-app .pc-friend-profile-viewport{flex:1;min-width:0;height:100dvh!important;overflow:auto}
+  .luno-desktop-app .pc-profile-preview-card{max-width:100%!important}
   .luno-desktop-app .pc-chat-topbar{flex-wrap:wrap!important;height:auto!important;min-height:64px;gap:8px 10px!important}
   .luno-desktop-app .chat-topbar-left{min-width:0;flex:1 1 auto}
   .luno-desktop-app .chat-header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
