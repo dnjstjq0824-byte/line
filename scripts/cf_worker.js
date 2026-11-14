@@ -236,6 +236,10 @@ const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS luno_email_codes (
     email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+  // F6: group invite links (unguessable token, expiry, revoke flag).
+  `CREATE TABLE IF NOT EXISTS luno_invites (
+    token TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, created_by TEXT NOT NULL,
+    expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
     avatar_url TEXT DEFAULT '', official INTEGER DEFAULT 0, owner_id TEXT DEFAULT '',
@@ -2022,7 +2026,7 @@ function chatSummary(conv, viewerId) {
   const list = messages.get(conv.id) || [];
   const last = list.filter(m => !(hiddenMsgs.get(viewerId)?.has(m.id))).at(-1);
   const meta = cMeta(conv.id, viewerId);
-  const memberBriefs = conv.members.map(userBrief).filter(Boolean);
+  const memberBriefs = conv.members.map(id => { const brief = userBrief(id); return brief ? { ...brief, role: convRole(conv, id) } : null; }).filter(Boolean);
   let title = conv.title;
   if (conv.kind === 'direct') {
     const other = conv.members.find(m => m !== viewerId);
@@ -2037,7 +2041,7 @@ function chatSummary(conv, viewerId) {
     unread_count: unread, mentioned: mentionedIn(conv.id, viewerId),
     updated_at: conv.updated_at, owner_id: conv.owner_id || null, notice: conv.notice || '',
     pinned: meta.pinned, muted: meta.muted, hidden: meta.hidden, badge_n: !!conv.badge_n && unread > 0,
-    member_count: conv.members.length, members: memberBriefs, official: !!conv.official,
+    member_count: conv.members.length, members: memberBriefs, my_role: convRole(conv, viewerId), avatar_url: conv.avatar_url || '', official: !!conv.official,
     last_message: last ? { id: last.id, kind: last.kind, body: last.unsent ? '' : String(last.body).slice(0, 120), unsent: !!last.unsent, sender_id: last.sender_id, created_at: last.created_at } : null
   };
 }
@@ -2452,6 +2456,18 @@ async function isBanned(userId) {
 // Email, demo seed data and the role copied into an old session are not grants.
 const GRANTABLE_ROLES = ['user', 'admin', 'partner', 'developer', 'creator', 'ads'];
 function grantedRole(role) { return GRANTABLE_ROLES.includes(role) ? role : 'user'; }
+// F6: group roles. The owner rides the room; admins ride conv.admins
+// (memory) and the member role column (D1). Direct rooms have no admins.
+function convRole(conv, userId) {
+  if (!conv || conv.kind !== 'group') return 'member';
+  if (conv.owner_id === userId) return 'owner';
+  if ((conv.admins || []).includes(userId)) return 'admin';
+  return 'member';
+}
+function convPrivileged(conv, userId) {
+  const r = convRole(conv, userId);
+  return r === 'owner' || r === 'admin';
+}
 // L-01: account kind. Anything that is not an issued bot is a human user,
 // including seeds, peers and rows that predate the kind column.
 function userKind(u) { return u && u.kind === 'bot' ? 'bot' : 'user'; }
@@ -2829,6 +2845,40 @@ async function serveProfilePhoto(userId, which) {
   }
   return json({ error: 'not found' }, 404);
 }
+// F6: group room photo bytes live in R2 under conv/<cid>/avatar; D1 keeps
+// the serving path on luno_conversations.avatar_url. Legacy inline data:
+// URLs still serve until replaced. No R2 binding keeps the inline value.
+async function storeRoomPhoto(cid, value) {
+  const bucket = mediaBucketOf();
+  const key = `conv/${cid}/avatar`;
+  if (!value) {
+    if (bucket) await bucket.delete(key).catch(() => {});
+    return '';
+  }
+  if (!bucket) return value;
+  const bytes = photoBytesFromDataUrl(value);
+  await bucket.put(key, bytes, { httpMetadata: { contentType: photoContentTypeOf(bytes) } });
+  return `/api/v1/conversations/${cid}/avatar`;
+}
+async function serveRoomPhoto(conv) {
+  const bucket = mediaBucketOf();
+  if (bucket) {
+    const obj = await bucket.get(`conv/${conv.id}/avatar`).catch(() => null);
+    if (obj) {
+      const bytes = new Uint8Array(await obj.arrayBuffer());
+      return new Response(bytes, { headers: { 'Content-Type': (obj.httpMetadata && obj.httpMetadata.contentType) || photoContentTypeOf(bytes), 'Cache-Control': 'private, max-age=3600' } });
+    }
+  }
+  if (conv.avatar_url && conv.avatar_url.startsWith('data:image/')) {
+    const bytes = photoBytesFromDataUrl(conv.avatar_url);
+    if (bytes) return new Response(bytes, { headers: { 'Content-Type': photoContentTypeOf(bytes), 'Cache-Control': 'private, max-age=3600' } });
+  }
+  return json({ error: 'not found' }, 404);
+}
+function inviteUrl(request, token) {
+  try { return new URL(`/invite/${token}`, request.url).toString(); }
+  catch { return `/invite/${token}`; }
+}
 function findDirect(a, b) {
   for (const c of conversations.values()) {
     if (c.kind === 'direct' && c.members.length === 2 && c.members.includes(a) && c.members.includes(b)) return c;
@@ -2872,7 +2922,7 @@ async function hydrateDurableConversation(cid) {
   if (row.deleted_at) { conversations.delete(cid); return null; }
   const { results } = await dbOf().prepare('SELECT user_id, role FROM luno_conversation_members WHERE conversation_id = ? ORDER BY joined_at, user_id').bind(cid).all();
   const previous = conversations.get(cid);
-  const conv = { ...previous, id: row.id, kind: row.kind, title: row.title, notice: row.notice, avatar_url: row.avatar_url, owner_id: row.owner_id, members: (results || []).map(member => member.user_id), revision: row.revision, created_at: row.created_at, updated_at: row.updated_at, last_sequence: previous?.last_sequence || 0, _durable: true };
+  const conv = { ...previous, id: row.id, kind: row.kind, title: row.title, notice: row.notice, avatar_url: row.avatar_url, owner_id: row.owner_id, members: (results || []).map(member => member.user_id), admins: (results || []).filter(member => member.role === 'admin').map(member => member.user_id), revision: row.revision, created_at: row.created_at, updated_at: row.updated_at, last_sequence: previous?.last_sequence || 0, _durable: true };
   conversations.set(cid, conv);
   await hydrateUsersByIds(conv.members);
   return conv;
@@ -2903,7 +2953,7 @@ async function persistDurableConversation(conv) {
   const db = dbOf(), mutation = uid(), at = now();
   const statements = [db.prepare('UPDATE luno_conversations SET title=?,notice=?,avatar_url=?,owner_id=?,revision=revision+1,mutation_token=?,deleted_at=?,updated_at=? WHERE id=? AND revision=? AND deleted_at IS NULL').bind(conv.title || '', conv.notice || '', conv.avatar_url || '', conv.owner_id, mutation, conv.members.length ? null : at, at, conv.id, conv.revision),
     db.prepare('DELETE FROM luno_conversation_members WHERE conversation_id=? AND EXISTS (SELECT 1 FROM luno_conversations WHERE id=? AND mutation_token=?)').bind(conv.id, conv.id, mutation),
-    ...conv.members.map(id => db.prepare('INSERT INTO luno_conversation_members (conversation_id,user_id,role,joined_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM luno_conversations WHERE id=? AND mutation_token=?)').bind(conv.id, id, id === conv.owner_id ? 'owner' : 'member', at, conv.id, mutation))];
+    ...conv.members.map(id => db.prepare('INSERT INTO luno_conversation_members (conversation_id,user_id,role,joined_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM luno_conversations WHERE id=? AND mutation_token=?)').bind(conv.id, id, id === conv.owner_id ? 'owner' : ((conv.admins || []).includes(id) ? 'admin' : 'member'), at, conv.id, mutation))];
   try {
     const result = await db.batch(statements);
     if (!result[0]?.meta?.changes) {
@@ -2935,6 +2985,8 @@ const deviceKeys = new Map();
 const userKeys = new Map();
 const groupCallRooms = new Map();
 // S6: maximum live participants per group-call room.
+// F6: maximum members per group room (create + invite + join).
+const GROUP_MAX_MEMBERS = 500;
 const GROUP_CALL_MAX_PARTICIPANTS = 8;
 const richMenus = new Map();
 const creatorSettlements = new Map();
@@ -3763,7 +3815,8 @@ async function extended(p, request, url, me, token) {
       const b = await readJson(request);
       const kind = b.kind === 'group' ? 'group' : 'direct';
       const ids = Array.from(new Set((Array.isArray(b.member_ids) ? b.member_ids : []).filter(x => typeof x === 'string' && x !== myId)));
-      if (!ids.length || ids.length > 499) return bad('대화 상대를 선택하세요');
+      if (!ids.length) return bad('대화 상대를 선택하세요');
+      if (ids.length + 1 > GROUP_MAX_MEMBERS) return bad(`그룹은 최대 ${GROUP_MAX_MEMBERS}명까지 가능합니다`);
       for (const id of ids) {
         const isOA = officialAccounts.has(id);
         const u = isOA ? officialAccounts.get(id) : (usersById.get(id) || await loadUserFromD1(id));
@@ -3799,6 +3852,24 @@ async function extended(p, request, url, me, token) {
       return json(chatSummary(c, myId), 201);
     }
   }
+  if (p === 'conversations/join' && method === 'POST') {
+    const b = await readJson(request);
+    if (!b.token || !dbOf()) return bad('초대 링크를 찾을 수 없습니다', 404);
+    await ensureSchema();
+    const inv = await dbOf().prepare('SELECT * FROM luno_invites WHERE token = ?').bind(String(b.token)).first();
+    if (!inv || inv.revoked) return bad('초대 링크를 찾을 수 없습니다', 404);
+    if (Number(inv.expires_at) <= Date.now()) return bad('만료된 초대 링크입니다', 410);
+    let conv = conversations.get(inv.conversation_id) || await hydrateDurableConversation(inv.conversation_id).catch(() => null);
+    if (!conv || conv.kind !== 'group') return bad('그룹 채팅방이 아닙니다', 404);
+    if (conv.members.includes(myId)) return bad('이미 참여한 방입니다', 409);
+    if (conv.members.length >= GROUP_MAX_MEMBERS) return bad(`그룹은 최대 ${GROUP_MAX_MEMBERS}명까지 가능합니다`);
+    conv.members.push(myId);
+    cMeta(conv.id, myId).hidden = false;
+    await persistDurableConversation(conv);
+    await systemMessage(conv.id, `${me.display_name}님이 초대 링크로 참여했습니다.`);
+    sendTo(conv.members, { type: 'conversation.updated', conversation_id: conv.id });
+    return json(chatSummary(conv, myId));
+  }
   if ((m = p.match(/^conversations\/([\w-]+)$/))) {
     const conv = conversations.get(resolveConversationId(m[1], myId));
     if (!conv) return bad('대화방을 찾을 수 없습니다', 404);
@@ -3809,18 +3880,33 @@ async function extended(p, request, url, me, token) {
     }
     if (method === 'PATCH') {
       const b = await readJson(request);
+      if ((b.title !== undefined || b.notice !== undefined || b.avatar !== undefined || b.owner_id !== undefined) && conv.kind === 'group' && !convPrivileged(conv, myId)) return json({ error: 'group settings forbidden' }, 403);
+      const announcements = [];
       if (b.title !== undefined) {
         if (conv.kind !== 'group') return bad('그룹 채팅방만 이름을 바꿀 수 있습니다');
         const t = clip(b.title, 50);
         if (!t) return bad('그룹 이름을 입력하세요');
-        conv.title = t;
+        if (t !== conv.title) { conv.title = t; announcements.push(`${me.display_name}님이 방 이름을 '${t}'(으)로 바꿨습니다.`); }
       }
-      if (b.notice !== undefined) conv.notice = clip(b.notice, 500);
+      if (b.notice !== undefined) {
+        const n = clip(b.notice, 500);
+        if (n !== (conv.notice || '')) { conv.notice = n; if (conv.kind === 'group') announcements.push(`${me.display_name}님이 공지를 바꿨습니다.`); }
+      }
+      if (b.avatar !== undefined) {
+        if (conv.kind !== 'group') return bad('그룹 채팅방만 사진을 바꿀 수 있습니다');
+        const photoErr = validatePhotoDataUrl(b.avatar, 'Group photo', 'INVALID_GROUP_PHOTO');
+        if (photoErr) return json(photoErr[1] ? { error: photoErr[0], code: photoErr[1] } : { error: photoErr[0] }, 400);
+        conv.avatar_url = await storeRoomPhoto(conv.id, b.avatar);
+        announcements.push(b.avatar ? `${me.display_name}님이 방 사진을 바꿨습니다.` : `${me.display_name}님이 방 사진을 지웠습니다.`);
+      }
       if (b.owner_id !== undefined) {
         if (conv.kind !== 'group' || conv.owner_id !== myId || !conv.members.includes(b.owner_id)) return json({ error: 'ownership transfer forbidden' }, 403);
         conv.owner_id = b.owner_id;
+        conv.admins = (conv.admins || []).filter(id => id !== b.owner_id);
+        announcements.push(`${me.display_name}님이 ${(usersById.get(b.owner_id) || {}).display_name || '멤버'}님에게 방장을 넘겼습니다.`);
       }
       await persistDurableConversation(conv);
+      for (const a of announcements) await systemMessage(conv.id, a);
       sendTo(conv.members, { type: 'conversation.updated', conversation_id: conv.id });
       return json(chatSummary(conv, myId));
     }
@@ -3839,12 +3925,19 @@ async function extended(p, request, url, me, token) {
     for (const k of ['pinned', 'muted', 'hidden']) if (typeof b[k] === 'boolean') meta[k] = b[k];
     return json({ status: 'updated', meta });
   }
+  if ((m = p.match(/^conversations\/([\w-]+)\/avatar$/)) && method === 'GET') {
+    const conv = conversations.get(resolveConversationId(m[1], myId));
+    if (!conv) return bad('대화방을 찾을 수 없습니다', 404);
+    return serveRoomPhoto(conv);
+  }
   if ((m = p.match(/^conversations\/([\w-]+)\/members$/)) && method === 'POST') {
     await hydrateSocialGraph(myId);
     const conv = conversations.get(resolveConversationId(m[1], myId));
     if (conv.kind !== 'group') return bad('그룹 채팅방에서만 초대할 수 있습니다');
     const b = await readJson(request);
     const ids = Array.from(new Set((Array.isArray(b.member_ids) ? b.member_ids : []).filter(x => typeof x === 'string')));
+    if (conv.members.length >= GROUP_MAX_MEMBERS) return bad(`그룹은 최대 ${GROUP_MAX_MEMBERS}명까지 가능합니다`);
+    if (conv.members.length + ids.filter(id => !conv.members.includes(id)).length > GROUP_MAX_MEMBERS) return bad(`그룹은 최대 ${GROUP_MAX_MEMBERS}명까지 가능합니다`);
     const added = [];
     for (const id of ids) {
       const u = usersById.get(id);
@@ -3865,14 +3958,61 @@ async function extended(p, request, url, me, token) {
     const conv = conversations.get(resolveConversationId(m[1], myId));
     if (conv.kind !== 'group') return bad('그룹 채팅방이 아닙니다');
     if (m[2] === myId) return await leaveConversation(conv, myId, me);
-    if (conv.owner_id !== myId) return bad('방장만 멤버를 내보낼 수 있습니다', 403);
+    if (!convPrivileged(conv, myId)) return bad('방장이나 관리자만 멤버를 내보낼 수 있습니다', 403);
+    if (conv.owner_id !== myId && convRole(conv, m[2]) !== 'member') return bad('관리자는 일반 멤버만 내보낼 수 있습니다', 403);
     if (!conv.members.includes(m[2])) return bad('멤버가 아닙니다', 404);
     const target = usersById.get(m[2]);
     conv.members = conv.members.filter(x => x !== m[2]);
+    conv.admins = (conv.admins || []).filter(x => x !== m[2]);
     await persistDurableConversation(conv);
     await systemMessage(conv.id, `${target ? target.display_name : '멤버'}님이 내보내졌습니다.`);
     sendTo([...conv.members, m[2]], { type: 'conversation.updated', conversation_id: conv.id });
     return json({ status: 'kicked' });
+  }
+  if ((m = p.match(/^conversations\/([\w-]+)\/members\/([\w-]+)\/role$/)) && method === 'PATCH') {
+    const conv = conversations.get(resolveConversationId(m[1], myId));
+    if (!conv || conv.kind !== 'group') return bad('그룹 채팅방이 아닙니다');
+    if (conv.owner_id !== myId) return json({ error: 'role change forbidden' }, 403);
+    if (!conv.members.includes(m[2]) || m[2] === conv.owner_id) return bad('멤버가 아닙니다', 404);
+    const b = await readJson(request);
+    if (b.role !== 'admin' && b.role !== 'member') return bad('올바르지 않은 역할입니다');
+    conv.admins = (conv.admins || []).filter(id => id !== m[2]);
+    if (b.role === 'admin') conv.admins.push(m[2]);
+    await persistDurableConversation(conv);
+    const target = usersById.get(m[2]);
+    const targetName = target ? target.display_name : '멤버';
+    await systemMessage(conv.id, b.role === 'admin' ? `${targetName}님이 관리자가 됐습니다.` : `${targetName}님이 일반 멤버가 됐습니다.`);
+    sendTo(conv.members, { type: 'conversation.updated', conversation_id: conv.id });
+    return json(chatSummary(conv, myId));
+  }
+  if ((m = p.match(/^conversations\/([\w-]+)\/invites$/))) {
+    const conv = conversations.get(resolveConversationId(m[1], myId));
+    if (!conv || conv.kind !== 'group') return bad('그룹 채팅방이 아닙니다');
+    if (!convPrivileged(conv, myId)) return json({ error: 'invite forbidden' }, 403);
+    if (!dbOf()) return bad('초대 링크를 만들 수 없습니다', 503);
+    await ensureSchema();
+    if (method === 'GET') {
+      const { results } = await dbOf().prepare('SELECT token, conversation_id, created_by, expires_at, revoked, created_at FROM luno_invites WHERE conversation_id = ? AND revoked = 0 AND expires_at > ? ORDER BY created_at DESC').bind(conv.id, Date.now()).all();
+      return json({ invites: (results || []).map(r => ({ token: r.token, conversation_id: r.conversation_id, created_by: r.created_by, expires_at: r.expires_at, created_at: r.created_at, invite_url: inviteUrl(request, r.token) })) });
+    }
+    if (method === 'POST') {
+      const b = await readJson(request);
+      const hours = intIn(b.expires_in_hours ?? 168, 1, 720) ?? 168;
+      const token = uid();
+      const expires_at = Date.now() + hours * 3600000;
+      await dbOf().prepare('INSERT INTO luno_invites (token, conversation_id, created_by, expires_at, revoked, created_at) VALUES (?, ?, ?, ?, 0, ?)').bind(token, conv.id, myId, expires_at, now()).run();
+      return json({ token, invite_url: inviteUrl(request, token), conversation_id: conv.id, expires_at }, 201);
+    }
+  }
+  if ((m = p.match(/^conversations\/([\w-]+)\/invites\/([\w-]+)$/)) && method === 'DELETE') {
+    const conv = conversations.get(resolveConversationId(m[1], myId));
+    if (!conv || conv.kind !== 'group') return bad('그룹 채팅방이 아닙니다');
+    if (!convPrivileged(conv, myId)) return json({ error: 'invite forbidden' }, 403);
+    if (!dbOf()) return bad('초대 링크를 폐기할 수 없습니다', 503);
+    await ensureSchema();
+    const done = await dbOf().prepare('UPDATE luno_invites SET revoked = 1 WHERE token = ? AND conversation_id = ?').bind(m[2], conv.id).run();
+    if (!done.meta?.changes) return bad('초대 링크를 찾을 수 없습니다', 404);
+    return json({ status: 'revoked' });
   }
 
   // ---------- Messages ----------
@@ -4060,9 +4200,9 @@ async function extended(p, request, url, me, token) {
     const target = (messages.get(cid) || []).find(x => x.id === m[2]);
     if (!target) return bad('제안 메시지를 찾을 수 없습니다', 404);
     if (target.kind !== 'proposal' || target.unsent) return bad('제안 메시지에만 결정할 수 있습니다', 400);
-    // Approvers: room owner, global admins, or — in direct rooms with no
-    // owner — any member. Everyone else 403s.
-    const privileged = me.role === 'admin' || (conv && conv.owner_id === myId) || (conv && conv.kind === 'direct');
+    // Approvers: room owner/admins (F6), global admins, or — in direct
+    // rooms with no owner — any member. Everyone else 403s.
+    const privileged = me.role === 'admin' || (conv && convPrivileged(conv, myId)) || (conv && conv.kind === 'direct');
     if (!privileged) return json({ error: 'forbidden' }, 403);
     const db = dbOf();
     if (!db) return json({ error: 'decisions require a configured database' }, 501);
@@ -5562,13 +5702,15 @@ async function extended(p, request, url, me, token) {
 
 async function leaveConversation(conv, myId, me) {
   conv.members = conv.members.filter(x => x !== myId);
+  conv.admins = (conv.admins || []).filter(x => x !== myId);
   cMeta(conv.id, myId).hidden = true;
   if (!conv.members.length) {
+    if (mediaBucketOf()) await mediaBucketOf().delete(`conv/${conv.id}/avatar`).catch(() => {});
     await persistDurableConversation(conv);
     conversations.delete(conv.id);
     return json({ status: 'left' });
   }
-  if (conv.owner_id === myId) conv.owner_id = conv.members[0];
+  if (conv.owner_id === myId) { conv.owner_id = conv.members[0]; conv.admins = (conv.admins || []).filter(x => x !== conv.owner_id); }
   await persistDurableConversation(conv);
   await systemMessage(conv.id, `${me.display_name}님이 나갔습니다.`);
   sendTo([...conv.members, myId], { type: 'conversation.updated', conversation_id: conv.id });
@@ -6442,7 +6584,7 @@ const workerCore = {
 
       // All conversation subresources share the same membership boundary.
       const conversationPath = p.match(/^conversations\/([^/]+)(?:\/|$)/);
-      if (conversationPath && conversationPath[1] !== 'read-all') {
+      if (conversationPath && conversationPath[1] !== 'read-all' && conversationPath[1] !== 'join') {
         ensureKeepMemo(authUser.id);
         if (isDemoUser(env, authUser.id)) ensureDemoConversationsForUser(authUser.id);
         const resolvedCid = resolveConversationId(conversationPath[1], authUser.id);

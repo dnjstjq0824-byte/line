@@ -311,6 +311,14 @@ class _DeckHeader extends StatelessWidget {
                 icon: Icon(Icons.sync, color: dark ? HarborDark.ink : Colors.white),
                 onPressed: session.syncOffline,
               ),
+              if (session.kindOf(conversationId) == 'group')
+                IconButton(
+                  tooltip: '그룹 설정',
+                  icon: Icon(Icons.settings_outlined,
+                      color: dark ? HarborDark.ink : Colors.white),
+                  onPressed: () =>
+                      context.go('/chats/$conversationId/settings'),
+                ),
             ],
           ),
         ),

@@ -107,6 +107,7 @@ const channelSlotDismissed = ref(false)
         <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--ln-info)' : c.official ? '#4F7CFF' : 'var(--ln-accent)' }">
           <span v-if="c.official">🛡️</span>
           <span v-else>{{ initialOf(c.title, 'L') }}</span>
+          <img v-if="c.kind === 'group' && c.avatar_url" :src="c.avatar_url" alt="" class="ln-profile-photo" />
         </div>
         <div class="pc-chat-item-meta">
           <div class="chat-row-top">

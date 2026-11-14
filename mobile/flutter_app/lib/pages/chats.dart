@@ -96,10 +96,21 @@ class _ChatsPageState extends State<ChatsPage> {
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _groupDialog(context),
-                  icon: const Icon(Icons.group_add_outlined, size: 18),
-                  label: const Text('그룹 만들기'),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _joinDialog(context),
+                      icon: const Icon(Icons.link, size: 18),
+                      label: const Text('링크로 참여'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.tonalIcon(
+                      onPressed: () => _groupDialog(context),
+                      icon: const Icon(Icons.group_add_outlined, size: 18),
+                      label: const Text('그룹 만들기'),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
@@ -137,6 +148,53 @@ class _ChatsPageState extends State<ChatsPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // F6: paste an invite link or raw token to join a group.
+  void _joinDialog(BuildContext context) {
+    final session = SessionScope.of(context, listen: false);
+    final input = TextEditingController();
+    String tokenOf(String raw) {
+      final t = raw.trim();
+      final i = t.lastIndexOf('/invite/');
+      final tail = i >= 0 ? t.substring(i + 8) : t;
+      return tail.split(RegExp(r'[?#\s]')).first;
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (dialog, setDialog) => AlertDialog(
+          title: const Text('링크로 참여'),
+          content: TextField(
+            controller: input,
+            autofocus: true,
+            onChanged: (_) => setDialog(() {}),
+            decoration: const InputDecoration(
+                labelText: '초대 링크 또는 토큰', isDense: true),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(dialog).pop(),
+                child: const Text('취소')),
+            FilledButton(
+              onPressed: tokenOf(input.text).isEmpty
+                  ? null
+                  : () async {
+                      final id =
+                          await session.joinGroup(tokenOf(input.text));
+                      if (!dialog.mounted) return;
+                      Navigator.of(dialog).pop();
+                      if (id != null && id.isNotEmpty && context.mounted) {
+                        context.go('/chats/$id');
+                      }
+                    },
+              child: const Text('참여하기'),
+            ),
+          ],
+        ),
       ),
     );
   }

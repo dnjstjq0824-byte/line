@@ -98,6 +98,7 @@ const emit = defineEmits<{
   unsend: [msgId: string]
   decide: [msg: Message, decision: 'approved' | 'rejected']
   approvals: []
+  'group-settings': []
   'scroll-bottom': []
   sticker: [stickerId: string]
   'file-change': [event: Event]
@@ -232,6 +233,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <button class="chat-topbar-menu-item" @click="emit('cycle-wallpaper'); showTopbarMenu = false"><span aria-hidden="true">🎨</span><span>{{ t('mvWallpaperTitle') }}</span></button>
             <button class="chat-topbar-menu-item" @click="emit('drawer', 'events'); showTopbarMenu = false"><LunoIcon name="calendar" :size="18" /><span>{{ t('mvEventsCalendar') }}</span></button>
             <button class="chat-topbar-menu-item" @click="emit('approvals'); showTopbarMenu = false"><LunoIcon name="check" :size="18" /><span>{{ t('apprTitle') }}</span></button>
+            <button v-if="selectedChat?.kind === 'group'" class="chat-topbar-menu-item" @click="emit('group-settings'); showTopbarMenu = false"><span aria-hidden="true">👥</span><span>{{ t('gsMenuSettings') }}</span></button>
           </div>
         </div>
       </div>

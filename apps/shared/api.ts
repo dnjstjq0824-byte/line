@@ -61,6 +61,8 @@ export type Chat = {
   member_count?: number
   members?: User[]
   owner_id?: string | null
+  my_role?: string
+  avatar_url?: string
   updated_at?: string
   last_message?: {
     id: string

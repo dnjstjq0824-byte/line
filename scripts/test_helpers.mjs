@@ -9,6 +9,7 @@ export function makeD1() {
             CREATE TABLE friends (user_id TEXT, friend_id TEXT);
             CREATE TABLE wallets (user_id TEXT PRIMARY KEY, balance INTEGER, updated_at TEXT);`);
   raw.exec(fs.readFileSync(new URL('./migrations/20261105_durable_conversations.sql', import.meta.url), 'utf8'));
+  raw.exec(fs.readFileSync(new URL('./migrations/20261114_group_roles.sql', import.meta.url), 'utf8'));
   const mkStmt = (sql) => {
     let params = [];
     const st = {

@@ -14,6 +14,7 @@ import 'pages/channels.dart';
 import 'pages/chat_archive.dart';
 import 'pages/chat_room.dart';
 import 'pages/chats.dart';
+import 'pages/group_settings.dart';
 import 'pages/console.dart';
 import 'pages/feed.dart';
 import 'pages/home.dart';
@@ -104,6 +105,10 @@ GoRouter buildRouter(SessionController session) {
                 path: 'albums',
                 pageBuilder: (c, s) => harborPage(
                     c, s, ChatArchivePage(conversationId: s.pathParameters['cid']!, kind: ChatArchiveKind.albums))),
+              GoRoute(
+                path: 'settings',
+                pageBuilder: (c, s) => harborPage(
+                    c, s, GroupSettingsPage(conversationId: s.pathParameters['cid']!))),
             ],
           ),
           GoRoute(path: '/feed', pageBuilder: (c, s) => harborPage(c, s, const FeedPage())),

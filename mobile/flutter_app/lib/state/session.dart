@@ -159,6 +159,9 @@ class SessionController extends ChangeNotifier {
   String selectedTitle = '';
   String replyToId = '';
   String editingMsgId = '';
+  // F6: open group room detail (members, roles, notice) + its invite links.
+  Map<String, dynamic> selectedRoom = {};
+  List<dynamic> roomInvites = [];
 
   Map<String, dynamic>? activeCall;
   // N1-L: background notifications. notifier is the test seam (fake sink).
@@ -661,6 +664,14 @@ class SessionController extends ChangeNotifier {
       }
     }
     return '대화방';
+  }
+
+  // F6: room kind for entry gating (group settings only exist for groups).
+  String kindOf(String conversationId) {
+    for (final c in chats) {
+      if (c['id'] == conversationId) return '${c['kind'] ?? ''}';
+    }
+    return '';
   }
 
   /// Item 6: per-message sender label. Group rooms resolve the sender;
@@ -1272,6 +1283,9 @@ class SessionController extends ChangeNotifier {
     if (room == null) return false;
     if (selfRole == 'admin') return true;
     if ('${room['kind']}' == 'direct') return true;
+    // F6: group admins decide alongside the owner (my_role rides the
+    // chats list entries, so no extra fetch is needed).
+    if ('${room['my_role'] ?? ''}' == 'admin') return true;
     return '${room['owner_id'] ?? ''}' == selfId && selfId.isNotEmpty;
   }
 
@@ -1372,6 +1386,172 @@ class SessionController extends ChangeNotifier {
         'title': title.trim(),
       });
       conversationId = c['id'] as String?;
+      await reload();
+    });
+    return conversationId;
+  }
+
+  // F6: group room management. run() is not reentrant, so _refreshRoom stays
+  // outside it and every public method below wraps exactly one run().
+  Future<void> _refreshRoom(String id) async {
+    selectedRoom = await api.call('/api/v1/conversations/$id');
+    notifyListeners();
+  }
+
+  Future<void> loadRoomDetail(String id) {
+    return run(() => _refreshRoom(id));
+  }
+
+  Future<void> renameRoom(String id, String title) {
+    if (title.trim().isEmpty) return Future.value();
+    return run(() async {
+      await api.call('/api/v1/conversations/$id',
+          method: 'PATCH', data: {'title': title.trim()});
+      notice = '방 이름을 바꿨습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> setRoomNotice(String id, String text) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id',
+          method: 'PATCH', data: {'notice': text.trim()});
+      notice = '공지를 저장했습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> updateRoomPhotoFromPicker(String id,
+      {ImageSource source = ImageSource.gallery}) {
+    return run(() async {
+      final picked = await ImagePicker().pickImage(
+          source: source,
+          maxWidth: 512,
+          maxHeight: 512,
+          imageQuality: 70);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.length > 262144) {
+        throw Exception('방 사진이 너무 큽니다 (최대 256KB)');
+      }
+      final kind = _avatarKindOf(bytes);
+      if (kind == null) {
+        throw Exception('지원하지 않는 사진 형식입니다 (JPEG/PNG/WebP).');
+      }
+      await api.call('/api/v1/conversations/$id',
+          method: 'PATCH',
+          data: {'avatar': 'data:image/$kind;base64,${base64Encode(bytes)}'});
+      notice = '방 사진을 바꿨습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> clearRoomPhoto(String id) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id',
+          method: 'PATCH', data: {'avatar': ''});
+      notice = '방 사진을 지웠습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> inviteMembers(String id, List<String> memberIds) {
+    if (memberIds.isEmpty) return Future.value();
+    return run(() async {
+      await api.call('/api/v1/conversations/$id/members',
+          method: 'POST', data: {'member_ids': memberIds});
+      notice = '초대했습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> kickMember(String id, String userId) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id/members/$userId',
+          method: 'DELETE');
+      notice = '내보냈습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> setMemberRole(String id, String userId, String role) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id/members/$userId/role',
+          method: 'PATCH', data: {'role': role});
+      notice = role == 'admin' ? '관리자로 지정했습니다.' : '일반 멤버로 바꿨습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> transferRoom(String id, String userId) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id',
+          method: 'PATCH', data: {'owner_id': userId});
+      notice = '방장을 넘겼습니다.';
+      await _refreshRoom(id);
+      await reload();
+    });
+  }
+
+  Future<void> leaveChat(String id) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id', method: 'DELETE');
+      if (selectedId == id) {
+        selectedId = '';
+        selectedTitle = '';
+        selectedRoom = {};
+        messages = [];
+      }
+      notice = '그룹에서 나갔습니다.';
+      await reload();
+    });
+  }
+
+  Future<void> loadRoomInvites(String id) {
+    return run(() async {
+      final res = await api.call('/api/v1/conversations/$id/invites');
+      roomInvites = res['invites'] ?? [];
+      notifyListeners();
+    });
+  }
+
+  Future<void> createRoomInvite(String id, int hours) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id/invites',
+          method: 'POST', data: {'expires_in_hours': hours});
+      final res = await api.call('/api/v1/conversations/$id/invites');
+      roomInvites = res['invites'] ?? [];
+      notice = '초대 링크를 만들었습니다.';
+      notifyListeners();
+    });
+  }
+
+  Future<void> revokeRoomInvite(String id, String token) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$id/invites/$token',
+          method: 'DELETE');
+      final res = await api.call('/api/v1/conversations/$id/invites');
+      roomInvites = res['invites'] ?? [];
+      notice = '초대 링크를 폐기했습니다.';
+      notifyListeners();
+    });
+  }
+
+  /// Returns the joined conversation id so the page can navigate to it.
+  Future<String?> joinGroup(String token) async {
+    String? conversationId;
+    await run(() async {
+      final c = await api.call('/api/v1/conversations/join',
+          method: 'POST', data: {'token': token.trim()});
+      conversationId = c['id'] as String?;
+      notice = '그룹에 참여했습니다.';
       await reload();
     });
     return conversationId;

@@ -9,6 +9,7 @@ import FriendPanel from '../components/FriendPanel.vue'
 import MessagePane from '../components/MessagePane.vue'
 import SettingsModal from '../components/SettingsModal.vue'
 import ApprovalBox from '../components/ApprovalBox.vue'
+import GroupSettingsModal from '../components/GroupSettingsModal.vue'
 import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
 import { parseStorePacks } from '../../../shared/shop'
 import { findDirectChatId } from '../../../shared/direct_chat'
@@ -900,6 +901,8 @@ const activeProfileUser = ref<User | null>(null)
 const showCreateGroupModal = ref(false)
 const groupTitleInput = ref('')
 const selectedFriendsForGroup = ref<string[]>([])
+// F6: paste an invite link or raw token to join.
+const joinLinkInput = ref('')
 const showAddFriendModal = ref(false)
 const addFriendHandleInput = ref('')
 const addFriendResults = ref<User[]>([])
@@ -913,6 +916,8 @@ const reportDetails = ref('')
 const myReports = ref<Array<{ id: string; subject_user_id: string; category: string; details: string; state: string; created_at: string }>>([])
 // L-05: approval box state (room proposals + per-message decision states).
 const showApprovalBox = ref(false)
+// F6: group settings modal state.
+const showGroupSettings = ref(false)
 const approvalProposals = ref<Array<{ message_id: string; body: string; author_id: string; author_name: string; created_at: string; state: string; decided_by: string | null }>>([])
 const proposalStates = ref<Record<string, string>>({})
 const showContactPicker = ref(false)
@@ -1931,6 +1936,16 @@ async function loadProposalStates(convId: string) {
     proposalStates.value = {}
   }
 }
+// F6: keep the chat list in sync with group settings changes.
+function onGroupChanged(updated: Chat) {
+  const i = chats.value.findIndex((c) => c.id === updated.id)
+  if (i >= 0) chats.value[i] = { ...chats.value[i], ...updated }
+}
+async function onGroupLeft() {
+  showGroupSettings.value = false
+  selectedChatId.value = ''
+  await loadChats()
+}
 async function openApprovalBox() {
   if (!selectedChatId.value) return
   await wrap(async () => {
@@ -1979,6 +1994,7 @@ function approvalCanDecide(): boolean {
   if (!me || !chat) return false
   if ((me as User).role === 'admin') return true
   if (chat.kind === 'direct') return true
+  if ((chat as Chat).my_role === 'admin') return true
   return (chat as Chat).owner_id === me.id
 }
 async function decideProposal(msgOrId: { id: string } | string, decision: 'approved' | 'rejected') {
@@ -2159,6 +2175,21 @@ async function startDirectChat(friend: User) {
   })
 }
 
+// F6: join a group from a pasted invite link or raw token.
+async function joinByLink() {
+  const raw = joinLinkInput.value.trim()
+  if (!raw) return
+  const token = raw.includes('/invite/') ? raw.slice(raw.lastIndexOf('/invite/') + 8).split(/[?#\s]/)[0] : raw.split(/[?#\s]/)[0]
+  if (!token) return
+  await wrap(async () => {
+    const c = await api<Chat>('/api/v1/conversations/join', 'POST', { token })
+    joinLinkInput.value = ''
+    showCreateGroupModal.value = false
+    await loadChats()
+    note.value = t('gsJoined')
+    await selectChat(c.id)
+  })
+}
 async function createGroupChat() {
   if (!groupTitleInput.value.trim() || selectedFriendsForGroup.value.length === 0) return
   await wrap(async () => {
@@ -3344,6 +3375,7 @@ onBeforeUnmount(() => {
         @unsend="unsendMessage"
         @decide="decideProposal"
         @approvals="openApprovalBox"
+        @group-settings="showGroupSettings = true"
         @scroll-bottom="scrollToBottom"
         @sticker="sendSticker"
         @file-change="uploadSelectedFile"
@@ -3772,6 +3804,15 @@ onBeforeUnmount(() => {
       @close="showApprovalBox = false"
       @decide="decideProposal"
     />
+    <GroupSettingsModal
+      v-if="showGroupSettings && selectedChat && selectedChat.kind === 'group'"
+      :chat="selectedChat"
+      :friends="friends"
+      :my-id="currentUser?.id || ''"
+      @close="showGroupSettings = false"
+      @changed="onGroupChanged"
+      @left="onGroupLeft"
+    />
     <SettingsModal
       v-if="showSettingsModal"
       :devices-list="devicesList"
@@ -3896,6 +3937,13 @@ onBeforeUnmount(() => {
           <div class="modal-actions-right">
             <button class="btn-secondary" @click="showCreateGroupModal = false">{{ t('mvCancel') }}</button>
             <button class="btn-primary" :disabled="!groupTitleInput.trim() || !selectedFriendsForGroup.length" @click="createGroupChat">{{ t('mvCreateGroup') }}</button>
+          </div>
+          <div class="setting-group">
+            <strong>{{ t('gsJoinByLink') }}</strong>
+            <div class="flex-row">
+              <input v-model="joinLinkInput" :placeholder="t('gsJoinPh')" @keydown.enter.prevent="joinByLink" />
+              <button class="btn-secondary" :disabled="!joinLinkInput.trim()" @click="joinByLink">{{ t('gsJoin') }}</button>
+            </div>
           </div>
         </div>
       </div>
