@@ -367,7 +367,11 @@ const LUNO_SCHEMA_PHASE1 = [
     mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0,
     sha256 TEXT NOT NULL DEFAULT '', uploader_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL)`,
-  `CREATE INDEX IF NOT EXISTS idx_attachments_conv ON attachments(conversation_id)`
+  `CREATE INDEX IF NOT EXISTS idx_attachments_conv ON attachments(conversation_id)`,
+  // L-17: rooms and users where LLM bots may act. Empty by default.
+  `CREATE TABLE IF NOT EXISTS luno_bot_allowlist (
+    kind TEXT NOT NULL, ref_id TEXT NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY (kind, ref_id))`
 ];
 // Additive columns for tables that predate Phase 1. Applied with a
 // PRAGMA guard because SQLite has no idempotent ADD COLUMN.
@@ -2269,6 +2273,22 @@ async function allocateHandle(prefix) {
     if (!(await handleTaken(candidate))) return candidate;
   }
   return '';
+}
+// L-17: master switch (default off) plus room/user allowlist. Routing (L-02)
+// requires the switch AND a listed room AND a listed author — fail closed on
+// every leg, including a missing database.
+function llmEnabled() { return String(CURRENT_ENV?.LLM_ENABLED || '').toLowerCase() === 'true'; }
+async function botAllowListed(kind, refId) {
+  const db = dbOf();
+  if (!db || !refId) return false;
+  await ensureSchema();
+  const row = await db.prepare('SELECT ref_id FROM luno_bot_allowlist WHERE kind = ? AND ref_id = ?').bind(kind, refId).first().catch(() => null);
+  return !!row;
+}
+async function botMayAct(roomId, authorId) {
+  if (!llmEnabled()) return false;
+  if (!(await botAllowListed('room', roomId))) return false;
+  return botAllowListed('user', authorId);
 }
 // Legacy databases have no grants: fail closed until the approved migration
 // and explicit administrator provisioning have been completed.
@@ -4566,6 +4586,34 @@ async function extended(p, request, url, me, token) {
       users.set(bot.email, bot);
       usersById.set(bot.id, bot);
       return json({ id: bot.id, email: bot.email, handle: bot.handle, display_name: bot.display_name, kind: 'bot' }, 201);
+    }
+    // L-17: allowlist management. The guard above already returned 403.
+    if (p === 'admin/llm/allowlist' && method === 'GET') {
+      const db = dbOf();
+      if (!db) return json({ enabled: llmEnabled(), rooms: [], users: [] });
+      await ensureSchema();
+      const rows = (await db.prepare('SELECT kind, ref_id FROM luno_bot_allowlist').all().catch(() => ({ results: [] }))).results || [];
+      return json({
+        enabled: llmEnabled(),
+        rooms: rows.filter(r => r.kind === 'room').map(r => r.ref_id),
+        users: rows.filter(r => r.kind === 'user').map(r => r.ref_id)
+      });
+    }
+    if (p === 'admin/llm/allowlist' && (method === 'POST' || method === 'DELETE')) {
+      const db = dbOf();
+      if (!db) return json({ error: 'allowlist requires a configured database' }, 501);
+      const b = await readJson(request);
+      const kind = String(b.kind || '');
+      const refId = clip(String(b.ref_id || ''), 128);
+      if ((kind !== 'room' && kind !== 'user') || !refId) return bad('kind must be room or user with a non-empty ref_id', 400);
+      await ensureSchema();
+      if (method === 'POST') {
+        const done = await db.prepare('INSERT OR IGNORE INTO luno_bot_allowlist (kind, ref_id, created_at) VALUES (?, ?, datetime(\'now\'))').bind(kind, refId).run().catch(() => null);
+        const added = done && done.meta && Number(done.meta.changes) > 0;
+        return json({ status: added ? 'added' : 'exists', kind, ref_id: refId }, added ? 201 : 200);
+      }
+      await db.prepare('DELETE FROM luno_bot_allowlist WHERE kind = ? AND ref_id = ?').bind(kind, refId).run();
+      return json({ status: 'removed', kind, ref_id: refId }, 200);
     }
     if (p === 'admin/reports' && method === 'GET') return json({ reports: adminReports.slice(0, 100) });
     if (p === 'admin/audit-logs' && method === 'GET') return json({ audit_logs: auditLogs.slice(0, 100) });

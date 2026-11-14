@@ -157,6 +157,45 @@ test('L-01: friends and messages carry the sender kind', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- L-17: kill switch + allowlist (built before L-02: routing depends on it) ----------
+
+test('L-17: switch off denies everything by default', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const off = await (await admin.api('admin/llm/allowlist', 'GET', null, admin.token)).json();
+    assert.equal(off.enabled, false, 'default off');
+    assert.deepEqual(off.rooms, []);
+    assert.deepEqual(off.users, []);
+    const { api } = await llmIsolate(db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: admin.id });
+    const login = await api('auth/login', 'POST', { email: 'llm-admin@luno-test.local', password: 'Str0ng!Passw0rd' });
+    const on = await (await api('admin/llm/allowlist', 'GET', null, (await login.json()).access_token)).json();
+    assert.equal(on.enabled, true, 'explicit opt-in');
+  } finally { db.raw.close(); }
+});
+
+test('L-17: allowlist CRUD is admin-only and validated', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const user = await registerAndLogin(admin.api, 'l17-user@luno-test.local');
+    assert.equal((await admin.api('admin/llm/allowlist', 'GET')).status, 401, 'no token');
+    assert.equal((await admin.api('admin/llm/allowlist', 'GET', null, user.token)).status, 403, 'user forbidden');
+    assert.equal((await admin.api('admin/llm/allowlist', 'POST', { kind: 'room', ref_id: 'r1' }, user.token)).status, 403);
+    assert.equal((await admin.api('admin/llm/allowlist', 'POST', { kind: 'planet', ref_id: 'r1' }, admin.token)).status, 400, 'bad kind');
+    assert.equal((await admin.api('admin/llm/allowlist', 'POST', { kind: 'room', ref_id: '' }, admin.token)).status, 400, 'empty ref');
+    assert.equal((await admin.api('admin/llm/allowlist', 'POST', { kind: 'room', ref_id: 'room-1' }, admin.token)).status, 201);
+    assert.equal((await admin.api('admin/llm/allowlist', 'POST', { kind: 'user', ref_id: user.id }, admin.token)).status, 201);
+    assert.equal((await admin.api('admin/llm/allowlist', 'POST', { kind: 'room', ref_id: 'room-1' }, admin.token)).status, 200, 'idempotent re-add');
+    const list = await (await admin.api('admin/llm/allowlist', 'GET', null, admin.token)).json();
+    assert.deepEqual(list.rooms, ['room-1']);
+    assert.deepEqual(list.users, [user.id]);
+    assert.equal((await admin.api('admin/llm/allowlist', 'DELETE', { kind: 'room', ref_id: 'room-1' }, admin.token)).status, 200);
+    const after = await (await admin.api('admin/llm/allowlist', 'GET', null, admin.token)).json();
+    assert.deepEqual(after.rooms, []);
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
