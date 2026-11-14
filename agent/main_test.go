@@ -121,6 +121,34 @@ func TestClaimCycleSkipsNonWhitelistedAuthor(t *testing.T) {
 	}
 }
 
+func TestMaskTextPatterns(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"email", "mail me at jane.doe@example.com please", "mail me at [EMAIL] please"},
+		{"email-plus", "a+b@luno-test.local", "[EMAIL]"},
+		{"phone-dash", "call 010-1234-5678 now", "call [PHONE] now"},
+		{"phone-intl", "call +82 10 1234 5678 now", "call [PHONE] now"},
+		{"phone-paren", "(02) 123 4567", "[PHONE]"},
+		{"card-dash", "card 1234-5678-9012-3456", "card [CARD]"},
+		{"card-plain", "card 1234567890123456", "card [CARD]"},
+		{"labeled-key", "api_key: AbC123_xyz-9", "[KEY]"},
+		{"bearer", "Authorization Bearer tok_abc.def-ghi", "Authorization [KEY]"},
+		{"cf-bot", "use cf-bot-550e8400-e29b-41d4", "use [TOKEN]"},
+		{"cf-token", "cf-token-abc123.def456", "[TOKEN]"},
+		{"sk", "sk-abcdefgh12345678", "[TOKEN]"},
+		{"password-en", "my password: s3cr3t!", "my [PASSWORD]"},
+		{"password-ko", "비밀번호=hunter2", "[PASSWORD]"},
+		{"plain", "hello bot, how are you?", "hello bot, how are you?"},
+		{"short-numbers", "room 101, 3 people, 2026", "room 101, 3 people, 2026"},
+		{"date", "2026-11-14 meeting", "2026-11-14 meeting"},
+		{"mention", "@helper_bot help", "@helper_bot help"},
+	}
+	for _, tc := range cases {
+		if got := maskText(tc.in); got != tc.want {
+			t.Errorf("%s: got %q want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestFakeProviderReportsReplyAndTokens(t *testing.T) {
 	reply, tokens, err := fakeProvider{}.complete("hello there")
 	if err != nil {

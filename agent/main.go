@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -345,7 +346,7 @@ func runClaimCycle(c *client, cfg config, llm llmProvider) error {
 	if !found {
 		return completeJob(c, j.ID, "failed", nil, "message not found", 0)
 	}
-	reply, tokens, err := llm.complete(body)
+	reply, tokens, err := llm.complete(maskText(body))
 	if err != nil {
 		return completeJob(c, j.ID, "failed", nil, "llm: "+err.Error(), 0)
 	}
@@ -380,6 +381,43 @@ func main() {
 		}
 		time.Sleep(cfg.pollEvery)
 	}
+}
+
+// L-10: secret masking. Everything addressed to the LLM passes through
+// here first: emails, phone numbers, card numbers, API key/token shapes,
+// and password phrases are replaced with markers. Deliberately
+// conservative — unknown shapes pass through rather than corrupting text.
+var (
+	maskPassword   = regexp.MustCompile(`(?i)(password|passwd|pwd|비밀번호|비번)\s*[:=]\s*\S+`)
+	maskLabeledKey = regexp.MustCompile(`(?i)(api[_-]?key|api[_-]?secret|secret[_-]?key|access[_-]?token|auth[_-]?token|bearer[_-]?token|client[_-]?secret)\s*[:=]\s*[\w\-.~+/=]+|bearer\s+[\w\-.~+/=]+`)
+	maskKnownToken = regexp.MustCompile(`\b(cf-bot-[A-Za-z0-9-]+|cf-token-[A-Za-z0-9-.]+|cf-refresh-[A-Za-z0-9-]+|sk-[A-Za-z0-9]{8,}|rk-[A-Za-z0-9]{8,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]+)\b`)
+	maskEmail      = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+	maskCard       = regexp.MustCompile(`\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b`)
+	maskPhone      = regexp.MustCompile(`\(?\+?[\d][\d\s\-.()]{7,}[\d]`)
+)
+
+func digitCount(s string) int {
+	n := 0
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			n++
+		}
+	}
+	return n
+}
+
+func maskText(text string) string {
+	out := maskPassword.ReplaceAllString(text, "[PASSWORD]")
+	out = maskLabeledKey.ReplaceAllString(out, "[KEY]")
+	out = maskKnownToken.ReplaceAllString(out, "[TOKEN]")
+	out = maskEmail.ReplaceAllString(out, "[EMAIL]")
+	out = maskCard.ReplaceAllString(out, "[CARD]")
+	return maskPhone.ReplaceAllStringFunc(out, func(m string) string {
+		if digitCount(m) < 9 {
+			return m
+		}
+		return "[PHONE]"
+	})
 }
 
 func toSlice(v any) []any {
