@@ -18,6 +18,7 @@ const passkeyChallenges = new Map(); // challenge -> { userId, purpose, expiresA
 const recoveryChallenges = new Map(); // id -> { userId, codeHash, expiresAt, consumedAt } (no-DB fallback; D1 otherwise)
 const recoveryMailOutbox = []; // S1 test seam: mock/log driver deliveries { email, code, created_at }
 const verificationMailOutbox = []; // F1 test seam: verification codes { email, code, created_at }
+const smsOutbox = []; // F2 test seam: sms deliveries { phone, code, created_at }
 const passkeyCreds = new Map(); // credentialIdB64 -> { userId, jwk, counter, transports, name, createdAt }
 const conversations = new Map();
 const messages = new Map();
@@ -2179,25 +2180,45 @@ async function withCors(request, env, res) {
   return new Response(nullBody ? null : res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
-// S1: recovery-mail driver seam. Real drivers (Resend) plug in here once a
-// sending domain exists; until then only the mock/log test drivers deliver
-// (into recoveryMailOutbox) and anything else fails closed.
-async function sendRecoveryMail(env, email, code) {
+// F2: mail/SMS driver adapter. Only none (quiet off) and log (persisted
+// log + test outbox) exist; real sending (Resend etc.) is never connected.
+// In workerd the "file" is the worker log (dashboard/tail); tests observe
+// the same deliveries through the outbox seams.
+function resolveMailDriver(env) {
   const provider = env.RECOVERY_MAIL_PROVIDER;
-  if (provider === 'mock' || provider === 'log') {
-    recoveryMailOutbox.push({ email, code, created_at: Date.now() });
-    return;
-  }
-  throw new Error(`recovery mail provider not implemented: ${provider}`);
+  return (provider === 'mock' || provider === 'log') ? provider : 'none';
 }
-// F1: verification-mail seam, mirroring recovery until F2 unifies drivers.
+function resolveSmsDriver(env) {
+  const provider = env.SMS_PROVIDER;
+  return (provider === 'mock' || provider === 'log') ? provider : 'none';
+}
+// Deliver one code; returns false on none (caller decides quiet vs closed).
+function deliverCode(driver, outbox, entry) {
+  if (driver === 'none') return false;
+  if (driver === 'log') console.log(`[LUNO ${entry.channel}] purpose=${entry.purpose} to=${entry.email || entry.phone}`);
+  outbox.push({ ...entry, created_at: Date.now() });
+  return true;
+}
+// S1: recovery mail fails closed without a driver (501 at the route).
+async function sendRecoveryMail(env, email, code) {
+  if (!deliverCode(resolveMailDriver(env), recoveryMailOutbox, { channel: 'mail', purpose: 'recovery', email, code })) {
+    throw new Error(`recovery mail provider not implemented: ${env.RECOVERY_MAIL_PROVIDER}`);
+  }
+}
+// F1: verification mail. Callers pre-check the provider (quiet/auto paths),
+// so reaching here without one is a bug.
 function verificationProvider(env) {
-  const provider = env.RECOVERY_MAIL_PROVIDER;
-  return (provider === 'mock' || provider === 'log') ? provider : null;
+  return resolveMailDriver(env) === 'none' ? null : resolveMailDriver(env);
 }
 async function sendVerificationMail(env, email, code) {
-  if (!verificationProvider(env)) throw new Error('verification mail provider not configured');
-  verificationMailOutbox.push({ email, code, created_at: Date.now() });
+  if (!deliverCode(resolveMailDriver(env), verificationMailOutbox, { channel: 'mail', purpose: 'verify', email, code })) {
+    throw new Error('verification mail provider not configured');
+  }
+}
+async function sendSms(env, phone, code) {
+  if (!deliverCode(resolveSmsDriver(env), smsOutbox, { channel: 'sms', purpose: 'login', phone, code })) {
+    throw new Error('sms provider not configured');
+  }
 }
 function newEmailCode() {
   return String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
@@ -6037,11 +6058,12 @@ const workerCore = {
         const body = await request.json().catch(() => ({}));
         const phone = String(body.phone || '').trim().replace(/[^0-9+]/g, '');
         if (!phone || phone.length < 8) return bad('올바른 전화번호를 입력해주세요', 400);
-        // No SMS provider is integrated: fail closed unless an operator explicitly enables dev codes.
-        if (env.ALLOW_DEV_PHONE_CODE !== 'true') return json({ error: 'phone login unavailable: SMS provider not configured' }, 501);
+        // F2: codes travel through the SMS driver only — never in a response.
+        if (resolveSmsDriver(env) === 'none') return json({ error: 'phone login unavailable: SMS provider not configured' }, 501);
         const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
         phoneVerificationCodes.set(phone, { code, expires_at: Date.now() + 180000 });
-        return json({ status: 'sent', phone, expires_in: 180, dev_code: code });
+        await sendSms(env, phone, code);
+        return json({ status: 'sent', phone, expires_in: 180 });
       }
       if (p === 'auth/phone/verify' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
@@ -6767,7 +6789,7 @@ export class UserSocketHub {
 }
 
 // S1: test seam export (mock/log recovery-mail deliveries).
-export { recoveryMailOutbox, verificationMailOutbox };
+export { recoveryMailOutbox, verificationMailOutbox, smsOutbox };
 export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };
 export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };
 export default {

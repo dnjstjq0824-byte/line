@@ -90,7 +90,7 @@ fs.mkdirSync(workerOutDir, { recursive: true });
 // from the deployed copy. Tests import scripts/cf_worker.js (seams intact);
 // wrangler serves dist_worker/cf_worker.js (seams removed).
 const testSeams = [
-  'export { recoveryMailOutbox, verificationMailOutbox };',
+  'export { recoveryMailOutbox, verificationMailOutbox, smsOutbox };',
   'export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };',
   'export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };',
 ];

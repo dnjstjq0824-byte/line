@@ -42,6 +42,7 @@ async function isolate(extraEnv = {}, database = db) {
     body: body === null ? undefined : JSON.stringify(body)
   }), e);
   api.raw = (path, method = 'GET') => mod.default.fetch(new Request(`${BASE}${path}`, { method }), e);
+  api.mod = mod;
   return api;
 }
 async function signup(api, email, handle) {
@@ -312,10 +313,13 @@ test('SEC: phone login can no longer mint an admin (or any) session without a ve
   assert.ok([400, 404].includes(verify.status), `verify must fail, got ${verify.status}`);
   assert.ok(!(await verify.json()).access_token);
   assert.equal((await api('auth/phone/send-code', 'POST', { phone: '+821099998888' })).status, 501, 'no SMS provider -> fail closed');
-  const dev = await isolate({ ALLOW_DEV_PHONE_CODE: 'true' });
+  // F2: codes travel through the SMS driver only, never in a response.
+  const dev = await isolate({ SMS_PROVIDER: 'mock' });
   const sent = await (await dev('auth/phone/send-code', 'POST', { phone: '+821011112222' })).json();
-  assert.match(sent.dev_code, /^\d{6}$/);
-  assert.equal((await dev('auth/phone/verify', 'POST', { phone: '+821011112222', code: sent.dev_code })).status, 404, 'valid code but unregistered number');
+  assert.ok(!('dev_code' in sent), 'no code in the response');
+  const code = dev.mod.smsOutbox.find((m) => m.phone === '+821011112222').code;
+  assert.match(code, /^\d{6}$/);
+  assert.equal((await dev('auth/phone/verify', 'POST', { phone: '+821011112222', code })).status, 404, 'valid code but unregistered number');
 });
 
 test('LV-01 policy: password change keeps current session, revokes all others, survives redeploy', async () => {
