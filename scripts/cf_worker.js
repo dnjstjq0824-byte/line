@@ -82,6 +82,8 @@ const QUOTA_ROOMS_PER_DAY = 50;
 // T1: translation guards. Defaults live here and nowhere else.
 const TRANSLATE_MAX_CHARS = 5000;
 const TRANSLATE_PER_MINUTE = 60;
+const STT_MAX_B64 = 14_000_000;
+const STT_PER_MINUTE = 30;
 const TRANSLATE_CHARS_PER_DAY = 50000;
 
 // Unstamped placeholder for local runs and tests. scripts/build_cf.js never edits
@@ -1178,6 +1180,28 @@ function activeTranslateProvider(env) {
   if (!name) return null;
   if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
   return translateProviders.get(name) || null;
+}
+// F14: speech-to-text provider interface, mirroring T1. transcribe(env,
+// audioB64, mime, lang) resolves { text, lang, engine }. The fake provider
+// answers canned text and is selectable only when DEMO_MODE is on. Audio
+// bytes are never logged.
+const sttProviders = new Map();
+function registerSttProvider(name, provider) {
+  sttProviders.set(name, provider);
+}
+const sttProviderCalls = [];
+registerSttProvider('fake', {
+  languages: ['ko', 'en', 'ja', 'th'],
+  async transcribe(env, audioB64, mime, lang) {
+    sttProviderCalls.push({ bytes: audioB64.length, mime, lang });
+    return { text: `[${lang || 'auto'} transcript]`, lang: lang || 'auto', engine: 'fake' };
+  },
+});
+function activeSttProvider(env) {
+  const name = env && env.STT_PROVIDER;
+  if (!name) return null;
+  if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
+  return sttProviders.get(name) || null;
 }
 async function translateCacheGet(textHash, target) {
   const db = dbOf();
@@ -5893,8 +5917,27 @@ function entitled(u, feature) {
   // ==========================================
   // PHASE 3: Voice STT & Message Unsend Recall
   // ==========================================
+  if (p === 'ai/stt/languages' && method === 'GET') {
+    const provider = activeSttProvider(CURRENT_ENV);
+    if (!provider) return json({ configured: false, languages: [] });
+    return json({ configured: true, engine: CURRENT_ENV.STT_PROVIDER, languages: provider.languages || [] });
+  }
   if (p === 'ai/stt' && method === 'POST') {
-    return json({ error: 'Speech transcription requires a configured provider-backed API', code: 'STT_NOT_CONFIGURED' }, 503);
+    const provider = activeSttProvider(CURRENT_ENV);
+    if (!provider) return json({ error: 'Speech transcription requires a configured provider-backed API', code: 'STT_NOT_CONFIGURED' }, 503);
+    if (!await rateLimit('rl:stt:' + myId, STT_PER_MINUTE)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const rawBody = await request.text().catch(() => '');
+    if (rawBody.length > STT_MAX_B64 + 4096) return bad('오디오가 너무 깁니다', 413);
+    let b = {};
+    try { const v = JSON.parse(rawBody || '{}'); if (v && typeof v === 'object') b = v; } catch { b = {}; }
+    const audio = typeof b.audio_base64 === 'string' ? b.audio_base64 : '';
+    const mime = typeof b.mime_type === 'string' ? b.mime_type.toLowerCase() : '';
+    if (!audio || !/^[A-Za-z0-9+/=]+$/.test(audio)) return bad('오디오 데이터가 필요합니다');
+    if (!mime.startsWith('audio/')) return bad('오디오 파일만 인식할 수 있습니다');
+    if (audio.length > STT_MAX_B64) return bad('오디오가 너무 깁니다', 413);
+    const lang = typeof b.lang === 'string' ? b.lang.trim().toLowerCase().slice(0, 10) : 'auto';
+    const out = await provider.transcribe(CURRENT_ENV, audio, mime, lang);
+    return json({ text: out.text, lang: out.lang, engine: out.engine });
   }
 
   // ==========================================

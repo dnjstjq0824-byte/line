@@ -24,6 +24,7 @@ const STATIC = new Set([
   'NEWS_SAMPLE', 'GRANTABLE_ROLES', 'REACTIONS', 'PEER_USERS', 'READY_TABLES', 'DELETE_REASONS',
   'ACCOUNT_PLANS', // F13: frozen plan vocabulary (PLAN_GRANTS is a plain object, not a scanned store)
   'translateProviders', // T1: provider registry, populated once at module load
+  'sttProviders', // F14: STT provider registry, populated once at module load
   'pushProviders', // N1-L: push provider registry, populated once at module load
 ]);
 const EPHEMERAL = new Set([
@@ -31,6 +32,7 @@ const EPHEMERAL = new Set([
   'qrChallenges', 'phoneVerificationCodes', 'passkeyChallenges',
   'recoveryChallenges', 'recoveryMailOutbox', 'verificationMailOutbox', 'smsOutbox',
   'translateProviderCalls', // T1: per-isolate provider-call probe for tests
+  'sttProviderCalls', // F14: per-isolate provider-call probe for tests
 ]);
 const CACHE = new Set([
   'users', 'usersById', 'sessions', 'revokedTokens', 'wsTickets',
