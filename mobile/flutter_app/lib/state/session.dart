@@ -1190,6 +1190,49 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  // F9: location + contact messages. Coordinates are validated by the
+  // server; contacts share a friend's id/handle/display name.
+  Future<void> sendLocation(
+      {required double lat, required double lng, String label = ''}) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      final x = await api.call('/api/v1/conversations/$selectedId/messages',
+          method: 'POST', data: {
+        'client_id': uuid(),
+        'kind': 'location',
+        'body': label.trim(),
+        'metadata': {'lat': lat, 'lng': lng, 'label': label.trim()},
+      });
+      if (!messages.any((m) => m['id'] == x['message']['id'])) {
+        messages.add(x['message']);
+      }
+      notice = '위치를 공유했습니다.';
+      await refreshChatList();
+    });
+  }
+
+  Future<void> sendContact(Map<String, dynamic> friend) {
+    if (selectedId.isEmpty) return Future.value();
+    return run(() async {
+      final x = await api.call('/api/v1/conversations/$selectedId/messages',
+          method: 'POST', data: {
+        'client_id': uuid(),
+        'kind': 'contact',
+        'body': '${friend['display_name'] ?? ''}',
+        'metadata': {
+          'user_id': '${friend['id']}',
+          'handle': '${friend['handle'] ?? ''}',
+          'display_name': '${friend['display_name'] ?? ''}',
+        },
+      });
+      if (!messages.any((m) => m['id'] == x['message']['id'])) {
+        messages.add(x['message']);
+      }
+      notice = '연락처를 공유했습니다.';
+      await refreshChatList();
+    });
+  }
+
   // T1: load the server's translation language list once. Silent on any
   // failure: translating must degrade to the "preparing" notice, never crash.
   Future<void> ensureTranslateLanguages() async {

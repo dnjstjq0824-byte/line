@@ -4269,6 +4269,18 @@ async function fetchLinkPreview(target) {
       return json({ ...decorated, message: decorated, duplicate: false }, 201);
     }
   }
+// F9: unsend removes the attachment bytes with the metadata rows so an R2
+// object never outlives its message (account purge covers the rest).
+async function deleteAttachmentEverywhere(attId) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema().catch(() => {});
+  const meta = await db.prepare('SELECT object_key FROM attachments WHERE id = ?').bind(String(attId)).first().catch(() => null);
+  const bucket = mediaBucketOf();
+  if (meta && meta.object_key && bucket) await bucket.delete(meta.object_key).catch(() => {});
+  await db.prepare('DELETE FROM attachments WHERE id = ?').bind(String(attId)).run().catch(() => null);
+  await db.prepare('DELETE FROM luno_attachments WHERE id = ?').bind(String(attId)).run().catch(() => null);
+}
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)$/))) {
     const cid = resolveConversationId(m[1], myId);
     await hydrateConversation(cid);
@@ -4289,6 +4301,7 @@ async function fetchLinkPreview(target) {
     }
     if (method === 'DELETE') {
       if (Date.now() - Date.parse(msg.created_at) > 24 * 3600 * 1000) return bad('24시간이 지난 메시지는 전송 취소할 수 없습니다');
+      if (msg.metadata && msg.metadata.attachment_id) await deleteAttachmentEverywhere(msg.metadata.attachment_id);
       msg.unsent = true;
       msg.body = '';
       msg.metadata = undefined;

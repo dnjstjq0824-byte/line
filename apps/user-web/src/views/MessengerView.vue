@@ -1865,7 +1865,32 @@ async function uploadSelectedFile(event: Event) {
   try { await wrap(() => sendAttachmentFile(file, conversation, token.value)) } finally { uploading.value = false }
 }
 
+// F9: photos shrink to 1600px before upload (GIF keeps animation).
+async function shrinkPhotoForUpload(file: File): Promise<File> {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') return file
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
+      if (scale >= 1) return file
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) return file
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      if (!blob) return file
+      return new File([blob], file.name.replace(/\.[a-z0-9]+$/i, '') + '.jpg', { type: 'image/jpeg' })
+    } finally {
+      bitmap.close()
+    }
+  } catch {
+    return file
+  }
+}
 async function sendAttachmentFile(file: File, conversation: string, sessionToken: string, voiceDurationSec?: number) {
+    if (voiceDurationSec === undefined) file = await shrinkPhotoForUpload(file)
     if (file.size === 0 || file.size > 512 * 1024) throw new Error(t('attachment_size_limit'))
     const bytes = new Uint8Array(await file.arrayBuffer())
     let binary = ''
@@ -1875,6 +1900,7 @@ async function sendAttachmentFile(file: File, conversation: string, sessionToken
     const kind = voiceDurationSec !== undefined ? 'voice' : file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'file'
     if (sessionToken !== token.value) return
     const att = await request<{ id: string; original_name: string }>('/api/v1/attachments', sessionToken, 'POST', {
+      conversation_id: conversation,
       original_name: file.name,
       mime_type: file.type || 'application/octet-stream',
       size_bytes: file.size,

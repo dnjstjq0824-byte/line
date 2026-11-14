@@ -454,6 +454,88 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
   }
 }
 
+// F9: location message card. Coordinates + label, display only.
+class _LocationCard extends StatelessWidget {
+  final dynamic meta;
+  final Color ink;
+  final Color faint;
+  const _LocationCard(
+      {required this.meta, required this.ink, required this.faint});
+
+  @override
+  Widget build(BuildContext context) {
+    final lat = meta is Map ? '${meta['lat'] ?? ''}' : '';
+    final lng = meta is Map ? '${meta['lng'] ?? ''}' : '';
+    final label =
+        meta is Map ? '${meta['label'] ?? ''}' : '';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.location_on_outlined, size: 28, color: ink),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label.isEmpty ? '위치 공유' : label,
+                  style: TextStyle(
+                      color: ink,
+                      fontSize: HarborType.small,
+                      fontWeight: FontWeight.w700)),
+              Text('$lat, $lng',
+                  style: TextStyle(
+                      color: faint, fontSize: HarborType.micro)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// F9: contact message card. Shared friend id/handle/name, display only.
+class _ContactCard extends StatelessWidget {
+  final dynamic meta;
+  final Color ink;
+  final Color faint;
+  const _ContactCard(
+      {required this.meta, required this.ink, required this.faint});
+
+  @override
+  Widget build(BuildContext context) {
+    final name =
+        meta is Map ? '${meta['display_name'] ?? ''}' : '';
+    final handle = meta is Map ? '${meta['handle'] ?? ''}' : '';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(
+          backgroundColor: faint.withValues(alpha: 0.3),
+          child: Text(name.isEmpty ? '?' : name.characters.first,
+              style: TextStyle(color: ink)),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name.isEmpty ? '연락처' : name,
+                  style: TextStyle(
+                      color: ink,
+                      fontSize: HarborType.small,
+                      fontWeight: FontWeight.w700)),
+              if (handle.isNotEmpty)
+                Text('@$handle',
+                    style: TextStyle(
+                        color: faint, fontSize: HarborType.micro)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _DateDivider extends StatelessWidget {
   final dynamic iso;
   const _DateDivider({required this.iso});
@@ -604,6 +686,10 @@ class _SignalBubble extends StatelessWidget {
                     label: Text('저장',
                         style: TextStyle(color: ink, fontSize: HarborType.small)),
                   ),
+                if (m['kind'] == 'location')
+                  _LocationCard(meta: m['metadata'], ink: ink, faint: faint),
+                if (m['kind'] == 'contact')
+                  _ContactCard(meta: m['metadata'], ink: ink, faint: faint),
                 // L-03: bot proposal/decision/report tag above the standard body.
                 if (m['kind'] == 'proposal' || m['kind'] == 'decision' || m['kind'] == 'report')
                   Padding(
@@ -1195,6 +1281,115 @@ Future<void> _forwardRoomSheet(BuildContext context,
   );
 }
 
+// F9: location share dialog. Coordinates are typed (no location plugin),
+// validated here and again by the server.
+Future<void> _shareLocationDialog(BuildContext context) async {
+  final session = SessionScope.of(context, listen: false);
+  final lat = TextEditingController();
+  final lng = TextEditingController();
+  final label = TextEditingController();
+  bool valid() {
+    final a = double.tryParse(lat.text.trim());
+    final o = double.tryParse(lng.text.trim());
+    return a != null && o != null && a.abs() <= 90 && o.abs() <= 180;
+  }
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialog) => StatefulBuilder(
+      builder: (dialog, setDialog) => AlertDialog(
+        title: const Text('위치 공유'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: lat,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setDialog(() {}),
+              decoration: const InputDecoration(
+                  labelText: '위도 (-90 ~ 90)', isDense: true),
+            ),
+            TextField(
+              controller: lng,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setDialog(() {}),
+              decoration: const InputDecoration(
+                  labelText: '경도 (-180 ~ 180)', isDense: true),
+            ),
+            TextField(
+              controller: label,
+              onChanged: (_) => setDialog(() {}),
+              decoration: const InputDecoration(
+                  labelText: '장소 이름 (선택)', isDense: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialog).pop(),
+              child: const Text('취소')),
+          FilledButton(
+            onPressed: !valid()
+                ? null
+                : () {
+                    Navigator.of(dialog).pop();
+                    session.sendLocation(
+                      lat: double.parse(lat.text.trim()),
+                      lng: double.parse(lng.text.trim()),
+                      label: label.text,
+                    );
+                  },
+            child: const Text('공유'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// F9: contact share sheet. Friends only; the card carries id/handle/name.
+Future<void> _shareContactSheet(BuildContext context) async {
+  final session = SessionScope.of(context, listen: false);
+  await showModalBottomSheet<void>(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('연락처 공유',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                if (session.friends.isEmpty)
+                  const ListTile(title: Text('공유할 친구가 없습니다.')),
+                for (final f in session.friends)
+                  if (f is Map)
+                    ListTile(
+                      dense: true,
+                      title: Text('${f['display_name'] ?? ''}'),
+                      subtitle: Text('@${f['handle'] ?? ''}'),
+                      onTap: () {
+                        Navigator.of(sheet).pop();
+                        session.sendContact(
+                            Map<String, dynamic>.from(f));
+                      },
+                    ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 // L-05: approval box bottom sheet. Lists the room's proposals with
 // decision states; privileged members decide inline.
 Future<void> approvalsSheet(BuildContext context, String conversationId) async {
@@ -1514,6 +1709,22 @@ class _Composer extends StatelessWidget {
               icon: Icon(Icons.attach_file,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onPressed: session.busy ? null : () => session.sendFile(),
+            ),
+            PopupMenuButton<String>(
+              tooltip: '더보기',
+              icon: Icon(Icons.add_circle_outline,
+                  color: dark ? HarborDark.harbor : HarborLight.harbor),
+              onSelected: (v) {
+                if (v == 'location') {
+                  _shareLocationDialog(context);
+                } else if (v == 'contact') {
+                  _shareContactSheet(context);
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'location', child: Text('위치 공유')),
+                PopupMenuItem(value: 'contact', child: Text('연락처 공유')),
+              ],
             ),
             Expanded(
               child: TextField(
