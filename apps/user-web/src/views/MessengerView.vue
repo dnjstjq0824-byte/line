@@ -486,7 +486,7 @@ async function submitPasswordChange() {
     return
   }
   try {
-    await api('/api/v1/auth/password', 'PATCH', {
+    await api('/api/v1/auth/change-password', 'POST', {
       current_password: currentPasswordInput.value,
       new_password: newPasswordInput.value
     })

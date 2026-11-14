@@ -248,7 +248,8 @@ const LUNO_SCHEMA_BASE = [
     PRIMARY KEY (message_id, user_id, emoji))`,
   `CREATE TABLE IF NOT EXISTS friends (
     user_id TEXT NOT NULL, friend_id TEXT NOT NULL, status TEXT DEFAULT 'accepted',
-    is_favorite INTEGER DEFAULT 0, created_at TEXT NOT NULL,
+    is_favorite INTEGER DEFAULT 0, is_hidden INTEGER DEFAULT 0, nickname TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
     PRIMARY KEY (user_id, friend_id))`,
   `CREATE TABLE IF NOT EXISTS wallets (
     user_id TEXT PRIMARY KEY, balance INTEGER DEFAULT 0, updated_at TEXT NOT NULL)`,
@@ -418,6 +419,8 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'created_at', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'updated_at', "TEXT NOT NULL DEFAULT ''"],
   ['friends', 'is_favorite', 'INTEGER DEFAULT 0'],
+  ['friends', 'is_hidden', 'INTEGER DEFAULT 0'],
+  ['friends', 'nickname', "TEXT DEFAULT ''"],
   ['friends', 'status', "TEXT DEFAULT 'accepted'"],
   ['friends', 'created_at', 'TEXT'],
   ['conversations', 'owner_id', "TEXT DEFAULT ''"],
@@ -3334,16 +3337,8 @@ async function extended(p, request, url, me, token) {
     await persistAudit(myId, self ? 'session.revoke.self' : 'session.revoke.remote', m[1], { via: 'devices' });
     return json({ status: 'revoked', session_id: m[1], self });
   }
-  if (p === 'me/password' && method === 'POST') {
-    const b = await readJson(request);
-    if (!(await checkPassword(me, b.old_password))) return bad('현재 비밀번호가 일치하지 않습니다', 403);
-    if (typeof b.new_password !== 'string' || b.new_password.length < 10) return bad('새 비밀번호는 10자 이상이어야 합니다');
-    await setPassword(me, b.new_password);
-    await persistPassword(me);
-    await revokeOtherSessions(myId, sessions.get(token)?.device_id, myId);
-    await persistAudit(myId, 'password.change', myId, { other_sessions: 'revoked' });
-    return json({ status: 'changed', other_sessions_revoked: true });
-  }
+  // F0: password change lives only at POST auth/change-password (same
+  // contract, same audit). The duplicate me/password route is removed.
   if (p === 'me/qr' && method === 'GET') return json({ code: `LUNO-FRIEND:${me.handle}`, handle: me.handle });
   if (p === 'me/stickers' && method === 'GET') {
     const owned = packsOf(myId);
@@ -3410,6 +3405,13 @@ async function extended(p, request, url, me, token) {
         await ensureSchema();
         if (typeof b.favorite === 'boolean') {
           await dbOf().prepare('UPDATE friends SET is_favorite = ? WHERE user_id = ? AND friend_id = ?').bind(b.favorite ? 1 : 0, myId, fid).run();
+        }
+        // F0: hidden and nickname are durable, not memory-only.
+        if (typeof b.hidden === 'boolean') {
+          await dbOf().prepare('UPDATE friends SET is_hidden = ? WHERE user_id = ? AND friend_id = ?').bind(b.hidden ? 1 : 0, myId, fid).run();
+        }
+        if (b.nickname !== undefined) {
+          await dbOf().prepare('UPDATE friends SET nickname = ? WHERE user_id = ? AND friend_id = ?').bind(clip(b.nickname, 30), myId, fid).run();
         }
         if (b.blocked === true) {
           await dbOf().prepare('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)').bind(myId, fid, now()).run();
@@ -5327,7 +5329,7 @@ async function hydrateSocialGraph(userId) {
   if (!rolesTableAbsent) {
     try {
       const r = await db.prepare(
-        `SELECT f.is_favorite AS fav, u.*, gr.role AS granted_role FROM friends f
+        `SELECT f.is_favorite AS fav, f.is_hidden AS hid, f.nickname AS nick, u.*, gr.role AS granted_role FROM friends f
          JOIN users u ON u.id = f.friend_id LEFT JOIN luno_user_roles gr ON gr.user_id = u.id
          WHERE f.user_id = ?`).bind(userId).all();
       rows = r.results || [];
@@ -5337,13 +5339,15 @@ async function hydrateSocialGraph(userId) {
   }
   if (!rows) {
     const r = await db.prepare(
-      `SELECT f.is_favorite AS fav, u.* FROM friends f
+      `SELECT f.is_favorite AS fav, f.is_hidden AS hid, f.nickname AS nick, u.* FROM friends f
        JOIN users u ON u.id = f.friend_id WHERE f.user_id = ?`).bind(userId).all();
     rows = r.results || [];
   }
   for (const row of rows) {
     friendships.set(`${userId}:${row.id}`, true);
     if (Number(row.fav)) fMeta(userId, row.id).favorite = true;
+    if (Number(row.hid)) fMeta(userId, row.id).hidden = true;
+    if (row.nick) fMeta(userId, row.id).nickname = row.nick;
     if (!usersById.has(row.id)) cacheUserRow(row, grantedRole(row.granted_role));
   }
   const blocks = await db.prepare('SELECT blocked_id FROM blocks WHERE blocker_id = ?').bind(userId).all().catch(() => null);
