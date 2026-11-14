@@ -196,6 +196,90 @@ test('L-17: allowlist CRUD is admin-only and validated', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- L-06: scope tokens (built before L-02: routing and queue depend on it) ----------
+
+async function mintBotToken(api, adminToken, botId, extra = {}) {
+  const res = await api(`admin/bots/${botId}/tokens`, 'POST', { rooms: [], ops: ['read'], ...extra }, adminToken);
+  assert.equal(res.status, 201, `mint: ${res.status}`);
+  return res.json();
+}
+
+test('L-06: mint validates bot, rooms, ops and ttl', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const user = await registerAndLogin(admin.api, 'l06-user@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Mint Bot', handle: 'mint_bot' }, admin.token)).json();
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens`, 'POST', { rooms: ['r'], ops: ['read'] })).status, 401, 'no token');
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens`, 'POST', { rooms: ['r'], ops: ['read'] }, user.token)).status, 403, 'user forbidden');
+    assert.equal((await admin.api('admin/bots/no-such-bot/tokens', 'POST', { rooms: ['r'], ops: ['read'] }, admin.token)).status, 404, 'unknown bot');
+    assert.equal((await admin.api(`admin/bots/${user.id}/tokens`, 'POST', { rooms: ['r'], ops: ['read'] }, admin.token)).status, 400, 'humans take no bot tokens');
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens`, 'POST', { rooms: [], ops: ['read'] }, admin.token)).status, 400, 'rooms required');
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens`, 'POST', { rooms: ['r'], ops: [] }, admin.token)).status, 400, 'ops required');
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens`, 'POST', { rooms: ['r'], ops: ['admin'] }, admin.token)).status, 400, 'unknown op');
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens`, 'POST', { rooms: ['r'], ops: ['read'], ttl_sec: 10 }, admin.token)).status, 400, 'ttl too small');
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens`, 'POST', { rooms: ['r'], ops: ['read'], ttl_sec: 99999999 }, admin.token)).status, 400, 'ttl too big');
+    const minted = await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read', 'post'] });
+    assert.match(minted.token, /^cf-bot-/);
+    assert.ok(minted.expires_at > Date.now(), 'future expiry');
+    assert.ok(!('token_hash' in minted), 'no hash in response');
+  } finally { db.raw.close(); }
+});
+
+test('L-06: scope gates rooms and ops independently', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const a = await registerAndLogin(admin.api, 'l06-a@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Scope Bot', handle: 'scope_bot' }, admin.token)).json();
+    const roomA = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'A', member_ids: [bot.id] }, a.token)).json();
+    const roomB = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'B', member_ids: [bot.id] }, a.token)).json();
+    const b = await registerAndLogin(admin.api, 'l06-b@luno-test.local');
+    const roomC = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'C', member_ids: [b.id] }, a.token)).json();
+    await admin.api(`conversations/${roomA.id}/messages`, 'POST', { body: 'hello' }, a.token);
+    const readTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [roomA.id, roomC.id], ops: ['read'] })).token;
+    const postTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [roomA.id], ops: ['post'] })).token;
+    assert.equal((await admin.api(`conversations/${roomA.id}/messages`, 'GET', null, readTok)).status, 200, 'read in scope');
+    assert.equal((await admin.api(`conversations/${roomB.id}/messages`, 'GET', null, readTok)).status, 403, 'read out of scope');
+    assert.equal((await admin.api(`conversations/${roomC.id}/messages`, 'GET', null, readTok)).status, 404, 'membership still applies to scoped rooms');
+    assert.equal((await admin.api(`conversations/${roomA.id}/messages`, 'POST', { body: 'x' }, readTok)).status, 403, 'post without op');
+    assert.equal((await admin.api(`conversations/${roomA.id}/messages`, 'POST', { body: 'bot here' }, postTok)).status, 201, 'post in scope');
+    assert.equal((await admin.api(`conversations/${roomA.id}/messages`, 'GET', null, postTok)).status, 403, 'read without op');
+    assert.equal((await admin.api(`conversations/${roomB.id}/messages`, 'POST', { body: 'x' }, postTok)).status, 403, 'post out of scope');
+    assert.equal((await admin.api('conversations', 'GET', null, readTok)).status, 403, 'no room listing for bots');
+    assert.equal((await admin.api('me', 'GET', null, readTok)).status, 403, 'no profile for bots');
+  } finally { db.raw.close(); }
+});
+
+test('L-06: revoke and expiry take effect immediately', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const a = await registerAndLogin(admin.api, 'l06-c@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Short Bot', handle: 'short_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'C', member_ids: [bot.id] }, a.token)).json();
+    const t1 = await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['read', 'post'] });
+    assert.equal((await admin.api(`conversations/${room.id}/messages`, 'GET', null, t1.token)).status, 200);
+    assert.equal((await admin.api(`admin/bots/${bot.id}/tokens/${t1.id}`, 'DELETE', null, admin.token)).status, 200);
+    assert.equal((await admin.api(`conversations/${room.id}/messages`, 'GET', null, t1.token)).status, 401, 'revoked immediately');
+    const t2 = await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['read'] });
+    db.raw.exec(`UPDATE luno_bot_tokens SET expires_at = 1 WHERE id = '${t2.id}'`);
+    assert.equal((await admin.api(`conversations/${room.id}/messages`, 'GET', null, t2.token)).status, 401, 'expired rejected');
+  } finally { db.raw.close(); }
+});
+
+test('L-06: bot tokens stop at non-message APIs', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    await registerAndLogin(admin.api, 'l06-d@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Narrow Bot', handle: 'narrow_bot' }, admin.token)).json();
+    const tok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-x'], ops: ['read', 'post', 'propose'] })).token;
+    assert.equal((await admin.api('translate', 'POST', { text: 'hi', target_lang: 'en' }, tok)).status, 403);
+    assert.equal((await admin.api('admin/stats', 'GET', null, tok)).status, 403);
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');

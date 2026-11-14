@@ -371,7 +371,14 @@ const LUNO_SCHEMA_PHASE1 = [
   // L-17: rooms and users where LLM bots may act. Empty by default.
   `CREATE TABLE IF NOT EXISTS luno_bot_allowlist (
     kind TEXT NOT NULL, ref_id TEXT NOT NULL, created_at TEXT NOT NULL,
-    PRIMARY KEY (kind, ref_id))`
+    PRIMARY KEY (kind, ref_id))`,
+  // L-06: scoped bot tokens. Only the hash is stored; the secret itself is
+  // shown once at mint time. Rooms/ops are JSON arrays.
+  `CREATE TABLE IF NOT EXISTS luno_bot_tokens (
+    id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, bot_id TEXT NOT NULL,
+    rooms_json TEXT NOT NULL, ops_json TEXT NOT NULL, expires_at INTEGER NOT NULL,
+    revoked INTEGER DEFAULT 0, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_bot_tokens_hash ON luno_bot_tokens(token_hash)`
 ];
 // Additive columns for tables that predate Phase 1. Applied with a
 // PRAGMA guard because SQLite has no idempotent ADD COLUMN.
@@ -2325,6 +2332,7 @@ async function getAuthUser(request) {
   if (!auth.startsWith('Bearer ')) return null;
   const token = auth.slice(7).trim();
   if (!token || revokedTokens.has(token)) return null;
+  if (token.startsWith('cf-bot-')) return authBotToken(token);
   let session = sessions.get(token);
   let grantedRoleFromSession = 'user';
   const db = dbOf();
@@ -2371,6 +2379,36 @@ async function getAuthUser(request) {
   if (db && isEnvAdmin(userId)) user.role = 'admin';
   AUTH_CTX.set(request, { token, session_id: session.device_id });
   return user;
+}
+
+// L-06: scoped bot tokens. Verified against D1 on every request (no cache)
+// so revoke and expiry bite immediately. Memory-only isolates fail closed.
+async function authBotToken(token) {
+  const db = dbOf();
+  if (!db) return null;
+  await ensureSchema();
+  const row = await db.prepare('SELECT id, bot_id, rooms_json, ops_json, expires_at, revoked FROM luno_bot_tokens WHERE token_hash = ?').bind(await sha256Hex(token)).first().catch(() => null);
+  if (!row || row.revoked || Number(row.expires_at) <= Date.now()) return null;
+  const bot = usersById.get(row.bot_id) || await loadUserFromD1(row.bot_id, 'user');
+  if (!bot || userKind(bot) !== 'bot') return null;
+  const standing = await db.prepare('SELECT state FROM users WHERE id = ?').bind(row.bot_id).first().catch(() => null);
+  const state = standing?.state || bot.state || 'active';
+  if (state === 'suspended' || state === 'deleted' || await isBanned(row.bot_id)) return null;
+  let rooms = [], ops = [];
+  try { rooms = JSON.parse(row.rooms_json); ops = JSON.parse(row.ops_json); } catch { return null; }
+  if (!Array.isArray(rooms) || !Array.isArray(ops)) return null;
+  return { ...bot, role: 'user', kind: 'bot', botScope: { id: row.id, rooms, ops } };
+}
+function botScopeAllows(me, op, roomId) {
+  const s = me && me.botScope;
+  return !!s && s.ops.includes(op) && s.rooms.includes(roomId);
+}
+// Routes a bot token may touch at all; per-room/op scope is checked inside
+// each handler. Everything else answers 403 for bots.
+function isBotApiRoute(p, method) {
+  if (/^conversations\/[\w-]+\/messages$/.test(p)) return method === 'GET' || method === 'POST';
+  if (method === 'GET' && /^conversations\/[\w-]+$/.test(p)) return true;
+  return false;
 }
 
 // N1-L: notification funnel. notify(env, userIds, event) filters out the
@@ -3037,6 +3075,9 @@ async function extended(p, request, url, me, token) {
   const method = request.method;
   let m;
   const myId = me.id;
+  // L-06: bot scope tokens touch only the bot routes below; every other
+  // authenticated route answers 403 for bots.
+  if (userKind(me) === 'bot' && !isBotApiRoute(p, method)) return json({ error: 'forbidden' }, 403);
   ensureKeepMemo(myId);
   if (isDemoUser(CURRENT_ENV, myId)) ensureDemoConversationsForUser(myId);
   await hydrateHidden(myId);
@@ -3427,7 +3468,10 @@ async function extended(p, request, url, me, token) {
   if ((m = p.match(/^conversations\/([\w-]+)$/))) {
     const conv = conversations.get(resolveConversationId(m[1], myId));
     if (!conv) return bad('대화방을 찾을 수 없습니다', 404);
-    if (method === 'GET') return json(chatSummary(conv, myId));
+    if (method === 'GET') {
+      if (userKind(me) === 'bot' && !botScopeAllows(me, 'read', conv.id)) return json({ error: 'forbidden' }, 403);
+      return json(chatSummary(conv, myId));
+    }
     if (method === 'PATCH') {
       const b = await readJson(request);
       if (b.title !== undefined) {
@@ -3501,6 +3545,7 @@ async function extended(p, request, url, me, token) {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
     if (method === 'GET') {
+      if (userKind(me) === 'bot' && !botScopeAllows(me, 'read', cid)) return json({ error: 'forbidden' }, 403);
       await hydrateConversation(cid);
       await hydrateCursors(myId);
       const before = intIn(url.searchParams.get('before_sequence') || 0, 0, 1e9) || 0;
@@ -3521,6 +3566,7 @@ async function extended(p, request, url, me, token) {
       return json({ messages: list.slice(-limit).map(x => decorateMessage(x, myId, cid)), has_more: list.length > limit });
     }
     if (method === 'POST') {
+      if (userKind(me) === 'bot' && !botScopeAllows(me, 'post', cid)) return json({ error: 'forbidden' }, 403);
       if (conv.official || conv.kind === 'official') return bad('공식계정 방은 읽기 전용입니다');
       if (!await rateLimit('rl:msg:' + myId, 300)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
       const b = await readJson(request);
@@ -4587,6 +4633,36 @@ async function extended(p, request, url, me, token) {
       usersById.set(bot.id, bot);
       return json({ id: bot.id, email: bot.email, handle: bot.handle, display_name: bot.display_name, kind: 'bot' }, 201);
     }
+    // L-06: scoped bot token mint/revoke. The guard above already returned 403.
+    if ((m = p.match(/^admin\/bots\/([\w-]+)\/tokens$/)) && method === 'POST') {
+      const db = dbOf();
+      if (!db) return json({ error: 'bot tokens require a configured database' }, 501);
+      const bot = usersById.get(m[1]) || await loadUserFromD1(m[1], 'user');
+      if (!bot) return json({ error: 'bot not found' }, 404);
+      if (userKind(bot) !== 'bot') return json({ error: 'bot tokens are issued to bots only' }, 400);
+      const b = await readJson(request);
+      const rooms = Array.isArray(b.rooms) ? b.rooms.map(r => clip(String(r || ''), 128)).filter(Boolean) : [];
+      const ops = Array.isArray(b.ops) ? [...new Set(b.ops.filter(o => o === 'read' || o === 'post' || o === 'propose'))] : [];
+      if (!rooms.length) return bad('at least one room id is required', 400);
+      if (!ops.length) return bad('at least one op (read, post, propose) is required', 400);
+      const ttl = b.ttl_sec === undefined ? 86400 : Number(b.ttl_sec);
+      if (!Number.isInteger(ttl) || ttl < 60 || ttl > 2592000) return bad('ttl_sec must be 60..2592000', 400);
+      await ensureSchema();
+      const id = uid();
+      const token = `cf-bot-${crypto.randomUUID()}`;
+      const expiresAt = Date.now() + ttl * 1000;
+      await db.prepare('INSERT INTO luno_bot_tokens (id, token_hash, bot_id, rooms_json, ops_json, expires_at, revoked, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, datetime(\'now\'))')
+        .bind(id, await sha256Hex(token), bot.id, JSON.stringify(rooms), JSON.stringify(ops), expiresAt).run();
+      return json({ id, token, bot_id: bot.id, rooms, ops, expires_at: expiresAt }, 201);
+    }
+    if ((m = p.match(/^admin\/bots\/([\w-]+)\/tokens\/([\w-]+)$/)) && method === 'DELETE') {
+      const db = dbOf();
+      if (!db) return json({ error: 'bot tokens require a configured database' }, 501);
+      await ensureSchema();
+      const done = await db.prepare('UPDATE luno_bot_tokens SET revoked = 1 WHERE id = ? AND bot_id = ?').bind(m[2], m[1]).run().catch(() => null);
+      if (!done || !done.meta || Number(done.meta.changes) < 1) return json({ error: 'token not found' }, 404);
+      return json({ status: 'revoked', id: m[2] }, 200);
+    }
     // L-17: allowlist management. The guard above already returned 403.
     if (p === 'admin/llm/allowlist' && method === 'GET') {
       const db = dbOf();
@@ -5169,6 +5245,7 @@ const workerCore = {
     if (url.pathname === '/api/v1/channel/slot' && request.method === 'GET') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
+      if (userKind(auth) === 'bot') return json({ error: 'forbidden' }, 403);
       const now = new Date().toISOString();
       let active = null;
       try {
@@ -5183,6 +5260,7 @@ const workerCore = {
     if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
+      if (userKind(auth) === 'bot') return json({ error: 'forbidden' }, 403);
       const b = await request.json().catch(() => ({}));
       const text = typeof b.text === 'string' ? b.text : '';
       const target = typeof b.target_lang === 'string' ? b.target_lang.trim().toLowerCase() : '';
@@ -5204,6 +5282,7 @@ const workerCore = {
     if (url.pathname === '/api/v1/translate/languages' && request.method === 'GET') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
+      if (userKind(auth) === 'bot') return json({ error: 'forbidden' }, 403);
       const provider = activeTranslateProvider(env);
       if (!provider) return json({ configured: false, languages: [] });
       return json({ configured: true, engine: env.TRANSLATE_PROVIDER, languages: provider.languages || [] });
@@ -5670,6 +5749,7 @@ const workerCore = {
       if (p === 'auth/qr/approve' && request.method === 'POST') {
         const authUser = await getAuthUser(request);
         if (!authUser) return json({ error: 'unauthorized' }, 401);
+        if (userKind(authUser) === 'bot') return json({ error: 'forbidden' }, 403);
         if (!await rateLimit('rl:qrappr:' + authUser.id, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const body = await request.json().catch(() => ({}));
         const c = await qrGetChallenge(body.challenge_id);
