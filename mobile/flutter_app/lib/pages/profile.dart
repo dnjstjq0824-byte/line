@@ -60,7 +60,7 @@ class ProfilePage extends StatelessWidget {
                       child: Text('프로필',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              fontSize: 17, fontWeight: FontWeight.w700)),
+                              fontSize: HarborType.title, fontWeight: FontWeight.w700)),
                     ),
                     _CircleButton(
                         icon: Icons.close,
@@ -330,7 +330,7 @@ class _Row extends StatelessWidget {
               child: value.isEmpty
                   ? Text(label,
                       style: TextStyle(
-                          fontSize: 17,
+                          fontSize: HarborType.title,
                           fontWeight: FontWeight.w600,
                           color: ink))
                   : Column(
@@ -397,7 +397,7 @@ class _ToggleRow extends StatelessWidget {
               children: [
                 Text(label,
                     style: TextStyle(
-                        fontSize: 17,
+                        fontSize: HarborType.title,
                         fontWeight: FontWeight.w600,
                         color: ink)),
                 const SizedBox(height: 4),
@@ -471,7 +471,7 @@ Future<void> _qrSheet(BuildContext context) async {
         children: [
           const Text('내 QR 코드',
               style:
-                  TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  TextStyle(fontSize: HarborType.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           Text('@${session.selfHandle}',
               style: Theme.of(context).textTheme.bodySmall),
@@ -479,7 +479,7 @@ Future<void> _qrSheet(BuildContext context) async {
           QrImageView(data: payload, size: 200),
           const SizedBox(height: 8),
           const Text('카메라로 스캔하면 친구로 추가할 수 있습니다.',
-              style: TextStyle(fontSize: 12, color: Colors.grey)),
+              style: TextStyle(fontSize: HarborType.small, color: Colors.grey)),
         ],
       ),
     ),

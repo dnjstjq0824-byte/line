@@ -25,30 +25,34 @@ class AppsPage extends StatelessWidget {
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
               children: [
+                // UX4: the directory never lists itself.
                 for (final d in LunoNav.secondary)
-                  Card(
-                    color: dark ? HarborDark.surface : Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(HarborRadius.card),
-                      side: BorderSide(
-                          color:
-                              dark ? HarborDark.channel : HarborLight.channel),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(HarborRadius.card),
-                      onTap: () => context.go(d.route),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(d.icon, size: 26),
-                          const SizedBox(height: 6),
-                          Text(d.label,
-                              style: const TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w600)),
-                        ],
+                  if (d.route != '/apps')
+                    Card(
+                      color: dark ? HarborDark.surface : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(HarborRadius.card),
+                        side: BorderSide(
+                            color: dark
+                                ? HarborDark.channel
+                                : HarborLight.channel),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(HarborRadius.card),
+                        onTap: () => context.go(d.route),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(d.icon, size: 26),
+                            const SizedBox(height: 6),
+                            Text(d.label,
+                                style: const TextStyle(
+                                    fontSize: HarborType.small,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
               ],
             ),
           ],

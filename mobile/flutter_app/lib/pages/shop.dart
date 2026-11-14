@@ -38,7 +38,7 @@ class ShopPage extends StatelessWidget {
                       SizedBox(width: 8),
                       Text('등록된 상품이 없습니다',
                           style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w700)),
+                              fontSize: HarborType.body, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),

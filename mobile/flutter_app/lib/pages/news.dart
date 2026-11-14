@@ -66,7 +66,7 @@ class NewsSampleBanner extends StatelessWidget {
       child: Text(
         'LUNO 에디토리얼 샘플 콘텐츠입니다. 실제 언론 기사가 아닙니다.',
         style: TextStyle(
-            fontSize: 12, color: dark ? HarborDark.buoyInk : HarborLight.buoyInk),
+            fontSize: HarborType.small, color: dark ? HarborDark.buoyInk : HarborLight.buoyInk),
       ),
     );
   }
@@ -226,7 +226,7 @@ class _HeroCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 17,
+                        fontSize: HarborType.title,
                         fontWeight: FontWeight.w800,
                         height: 1.3),
                   ),
@@ -235,7 +235,7 @@ class _HeroCard extends StatelessWidget {
                     newsByline(session, article),
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.75),
-                        fontSize: 12),
+                        fontSize: HarborType.small),
                   ),
                 ],
               ),
@@ -306,7 +306,7 @@ class _NewsRow extends StatelessWidget {
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
-                        fontSize: 12)),
+                        fontSize: HarborType.small)),
               ),
             ),
           ],

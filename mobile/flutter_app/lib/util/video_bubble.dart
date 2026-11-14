@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../design/v3.dart';
 import 'attachments.dart';
 
 class VideoBubble extends StatefulWidget {
@@ -119,7 +120,7 @@ class _VideoBubbleState extends State<VideoBubble> {
               ready
                   ? voiceDurationLabel(ctrl.value.duration.inSeconds)
                   : '동영상',
-              style: const TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: HarborType.micro),
             ),
           ],
         ),

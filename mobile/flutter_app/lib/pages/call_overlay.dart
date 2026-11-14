@@ -79,7 +79,7 @@ class CallOverlay extends StatelessWidget {
                   child: AspectRatio(
                     aspectRatio: 3 / 4,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(HarborRadius.avatar),
                       child: _localView(session),
                     ),
                   ),
@@ -94,7 +94,7 @@ class CallOverlay extends StatelessWidget {
                   children: [
                     Text(title,
                         style: const TextStyle(
-                            fontSize: 17,
+                            fontSize: HarborType.title,
                             color: Colors.white,
                             shadows: [
                               Shadow(
@@ -110,7 +110,7 @@ class CallOverlay extends StatelessWidget {
                     if (session.callMediaIssue)
                       const Text('미디어를 사용할 수 없습니다',
                           style: TextStyle(
-                              fontSize: 12, color: Colors.amber)),
+                              fontSize: HarborType.small, color: Colors.amber)),
                   ],
                 ),
               ),

@@ -78,6 +78,15 @@ abstract final class HarborShadow {
   ];
 }
 
+/// Harbor fixed layout widths in logical px. Mirrors
+/// design-v3.tokens.json layout (railPx/listPx) — the one width scale for
+/// web and app. Tablet rail uses railWidth; the app has no tablet two-pane
+/// (UX4), so listWidth is the pinned contract for one if it is ever built.
+abstract final class HarborLayout {
+  static const railWidth = 76.0;
+  static const listWidth = 340.0;
+}
+
 /// Harbor type scale in logical px. Mirrors design-v3.tokens.json typePx.
 abstract final class HarborType {
   static const display = 22.0;

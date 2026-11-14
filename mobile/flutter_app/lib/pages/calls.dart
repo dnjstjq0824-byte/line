@@ -110,7 +110,7 @@ class _CallRow extends StatelessWidget {
               callRowDate(call['started_at']),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: lineColor, fontFeatures: const [LunoType.tabular]),
+              style: TextStyle(fontSize: HarborType.small, color: lineColor, fontFeatures: const [LunoType.tabular]),
             ),
           ),
         ],

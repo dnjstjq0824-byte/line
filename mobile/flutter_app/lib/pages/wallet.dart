@@ -82,7 +82,7 @@ class _WalletPageState extends State<WalletPage> {
                               : 'LUNO POINTS: ${session.money(session.walletPoints!)} P',
                           style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 12,
+                              fontSize: HarborType.small,
                               fontWeight: FontWeight.w700),
                         ),
                       ),
@@ -133,7 +133,7 @@ class _WalletPageState extends State<WalletPage> {
                         const SizedBox(height: 8),
                         Text(localError!,
                             style: const TextStyle(
-                                color: Colors.white, fontSize: 12)),
+                                color: Colors.white, fontSize: HarborType.small)),
                       ],
                     ],
                   ),

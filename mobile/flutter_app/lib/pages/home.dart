@@ -63,7 +63,7 @@ class _HomePageState extends State<HomePage> {
           ),
           InkWell(
             onTap: () => context.go('/profile'),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(HarborRadius.avatar),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
@@ -294,14 +294,14 @@ class _ServiceButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: () => context.go(route),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(HarborRadius.avatar),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Column(
           children: [
             Icon(icon, size: 30),
             const SizedBox(height: 6),
-            Text(label, style: const TextStyle(fontSize: 12)),
+            Text(label, style: const TextStyle(fontSize: HarborType.small)),
           ],
         ),
       ),
@@ -337,7 +337,7 @@ class _QrApproveDialogState extends State<_QrApproveDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text('PC 화면의 QR 아래 표시된 값을 입력하세요.',
-              style: TextStyle(fontSize: 12)),
+              style: TextStyle(fontSize: HarborType.small)),
           const SizedBox(height: 8),
           TextField(
               controller: challenge,

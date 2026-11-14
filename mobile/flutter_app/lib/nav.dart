@@ -10,18 +10,19 @@ class LunoDestination {
 }
 
 abstract final class LunoNav {
+  // UX4: bottom tabs match the web order (home/chats/news/calls/wallet).
   static const primary = <LunoDestination>[
     LunoDestination('/home', '홈', Icons.home_outlined, Icons.home),
     LunoDestination('/chats', '토크', Icons.chat_bubble_outline, Icons.chat_bubble),
-    LunoDestination('/shop', '쇼핑', Icons.shopping_bag_outlined, Icons.shopping_bag),
     LunoDestination('/news', '뉴스', Icons.newspaper_outlined, Icons.newspaper),
-    LunoDestination('/apps', '앱', Icons.apps_outlined, Icons.apps),
+    LunoDestination('/calls', '통화', Icons.phone_outlined, Icons.phone),
+    LunoDestination('/wallet', '지갑', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
   ];
   static const secondary = <LunoDestination>[
-    LunoDestination('/calls', '통화', Icons.phone_outlined, Icons.phone),
+    LunoDestination('/shop', '쇼핑', Icons.shopping_bag_outlined, Icons.shopping_bag),
+    LunoDestination('/apps', '앱', Icons.apps_outlined, Icons.apps),
     LunoDestination('/feed', '피드', Icons.play_circle_outline, Icons.play_circle),
     LunoDestination('/lounge', '라운지', Icons.forum_outlined, Icons.forum),
-    LunoDestination('/wallet', '지갑', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
     LunoDestination('/keep', 'Keep', Icons.bookmark_outline, Icons.bookmark),
     LunoDestination('/settings', '설정', Icons.settings_outlined, Icons.settings),
     LunoDestination('/console', '콘솔', Icons.radar_outlined, Icons.radar),

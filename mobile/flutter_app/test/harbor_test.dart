@@ -41,14 +41,14 @@ void main() {
       '/console/reports', '/console/flags', '/console/audit',
     ];
     expect(routes.toSet().length, routes.length);
-    // LINE parity (user-requested 2026-11-09): bottom bar is 홈/토크/쇼핑/뉴스/앱.
-    // 통화 moves to the 앱 directory; every route keeps its own address.
+    // UX4 (work order 2026-11-13): bottom bar matches the web order 홈/토크/뉴스/통화/지갑.
+    // 쇼핑/앱 move to the 앱 directory; every route keeps its own address.
     expect(LunoNav.primary.length, 5);
     expect(LunoNav.primary.map((d) => d.route),
-        ['/home', '/chats', '/shop', '/news', '/apps']);
+        ['/home', '/chats', '/news', '/calls', '/wallet']);
     expect(LunoNav.secondary.length, 7);
     expect(LunoNav.secondary.map((d) => d.route),
-        ['/calls', '/feed', '/lounge', '/wallet', '/keep', '/settings', '/console']);
+        ['/shop', '/apps', '/feed', '/lounge', '/keep', '/settings', '/console']);
   });
 
   test('LUNO brand surfaces reuse frozen PO tokens', () {

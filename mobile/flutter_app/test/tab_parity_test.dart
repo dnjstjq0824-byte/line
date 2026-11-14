@@ -8,17 +8,17 @@ import 'package:luno_messenger/router.dart';
 import 'package:luno_messenger/state/session.dart';
 import 'package:luno_messenger/util/store_packs.dart';
 
-// P2 LINE tab parity: bottom bar follows the LINE five-tab order
-// (홈/토크/쇼핑/뉴스/앱). P4b-6 replaced the "preparing" placeholder with the
-// real catalog: 쇼핑 lists packs and honestly notes that checkout is
+// UX4 web tab parity: bottom bar follows the web five-tab order
+// (홈/토크/뉴스/통화/지갑). P4b-6 replaced the "preparing" placeholder with
+// the real catalog: 쇼핑 lists packs and honestly notes that checkout is
 // unavailable (503 fail-closed on both backends). 앱 is a directory over
 // real destinations.
 void main() {
-  test('bottom bar follows the LINE five-tab order', () {
+  test('bottom bar follows the web five-tab order', () {
     expect(LunoNav.primary.map((d) => d.route),
-        ['/home', '/chats', '/shop', '/news', '/apps']);
+        ['/home', '/chats', '/news', '/calls', '/wallet']);
     expect(LunoNav.primary.map((d) => d.label),
-        ['홈', '토크', '쇼핑', '뉴스', '앱']);
+        ['홈', '토크', '뉴스', '통화', '지갑']);
     expect(LunoNav.parentOf('/shop'), '/shop');
     expect(LunoNav.parentOf('/apps'), '/apps');
   });
@@ -65,7 +65,7 @@ void main() {
     expect(find.textContaining('결제 연동 준비 중'), findsOneWidget);
   });
 
-  testWidgets('apps tab lists every secondary destination',
+  testWidgets('apps tab lists every secondary destination but itself',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -74,7 +74,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // UX4: /apps moved to secondary with the web tab order; the directory
+    // lists the other six, never a tile to itself.
     for (final d in LunoNav.secondary) {
+      if (d.route == '/apps') continue;
       expect(find.text(d.label), findsOneWidget);
     }
   });

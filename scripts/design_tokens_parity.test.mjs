@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Parity between the canonical token file, the Vue CSS variables, and the
 // Flutter Harbor tokens. design_v3.test.mjs owns the base palette contract;
@@ -54,4 +56,38 @@ test('shadows and type scale exist in tokens, CSS and Dart', () => {
     assert.ok(css.includes(`--ln-fs-${name}:${px}px`), `css type ${name}`);
     assert.ok(dart.includes(`static const ${name} = ${px}.0;`), `dart type ${name}`);
   }
+});
+
+test('UX4: HarborLayout rail/list mirror the token file', () => {
+  assert.ok(dart.includes(`static const railWidth = ${tokens.layout.railPx}.0;`), 'dart railWidth');
+  assert.ok(dart.includes(`static const listWidth = ${tokens.layout.listPx}.0;`), 'dart listWidth');
+});
+
+test('UX4: spec-value sizes use v3 constants, never raw literals', async () => {
+  const lib = join(dirname(fileURLToPath(import.meta.url)), '..', 'mobile', 'flutter_app', 'lib');
+  async function darts(dir) {
+    const out = [];
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) out.push(...await darts(p));
+      else if (e.name.endsWith('.dart')) out.push(p);
+    }
+    return out;
+  }
+  // design/v3.dart holds the definitions; luno_design_v2.dart is dead
+  // legacy (no imports anywhere) and keeps its own scale untouched.
+  const skip = new Set(['design/v3.dart', 'luno_design_v2.dart']);
+  const offenders = [];
+  for (const f of await darts(lib)) {
+    const rel = f.slice(lib.length + 1).replace(/\\/g, '/');
+    if (skip.has(rel)) continue;
+    const text = await readFile(f, 'utf8');
+    for (const m of text.matchAll(/fontSize:\s*(22|17|15|12|11)(?![\d.])/g)) {
+      offenders.push(`${rel}: fontSize ${m[1]}`);
+    }
+    for (const m of text.matchAll(/Radius\.circular\((10|14|12|22|999)(?![\d.])/g)) {
+      offenders.push(`${rel}: radius ${m[1]}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
 });

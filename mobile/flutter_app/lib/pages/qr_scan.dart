@@ -146,7 +146,7 @@ class _QrScanPageState extends State<QrScanPage> {
             child: Text(_error,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    fontSize: 12, color: Theme.of(context).colorScheme.error)),
+                    fontSize: HarborType.small, color: Theme.of(context).colorScheme.error)),
           ),
         Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -227,7 +227,7 @@ class QrPayloadSheet extends StatelessWidget {
         children: [
           Text(title,
               style:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  const TextStyle(fontSize: HarborType.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           if (kind == QrPayloadKind.login)
             Text('이 기기에서 PC/웹 로그인을 승인합니다.\n요청 ID: ${payload.challengeId}'),

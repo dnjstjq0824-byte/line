@@ -145,7 +145,7 @@ class _GatePanel extends StatelessWidget {
                   children: [
                     Text(row.$1,
                         style: TextStyle(
-                            fontSize: 12,
+                            fontSize: HarborType.small,
                             fontWeight: FontWeight.w800,
                             color: dark ? HarborDark.beacon : HarborLight.seaGlass)),
                     const SizedBox(width: 12),
@@ -161,7 +161,7 @@ class _GatePanel extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(row.$3,
                               style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: HarborType.small,
                                   color: dark
                                       ? HarborDark.drift
                                       : Colors.white.withValues(alpha: 0.7))),
@@ -174,7 +174,7 @@ class _GatePanel extends StatelessWidget {
             const Spacer(),
             Text('하버 게이트 v3',
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: HarborType.micro,
                     color: dark ? HarborDark.drift : Colors.white.withValues(alpha: 0.6))),
           ],
         ),
@@ -233,7 +233,7 @@ class _GateForm extends StatelessWidget {
               ),
               child: Text('💡 데모 계정: user@luno.local / LunoUser#2026!',
                   style: TextStyle(
-                      fontSize: 12,
+                      fontSize: HarborType.small,
                       fontWeight: FontWeight.w700,
                       color: dark ? HarborDark.ink : HarborLight.harbor)),
             ),

@@ -5,6 +5,8 @@
 // list renders without a card instead of showing a broken one.
 import 'package:flutter/material.dart';
 
+import '../design/v3.dart';
+
 class ChannelSlot {
   final String id;
   final String title;
@@ -56,7 +58,7 @@ class ChannelSlotCard extends StatelessWidget {
                           fontSize: 13, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
                   Text(slot.body,
-                      style: const TextStyle(fontSize: 12, height: 1.4)),
+                      style: const TextStyle(fontSize: HarborType.small, height: 1.4)),
                 ],
               ),
             ),

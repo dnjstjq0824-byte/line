@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import '../design/v3.dart';
 import 'photo_effects.dart';
 
 /// Recording cap: low-preset clips past this rarely fit 512KiB.
@@ -265,7 +266,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
                       ? BoxShape.rectangle
                       : BoxShape.circle,
                   borderRadius: _video && _recording
-                      ? BorderRadius.circular(12)
+                      ? BorderRadius.circular(HarborRadius.avatar)
                       : null,
                   border: Border.all(
                       color: _video ? Colors.red : Colors.white, width: 4),

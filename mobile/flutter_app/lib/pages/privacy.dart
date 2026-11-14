@@ -48,7 +48,7 @@ class _PrivacyPageState extends State<PrivacyPage> {
                 ),
                 Text('개인 정보 보호',
                     style: TextStyle(
-                        fontSize: 17,
+                        fontSize: HarborType.title,
                         fontWeight: FontWeight.w700,
                         color: ink)),
               ],
@@ -247,7 +247,7 @@ class _DeviceRow extends StatelessWidget {
                 if (bits.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(bits.join(' · '),
-                      style: TextStyle(fontSize: 12, color: sub)),
+                      style: TextStyle(fontSize: HarborType.small, color: sub)),
                 ],
               ],
             ),

@@ -53,7 +53,7 @@ class HarborButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(HarborRadius.control),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: HarborType.body),
         ),
         child: loading
             ? SizedBox(

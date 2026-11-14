@@ -8,6 +8,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
+import '../design/v3.dart';
+
 const photoEffectIds = ['none', 'gray', 'sepia'];
 
 String photoEffectLabel(String id) {
@@ -74,7 +76,7 @@ class _PhotoEffectSheetState extends State<PhotoEffectSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(HarborRadius.avatar),
               child: Image.memory(_preview(_effect),
                   height: 220, fit: BoxFit.contain),
             ),

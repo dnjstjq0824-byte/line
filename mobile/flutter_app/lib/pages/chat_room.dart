@@ -93,7 +93,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     child: Text('공지: ${session.pins.first['body'] ?? ''}',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            fontSize: 12,
+                            fontSize: HarborType.small,
                             fontWeight: FontWeight.w700,
                             color: dark ? HarborDark.ink : HarborLight.harbor)),
                   ),
@@ -111,7 +111,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     ? '자동 번역 켜짐 · ${session.targetTranslateLang.toUpperCase()}'
                     : '자동 번역 켜짐 · 번역 준비 중',
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: HarborType.micro,
                     color: dark ? HarborDark.ink : HarborLight.harbor)),
           ),
         Expanded(
@@ -163,11 +163,11 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                   bottom: 12,
                   child: Material(
                     color: dark ? HarborDark.surface : Colors.white,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(HarborRadius.control),
                     elevation: 3,
                     child: InkWell(
                       key: const ValueKey('jump-latest'),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(HarborRadius.control),
                       onTap: _jumpLatest,
                       child: Padding(
                         padding: const EdgeInsets.all(10),
@@ -193,7 +193,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
               children: [
                 Text('답장 작성 중...',
                     style: TextStyle(
-                        fontSize: 12,
+                        fontSize: HarborType.small,
                         fontWeight: FontWeight.w600,
                         color: dark ? HarborDark.ink : HarborLight.harbor)),
                 IconButton(
@@ -344,7 +344,7 @@ class _ChatImage extends StatelessWidget {
                   : const SizedBox(
                       height: 180, child: Center(child: CircularProgressIndicator())),
               errorBuilder: (_, __, ___) =>
-                  Text(label, style: const TextStyle(fontSize: 12))),
+                  Text(label, style: const TextStyle(fontSize: HarborType.small))),
         ),
       ),
     );
@@ -373,7 +373,7 @@ class _DateDivider extends StatelessWidget {
           ),
           child: Text(label,
               style: TextStyle(
-                  fontSize: 11,
+                  fontSize: HarborType.micro,
                   fontWeight: FontWeight.w600,
                   color: dark ? HarborDark.drift : HarborLight.drift)),
         ),
@@ -487,7 +487,7 @@ class _SignalBubble extends StatelessWidget {
                         attachmentIdOf(m)!, '${m['body']}'),
                     icon: Icon(Icons.download, size: 16, color: ink),
                     label: Text('저장',
-                        style: TextStyle(color: ink, fontSize: 12)),
+                        style: TextStyle(color: ink, fontSize: HarborType.small)),
                   ),
                 if (m['kind'] == 'sticker')
                   StickerBubble(
@@ -513,10 +513,10 @@ class _SignalBubble extends StatelessWidget {
                     ),
                     child: trans['loading'] == true
                         ? const Text('AI 번역 중...',
-                            style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic))
+                            style: TextStyle(fontSize: HarborType.micro, fontStyle: FontStyle.italic))
                         : trans['error'] != null
                             ? Text('${trans['error']}',
-                                style: TextStyle(fontSize: 11, color: faint))
+                                style: TextStyle(fontSize: HarborType.micro, color: faint))
                             : Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -531,7 +531,7 @@ class _SignalBubble extends StatelessWidget {
                                   const SizedBox(height: 2),
                                   Text('${trans['translated']}',
                                       style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: HarborType.small,
                                           fontWeight: FontWeight.w600,
                                           color: ink)),
                                 ],
@@ -555,7 +555,7 @@ class _SignalBubble extends StatelessWidget {
                     for (final emo in lunoReactions.take(3))
                       InkWell(
                         onTap: () => session.react(m['id'], emo),
-                        child: Text(emo, style: const TextStyle(fontSize: 12)),
+                        child: Text(emo, style: const TextStyle(fontSize: HarborType.small)),
                       ),
                     InkWell(
                       onTap: () => session.translateMessage(msgId, '${m['body']}'),
@@ -761,7 +761,7 @@ class _CallBubble extends StatelessWidget {
                           Text(callBubbleTitle(m),
                               style: TextStyle(
                                   color: ink,
-                                  fontSize: 15,
+                                  fontSize: HarborType.body,
                                   fontWeight: FontWeight.w700)),
                           if (duration.isNotEmpty)
                             Text(duration,
@@ -891,18 +891,18 @@ class _SecurityNoticeCard extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text('IP 주소: $ip',
                               style:
-                                  TextStyle(fontSize: 12, color: sub)),
+                                  TextStyle(fontSize: HarborType.small, color: sub)),
                         ],
                         if (location.isNotEmpty)
                           Text('위치: $location',
                               style:
-                                  TextStyle(fontSize: 12, color: sub)),
+                                  TextStyle(fontSize: HarborType.small, color: sub)),
                         if (sample)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text('샘플 데이터',
                                 style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: HarborType.micro,
                                     fontStyle: FontStyle.italic,
                                     color: sub)),
                           ),

@@ -269,7 +269,7 @@ class _ProfileRow extends StatelessWidget {
                 children: [
                   Text(name,
                       style: TextStyle(
-                          fontSize: 17,
+                          fontSize: HarborType.title,
                           fontWeight: FontWeight.w600,
                           color: ink)),
                   const SizedBox(height: 2),

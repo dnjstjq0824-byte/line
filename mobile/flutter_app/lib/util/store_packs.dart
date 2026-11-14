@@ -6,6 +6,8 @@
 // skipped so one bad row never blanks the shelf.
 import 'package:flutter/material.dart';
 
+import '../design/v3.dart';
+
 class StorePack {
   final String id;
   final String title;
@@ -81,19 +83,19 @@ class StorePackCard extends StatelessWidget {
                 if (pack.owned == true)
                   const Text('보유 중',
                       style: TextStyle(
-                          fontSize: 12,
+                          fontSize: HarborType.small,
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF22C55E)))
                 else
                   Text(storePriceLabel(pack),
                       style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700)),
+                          fontSize: HarborType.small, fontWeight: FontWeight.w700)),
               ],
             ),
             if (pack.description.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(pack.description,
-                  style: const TextStyle(fontSize: 12, height: 1.4)),
+                  style: const TextStyle(fontSize: HarborType.small, height: 1.4)),
             ],
             if (pack.stickers.isNotEmpty) ...[
               const SizedBox(height: 8),

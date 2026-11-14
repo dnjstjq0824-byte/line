@@ -65,7 +65,7 @@ class CallDetailPage extends StatelessWidget {
                   Expanded(
                     child: Text(name.isEmpty ? '알 수 없음' : name,
                         style: TextStyle(
-                            fontSize: 22,
+                            fontSize: HarborType.display,
                             fontWeight: FontWeight.w700,
                             color: ink)),
                   ),
@@ -123,7 +123,7 @@ class CallDetailPage extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(day.label,
                       style: TextStyle(
-                          fontSize: 15,
+                          fontSize: HarborType.body,
                           fontWeight: FontWeight.w700,
                           color: ink)),
                 ),

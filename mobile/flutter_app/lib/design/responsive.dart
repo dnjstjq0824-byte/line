@@ -122,7 +122,7 @@ class Masthead extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: text.displaySmall?.copyWith(fontSize: 22)),
+                Text(title, style: text.displaySmall?.copyWith(fontSize: HarborType.display)),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
                   Text(subtitle!, style: text.bodySmall),
@@ -253,7 +253,7 @@ class _RailItem extends StatelessWidget {
                     ),
                     child: Text('$badge',
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: HarborType.micro,
                             fontWeight: FontWeight.w800,
                             color: dark ? HarborDark.onBeacon : HarborLight.onBeacon)),
                   ),
@@ -281,7 +281,8 @@ class _TabletDesk extends StatelessWidget {
       body: Row(
         children: [
           Container(
-            width: 68,
+            key: const Key('tablet-rail'),
+            width: HarborLayout.railWidth,
             color: dark ? HarborDark.surface : HarborLight.surface,
             child: SafeArea(
               child: Column(
@@ -487,7 +488,7 @@ class HarborWordmark extends StatelessWidget {
           ),
           child: Text('LUNO',
               style: TextStyle(
-                  fontSize: 12,
+                  fontSize: HarborType.small,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.6,
                   color: dark ? HarborDark.onHarbor : HarborLight.onHarbor)),
@@ -521,7 +522,7 @@ class StatusStrip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: Text(session.error,
             style: TextStyle(
-                fontSize: 12,
+                fontSize: HarborType.small,
                 fontWeight: FontWeight.w600,
                 color: dark ? HarborDark.danger : HarborLight.danger)),
       ));
@@ -533,7 +534,7 @@ class StatusStrip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: Text(session.notice,
             style: TextStyle(
-                fontSize: 12,
+                fontSize: HarborType.small,
                 fontWeight: FontWeight.w600,
                 color: dark ? HarborDark.ink : HarborLight.ink)),
       ));
@@ -548,7 +549,7 @@ class StatusStrip extends StatelessWidget {
             Expanded(
               child: Text('오프라인 상태입니다. 연결 후 다시 시도해주세요.',
                   style: TextStyle(
-                      fontSize: 12,
+                      fontSize: HarborType.small,
                       fontWeight: FontWeight.w600,
                       color: dark ? HarborDark.ink : HarborLight.ink)),
             ),

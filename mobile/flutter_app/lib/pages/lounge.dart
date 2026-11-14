@@ -190,7 +190,7 @@ class _RoomPostsViewState extends State<_RoomPostsView> {
                         style: TextStyle(
                             color: dark ? HarborDark.ink : Colors.white,
                             fontWeight: FontWeight.w700,
-                            fontSize: 15)),
+                            fontSize: HarborType.body)),
                   ),
                   TextButton(
                     onPressed: session.busy
@@ -215,7 +215,7 @@ class _RoomPostsViewState extends State<_RoomPostsView> {
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Text('내 닉네임: ${session.roomNickname}',
                 style: TextStyle(
-                    fontSize: 11,
+                    fontSize: HarborType.micro,
                     color: dark ? HarborDark.ink : HarborLight.harbor)),
           ),
         Expanded(
