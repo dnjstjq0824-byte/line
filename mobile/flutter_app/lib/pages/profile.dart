@@ -14,14 +14,23 @@ import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
 
-ImageProvider? dataUrlImage(String url) {
-  final i = url.indexOf('base64,');
-  if (!url.startsWith('data:image/') || i < 0) return null;
-  try {
-    return MemoryImage(base64Decode(url.substring(i + 7)));
-  } catch (_) {
-    return null;
+// F5: avatar/cover arrive as an R2 serving path (/api/v1/users/...),
+// an absolute URL, or a legacy inline data: URL.
+ImageProvider? profilePhotoImage(String baseUrl, String url) {
+  if (url.startsWith('data:image/')) {
+    final i = url.indexOf('base64,');
+    if (i < 0) return null;
+    try {
+      return MemoryImage(base64Decode(url.substring(i + 7)));
+    } catch (_) {
+      return null;
+    }
   }
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return NetworkImage(url);
+  }
+  if (url.startsWith('/')) return NetworkImage('$baseUrl$url');
+  return null;
 }
 
 class ProfilePage extends StatelessWidget {
@@ -35,7 +44,8 @@ class ProfilePage extends StatelessWidget {
     final status = session.selfStatusMessage.isEmpty
         ? '설정 안 함'
         : session.selfStatusMessage;
-    final cover = dataUrlImage(session.selfCoverUrl);
+    final cover =
+        profilePhotoImage(session.api.baseUrl, session.selfCoverUrl);
     final searchable =
         session.myPrefs['searchable_by_id'] as bool? ?? true;
     final ink = dark ? LunoDark.textPrimary : LunoLight.textPrimary;
@@ -286,7 +296,8 @@ class _ProfileAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final img = dataUrlImage(SessionScope.of(context).selfAvatarUrl);
+    final session = SessionScope.of(context);
+    final img = profilePhotoImage(session.api.baseUrl, session.selfAvatarUrl);
     if (img == null) {
       return LineAvatar(
         glyph: name,

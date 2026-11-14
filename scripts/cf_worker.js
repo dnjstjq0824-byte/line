@@ -227,7 +227,7 @@ const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, handle TEXT UNIQUE,
     password_hash TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '',
-    cover_url TEXT DEFAULT '', prefs_json TEXT DEFAULT '',
+    cover_url TEXT DEFAULT '', avatar_color TEXT DEFAULT '#4F7CFF', prefs_json TEXT DEFAULT '',
     status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
     birthday TEXT DEFAULT '', state TEXT DEFAULT 'active', kind TEXT DEFAULT 'user',
     email_verified INTEGER DEFAULT 0, deleted_at TEXT DEFAULT '', deletion_reason TEXT DEFAULT '',
@@ -416,6 +416,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'birthday', "TEXT DEFAULT ''"],
   ['users', 'avatar_url', "TEXT DEFAULT ''"],
   ['users', 'cover_url', "TEXT DEFAULT ''"],
+  ['users', 'avatar_color', "TEXT DEFAULT '#4F7CFF'"],
   ['users', 'prefs_json', "TEXT DEFAULT ''"],
   ['users', 'status_message', "TEXT DEFAULT ''"],
   ['users', 'bio', "TEXT DEFAULT ''"],
@@ -1255,7 +1256,7 @@ async function deleteAccountData(userId) {
     gone.state = 'deleted';
     gone.display_name = '탈퇴한 사용자';
     delete gone.pw_hash; delete gone.pw_salt; delete gone.pw_iter;
-    gone.bio = ''; gone.status_message = ''; gone.avatar_url = ''; gone.phone = ''; gone.birthday = '';
+    gone.bio = ''; gone.status_message = ''; gone.avatar_url = ''; gone.cover_url = ''; gone.phone = ''; gone.birthday = '';
     gone.deletion_reason = '';
   }
   for (const [email, u] of Array.from(users)) if (u.id === userId) users.delete(email);
@@ -1329,10 +1330,12 @@ async function deleteAccountData(userId) {
     try {
       const rows = await db.prepare('SELECT object_key FROM attachments WHERE uploader_id = ?').bind(userId).all();
       for (const r of (rows.results || [])) { if (r.object_key) await bucket.delete(r.object_key).catch(() => {}); }
+      await bucket.delete(profilePhotoKey(userId, 'avatar')).catch(() => {});
+      await bucket.delete(profilePhotoKey(userId, 'cover')).catch(() => {});
     } catch (_) {}
   }
   await d1Batch(db, [
-    ["UPDATE users SET state = 'deleted', display_name = ?, password_hash = 'pbkdf2$deleted', bio = '', status_message = '', avatar_url = '', phone_number = '', birthday = '', deletion_reason = '', updated_at = ? WHERE id = ?", '탈퇴한 사용자', at, userId],
+    ["UPDATE users SET state = 'deleted', display_name = ?, password_hash = 'pbkdf2$deleted', bio = '', status_message = '', avatar_url = '', cover_url = '', phone_number = '', birthday = '', deletion_reason = '', updated_at = ? WHERE id = ?", '탈퇴한 사용자', at, userId],
     ['DELETE FROM luno_sessions WHERE user_id = ?', userId],
     ['DELETE FROM refresh_tokens WHERE user_id = ?', userId],
     ['DELETE FROM friends WHERE user_id = ? OR friend_id = ?', userId, userId],
@@ -2357,7 +2360,7 @@ function cacheUserRow(row, granted) {
   const u = applyStoredPassword({
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: granted,
-    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', created_at: row.created_at,
     state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
     deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
   }, row.password_hash);
@@ -2375,7 +2378,7 @@ async function loadUserFromD1(id, knownRole) {
   const u = applyStoredPassword({
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
-    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
+    bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', created_at: row.created_at,
     state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
     deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
   }, row.password_hash);
@@ -2772,6 +2775,59 @@ function validatePhotoDataUrl(value, label, code) {
   const valid = match[1] === 'jpeg' ? raw.startsWith('\xff\xd8\xff') : match[1] === 'png' ? raw.startsWith('\x89PNG\r\n\x1a\n') : raw.startsWith('RIFF') && raw.slice(8, 12) === 'WEBP';
   if (!valid || raw.length > 262144) return [`Invalid or oversized ${label.toLowerCase()}`, code];
   return null;
+}
+// F5: profile/cover photo bytes live in R2 under profile/<uid>/avatar|cover
+// and D1 keeps the serving path. Uploads overwrite the single object per
+// slot (replace deletes the old bytes); clearing deletes the object.
+// Rows that predate R2 keep an inline data: URL and still serve until the
+// next upload. Without an R2 binding the inline value is kept as-is.
+function photoBytesFromDataUrl(value) {
+  const match = String(value || '').match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match) return null;
+  const bin = atob(match[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function photoContentTypeOf(bytes) {
+  if (bytes.length > 2 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image/jpeg';
+  if (bytes.length > 7 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
+  if (bytes.length > 11 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  return 'application/octet-stream';
+}
+function profilePhotoKey(userId, which) { return `profile/${userId}/${which === 'cover' ? 'cover' : 'avatar'}`; }
+function profilePhotoPath(userId, which) { return `/api/v1/users/${userId}/${which === 'cover' ? 'cover' : 'avatar'}`; }
+async function storeProfilePhoto(userId, which, value) {
+  const bucket = mediaBucketOf();
+  const key = profilePhotoKey(userId, which);
+  if (!value) {
+    if (bucket) await bucket.delete(key).catch(() => {});
+    return '';
+  }
+  if (!bucket) return value;
+  const bytes = photoBytesFromDataUrl(value);
+  await bucket.put(key, bytes, { httpMetadata: { contentType: photoContentTypeOf(bytes) } });
+  return profilePhotoPath(userId, which);
+}
+async function serveProfilePhoto(userId, which) {
+  const bucket = mediaBucketOf();
+  if (bucket) {
+    const obj = await bucket.get(profilePhotoKey(userId, which)).catch(() => null);
+    if (obj) {
+      const bytes = new Uint8Array(await obj.arrayBuffer());
+      return new Response(bytes, { headers: { 'Content-Type': (obj.httpMetadata && obj.httpMetadata.contentType) || photoContentTypeOf(bytes), 'Cache-Control': 'private, max-age=3600' } });
+    }
+  }
+  if (dbOf()) {
+    await ensureSchema();
+    const row = await dbOf().prepare('SELECT avatar_url, cover_url FROM users WHERE id = ?').bind(userId).first().catch(() => null);
+    const inline = row ? (which === 'cover' ? row.cover_url : row.avatar_url) : '';
+    if (inline && inline.startsWith('data:image/')) {
+      const bytes = photoBytesFromDataUrl(inline);
+      if (bytes) return new Response(bytes, { headers: { 'Content-Type': photoContentTypeOf(bytes), 'Cache-Control': 'private, max-age=3600' } });
+    }
+  }
+  return json({ error: 'not found' }, 404);
 }
 function findDirect(a, b) {
   for (const c of conversations.values()) {
@@ -3414,15 +3470,16 @@ async function extended(p, request, url, me, token) {
   if (p === 'me') {
     if (dbOf()) {
       const row = await dbOf().prepare('SELECT * FROM users WHERE id = ?').bind(myId).first();
-      if (row) me.avatar_url = row.avatar_url || '';
+      if (row) { me.avatar_url = row.avatar_url || ''; me.cover_url = row.cover_url || ''; me.avatar_color = row.avatar_color || '#4F7CFF'; }
     }
     if (method === 'GET') return json({ ...publicUser(me), email: me.email, role: me.role });
     if (method === 'PATCH') {
       const b = await readJson(request);
-      for (const [key, label, code] of [['avatar_url', 'Profile photo', 'INVALID_AVATAR'], ['cover_url', 'Cover photo', 'INVALID_COVER']]) {
+      for (const [key, which, label, code] of [['avatar_url', 'avatar', 'Profile photo', 'INVALID_AVATAR'], ['cover_url', 'cover', 'Cover photo', 'INVALID_COVER']]) {
         if (b[key] === undefined) continue;
         const err = validatePhotoDataUrl(b[key], label, code);
         if (err) return json(err[1] ? { error: err[0], code: err[1] } : { error: err[0] }, 400);
+        b[key] = await storeProfilePhoto(myId, which, b[key]);
       }
       if (b.display_name !== undefined) {
         const v = clip(b.display_name, 40);
@@ -3450,7 +3507,7 @@ async function extended(p, request, url, me, token) {
         }
         me.handle = h;
       }
-      if (dbOf()) await dbOf().prepare("UPDATE users SET display_name = ?, bio = ?, status_message = ?, avatar_url = ?, cover_url = ?, handle = ?, birthday = ?, updated_at = ? WHERE id = ?").bind(me.display_name, me.bio || '', me.status_message || '', b.avatar_url === undefined ? (me.avatar_url || '') : b.avatar_url, b.cover_url === undefined ? (me.cover_url || '') : b.cover_url, me.handle || '', me.birthday || '', now(), myId).run();
+      if (dbOf()) await dbOf().prepare("UPDATE users SET display_name = ?, bio = ?, status_message = ?, avatar_url = ?, cover_url = ?, avatar_color = ?, handle = ?, birthday = ?, updated_at = ? WHERE id = ?").bind(me.display_name, me.bio || '', me.status_message || '', b.avatar_url === undefined ? (me.avatar_url || '') : b.avatar_url, b.cover_url === undefined ? (me.cover_url || '') : b.cover_url, me.avatar_color || '#4F7CFF', me.handle || '', me.birthday || '', now(), myId).run();
       if (b.avatar_url !== undefined) me.avatar_url = b.avatar_url;
       if (b.cover_url !== undefined) me.cover_url = b.cover_url;
       return json({ ...publicUser(me), email: me.email, role: me.role });
@@ -3639,6 +3696,12 @@ async function extended(p, request, url, me, token) {
     if (!u && dbOf()) u = await loadUserFromD1(m[1], undefined);
     if (!u || u.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);
     return json({ ...publicUser(u), is_friend: isFriend(myId, u.id) });
+  }
+  if ((m = p.match(/^users\/([\w-]+)\/(avatar|cover)$/)) && method === 'GET') {
+    let u = usersById.get(m[1]);
+    if (!u && dbOf()) u = await loadUserFromD1(m[1], undefined);
+    if (!u || u.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);
+    return serveProfilePhoto(m[1], m[2]);
   }
 
   // ---------- Official accounts ----------
