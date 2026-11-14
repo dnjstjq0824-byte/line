@@ -3566,6 +3566,7 @@ async function extended(p, request, url, me, token) {
     if (!conv) return bad('대화방을 찾을 수 없습니다', 404);
     if (method === 'GET') {
       if (userKind(me) === 'bot' && !botScopeAllows(me, 'read', conv.id)) return json({ error: 'forbidden' }, 403);
+      if (userKind(me) === 'bot') await persistAudit(myId, 'bot.read', conv.id, { route: 'conversation' });
       return json(chatSummary(conv, myId));
     }
     if (method === 'PATCH') {
@@ -3642,6 +3643,7 @@ async function extended(p, request, url, me, token) {
     const conv = conversations.get(cid);
     if (method === 'GET') {
       if (userKind(me) === 'bot' && !botScopeAllows(me, 'read', cid)) return json({ error: 'forbidden' }, 403);
+      if (userKind(me) === 'bot') await persistAudit(myId, 'bot.read', cid, { route: 'messages' });
       await hydrateConversation(cid);
       await hydrateCursors(myId);
       const before = intIn(url.searchParams.get('before_sequence') || 0, 0, 1e9) || 0;
@@ -3769,6 +3771,7 @@ async function extended(p, request, url, me, token) {
         const acct = officialAccounts.get(conv.members.find(x => officialAccounts.has(x)));
         if (acct && kind === 'text') await pushPersistent(cid, acct.id, { kind: 'text', body: botReply(body, acct) });
       }
+      if (userKind(me) === 'bot') await persistAudit(myId, BOT_ONLY_KINDS.has(kind) ? 'bot.propose' : 'bot.post', cid, { kind, message_id: msg.id });
       const decorated = decorateMessage(msg, myId, cid);
       return json({ ...decorated, message: decorated, duplicate: false }, 201);
     }
@@ -3830,6 +3833,7 @@ async function extended(p, request, url, me, token) {
     if (!decisionId) return json({ error: 'proposal already decided' }, 409);
     const verdict = b.decision === 'approved' ? '승인되었습니다' : '거절되었습니다';
     const posted = await pushPersistent(cid, target.sender_id, { kind: 'decision', body: `제안 '${clip(target.body, 120)}'이 ${verdict}.` });
+    await persistAudit(myId, 'proposal.decide', target.id, { room: cid, decision: b.decision, decision_id: decisionId });
     return json({ id: decisionId, message_id: posted.id, state: b.decision }, 201);
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/proposals$/)) && method === 'GET') {
@@ -5007,6 +5011,7 @@ async function extended(p, request, url, me, token) {
     const conv = conversations.get(cid);
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
     if (userKind(me) === 'bot' && !botScopeAllows(me, 'read', cid)) return json({ error: 'forbidden' }, 403);
+    if (userKind(me) === 'bot') await persistAudit(myId, 'bot.read', cid, { route: 'sync' });
     const since = intIn(url.searchParams.get('since_sequence') || 0, 0, 1e9) || 0;
     const db = dbOf();
     let delta;

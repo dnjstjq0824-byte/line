@@ -700,6 +700,53 @@ test('L-09: killswitch halts new work immediately, release resumes', async () =>
   } finally { db.raw.close(); }
 });
 
+// ---------- L-11: bot audit log ----------
+
+function botAuditRows(db, botId) {
+  return db.raw.prepare("SELECT action, target FROM luno_audit WHERE actor = ? ORDER BY id").all(botId);
+}
+
+test('L-11: bot reads, posts and proposals land in luno_audit', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const a = await registerAndLogin(admin.api, 'l11-a@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Audit Bot', handle: 'audit_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'Audit Room', member_ids: [bot.id] }, a.token)).json();
+    const tok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['read', 'post', 'propose'] })).token;
+    await admin.api(`conversations/${room.id}/messages`, 'POST', { body: 'seed' }, a.token);
+    await admin.api(`conversations/${room.id}/messages`, 'GET', null, tok);
+    await admin.api(`conversations/${room.id}/messages`, 'POST', { body: 'bot says hi' }, tok);
+    await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'bot proposes' }, tok);
+    const actions = botAuditRows(db, bot.id).map((r) => r.action);
+    assert.ok(actions.includes('bot.read'), `reads logged: ${actions}`);
+    assert.ok(actions.includes('bot.post'), `posts logged: ${actions}`);
+    assert.ok(actions.includes('bot.propose'), `proposals logged: ${actions}`);
+    const logs = await (await admin.api('admin/audit-logs', 'GET', null, admin.token)).json();
+    assert.ok((logs.audit_logs || []).some((l) => l.action === 'bot.propose'), 'admin can query bot entries');
+  } finally { db.raw.close(); }
+});
+
+test('L-11: decisions are logged, human chatter is not', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const owner = await registerAndLogin(admin.api, 'l11-o@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Audit2 Bot', handle: 'audit2_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'Audit2 Room', member_ids: [bot.id] }, owner.token)).json();
+    const propTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['propose'] })).token;
+    const prop = await (await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'Decide me' }, propTok)).json();
+    await admin.api(`conversations/${room.id}/messages`, 'POST', { body: 'human chat' }, owner.token);
+    await admin.api(`conversations/${room.id}/messages`, 'GET', null, owner.token);
+    await admin.api(`conversations/${room.id}/messages/${prop.message.id}/decide`, 'POST', { decision: 'approved' }, owner.token);
+    const decRows = db.raw.prepare("SELECT actor, action FROM luno_audit WHERE action = 'proposal.decide'").all();
+    assert.equal(decRows.length, 1);
+    assert.equal(decRows[0].actor, owner.id);
+    const humanRows = db.raw.prepare("SELECT action FROM luno_audit WHERE actor = ?").all(owner.id);
+    assert.deepEqual(humanRows.map((r) => r.action), ['proposal.decide'], 'only the decision, never reads/posts');
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
