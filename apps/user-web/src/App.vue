@@ -3197,6 +3197,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 .badge-verified { background: #dcfce7; color: #15803d; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
 /* L-01: bot identity pill (blue, distinct from the green official badge). */
 .badge-bot { background: #dbeafe; color: #1d4ed8; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
+/* L-03: proposal/decision/report kind tag inside the standard bubble. */
+.badge-kind { background: #f1f5f9; color: #475569; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; margin-right: 6px; white-space: nowrap; }
 .pin-icon, .pin-toggle { font-size: 12px; }
 .btn-unpin-inline { background: none; border: none; color: #94a3b8; cursor: pointer; margin-left: auto; font-size: 11px; }
 .other-avatar, .luno-official-avatar { flex-shrink: 0; }

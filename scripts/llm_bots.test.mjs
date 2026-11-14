@@ -464,6 +464,58 @@ test('L-02: switch off routes nothing', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- L-03: proposal / decision / report kinds (bots with propose op only) ----------
+
+test('L-03: humans cannot send bot-only kinds', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const a = await registerAndLogin(admin.api, 'l03-a@luno-test.local');
+    const b = await registerAndLogin(admin.api, 'l03-b@luno-test.local');
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'Kinds', member_ids: [b.id] }, a.token)).json();
+    const roomId = room.id;
+    for (const kind of ['proposal', 'decision', 'report']) {
+      const res = await admin.api(`conversations/${roomId}/messages`, 'POST', { kind, body: 'x' }, a.token);
+      assert.equal(res.status, 403, `human ${kind} forbidden`);
+    }
+  } finally { db.raw.close(); }
+});
+
+test('L-03: propose op posts the three kinds, lesser scopes cannot', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const a = await registerAndLogin(admin.api, 'l03-c@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Kind Bot', handle: 'kindbot_bot' }, admin.token)).json();
+    const room = await (await admin.api('conversations', 'POST', { kind: 'group', title: 'Bot Kinds', member_ids: [bot.id] }, a.token)).json();
+    const readTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['read'] })).token;
+    const postTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['post'] })).token;
+    const propTok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: [room.id], ops: ['propose'] })).token;
+    assert.equal((await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'p' }, readTok)).status, 403);
+    assert.equal((await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: 'p' }, postTok)).status, 403, 'post op is not propose');
+    assert.equal((await admin.api(`conversations/${room.id}/messages`, 'POST', { kind: 'proposal', body: '' }, propTok)).status, 400, 'body required');
+    for (const kind of ['proposal', 'decision', 'report']) {
+      const res = await admin.api(`conversations/${room.id}/messages`, 'POST', { kind, body: `${kind} body` }, propTok);
+      assert.equal(res.status, 201, `bot ${kind} posts`);
+    }
+    const history = await (await admin.api(`conversations/${room.id}/messages`, 'GET', null, a.token)).json();
+    const kinds = history.messages.map((m) => m.kind).sort();
+    assert.ok(kinds.includes('proposal') && kinds.includes('decision') && kinds.includes('report'), `kinds persisted: ${kinds}`);
+  } finally { db.raw.close(); }
+});
+
+test('L-03: web renders the three kinds with labels', async () => {
+  const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
+  const i18n = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
+  for (const kind of ['proposal', 'decision', 'report']) {
+    assert.ok(pane.includes(`'${kind}'`), `pane handles ${kind}`);
+  }
+  for (const key of ['msgKindProposal', 'msgKindDecision', 'msgKindReport']) {
+    const hits = i18n.split(`${key}:`).length - 1;
+    assert.equal(hits, 4, `${key} in all 4 locales`);
+  }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');

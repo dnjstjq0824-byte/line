@@ -489,6 +489,21 @@ class _SignalBubble extends StatelessWidget {
                     label: Text('저장',
                         style: TextStyle(color: ink, fontSize: HarborType.small)),
                   ),
+                // L-03: bot proposal/decision/report tag above the standard body.
+                if (m['kind'] == 'proposal' || m['kind'] == 'decision' || m['kind'] == 'report')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+                        borderRadius: BorderRadius.circular(HarborRadius.lamp),
+                      ),
+                      child: Text(
+                        m['kind'] == 'proposal' ? '제안' : m['kind'] == 'decision' ? '결정' : '보고',
+                        style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: ink)),
+                    ),
+                  ),
                 if (m['kind'] == 'sticker')
                   StickerBubble(
                     glyph: stickerGlyph(

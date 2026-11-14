@@ -483,6 +483,10 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                   <small v-if="msg.metadata?.handle" class="contact-card-handle">@{{ msg.metadata.handle }}</small>
                 </div>
                 <MessageAttachment v-else-if="msg.metadata?.attachment_id" :message="msg" :token="token" :labels="{ download: t('attachment_download'), retry: t('attachment_retry'), loading: t('attachment_loading'), error: t('attachment_error') }" />
+                <div v-else-if="msg.kind === 'proposal' || msg.kind === 'decision' || msg.kind === 'report'" class="bubble-text-content bubble-bot-kind">
+                  <span class="badge-kind">{{ msg.kind === 'proposal' ? t('msgKindProposal') : msg.kind === 'decision' ? t('msgKindDecision') : t('msgKindReport') }}</span>
+                  {{ msg.body }}
+                </div>
                 <div v-else class="bubble-text-content">{{ msg.body }}</div>
 
                 <!-- Reactions Display -->

@@ -2635,7 +2635,9 @@ function pollView(poll, viewerId) {
   };
 }
 // D4: timelineView/voomView replaced by timelineRowView/voomRowView (D1 rows).
-const MESSAGE_KINDS = new Set(['text', 'sticker', 'image', 'video', 'voice', 'file', 'location', 'contact', 'pay', 'transfer', 'ciphertext', 'call_status', 'security_notice']);
+const MESSAGE_KINDS = new Set(['text', 'sticker', 'image', 'video', 'voice', 'file', 'location', 'contact', 'pay', 'transfer', 'ciphertext', 'call_status', 'security_notice', 'proposal', 'decision', 'report']);
+// L-03: bot-emitted kinds. Humans always 403; bots need the propose op.
+const BOT_ONLY_KINDS = new Set(['proposal', 'decision', 'report']);
 // A-5: server-minted kinds a client must never send directly.
 const FORGED_CLIENT_KINDS = new Set(['security_notice', 'pay', 'transfer', 'call_status', 'system']);
 const pushTokens = new Map();
@@ -3604,7 +3606,6 @@ async function extended(p, request, url, me, token) {
       return json({ messages: list.slice(-limit).map(x => decorateMessage(x, myId, cid)), has_more: list.length > limit });
     }
     if (method === 'POST') {
-      if (userKind(me) === 'bot' && !botScopeAllows(me, 'post', cid)) return json({ error: 'forbidden' }, 403);
       if (conv.official || conv.kind === 'official') return bad('공식계정 방은 읽기 전용입니다');
       if (!await rateLimit('rl:msg:' + myId, 300)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
       const b = await readJson(request);
@@ -3612,6 +3613,12 @@ async function extended(p, request, url, me, token) {
       await hydrateConversation(cid);
       if (!MESSAGE_KINDS.has(kind)) return bad('지원하지 않는 메시지 종류입니다');
       if (FORGED_CLIENT_KINDS.has(kind)) return bad('시스템 메시지는 직접 전송할 수 없습니다', 400);
+      if (BOT_ONLY_KINDS.has(kind)) {
+        if (userKind(me) !== 'bot') return json({ error: 'forbidden' }, 403);
+        if (!botScopeAllows(me, 'propose', cid)) return json({ error: 'forbidden' }, 403);
+      } else if (userKind(me) === 'bot' && !botScopeAllows(me, 'post', cid)) {
+        return json({ error: 'forbidden' }, 403);
+      }
       if (conv.kind === 'direct') {
         const other = conv.members.find(x => x !== myId);
         if (other) {
@@ -3637,6 +3644,10 @@ async function extended(p, request, url, me, token) {
         }
       }
       if (kind === 'text') {
+        body = body.trim();
+        if (!body) return bad('메시지를 입력하세요');
+        if (body.length > MAX_BODY) return bad('메시지가 너무 깁니다');
+      } else if (kind === 'proposal' || kind === 'decision' || kind === 'report') {
         body = body.trim();
         if (!body) return bad('메시지를 입력하세요');
         if (body.length > MAX_BODY) return bad('메시지가 너무 깁니다');
