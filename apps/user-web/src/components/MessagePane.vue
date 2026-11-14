@@ -10,6 +10,7 @@ import { initialOf } from '../../../shared/avatar_initial'
 import { senderDisplayName } from '../../../shared/sender_name'
 import type { LunoSticker } from '../luno-stickers'
 import type { LunoLocale } from '../luno-i18n'
+import LinkPreview from './LinkPreview.vue'
 import { currentUser, t, token } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import MessageAttachment from './MessageAttachment.vue'
@@ -47,6 +48,7 @@ const props = defineProps<{
   conversationError: string
   messageTranslations: Record<string, { translated: string; sourceLang: string; engine: string; loading?: boolean; error?: string }>
   translateConfigured: boolean
+  linkPreviewsEnabled: boolean
   translateLanguages: string[]
   sendingConversations: Set<string>
   filteredStickers: LunoSticker[]
@@ -515,6 +517,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                   {{ proposalState(msg) === 'approved' ? t('apprApprovedState') : t('apprRejectedState') }}
                 </div>
                 <div v-else class="bubble-text-content">{{ msg.body }}</div>
+                <LinkPreview v-if="msg.kind === 'text' && !msg.unsent" :text="msg.body" :enabled="linkPreviewsEnabled" />
 
                 <!-- Reactions Display -->
                 <div v-if="msg.reactions && Object.keys(msg.reactions).length" class="bubble-reactions-row">

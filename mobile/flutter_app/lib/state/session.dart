@@ -1784,6 +1784,47 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  // F8: link preview toggle + per-URL preview cache (server caches in D1;
+  // this map only dedups repeat renders on the device).
+  final Map<String, Map<String, dynamic>> linkPreviewCache = {};
+
+  Future<void> setLinkPreviews(bool value) {
+    return run(() async {
+      if (!prefsLoaded) {
+        await loadPrefs();
+        if (!prefsLoaded) throw Exception('설정을 불러오지 못했습니다.');
+      }
+      final data = Map<String, dynamic>.from(myPrefs)
+        ..['link_previews'] = value;
+      final res = await api.call('/api/v1/me/settings', method: 'PUT', data: data);
+      myPrefs = Map<String, dynamic>.from(res);
+      myPrefs['link_previews'] = value;
+      notice = value ? '링크 미리보기를 켰습니다.' : '링크 미리보기를 껐습니다.';
+    });
+  }
+
+  Future<Map<String, dynamic>?> loadLinkPreview(String url) async {
+    if (linkPreviewCache.containsKey(url)) {
+      final hit = linkPreviewCache[url]!;
+      return hit.isEmpty ? null : hit;
+    }
+    if (myPrefs['link_previews'] == false) return null;
+    try {
+      final res = await api.call(
+          '/api/v1/link-preview?url=${Uri.encodeComponent(url)}');
+      if (res['unavailable'] == true ||
+          '${res['title'] ?? ''}'.isEmpty) {
+        linkPreviewCache[url] = {};
+        return null;
+      }
+      final pv = Map<String, dynamic>.from(res);
+      linkPreviewCache[url] = pv;
+      return pv;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _patchFriend(String friendId, Map<String, dynamic> data) {
     return run(() async {
       await api.call('/api/v1/friends/$friendId',

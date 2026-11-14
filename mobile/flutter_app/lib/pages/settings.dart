@@ -29,6 +29,8 @@ class SettingsPage extends StatelessWidget {
         : session.selfStatusMessage;
     final searchable =
         session.myPrefs['searchable_by_id'] as bool? ?? true;
+    final linkPreviews =
+        session.myPrefs['link_previews'] as bool? ?? true;
     return ListView(
       children: [
         PageColumn(
@@ -50,6 +52,17 @@ class SettingsPage extends StatelessWidget {
                   ink: ink,
                   sub: sub,
                   onChanged: session.setSearchableById,
+                ),
+                const _RowDivider(),
+                _ToggleRow(
+                  switchKey: const ValueKey('link-preview-toggle'),
+                  title: '링크 미리보기',
+                  description: '대화의 https 링크 아래에 제목·설명·이미지를 보여줍니다.',
+                  value: linkPreviews,
+                  enabled: session.prefsLoaded,
+                  ink: ink,
+                  sub: sub,
+                  onChanged: session.setLinkPreviews,
                 ),
                 const _RowDivider(),
                 _ActionRow(

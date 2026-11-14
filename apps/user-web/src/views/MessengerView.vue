@@ -76,6 +76,16 @@ const messageTranslations = ref<Record<string, {
 }>>({})
 // T1: translation engine state from GET /api/v1/translate/languages.
 const translateConfigured = ref(false)
+// F8: link preview toggle from GET /api/v1/me/settings (default on).
+const linkPreviewsEnabled = ref(true)
+async function ensureLinkPreviewPref() {
+  try {
+    const prefs = await api<Record<string, unknown>>('/api/v1/me/settings', 'GET')
+    linkPreviewsEnabled.value = prefs.link_previews !== false
+  } catch {
+    linkPreviewsEnabled.value = true
+  }
+}
 const translateLanguages = ref<string[]>([])
 let translateLangsLoaded = false
 async function ensureTranslateLanguages() {
@@ -1987,7 +1997,7 @@ function reportStateLabel(state: string): string {
   if (state === 'dismissed') return t('reportStateDismissed')
   return t('reportStateOpen')
 }
-watch(showSettingsModal, (open) => { if (open) void loadMyReports() })
+watch(showSettingsModal, (open) => { if (open) void loadMyReports(); else void ensureLinkPreviewPref() })
 function approvalCanDecide(): boolean {
   const me = currentUser.value
   const chat = selectedChat.value
@@ -2666,6 +2676,7 @@ onMounted(async () => {
     if (window.visualViewport) window.visualViewport.addEventListener('resize', syncKeyboardOpen)
   }
   await fetchAppVersion()
+  void ensureLinkPreviewPref()
   applyRouteNav()
   const savedToken = token.value || readStoredToken()
   if (savedToken) {
@@ -3341,6 +3352,7 @@ onBeforeUnmount(() => {
         :conversation-error="conversationError"
         :message-translations="messageTranslations"
         :translate-configured="translateConfigured"
+        :link-previews-enabled="linkPreviewsEnabled"
         :translate-languages="translateLanguages"
         :sending-conversations="sendingConversations"
         :filtered-stickers="filteredStickers"

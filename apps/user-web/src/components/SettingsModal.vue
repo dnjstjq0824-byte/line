@@ -76,6 +76,15 @@ function setFontScale(scale: 'normal' | 'large' | 'xlarge') {
 const approveChallengeInput = ref('')
 const approveTokenInput = ref('')
 
+// F8: link preview toggle (GET/PATCH me/settings).
+const linkPreviews = ref(true)
+async function saveLinkPreviews() {
+  await wrap(async () => {
+    const prefs = await api<Record<string, unknown>>('/api/v1/me/settings', 'PATCH', { link_previews: linkPreviews.value })
+    linkPreviews.value = prefs.link_previews !== false
+  })
+}
+
 const editProfileName = ref('')
 const editProfileBio = ref('')
 const editProfileHandle = ref('')
@@ -233,6 +242,7 @@ onMounted(() => {
   editProfileHandle.value = currentUser.value?.handle || ''
   refreshNotifyState()
   void fetchPasskeys()
+  void api<Record<string, unknown>>('/api/v1/me/settings').then((prefs) => { linkPreviews.value = prefs.link_previews !== false }).catch(() => {})
 })
 </script>
 
@@ -306,6 +316,10 @@ onMounted(() => {
           <label class="setting-toggle-row setting-check-row">
             <span>{{ t('mvReadReceipts') }}</span>
             <input type="checkbox" checked />
+          </label>
+          <label class="setting-toggle-row setting-check-row">
+            <span>{{ t('mvLinkPreviews') }}</span>
+            <input v-model="linkPreviews" type="checkbox" @change="saveLinkPreviews" />
           </label>
           <label class="setting-toggle-row setting-check-row">
             <span>{{ t('mvSoundNotif') }}</span>

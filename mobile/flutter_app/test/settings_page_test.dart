@@ -74,6 +74,8 @@ void main() {
     await tester.pumpWidget(_wrap(s));
     await tester.pumpAndSettle();
     expect(s.autoTranslate, isFalse);
+    await tester.ensureVisible(find.byKey(const ValueKey('auto-translate-toggle')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('auto-translate-toggle')));
     await tester.pumpAndSettle();
     expect(s.autoTranslate, isTrue);

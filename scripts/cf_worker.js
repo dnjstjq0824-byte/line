@@ -114,7 +114,7 @@ const DEFAULT_PREFS = {
   theme: 'mint', dark_mode: false, language: 'ko', font_size: 'medium',
   show_read_receipts: true, searchable_by_id: true, searchable_by_email: false,
   allow_friend_requests: true, notifications: true, notification_preview: true,
-  letter_sealing: false, wallpaper: 'default'
+  letter_sealing: false, wallpaper: 'default', link_previews: true
 };
 
 function now() { return new Date().toISOString(); }
@@ -240,6 +240,10 @@ const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS luno_invites (
     token TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, created_by TEXT NOT NULL,
     expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+  // F8: link preview cache (OG title/description/image per URL).
+  `CREATE TABLE IF NOT EXISTS luno_link_previews (
+    url TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
+    image_url TEXT NOT NULL DEFAULT '', ok INTEGER NOT NULL DEFAULT 0, fetched_at INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
     avatar_url TEXT DEFAULT '', official INTEGER DEFAULT 0, owner_id TEXT DEFAULT '',
@@ -3577,6 +3581,115 @@ async function extended(p, request, url, me, token) {
       await persistAudit(myId, 'account.delete_request', myId, { reason });
       return json({ status: 'deletion_scheduled', grace_until: deletionGraceUntil(stamped), message: '계정 삭제가 예약되었습니다. 30일 안에 로그인하면 복구됩니다.' });
     }
+  }
+// F8: link previews. Only public https pages are fetched: plain http,
+// credentials, localhost/private/link-local hosts and intranet suffixes
+// never reach fetch (every redirect hop re-validates). Bodies cap at
+// 512KB and fetches at 3s; hits cache in D1 for 24h, misses for 1h.
+const LINK_PREVIEW_MAX_BYTES = 524288;
+const LINK_PREVIEW_TIMEOUT_MS = 3000;
+const LINK_PREVIEW_TTL_MS = 24 * 3600 * 1000;
+const LINK_PREVIEW_FAIL_TTL_MS = 3600 * 1000;
+function linkPreviewHostBlocked(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  if (!h) return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.lan') || h.endsWith('.home') || h.endsWith('.corp')) return true;
+  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const o = v4.slice(1).map(Number);
+    if (o.some(n => n > 255)) return true;
+    if (o[0] === 10 || o[0] === 127 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168) || (o[0] === 169 && o[1] === 254) || o[0] === 0 || o[0] >= 224) return true;
+    return false;
+  }
+  if (h.includes(':')) return true;
+  return false;
+}
+function linkPreviewUrlError(value) {
+  let u;
+  try { u = new URL(String(value || '')); } catch { return 'valid URL required'; }
+  if (u.protocol !== 'https:') return 'https links only';
+  if (u.username || u.password) return 'credentialed links blocked';
+  if (linkPreviewHostBlocked(u.hostname)) return 'private hosts blocked';
+  return null;
+}
+function linkPreviewMeta(html, prop) {
+  const tags = String(html).match(/<meta[^>]*>/gi) || [];
+  const want = String(prop).toLowerCase();
+  for (const tag of tags) {
+    const nm = tag.match(/(?:property|name)\s*=\s*["']([^"']+)["']/i);
+    if (!nm || nm[1].toLowerCase() !== want) continue;
+    const ct = tag.match(/content\s*=\s*["']([^"']{1,2000})["']/i);
+    if (ct && ct[1].trim()) return ct[1].trim();
+  }
+  return '';
+}
+function linkPreviewTitle(html) {
+  const m = String(html).match(/<title[^>]*>([^<]{1,500})<\/title\s*>/i);
+  return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+}
+async function fetchLinkPreview(target) {
+  let current = target;
+  let res = null;
+  for (let hop = 0; hop < 4; hop++) {
+    const err = linkPreviewUrlError(current);
+    if (err) return { blocked: err };
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), LINK_PREVIEW_TIMEOUT_MS);
+    try {
+      res = await fetch(current, { method: 'GET', redirect: 'manual', signal: ctl.signal, headers: { 'User-Agent': 'LUNO-LinkPreview/1.0', 'Accept': 'text/html' } });
+    } catch {
+      return { failed: true };
+    } finally { clearTimeout(timer); }
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) return { failed: true };
+      try { current = new URL(loc, current).toString(); } catch { return { failed: true }; }
+      res = null;
+      continue;
+    }
+    break;
+  }
+  if (!res || !res.ok) return { failed: true };
+  const ctype = (res.headers.get('content-type') || '').toLowerCase();
+  if (ctype && ctype.indexOf('text/html') < 0 && ctype.indexOf('application/xhtml') < 0) return { failed: true };
+  let bytes;
+  try {
+    bytes = await res.arrayBuffer();
+    if (bytes.byteLength > LINK_PREVIEW_MAX_BYTES) return { failed: true };
+  } catch { return { failed: true }; }
+  const html = new TextDecoder('utf-8', { fatal: false }).decode(bytes).slice(0, 200000);
+  const title = linkPreviewMeta(html, 'og:title') || linkPreviewTitle(html);
+  const description = linkPreviewMeta(html, 'og:description') || linkPreviewMeta(html, 'description');
+  let image = linkPreviewMeta(html, 'og:image');
+  if (image) {
+    try {
+      const abs = new URL(image, current).toString();
+      image = linkPreviewUrlError(abs) ? '' : abs;
+    } catch { image = ''; }
+  }
+  return { title: clip(title, 200), description: clip(description, 500), image_url: clip(image, 2000) };
+}
+  if (p === 'link-preview' && method === 'GET') {
+    const target = (url.searchParams.get('url') || '').trim();
+    const invalid = linkPreviewUrlError(target);
+    if (invalid) return bad(invalid);
+    if (!dbOf()) return bad('previews unavailable', 503);
+    await ensureSchema();
+    const hit = await dbOf().prepare('SELECT * FROM luno_link_previews WHERE url = ?').bind(target).first().catch(() => null);
+    const age = hit ? Date.now() - Number(hit.fetched_at) : Infinity;
+    const ttl = hit && !hit.ok ? LINK_PREVIEW_FAIL_TTL_MS : LINK_PREVIEW_TTL_MS;
+    if (hit && age < ttl) {
+      if (!hit.ok) return json({ url: target, title: '', description: '', image_url: '', unavailable: true, cached: true });
+      return json({ url: target, title: hit.title || '', description: hit.description || '', image_url: hit.image_url || '', unavailable: false, cached: true });
+    }
+    const pv = await fetchLinkPreview(target);
+    if (pv.blocked) return bad(pv.blocked);
+    if (pv.failed || !pv.title) {
+      await dbOf().prepare('INSERT INTO luno_link_previews (url, title, description, image_url, ok, fetched_at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(url) DO UPDATE SET title = excluded.title, description = excluded.description, image_url = excluded.image_url, ok = 0, fetched_at = excluded.fetched_at').bind(target, '', '', '', Date.now()).run();
+      return json({ url: target, title: '', description: '', image_url: '', unavailable: true, cached: false });
+    }
+    await dbOf().prepare('INSERT INTO luno_link_previews (url, title, description, image_url, ok, fetched_at) VALUES (?, ?, ?, ?, 1, ?) ON CONFLICT(url) DO UPDATE SET title = excluded.title, description = excluded.description, image_url = excluded.image_url, ok = 1, fetched_at = excluded.fetched_at').bind(target, pv.title, pv.description, pv.image_url, Date.now()).run();
+    return json({ url: target, title: pv.title, description: pv.description, image_url: pv.image_url, unavailable: false, cached: false });
   }
   if (p === 'me/settings') {
     const prefs = prefsOf(myId);

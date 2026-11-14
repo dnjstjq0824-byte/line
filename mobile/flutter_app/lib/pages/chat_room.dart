@@ -365,6 +365,95 @@ class _ChatImage extends StatelessWidget {
   }
 }
 
+// F8: one link card under a text bubble. First https URL only, hidden
+// when the account switched previews off or the fetch came back empty.
+class _LinkPreviewCard extends StatefulWidget {
+  final String text;
+  const _LinkPreviewCard({required this.text});
+
+  @override
+  State<_LinkPreviewCard> createState() => _LinkPreviewCardState();
+}
+
+class _LinkPreviewCardState extends State<_LinkPreviewCard> {
+  Map<String, dynamic>? _pv;
+  bool _done = false;
+
+  String _firstUrl(String s) {
+    final m = RegExp('https://[^\\s<>"\']+').firstMatch(s);
+    if (m == null) {
+      return '';
+    }
+    return m.group(0)!.replaceAll(RegExp(r'[.,!?;:)\]]+$'), '');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final session = SessionScope.of(context, listen: false);
+      final url = _firstUrl(widget.text);
+      final pv = url.isEmpty ? null : await session.loadLinkPreview(url);
+      if (mounted) {
+        setState(() {
+          _pv = pv;
+          _done = true;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_done || _pv == null) return const SizedBox.shrink();
+    final pv = _pv!;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final img = '${pv['image_url'] ?? ''}';
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(HarborRadius.control),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (img.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(HarborRadius.control),
+              child: Image.network(img,
+                  width: 64, height: 64, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      const SizedBox.shrink()),
+            ),
+          if (img.isNotEmpty) const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${pv['title']}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: HarborType.small,
+                        fontWeight: FontWeight.w700)),
+                if ('${pv['description'] ?? ''}'.isNotEmpty)
+                  Text('${pv['description']}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: HarborType.micro)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DateDivider extends StatelessWidget {
   final dynamic iso;
   const _DateDivider({required this.iso});
@@ -566,6 +655,8 @@ class _SignalBubble extends StatelessWidget {
                           fontSize: LunoType.bubbleSize,
                           fontWeight: LunoType.bubbleWeight,
                           height: LunoType.bubbleHeight)),
+                if (m['kind'] == 'text' && m['unsent'] != true)
+                  _LinkPreviewCard(text: '${m['body']}'),
                 if (trans != null) ...[
                   const SizedBox(height: 6),
                   Container(
