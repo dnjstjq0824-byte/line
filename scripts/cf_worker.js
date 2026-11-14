@@ -17,6 +17,7 @@ const friendships = new Map();
 const passkeyChallenges = new Map(); // challenge -> { userId, purpose, expiresAt }
 const recoveryChallenges = new Map(); // id -> { userId, codeHash, expiresAt, consumedAt } (no-DB fallback; D1 otherwise)
 const recoveryMailOutbox = []; // S1 test seam: mock/log driver deliveries { email, code, created_at }
+const verificationMailOutbox = []; // F1 test seam: verification codes { email, code, created_at }
 const passkeyCreds = new Map(); // credentialIdB64 -> { userId, jwk, counter, transports, name, createdAt }
 const conversations = new Map();
 const messages = new Map();
@@ -228,7 +229,12 @@ const LUNO_SCHEMA_BASE = [
     cover_url TEXT DEFAULT '', prefs_json TEXT DEFAULT '',
     status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
     birthday TEXT DEFAULT '', state TEXT DEFAULT 'active', kind TEXT DEFAULT 'user',
+    email_verified INTEGER DEFAULT 0,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  // F1: email verification codes (hash only, 15-minute life, 5 attempts).
+  `CREATE TABLE IF NOT EXISTS luno_email_codes (
+    email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
     avatar_url TEXT DEFAULT '', official INTEGER DEFAULT 0, owner_id TEXT DEFAULT '',
@@ -414,6 +420,9 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'phone_number', "TEXT DEFAULT ''"],
   ['users', 'state', "TEXT DEFAULT 'active'"],
   ['users', 'kind', "TEXT DEFAULT 'user'"],
+  // F1: legacy rows grandfather to verified (they registered before
+  // verification existed); new rows always set the flag explicitly.
+  ['users', 'email_verified', 'INTEGER DEFAULT 1'],
   ['users', 'password_hash', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'display_name', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'created_at', "TEXT NOT NULL DEFAULT ''"],
@@ -2181,6 +2190,18 @@ async function sendRecoveryMail(env, email, code) {
   }
   throw new Error(`recovery mail provider not implemented: ${provider}`);
 }
+// F1: verification-mail seam, mirroring recovery until F2 unifies drivers.
+function verificationProvider(env) {
+  const provider = env.RECOVERY_MAIL_PROVIDER;
+  return (provider === 'mock' || provider === 'log') ? provider : null;
+}
+async function sendVerificationMail(env, email, code) {
+  if (!verificationProvider(env)) throw new Error('verification mail provider not configured');
+  verificationMailOutbox.push({ email, code, created_at: Date.now() });
+}
+function newEmailCode() {
+  return String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
+}
 // Authentication is session-backed only: a token is valid iff its digest exists in D1 (or the
 // in-memory store when no D1 is bound), has not been revoked and is inside its TTL. The old
 // stateless "cf-token-<userId>.*" fallback accepted any forged token and is removed.
@@ -2189,7 +2210,7 @@ function cacheUserRow(row, granted) {
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: granted,
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
-    state: row.state || undefined, kind: row.kind || 'user'
+    state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1
   }, row.password_hash);
   if (isEnvAdmin(u.id)) u.role = 'admin';
   users.set(row.email.toLowerCase(), u);
@@ -2206,7 +2227,7 @@ async function loadUserFromD1(id, knownRole) {
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
-    state: row.state || undefined, kind: row.kind || 'user'
+    state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1
   }, row.password_hash);
   users.set(row.email.toLowerCase(), u);
   usersById.set(u.id, u);
@@ -2413,9 +2434,13 @@ async function getAuthUser(request) {
   if (db) {
     // A-2: account standing is re-read from D1 on every request, so a ban,
     // suspension or deletion on another isolate takes effect immediately.
-    const standing = await db.prepare('SELECT state FROM users WHERE id = ?').bind(userId).first().catch(() => null);
+    // F1: verification rides the same re-read so flips apply live.
+    const standing = await db.prepare('SELECT state, email_verified FROM users WHERE id = ?').bind(userId).first().catch(() => null);
     const state = standing?.state || user?.state || 'active';
     if (user) user.state = state;
+    if (user && standing && standing.email_verified !== undefined && standing.email_verified !== null) {
+      user.email_verified = Number(standing.email_verified) === 0 ? 0 : 1;
+    }
     if (!user || state === 'suspended' || state === 'deleted' || await isBanned(userId)) {
       sessions.delete(token);
       return null;
@@ -3666,6 +3691,8 @@ async function extended(p, request, url, me, token) {
       return json({ messages: list.slice(-limit).map(x => decorateMessage(x, myId, cid)), has_more: list.length > limit });
     }
     if (method === 'POST') {
+      // F1: unverified accounts cannot send.
+      if (me.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
       if (conv.official || conv.kind === 'official') return bad('공식계정 방은 읽기 전용입니다');
       if (!await rateLimit('rl:msg:' + myId, 300)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
       const b = await readJson(request);
@@ -4837,14 +4864,14 @@ async function extended(p, request, url, me, token) {
       }
       const bot = {
         id: uid(), email: `${botHandle}@bots.invalid`, handle: botHandle,
-        display_name: displayName, role: 'user', kind: 'bot',
+        display_name: displayName, role: 'user', kind: 'bot', email_verified: 1,
         bio: 'LUNO bot', created_at: new Date().toISOString()
       };
       const db = dbOf();
       if (db) {
         await ensureSchema();
         try {
-          await db.prepare("INSERT INTO users (id, email, handle, password_hash, display_name, bio, kind, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?, 'bot', datetime('now'), datetime('now'))")
+          await db.prepare("INSERT INTO users (id, email, handle, password_hash, display_name, bio, kind, email_verified, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?, 'bot', 1, datetime('now'), datetime('now'))")
             .bind(bot.id, bot.email, bot.handle, bot.display_name, bot.bio).run();
         } catch (err) {
           if (/UNIQUE constraint|unique/i.test(String(err && err.message))) return json({ error: 'handle is already taken' }, 409);
@@ -5647,12 +5674,17 @@ const workerCore = {
           if (!handle) return json({ error: 'could not allocate a unique handle' }, 500);
         }
         // L-01: public signup always mints human accounts; body.kind is ignored.
+        // F1: strict verification only when a mail provider exists AND codes
+        // can persist; otherwise registration auto-verifies (documented
+        // dev-mode behavior — unenforceable checks fail open, never half-on).
+        const needsVerify = !!verificationProvider(env) && !!env.DB;
         const newUser = {
           id: crypto.randomUUID(),
           email,
           display_name: body.display_name || email.split('@')[0],
           role: 'user',
           kind: 'user',
+          email_verified: needsVerify ? 0 : 1,
           handle,
           bio: 'New Messenger User',
           created_at: new Date().toISOString()
@@ -5664,17 +5696,23 @@ const workerCore = {
           // S2: plain INSERT is the final uniqueness defense — a concurrent
           // registration loses with 409 instead of replacing the row.
           try {
-            await env.DB.prepare("INSERT INTO users (id, email, handle, password_hash, display_name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
-              .bind(newUser.id, newUser.email, newUser.handle, encodePasswordHash(newUser), newUser.display_name, newUser.bio).run();
+            await env.DB.prepare("INSERT INTO users (id, email, handle, password_hash, display_name, bio, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))")
+              .bind(newUser.id, newUser.email, newUser.handle, encodePasswordHash(newUser), newUser.display_name, newUser.bio, newUser.email_verified).run();
           } catch (err) {
             if (/UNIQUE constraint|unique/i.test(String(err && err.message))) return json({ error: 'account already exists' }, 409);
             throw err;
           }
           await d1Run(env.DB, "INSERT OR IGNORE INTO wallets (user_id, balance, updated_at) VALUES (?, 0, datetime('now'))", newUser.id);
+          if (needsVerify) {
+            const code = newEmailCode();
+            await env.DB.prepare('INSERT OR REPLACE INTO luno_email_codes (email, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, datetime(\'now\'))')
+              .bind(email, await sha256Hex(code), Date.now() + 15 * 60 * 1000).run();
+            await sendVerificationMail(env, email, code);
+          }
         }
         users.set(email, newUser);
         usersById.set(newUser.id, newUser);
-        return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name }, 201);
+        return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name, email_verified: newUser.email_verified === 1 }, 201);
       }
 
       // 1b. Passkey login (email-first, public)
@@ -5729,6 +5767,7 @@ const workerCore = {
             challengeB64: challenge, body, cred,
           });
           await pkUpdateCounter(userId, cred.credId, counter);
+          if (user.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
           const { token: ptoken, deviceId: pdevice, refreshToken: pre } = await createSession(user, request);
           return json({
             access_token: ptoken,
@@ -5791,6 +5830,9 @@ const workerCore = {
           await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
+        // F1: verified email required (checked after the password so the
+        // gate never confirms whether an address exists).
+        if (user.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
         await clearLoginFailures(identifier, loginIp);
         const { token, deviceId, refreshToken } = await createSession(user, request);
         return json({
@@ -5938,8 +5980,56 @@ const workerCore = {
         await persistPassword(user);
         await revokeOtherSessions(userId, '', userId);
         await revokeAllRefresh(userId, null);
+        // F1: completing recovery proves inbox ownership, so it verifies the email too.
+        if (dbOf()) {
+          await dbOf().prepare('UPDATE users SET email_verified = 1 WHERE id = ?').bind(userId).run().catch(() => null);
+        }
+        user.email_verified = 1;
         await persistAudit(userId, 'password.recover', userId, {});
         return json({ status: 'password_reset' });
+      }
+
+      // F1: email verification. Codes are hash-stored, 15-minute, 5 tries;
+      // responses never carry the code (F2 pins this for all drivers).
+      if (p === 'auth/verify-email' && request.method === 'POST') {
+        if (!await rateLimit('rl:verify:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        const body = await request.json().catch(() => ({}));
+        const email = typeof body.email === 'string' ? body.email.toLowerCase().trim() : '';
+        const code = typeof body.code === 'string' ? body.code.trim() : '';
+        if (!email.includes('@') || !/^\d{6}$/.test(code)) return json({ error: 'invalid verification request' }, 400);
+        if (!dbOf()) return json({ error: 'verification requires a configured database' }, 501);
+        await ensureSchema();
+        const row = await dbOf().prepare('SELECT code_hash, expires_at, attempts FROM luno_email_codes WHERE email = ?').bind(email).first();
+        if (!row || Number(row.attempts) >= 5) return json({ error: 'invalid or expired code' }, 400);
+        if (Number(row.expires_at) <= Date.now()) {
+          await dbOf().prepare('DELETE FROM luno_email_codes WHERE email = ?').bind(email).run();
+          return json({ error: 'invalid or expired code' }, 400);
+        }
+        if (row.code_hash !== await sha256Hex(code)) {
+          await dbOf().prepare('UPDATE luno_email_codes SET attempts = attempts + 1 WHERE email = ?').bind(email).run();
+          return json({ error: 'invalid or expired code' }, 400);
+        }
+        await dbOf().prepare('DELETE FROM luno_email_codes WHERE email = ?').bind(email).run();
+        await dbOf().prepare('UPDATE users SET email_verified = 1, updated_at = datetime(\'now\') WHERE email = ?').bind(email).run();
+        const u = users.get(email);
+        if (u) u.email_verified = 1;
+        return json({ status: 'verified' });
+      }
+      if (p === 'auth/verify-email/resend' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const email = typeof body.email === 'string' ? body.email.toLowerCase().trim() : '';
+        if (!email.includes('@')) return json({ error: 'invalid email' }, 400);
+        if (!await rateLimit('rl:resend:' + email, 5)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        const quiet = () => json({ status: 'sent' });
+        if (!dbOf() || !verificationProvider(env)) return quiet();
+        await ensureSchema();
+        const user = await dbOf().prepare('SELECT email_verified FROM users WHERE email = ?').bind(email).first();
+        if (!user || Number(user.email_verified) === 1) return quiet();
+        const code = newEmailCode();
+        await dbOf().prepare('INSERT OR REPLACE INTO luno_email_codes (email, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, datetime(\'now\'))')
+          .bind(email, await sha256Hex(code), Date.now() + 15 * 60 * 1000).run();
+        await sendVerificationMail(env, email, code);
+        return quiet();
       }
 
       // 2.5 Auth: Phone Login
@@ -5969,6 +6059,7 @@ const workerCore = {
         const user = Array.from(users.values()).find(u => u.phone === phone);
         if (!user) return bad('가입되지 않은 전화번호입니다', 404);
         if (user.role === 'admin') return bad('관리자 계정은 전화번호로 로그인할 수 없습니다', 403);
+        if (user.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
         const { token, deviceId } = await createSession(user, request);
         return json({
           status: 'authenticated',
@@ -6015,6 +6106,7 @@ const workerCore = {
           const u = Array.from(users.values()).find(usr => usr.id === c.user_id)
             || (dbOf() ? await loadUserFromD1(c.user_id) : null);
           if (!u) return bad('승인한 사용자를 찾을 수 없습니다', 400);
+          if (u.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
           const { token } = await createSession(u, request);
           await qrDeleteChallenge(body.challenge_id); // Invalidate immediately upon consumption
           return json({ status: 'authenticated', access_token: token, user_id: u.id, role: u.role });
@@ -6675,7 +6767,7 @@ export class UserSocketHub {
 }
 
 // S1: test seam export (mock/log recovery-mail deliveries).
-export { recoveryMailOutbox };
+export { recoveryMailOutbox, verificationMailOutbox };
 export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };
 export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };
 export default {

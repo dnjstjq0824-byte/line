@@ -96,7 +96,7 @@ export type Message = {
   }
 }
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) { super(message); this.name = 'ApiError' }
+  constructor(message: string, public readonly status: number, public readonly code?: string) { super(message); this.name = 'ApiError' }
 }
 export async function request<T>(path: string, token: string | null = null, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
   const resp = await fetch(API_URL + path, {
@@ -109,7 +109,7 @@ export async function request<T>(path: string, token: string | null = null, meth
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   })
   const payload = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
-  if (!resp.ok) throw new ApiError(payload.error || `HTTP ${resp.status}`, resp.status)
+  if (!resp.ok) throw new ApiError(payload.error || `HTTP ${resp.status}`, resp.status, payload.code)
   return payload as T
 }
 export function newClientID(): string {

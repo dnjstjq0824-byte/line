@@ -93,7 +93,7 @@ check('go_router map is 1 route = 1 page', () => {
 // 6. API contract: every Flutter endpoint exists on the backend.
 check('flutter endpoints all exist in backend route table', () => {
   // Legacy-known 404s (no backend route; behaviour preserved, never rewired).
-  const allowlist = new Set(['/api/v1/me/export-data', '/api/v1/bookmarks', '/api/v1/auth/', '/api/v1/auth/change-password', '/api/v1/app/latest', '/api/v1/translate/languages', '/api/v1/calls/ice-servers']); // '/api/v1/auth/' = mobile route-prefix filter, never requested; change-password = worker-only (Go uses PATCH /api/v1/auth/password); app/latest = worker-only release feed (C3); translate/languages = worker-only (T1, Go routes frozen); calls/ice-servers = worker-only (N2-L, Go routes frozen)
+  const allowlist = new Set(['/api/v1/me/export-data', '/api/v1/bookmarks', '/api/v1/auth/', '/api/v1/auth/change-password', '/api/v1/auth/verify-email', '/api/v1/auth/verify-email/resend', '/api/v1/app/latest', '/api/v1/translate/languages', '/api/v1/calls/ice-servers']); // '/api/v1/auth/' = mobile route-prefix filter, never requested; change-password = worker-only (Go uses PATCH /api/v1/auth/password); verify-email* = worker-only (F1, Go routes frozen); app/latest = worker-only release feed (C3); translate/languages = worker-only (T1, Go routes frozen); calls/ice-servers = worker-only (N2-L, Go routes frozen)
   const lib = join(root, 'mobile', 'flutter_app', 'lib');
   const dart = [];
   const walk = (d) => {

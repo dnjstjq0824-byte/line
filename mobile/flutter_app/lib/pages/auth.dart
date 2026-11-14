@@ -17,12 +17,14 @@ class _LoginPageState extends State<LoginPage> {
   final email = TextEditingController();
   final password = TextEditingController();
   final name = TextEditingController();
+  final code = TextEditingController();
 
   @override
   void dispose() {
     email.dispose();
     password.dispose();
     name.dispose();
+    code.dispose();
     super.dispose();
   }
 
@@ -56,12 +58,19 @@ class _LoginPageState extends State<LoginPage> {
                             padding: const EdgeInsets.all(32),
                             child: SizedBox(
                               width: 400,
-                              child: _GateForm(
-                                email: email,
-                                password: password,
-                                name: name,
-                                onSubmit: () => _submit(session),
-                              ),
+                              child: session.needsEmailVerify
+                                  ? _VerifyCard(
+                                      code: code,
+                                      onVerify: () =>
+                                          session.verifyEmailCode(code.text),
+                                      onResend: session.resendVerifyCode,
+                                    )
+                                  : _GateForm(
+                                      email: email,
+                                      password: password,
+                                      name: name,
+                                      onSubmit: () => _submit(session),
+                                    ),
                             ),
                           ),
                         ),
@@ -79,12 +88,19 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           const HarborWordmark(compact: false),
                           const SizedBox(height: 12),
-                          _GateForm(
-                            email: email,
-                            password: password,
-                            name: name,
-                            onSubmit: () => _submit(session),
-                          ),
+                          if (session.needsEmailVerify)
+                            _VerifyCard(
+                              code: code,
+                              onVerify: () => session.verifyEmailCode(code.text),
+                              onResend: session.resendVerifyCode,
+                            )
+                          else
+                            _GateForm(
+                              email: email,
+                              password: password,
+                              name: name,
+                              onSubmit: () => _submit(session),
+                            ),
                         ],
                       ),
                     ),
@@ -176,6 +192,62 @@ class _GatePanel extends StatelessWidget {
                 style: TextStyle(
                     fontSize: HarborType.micro,
                     color: dark ? HarborDark.drift : Colors.white.withValues(alpha: 0.6))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// F1: email verification step. Shown instead of the gate form while the
+// account needs a code from its inbox.
+class _VerifyCard extends StatelessWidget {
+  final TextEditingController code;
+  final Future<void> Function() onVerify;
+  final Future<void> Function() onResend;
+  const _VerifyCard({
+    required this.code,
+    required this.onVerify,
+    required this.onResend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final text = Theme.of(context).textTheme;
+    return Card(
+      color: dark ? HarborDark.surface : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(HarborRadius.card),
+        side: BorderSide(color: dark ? HarborDark.channel : HarborLight.channel),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('이메일 인증', style: text.headlineSmall),
+            const SizedBox(height: 4),
+            Text('${session.verifyEmail} 주소로 보내드린 6자리 인증번호를 입력하세요.',
+                style: text.bodySmall),
+            const SizedBox(height: 12),
+            TextField(
+              controller: code,
+              decoration: const InputDecoration(labelText: '인증번호'),
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: session.busy ? null : onVerify,
+              child: const Text('인증하기'),
+            ),
+            TextButton(
+              onPressed: session.busy ? null : onResend,
+              child: const Text('인증번호 다시 받기'),
+            ),
           ],
         ),
       ),

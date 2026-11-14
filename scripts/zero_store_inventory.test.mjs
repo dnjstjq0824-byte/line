@@ -28,7 +28,7 @@ const STATIC = new Set([
 const EPHEMERAL = new Set([
   'activeSockets', 'AUTH_CTX', 'callSessions', 'groupCallRooms',
   'qrChallenges', 'phoneVerificationCodes', 'passkeyChallenges',
-  'recoveryChallenges', 'recoveryMailOutbox',
+  'recoveryChallenges', 'recoveryMailOutbox', 'verificationMailOutbox',
   'translateProviderCalls', // T1: per-isolate provider-call probe for tests
 ]);
 const CACHE = new Set([

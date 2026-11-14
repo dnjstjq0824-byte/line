@@ -19,7 +19,8 @@ import '../legacy_tokens.dart';
 class ApiException implements Exception {
   final int statusCode;
   final String message;
-  ApiException(this.statusCode, this.message);
+  final String? code;
+  ApiException(this.statusCode, this.message, [this.code]);
   @override
   String toString() => 'Exception: $message';
 }
@@ -123,7 +124,8 @@ class Api {
     if (parsed is! Map<String, dynamic>) throw Exception('유효하지 않은 응답 형식');
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ApiException(res.statusCode,
-          parsed['error']?.toString() ?? 'HTTP 오류: ${res.statusCode}');
+          parsed['error']?.toString() ?? 'HTTP 오류: ${res.statusCode}',
+          parsed['code']?.toString());
     }
     return parsed;
   }

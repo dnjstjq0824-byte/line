@@ -263,6 +263,30 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// F1: set when the account needs email verification; the login page
+  /// swaps to the verify step until [verifyEmail] succeeds.
+  bool needsEmailVerify = false;
+  String verifyEmail = '';
+
+  Future<void> verifyEmailCode(String code) {
+    return run(() async {
+      await api.call('/api/v1/auth/verify-email',
+          method: 'POST', data: {'email': verifyEmail, 'code': code.trim()});
+      needsEmailVerify = false;
+      notice = '이메일 인증이 완료되었습니다. 로그인해주세요.';
+      notifyListeners();
+    });
+  }
+
+  Future<void> resendVerifyCode() {
+    return run(() async {
+      await api.call('/api/v1/auth/verify-email/resend',
+          method: 'POST', data: {'email': verifyEmail});
+      notice = '인증번호를 다시 보냈습니다.';
+      notifyListeners();
+    });
+  }
+
   Future<void> login({
     required String email,
     required String password,
@@ -270,22 +294,41 @@ class SessionController extends ChangeNotifier {
   }) async {
     await run(() async {
       if (registerMode) {
-        await api.call('/api/v1/auth/register', method: 'POST', data: {
+        final reg = await api.call('/api/v1/auth/register', method: 'POST', data: {
           'email': email.trim(),
           'password': password,
           'display_name': displayName.trim(),
         });
         registerMode = false;
+        if (reg['email_verified'] == false) {
+          needsEmailVerify = true;
+          verifyEmail = email.trim();
+          notice = '이메일 인증이 필요합니다.';
+          notifyListeners();
+          return;
+        }
         notice = 'LUNO 계정이 생성되었습니다. 로그인해주세요.';
         notifyListeners();
         return;
       }
-      final result = await api.call('/api/v1/auth/login', method: 'POST', data: {
-        'email': email.trim(),
-        'password': password,
-        'platform': 'android',
-        'device_name': 'LUNO Android Client',
-      });
+      Map<String, dynamic> result;
+      try {
+        result = await api.call('/api/v1/auth/login', method: 'POST', data: {
+          'email': email.trim(),
+          'password': password,
+          'platform': 'android',
+          'device_name': 'LUNO Android Client',
+        });
+      } on ApiException catch (e) {
+        if (e.code == 'EMAIL_NOT_VERIFIED') {
+          needsEmailVerify = true;
+          verifyEmail = email.trim();
+          notice = '이메일 인증이 필요합니다.';
+          notifyListeners();
+          return;
+        }
+        rethrow;
+      }
       api.token = result['access_token'];
       api.refreshToken = result['refresh_token'] as String?;
       if (api.refreshToken != null) {

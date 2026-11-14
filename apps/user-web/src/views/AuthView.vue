@@ -76,6 +76,40 @@ const recoverCodeInput = ref('')
 const recoverNewPassword = ref('')
 const recoverSent = ref(false)
 
+// F1: email verification step after signup, or after a gated login.
+const showVerifyModal = ref(false)
+const verifyEmail = ref('')
+const verifyCodeInput = ref('')
+
+function openVerifyModal(address: string) {
+  showVerifyModal.value = true
+  verifyEmail.value = address
+  verifyCodeInput.value = ''
+}
+
+async function submitVerifyCode() {
+  await wrap(async () => {
+    await request('/api/v1/auth/verify-email', null, 'POST', {
+      email: verifyEmail.value.trim(),
+      code: verifyCodeInput.value.trim()
+    })
+    note.value = t('verifyDoneNote')
+    email.value = verifyEmail.value
+    password.value = ''
+    registerMode.value = false
+    showVerifyModal.value = false
+  })
+}
+
+async function resendVerifyCode() {
+  await wrap(async () => {
+    await request('/api/v1/auth/verify-email/resend', null, 'POST', {
+      email: verifyEmail.value.trim()
+    })
+    note.value = t('verifyResentNote')
+  })
+}
+
 function openRecoverModal() {
   showRecoverModal.value = true
   recoverEmail.value = email.value
@@ -118,25 +152,40 @@ async function verifyRecoverCode() {
 async function authAction() {
   await wrap(async () => {
     if (registerMode.value) {
-      await request('/api/v1/auth/register', null, 'POST', {
+      const reg = await request<{ email_verified?: boolean }>('/api/v1/auth/register', null, 'POST', {
         email: email.value.trim(),
         password: password.value,
         display_name: displayName.value.trim() || email.value.split('@')[0]
       })
+      if (reg.email_verified === false) {
+        note.value = t('verifyNeededNote')
+        registerMode.value = false
+        openVerifyModal(email.value.trim())
+        return
+      }
       note.value = t('registerDoneNote')
       registerMode.value = false
       return
     }
-    const data = await request<LoginResult>('/api/v1/auth/login', null, 'POST', {
-      email: email.value.trim(),
-      password: password.value,
-      device_name: 'LUNO Web Desktop Client',
-      platform: 'web'
-    })
-    storeSession(data, autoLoginCheck.value)
-    currentUser.value = await api<User>('/api/v1/me')
-    password.value = ''
-    await router.push('/chats')
+    try {
+      const data = await request<LoginResult>('/api/v1/auth/login', null, 'POST', {
+        email: email.value.trim(),
+        password: password.value,
+        device_name: 'LUNO Web Desktop Client',
+        platform: 'web'
+      })
+      storeSession(data, autoLoginCheck.value)
+      currentUser.value = await api<User>('/api/v1/me')
+      password.value = ''
+      await router.push('/chats')
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'EMAIL_NOT_VERIFIED') {
+        note.value = t('verifyNeededNote')
+        openVerifyModal(email.value.trim())
+        return
+      }
+      throw e
+    }
   })
 }
 
@@ -551,6 +600,31 @@ onBeforeUnmount(() => {
               </button>
             </template>
             <button class="btn-secondary" type="button" @click="showRecoverModal = false">{{ t('mvRecoverCancel') }}</button>
+          </div>
+        </div>
+      </div>
+      <div v-if="showVerifyModal" class="modal-backdrop" @click.self="showVerifyModal = false">
+        <div class="standard-modal-box" role="dialog" :aria-label="t('verifyTitle')">
+          <div class="modal-header">
+            <h3>{{ t('verifyTitle') }}</h3>
+            <button class="btn-modal-close" @click="showVerifyModal = false">✕</button>
+          </div>
+          <div class="modal-body-form">
+            <p class="ln-charge-notice" role="note">
+              {{ t('verifyPrompt') }}
+            </p>
+            <label class="pc-input-row">
+              <span>{{ t('verifyEmailLabel') }}</span>
+              <input v-model="verifyEmail" type="email" class="pc-login-input" disabled />
+            </label>
+            <label class="pc-input-row">
+              <span>{{ t('verifyCodeLabel') }}</span>
+              <input v-model="verifyCodeInput" type="text" class="pc-login-input" autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
+            </label>
+            <button class="btn-pc-submit-full" type="button" :disabled="verifyCodeInput.trim().length < 6" @click="submitVerifyCode">
+              {{ t('verifySubmit') }}
+            </button>
+            <button class="btn-secondary" type="button" @click="resendVerifyCode">{{ t('verifyResend') }}</button>
           </div>
         </div>
       </div>
