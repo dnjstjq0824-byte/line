@@ -2064,6 +2064,34 @@ function startReply(msg: Message) {
   replyToMessage.value = msg
 }
 
+// F7: delete-for-me hides one side; forward copies into another room.
+const showForwardModal = ref(false)
+const forwardTargetMsg = ref<Message | null>(null)
+function openForwardPicker(msg: Message) {
+  forwardTargetMsg.value = msg
+  showForwardModal.value = true
+}
+async function hideMessage(msgId: string) {
+  if (!selectedChatId.value) return
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${selectedChatId.value}/messages/${msgId}/hide`, 'POST')
+    messages.value = messages.value.filter((m) => m.id !== msgId)
+    note.value = t('mvHideDone')
+  })
+}
+async function doForward(chatId: string) {
+  const msg = forwardTargetMsg.value
+  if (!msg || !selectedChatId.value) return
+  await wrap(async () => {
+    await api(`/api/v1/conversations/${selectedChatId.value}/messages/${msg.id}/forward`, 'POST', { to_conversation_id: chatId })
+    showForwardModal.value = false
+    forwardTargetMsg.value = null
+    note.value = t('mvForwarded')
+    if (chatId === selectedChatId.value) await selectChat(chatId)
+    else await loadChats()
+  })
+}
+
 // --- Polls & Events ---
 async function createPoll() {
   if (!selectedChatId.value || !newPollQuestion.value.trim() || !newPollOption1.value.trim() || !newPollOption2.value.trim()) return
@@ -3373,6 +3401,8 @@ onBeforeUnmount(() => {
         @keep="saveToKeep"
         @pin="pinMessage"
         @unsend="unsendMessage"
+        @forward="openForwardPicker"
+        @hide="hideMessage"
         @decide="decideProposal"
         @approvals="openApprovalBox"
         @group-settings="showGroupSettings = true"
@@ -3944,6 +3974,26 @@ onBeforeUnmount(() => {
               <input v-model="joinLinkInput" :placeholder="t('gsJoinPh')" @keydown.enter.prevent="joinByLink" />
               <button class="btn-secondary" :disabled="!joinLinkInput.trim()" @click="joinByLink">{{ t('gsJoin') }}</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- F7: FORWARD PICKER MODAL -->
+    <div v-if="showForwardModal" class="modal-backdrop" @click.self="showForwardModal = false">
+      <div class="standard-modal-box">
+        <div class="modal-header">
+          <h3>{{ t('mvForwardTo') }}</h3>
+          <button class="btn-modal-close" @click="showForwardModal = false">✕</button>
+        </div>
+        <div class="modal-body-form">
+          <div class="select-friends-scroll">
+            <button v-for="c in chats.filter((c) => !c.official)" :key="c.id" class="friend-check-item" @click="doForward(c.id)">
+              <span>{{ c.title || t('mvChatFallback') }}</span>
+            </button>
+          </div>
+          <div class="modal-actions-right">
+            <button class="btn-secondary" @click="showForwardModal = false">{{ t('mvCancel') }}</button>
           </div>
         </div>
       </div>

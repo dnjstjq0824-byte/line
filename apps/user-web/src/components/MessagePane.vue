@@ -96,6 +96,8 @@ const emit = defineEmits<{
   keep: [msg: Message]
   pin: [msgId: string]
   unsend: [msgId: string]
+  forward: [msg: Message]
+  hide: [msgId: string]
   decide: [msg: Message, decision: 'approved' | 'rejected']
   approvals: []
   'group-settings': []
@@ -479,6 +481,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <div v-if="msg.reply_to" class="bubble-reply-preview">
                   <LunoIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || t('mvRepliedMsg') }}
                 </div>
+                <div v-if="(msg.metadata as any)?.forwarded" class="bubble-forwarded-tag">➦ {{ t('mvForwardedTag') }}</div>
 
                 <div v-if="msg.unsent" class="bubble-unsent">{{ t('mvMsgUnsent') }}</div>
                 <div v-else-if="editingMessageId === msg.id" class="inline-edit-box">
@@ -555,6 +558,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
               <button :title="t('mvCtxKeep')" @click="emit('keep', msg)"><LunoIcon name="keep" :size="14" /></button>
               <button :title="t('mvNoticeRegister')" @click="emit('pin', msg.id)"><LunoIcon name="pin" :size="14" /></button>
               <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvCtxUnsend')" @click="emit('unsend', msg.id)"><LunoIcon name="close" :size="14" /></button>
+              <button v-if="!msg.unsent" :title="t('mvForward')" @click="emit('forward', msg)">➦</button>
+              <button v-if="!msg.unsent" :title="t('mvHideMine')" @click="emit('hide', msg.id)">🗑</button>
             </div>
           </div>
         </template>

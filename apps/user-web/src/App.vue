@@ -1592,6 +1592,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
   border-left: 2px solid currentColor;
   padding-left: 4px;
 }
+.bubble-forwarded-tag {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
 .pc-msg-meta {
   display: flex;
   gap: 4px;

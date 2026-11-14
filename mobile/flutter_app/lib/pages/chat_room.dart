@@ -483,6 +483,9 @@ class _SignalBubble extends StatelessWidget {
                 if (m['reply_to'] != null && '${m['reply_to']}'.isNotEmpty)
                   Text('↩ ${m['reply_preview'] ?? '답장'}',
                       style: TextStyle(fontSize: 10, color: faint)),
+                if (m['metadata'] is Map && m['metadata']['forwarded'] == true)
+                  Text('➦ 전달됨',
+                      style: TextStyle(fontSize: 10, color: faint)),
                 if (m['kind'] == 'image' && attachmentIdOf(m) != null)
                   _ChatImage(
                     url: attachmentContentUrl(
@@ -636,6 +639,23 @@ class _SignalBubble extends StatelessWidget {
                         onTap: () => session.unsend(m['id']),
                         child: Icon(Icons.delete_outline, size: 13, color: faint),
                       ),
+                    if (mine && m['kind'] == 'text')
+                      InkWell(
+                        onTap: () => _editMessageDialog(
+                            context, session, msgId, '${m['body']}'),
+                        child: Icon(Icons.edit_outlined, size: 13, color: faint),
+                      ),
+                    InkWell(
+                      onTap: () =>
+                          _forwardRoomSheet(context, session, msgId),
+                      child:
+                          Icon(Icons.forward_outlined, size: 13, color: faint),
+                    ),
+                    InkWell(
+                      onTap: () => session.hideMessage(msgId),
+                      child: Icon(Icons.visibility_off_outlined,
+                          size: 13, color: faint),
+                    ),
                   ],
                 ),
               ],
@@ -1007,6 +1027,81 @@ class _SecurityNoticeCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// F7: prefilled edit dialog for text messages.
+Future<void> _editMessageDialog(BuildContext context,
+    SessionController session, String msgId, String body) async {
+  final controller = TextEditingController(text: body);
+  await showDialog<void>(
+    context: context,
+    builder: (dialog) => StatefulBuilder(
+      builder: (dialog, setDialog) => AlertDialog(
+        title: const Text('메시지 수정'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          onChanged: (_) => setDialog(() {}),
+          decoration:
+              const InputDecoration(labelText: '메시지', isDense: true),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialog).pop(),
+              child: const Text('취소')),
+          FilledButton(
+            onPressed: controller.text.trim().isEmpty
+                ? null
+                : () {
+                    Navigator.of(dialog).pop();
+                    session.editMessage(msgId, controller.text);
+                  },
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// F7: forward target picker. Official rooms are read-only, like the web.
+Future<void> _forwardRoomSheet(BuildContext context,
+    SessionController session, String msgId) async {
+  final rooms = session.chats
+      .where((c) => c is Map && c['official'] != true)
+      .toList();
+  await showModalBottomSheet<void>(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('전달할 방 선택',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final c in rooms)
+                  ListTile(
+                    dense: true,
+                    title: Text('${(c as Map)['title'] ?? '대화방'}'),
+                    onTap: () {
+                      Navigator.of(sheet).pop();
+                      session.forwardMessage('${c['id']}', msgId);
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // L-05: approval box bottom sheet. Lists the room's proposals with

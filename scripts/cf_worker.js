@@ -4190,6 +4190,48 @@ async function extended(p, request, url, me, token) {
       return json({ status: 'recalled', message_id: msg.id });
     }
   }
+  if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)\/forward$/)) && method === 'POST') {
+    // F7: forward into another room. Source membership comes from the
+    // global gate; the target room is checked here. Attachment bytes are
+    // copied under the target room so source-only members stay locked out.
+    if (me.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
+    if (!await rateLimit('rl:msg:' + myId, 300)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const b = await readJson(request);
+    const scid = resolveConversationId(m[1], myId);
+    const tcid = resolveConversationId(typeof b.to_conversation_id === 'string' ? b.to_conversation_id : '', myId);
+    await hydrateConversation(scid);
+    const orig = (messages.get(scid) || []).find(x => x.id === m[2]);
+    if (!orig) return bad('메시지를 찾을 수 없습니다', 404);
+    if (orig.unsent) return bad('취소된 메시지는 전달할 수 없습니다', 400);
+    const forwardable = new Set(['text', 'sticker', 'image', 'video', 'voice', 'file', 'location', 'contact']);
+    if (!forwardable.has(orig.kind)) return bad('이 종류의 메시지는 전달할 수 없습니다', 400);
+    let tconv = conversations.get(tcid);
+    if (!tconv && dbOf()) tconv = await hydrateDurableConversation(tcid).catch(() => null);
+    if (!tconv || !tconv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
+    if (tconv.official || tconv.kind === 'official') return bad('공식계정 방은 읽기 전용입니다');
+    let metadata = { ...(orig.metadata || {}) };
+    delete metadata.mentions;
+    metadata.forwarded = true;
+    if (['image', 'video', 'voice', 'file'].includes(orig.kind)) {
+      const att = await loadAttachment(orig.metadata && orig.metadata.attachment_id);
+      if (!att || att.conversation_id !== scid) return bad('첨부 파일을 찾을 수 없습니다', 404);
+      const copy = { id: uid(), owner: myId, conversation_id: tcid, name: att.name, mime: att.mime, bytes: att.bytes };
+      await persistAttachmentR2(copy);
+      metadata = { attachment_id: copy.id, mime_type: copy.mime, name: copy.name, size_bytes: copy.bytes.length, forwarded: true };
+      if (orig.kind === 'voice' && orig.metadata && orig.metadata.duration !== undefined) metadata.duration = orig.metadata.duration;
+    }
+    const msg = await pushPersistent(tcid, myId, { kind: orig.kind, body: orig.body, metadata: Object.keys(metadata).length ? metadata : undefined });
+    await persistCursor(tcid, myId, msg.sequence);
+    await notify(notifyEnv(), tconv.members, {
+      kind: 'message',
+      conversation_id: tcid,
+      sender_id: myId,
+      title: me.display_name || me.handle || 'LUNO',
+      body: notifyMessagePreview(orig.kind, orig.body),
+    });
+    const fwd = decorateMessage(msg, myId, tcid);
+    return json({ ...fwd, message: fwd, duplicate: false }, 201);
+  }
   // ---------- L-05 approval box ----------
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)\/decide$/)) && method === 'POST') {
     const cid = resolveConversationId(m[1], myId);
@@ -4238,6 +4280,9 @@ async function extended(p, request, url, me, token) {
     return json({ proposals });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/messages\/([\w-]+)\/hide$/)) && method === 'POST') {
+    const hcid = resolveConversationId(m[1], myId);
+    await hydrateConversation(hcid);
+    if (!(messages.get(hcid) || []).some(x => x.id === m[2])) return bad('메시지를 찾을 수 없습니다', 404);
     const db = dbOf();
     if (db) {
       await ensureSchema();

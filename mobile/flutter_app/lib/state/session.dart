@@ -2193,6 +2193,40 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // F7: message edit, delete-for-me, and forward into another room.
+  Future<void> editMessage(String msgId, String body) {
+    if (body.trim().isEmpty) return Future.value();
+    return run(() async {
+      await api.call('/api/v1/conversations/$selectedId/messages/$msgId',
+          method: 'PATCH', data: {'body': body.trim()});
+      for (final m in messages) {
+        if (m['id'] == msgId) {
+          m['body'] = body.trim();
+          m['edited_at'] = DateTime.now().toUtc().toIso8601String();
+        }
+      }
+      notice = '메시지를 수정했습니다.';
+    });
+  }
+
+  Future<void> hideMessage(String msgId) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$selectedId/messages/$msgId/hide',
+          method: 'POST');
+      messages.removeWhere((m) => m['id'] == msgId);
+      notice = '나에게서 삭제했습니다.';
+    });
+  }
+
+  Future<void> forwardMessage(String targetCid, String msgId) {
+    return run(() async {
+      await api.call('/api/v1/conversations/$selectedId/messages/$msgId/forward',
+          method: 'POST', data: {'to_conversation_id': targetCid});
+      notice = '전달했습니다.';
+      await refreshChatList();
+    });
+  }
+
   // --- Pure helpers (identical to legacy) ---------------------------------------
 
   String uuid() {

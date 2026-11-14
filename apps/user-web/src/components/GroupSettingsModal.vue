@@ -5,6 +5,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import type { Chat, User } from '../../../shared/api'
+import { initialOf } from '../../../shared/avatar_initial'
 import { api, note, t, wrap } from '../store/session'
 
 interface InviteLink {
@@ -207,7 +208,7 @@ onMounted(() => { void loadInvites() })
           <strong>{{ t('gsPhoto') }}</strong>
           <div class="gs-photo-row">
             <div class="pc-avatar circle-46 group-avatar">
-              <span>{{ (room.title || '?').slice(0, 1) }}</span>
+              <span>{{ initialOf(room.title, '?') }}</span>
               <img v-if="room.avatar_url" :src="room.avatar_url" alt="" class="ln-profile-photo" />
             </div>
             <template v-if="privileged">
@@ -233,7 +234,7 @@ onMounted(() => { void loadInvites() })
           <strong>{{ t('gsMembers') }} ({{ room.member_count || (room.members || []).length }})</strong>
           <div v-for="m in room.members || []" :key="m.id" class="gs-member-row">
             <div class="pc-avatar circle-36" :style="{ background: m.avatar_color || 'var(--ln-accent)' }">
-              <span>{{ (m.display_name || '?').slice(0, 1) }}</span>
+              <span>{{ initialOf(m.display_name, '?') }}</span>
               <img v-if="m.avatar_url" :src="m.avatar_url" alt="" class="ln-profile-photo" />
             </div>
             <span class="gs-member-name">{{ m.display_name }}</span>
