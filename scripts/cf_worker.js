@@ -378,7 +378,16 @@ const LUNO_SCHEMA_PHASE1 = [
     id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, bot_id TEXT NOT NULL,
     rooms_json TEXT NOT NULL, ops_json TEXT NOT NULL, expires_at INTEGER NOT NULL,
     revoked INTEGER DEFAULT 0, created_at TEXT NOT NULL)`,
-  `CREATE INDEX IF NOT EXISTS idx_bot_tokens_hash ON luno_bot_tokens(token_hash)`
+  `CREATE INDEX IF NOT EXISTS idx_bot_tokens_hash ON luno_bot_tokens(token_hash)`,
+  // L-07: bot work queue. Claim/complete below; routing (L-02) enqueues.
+  `CREATE TABLE IF NOT EXISTS luno_bot_jobs (
+    id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, room_id TEXT NOT NULL,
+    kind TEXT NOT NULL, payload_json TEXT NOT NULL, status TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 5,
+    locked_by TEXT, lock_expires_at INTEGER NOT NULL DEFAULT 0,
+    result_json TEXT DEFAULT '', error TEXT DEFAULT '',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_bot_jobs_claim ON luno_bot_jobs(bot_id, status, created_at)`
 ];
 // Additive columns for tables that predate Phase 1. Applied with a
 // PRAGMA guard because SQLite has no idempotent ADD COLUMN.
@@ -2408,7 +2417,21 @@ function botScopeAllows(me, op, roomId) {
 function isBotApiRoute(p, method) {
   if (/^conversations\/[\w-]+\/messages$/.test(p)) return method === 'GET' || method === 'POST';
   if (method === 'GET' && /^conversations\/[\w-]+$/.test(p)) return true;
+  if (method === 'POST' && p === 'bot/jobs/claim') return true;
+  if (method === 'POST' && /^bot\/jobs\/[\w-]+\/complete$/.test(p)) return true;
   return false;
+}
+// L-07: enqueue one unit of bot work. Internal only — routing (L-02) calls
+// it; runners use claim/complete. Returns the job id or null without D1.
+async function enqueueBotJob({ botId, roomId, kind, payload, maxAttempts = 5 }) {
+  const db = dbOf();
+  if (!db) return null;
+  await ensureSchema();
+  const id = uid();
+  await db.prepare(`INSERT INTO luno_bot_jobs (id, bot_id, room_id, kind, payload_json, status, attempts, max_attempts, lock_expires_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'queued', 0, ?, 0, datetime('now'), datetime('now'))`)
+    .bind(id, botId, roomId, kind, JSON.stringify(payload || {}), maxAttempts).run();
+  return id;
 }
 
 // N1-L: notification funnel. notify(env, userIds, event) filters out the
@@ -4581,6 +4604,57 @@ async function extended(p, request, url, me, token) {
     const rep = { id: uid(), reporter_id: myId, subject_user_id: b.subject_user_id, category, details: clip(b.details || '', 2000), state: 'open', created_at: now() };
     adminReports.unshift(rep);
     return json({ id: rep.id }, 201);
+  }
+
+  // ---------- L-07 bot jobs (claim/complete; bots only, rooms in scope) ----------
+  if (p === 'bot/jobs/claim' && method === 'POST') {
+    if (userKind(me) !== 'bot') return json({ error: 'forbidden' }, 403);
+    if (!await rateLimit('rl:botclaim:' + myId, 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const db = dbOf();
+    if (!db) return json({ error: 'job queue requires a configured database' }, 501);
+    await ensureSchema();
+    const rooms = (me.botScope && me.botScope.rooms) || [];
+    if (!rooms.length) return json({ job: null });
+    // Exhausted jobs fail out instead of clogging the queue.
+    await db.prepare(`UPDATE luno_bot_jobs SET status = 'failed', error = 'max attempts exceeded', updated_at = datetime('now')
+      WHERE bot_id = ? AND status != 'done' AND status != 'failed' AND attempts >= max_attempts`).bind(myId).run().catch(() => null);
+    const ph = rooms.map(() => '?').join(',');
+    for (let i = 0; i < 3; i++) {
+      const cand = await db.prepare(`SELECT id FROM luno_bot_jobs WHERE bot_id = ? AND room_id IN (${ph})
+        AND attempts < max_attempts AND (status = 'queued' OR (status = 'running' AND lock_expires_at < ?))
+        ORDER BY created_at, rowid LIMIT 1`).bind(myId, ...rooms, Date.now()).first().catch(() => null);
+      if (!cand) return json({ job: null });
+      const lockUntil = Date.now() + 120000;
+      const upd = await db.prepare(`UPDATE luno_bot_jobs SET status = 'running', attempts = attempts + 1, locked_by = ?, lock_expires_at = ?, updated_at = datetime('now')
+        WHERE id = ? AND (status = 'queued' OR (status = 'running' AND lock_expires_at < ?))`)
+        .bind(me.botScope.id, lockUntil, cand.id, Date.now()).run().catch(() => null);
+      if (upd && upd.meta && Number(upd.meta.changes) === 1) {
+        const job = await db.prepare('SELECT id, bot_id, room_id, kind, payload_json, status, attempts FROM luno_bot_jobs WHERE id = ?').bind(cand.id).first();
+        let payload = {};
+        try { payload = JSON.parse(job.payload_json); } catch {}
+        return json({ job: { id: job.id, bot_id: job.bot_id, room_id: job.room_id, kind: job.kind, payload, status: job.status, attempts: job.attempts, locked_until: lockUntil } });
+      }
+    }
+    return json({ job: null });
+  }
+  if ((m = p.match(/^bot\/jobs\/([\w-]+)\/complete$/)) && method === 'POST') {
+    if (userKind(me) !== 'bot') return json({ error: 'forbidden' }, 403);
+    const db = dbOf();
+    if (!db) return json({ error: 'job queue requires a configured database' }, 501);
+    const b = await readJson(request);
+    if (b.status !== 'done' && b.status !== 'failed') return bad('status must be done or failed', 400);
+    await ensureSchema();
+    const job = await db.prepare('SELECT id, bot_id, status, locked_by FROM luno_bot_jobs WHERE id = ?').bind(m[1]).first().catch(() => null);
+    if (!job || job.bot_id !== myId) return json({ error: 'job not found' }, 404);
+    if (job.status !== 'running' || job.locked_by !== me.botScope.id) return json({ error: 'job is not locked by this runner' }, 409);
+    if (b.status === 'done') {
+      await db.prepare(`UPDATE luno_bot_jobs SET status = 'done', result_json = ?, locked_by = NULL, lock_expires_at = 0, updated_at = datetime('now') WHERE id = ?`)
+        .bind(clip(JSON.stringify(b.result ?? null), 4000), m[1]).run();
+    } else {
+      await db.prepare(`UPDATE luno_bot_jobs SET status = 'failed', error = ?, locked_by = NULL, lock_expires_at = 0, updated_at = datetime('now') WHERE id = ?`)
+        .bind(clip(String(b.error || 'failed'), 500), m[1]).run();
+    }
+    return json({ status: b.status, id: m[1] }, 200);
   }
 
   // ---------- Admin ----------

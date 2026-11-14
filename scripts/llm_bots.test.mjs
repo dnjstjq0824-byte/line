@@ -280,6 +280,94 @@ test('L-06: bot tokens stop at non-message APIs', async () => {
   } finally { db.raw.close(); }
 });
 
+// ---------- L-07: job queue (built before L-02: routing enqueues into it) ----------
+
+async function seedJob(db, botId, roomId, extra = {}) {
+  const id = `job-${Math.random().toString(36).slice(2, 10)}`;
+  db.raw.exec(`INSERT INTO luno_bot_jobs (id, bot_id, room_id, kind, payload_json, status, attempts, max_attempts, locked_by, lock_expires_at, created_at, updated_at)
+    VALUES ('${id}', '${botId}', '${roomId}', '${extra.kind || 'mention'}', '{}', '${extra.status || 'queued'}', ${extra.attempts || 0}, 5, ${extra.locked_by ? `'${extra.locked_by}'` : 'NULL'}, ${extra.lock_expires_at || 0}, datetime('now'), datetime('now'))`);
+  return id;
+}
+
+test('L-07: claim assigns queued jobs oldest-first, one runner each', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Job Bot', handle: 'job_bot' }, admin.token)).json();
+    const t1 = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    const t2 = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    const j1 = await seedJob(db, bot.id, 'room-1');
+    const j2 = await seedJob(db, bot.id, 'room-1');
+    const c1 = await (await admin.api('bot/jobs/claim', 'POST', {}, t1)).json();
+    assert.equal(c1.job.id, j1, 'oldest first');
+    assert.equal(c1.job.attempts, 1);
+    const c2 = await (await admin.api('bot/jobs/claim', 'POST', {}, t2)).json();
+    assert.equal(c2.job.id, j2, 'second runner gets the next job');
+    const c3 = await (await admin.api('bot/jobs/claim', 'POST', {}, t1)).json();
+    assert.equal(c3.job, null, 'nothing left to claim');
+    const row = db.raw.prepare('SELECT status, attempts FROM luno_bot_jobs WHERE id = ?').get(j1);
+    assert.equal(row.status, 'running');
+    assert.equal(row.attempts, 1);
+  } finally { db.raw.close(); }
+});
+
+test('L-07: expired locks are reclaimed, exhausted jobs fail out', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Lock Bot', handle: 'lock_bot' }, admin.token)).json();
+    const t1 = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    const t2 = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    const j1 = await seedJob(db, bot.id, 'room-1');
+    await admin.api('bot/jobs/claim', 'POST', {}, t1);
+    db.raw.exec(`UPDATE luno_bot_jobs SET lock_expires_at = 1 WHERE id = '${j1}'`);
+    const re = await (await admin.api('bot/jobs/claim', 'POST', {}, t2)).json();
+    assert.equal(re.job.id, j1, 'expired lock reclaimed by another runner');
+    assert.equal(re.job.attempts, 2);
+    const jx = await seedJob(db, bot.id, 'room-1', { status: 'running', attempts: 5, locked_by: 'dead', lock_expires_at: 1 });
+    const none = await (await admin.api('bot/jobs/claim', 'POST', {}, t1)).json();
+    assert.equal(none.job, null);
+    const xrow = db.raw.prepare('SELECT status FROM luno_bot_jobs WHERE id = ?').get(jx);
+    assert.equal(xrow.status, 'failed', 'exhausted jobs fail out');
+  } finally { db.raw.close(); }
+});
+
+test('L-07: only the lock holder completes, done and failed are terminal', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Done Bot', handle: 'done_bot' }, admin.token)).json();
+    const t1 = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    const t2 = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    const j1 = await seedJob(db, bot.id, 'room-1');
+    const j2 = await seedJob(db, bot.id, 'room-1');
+    await admin.api('bot/jobs/claim', 'POST', {}, t1);
+    assert.equal((await admin.api(`bot/jobs/${j1}/complete`, 'POST', { status: 'done' }, t2)).status, 409, 'non-holder cannot complete');
+    assert.equal((await admin.api(`bot/jobs/${j1}/complete`, 'POST', { status: 'done' }, t1)).status, 200);
+    assert.equal((await admin.api(`bot/jobs/${j1}/complete`, 'POST', { status: 'done' }, t1)).status, 409, 'no double complete');
+    await admin.api('bot/jobs/claim', 'POST', {}, t1);
+    assert.equal((await admin.api(`bot/jobs/${j2}/complete`, 'POST', { status: 'failed', error: 'boom' }, t1)).status, 200);
+    const row = db.raw.prepare('SELECT status FROM luno_bot_jobs WHERE id = ?').get(j2);
+    assert.equal(row.status, 'failed');
+    const c = await (await admin.api('bot/jobs/claim', 'POST', {}, t2)).json();
+    assert.equal(c.job, null, 'terminal jobs never reclaimed');
+  } finally { db.raw.close(); }
+});
+
+test('L-07: claim respects token rooms and bot-only access', async () => {
+  const db = makeD1();
+  try {
+    const admin = await makeAdmin(db);
+    const user = await registerAndLogin(admin.api, 'l07-user@luno-test.local');
+    const bot = await (await admin.api('admin/bots', 'POST', { display_name: 'Scope Job Bot', handle: 'scopejob_bot' }, admin.token)).json();
+    await seedJob(db, bot.id, 'room-9');
+    const tok = (await mintBotToken(admin.api, admin.token, bot.id, { rooms: ['room-1'], ops: ['read'] })).token;
+    const c = await (await admin.api('bot/jobs/claim', 'POST', {}, tok)).json();
+    assert.equal(c.job, null, 'out-of-scope rooms invisible');
+    assert.equal((await admin.api('bot/jobs/claim', 'POST', {}, user.token)).status, 403, 'humans cannot claim bot jobs');
+  } finally { db.raw.close(); }
+});
+
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
