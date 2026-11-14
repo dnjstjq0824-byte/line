@@ -43,6 +43,8 @@ const emit = defineEmits<{
 
 const targetTranslateLang = defineModel<LunoLocale>('targetTranslateLang', { required: true })
 const deletePasswordInput = defineModel<string>('deletePasswordInput', { required: true })
+const deleteReasonInput = defineModel<string>('deleteReasonInput', { required: true })
+const deleteConfirmInput = defineModel<string>('deleteConfirmInput', { required: true })
 
 function enableLightMode() {
   if (isDarkMode.value) toggleDarkMode()
@@ -340,6 +342,18 @@ onMounted(() => {
         <div class="setting-group" style="margin-top:8px">
           <strong>{{ t('mvBackupPrivacy') }}</strong>
           <input v-model="deletePasswordInput" type="password" autocomplete="current-password" :placeholder="t('mvDeletePwPh')" :aria-label="t('mvDeletePwAria')" class="pc-login-input" style="margin:2px 0 6px" />
+          <label class="pc-input-row" style="margin-top:4px">
+            <span>{{ t('mvDeleteReason') }}</span>
+            <select v-model="deleteReasonInput" class="pc-login-input">
+              <option value="">{{ t('mvDeleteReasonSkip') }}</option>
+              <option value="not_using">{{ t('mvDeleteReasonNotUsing') }}</option>
+              <option value="privacy">{{ t('mvDeleteReasonPrivacy') }}</option>
+              <option value="hard_to_use">{{ t('mvDeleteReasonHardToUse') }}</option>
+              <option value="other">{{ t('mvDeleteReasonOther') }}</option>
+            </select>
+          </label>
+          <input v-model="deleteConfirmInput" type="email" autocomplete="email" :placeholder="t('mvDeleteConfirmPh')" :aria-label="t('mvDeleteConfirmAria')" class="pc-login-input" style="margin:2px 0 6px" />
+          <p class="muted" style="font-size:12px">{{ t('mvDeleteGraceNote') }}</p>
           <div class="flex-row" style="margin-top:6px;gap:8px">
             <button class="btn-secondary" style="flex:1" @click="emit('export')">{{ t('mvBackupData') }}</button>
             <button class="btn-secondary" style="flex:1;color:#ef4444" @click="emit('delete')">{{ t('mvDeleteAccount') }}</button>

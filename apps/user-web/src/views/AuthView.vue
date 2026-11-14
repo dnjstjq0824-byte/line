@@ -176,6 +176,7 @@ async function authAction() {
       })
       storeSession(data, autoLoginCheck.value)
       currentUser.value = await api<User>('/api/v1/me')
+      if (data.recovered) note.value = t('accountRecoveredNote')
       password.value = ''
       await router.push('/chats')
     } catch (e) {

@@ -2364,12 +2364,22 @@ async function exportUserDataArchive() {
 }
 
 const deletePasswordInput = ref('')
+const deleteReasonInput = ref('')
+const deleteConfirmInput = ref('')
 async function deleteUserAccount() {
   if (!deletePasswordInput.value) { error.value = t('mvDeletePwRequired'); return }
+  if (!deleteConfirmInput.value) { error.value = t('mvDeleteConfirmRequired'); return }
   if (!confirm(t('mvDeleteConfirm'))) return
   await wrap(async () => {
-    await api('/api/v1/me', 'DELETE', { password: deletePasswordInput.value })
+    const res = await api<{ status: string; grace_until?: string }>('/api/v1/me', 'DELETE', {
+      password: deletePasswordInput.value,
+      reason: deleteReasonInput.value || undefined,
+      confirm_text: deleteConfirmInput.value
+    })
     deletePasswordInput.value = ''
+    deleteReasonInput.value = ''
+    deleteConfirmInput.value = ''
+    if (res.status === 'deletion_scheduled') note.value = t('mvDeleteScheduledNote')
     logout()
   })
 }
@@ -3698,6 +3708,8 @@ onBeforeUnmount(() => {
       :translate-languages="translateLanguages"
       v-model:target-translate-lang="targetTranslateLang"
       v-model:delete-password-input="deletePasswordInput"
+      v-model:delete-reason-input="deleteReasonInput"
+      v-model:delete-confirm-input="deleteConfirmInput"
       @close="showSettingsModal = false"
       @export="exportUserDataArchive"
       @delete="deleteUserAccount"

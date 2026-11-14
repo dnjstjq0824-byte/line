@@ -230,7 +230,7 @@ const LUNO_SCHEMA_BASE = [
     cover_url TEXT DEFAULT '', prefs_json TEXT DEFAULT '',
     status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
     birthday TEXT DEFAULT '', state TEXT DEFAULT 'active', kind TEXT DEFAULT 'user',
-    email_verified INTEGER DEFAULT 0,
+    email_verified INTEGER DEFAULT 0, deleted_at TEXT DEFAULT '', deletion_reason TEXT DEFAULT '',
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   // F1: email verification codes (hash only, 15-minute life, 5 attempts).
   `CREATE TABLE IF NOT EXISTS luno_email_codes (
@@ -424,6 +424,8 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   // F1: legacy rows grandfather to verified (they registered before
   // verification existed); new rows always set the flag explicitly.
   ['users', 'email_verified', 'INTEGER DEFAULT 1'],
+  ['users', 'deleted_at', "TEXT DEFAULT ''"],
+  ['users', 'deletion_reason', "TEXT DEFAULT ''"],
   ['users', 'password_hash', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'display_name', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'created_at', "TEXT NOT NULL DEFAULT ''"],
@@ -1189,6 +1191,58 @@ async function d1Batch(db, stmts) {
   }
   for (const [sql, ...params] of stmts) await db.prepare(sql).bind(...params).run();
 }
+// F3: 30-day deletion grace. Reasons come from a fixed set; the confirm
+// phrase is the account email (locale-free, no new strings).
+const ACCOUNT_DELETE_GRACE_MS = 30 * 24 * 3600 * 1000;
+const DELETE_REASONS = new Set(['not_using', 'privacy', 'hard_to_use', 'other']);
+function deletionGraceUntil(fromIso) {
+  return new Date(Date.parse(fromIso) + ACCOUNT_DELETE_GRACE_MS).toISOString();
+}
+// Shared by DELETE /me and POST /me/delete-account. Returns an error
+// response when the request is invalid, else null.
+async function checkDeletionBody(me, b) {
+  if (!b.password) return json({ error: 'password required for account deletion' }, 400);
+  if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
+  if (['user@luno.local'].includes((me.email || '').toLowerCase())) {
+    return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
+  }
+  if (typeof b.confirm_text !== 'string' || b.confirm_text.trim().toLowerCase() !== String(me.email || '').toLowerCase()) {
+    return json({ error: 'confirm phrase must equal the account email', code: 'CONFIRM_MISMATCH' }, 400);
+  }
+  const reason = b.reason === undefined || b.reason === null || b.reason === '' ? '' : String(b.reason);
+  if (reason && !DELETE_REASONS.has(reason)) return json({ error: 'unknown deletion reason' }, 400);
+  return null;
+}
+async function scheduleAccountDeletion(me, reason) {
+  const stamped = now();
+  me.state = 'deleted';
+  me.deleted_at = stamped;
+  me.deletion_reason = reason;
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    await db.prepare("UPDATE users SET state = 'deleted', deleted_at = ?, deletion_reason = ?, updated_at = ? WHERE id = ?")
+      .bind(stamped, reason, stamped, me.id).run();
+  }
+  return stamped;
+}
+// F3: pre-grace rows (no stamp) count as expired — A-10 already wiped them.
+function deletionExpired(user) {
+  if (!user || user.state !== 'deleted') return false;
+  const ts = Date.parse(user.deleted_at || '') || 0;
+  return !user.deleted_at || Date.now() - ts > ACCOUNT_DELETE_GRACE_MS;
+}
+async function restoreDeletion(user) {
+  user.state = 'active';
+  user.deleted_at = '';
+  user.deletion_reason = '';
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    await db.prepare("UPDATE users SET state = 'active', deleted_at = '', deletion_reason = '', updated_at = datetime('now') WHERE id = ?").bind(user.id).run();
+  }
+  await persistAudit(user.id, 'account.recover', user.id, {});
+}
 // A-10: one deletion path for DELETE /me and POST /me/delete-account.
 // The users row is retained in anonymized form (state='deleted', credentials
 // and profile PII wiped) so audit trails and unique constraints stay intact;
@@ -1200,6 +1254,7 @@ async function deleteAccountData(userId) {
     gone.display_name = '탈퇴한 사용자';
     delete gone.pw_hash; delete gone.pw_salt; delete gone.pw_iter;
     gone.bio = ''; gone.status_message = ''; gone.avatar_url = ''; gone.phone = ''; gone.birthday = '';
+    gone.deletion_reason = '';
   }
   for (const [email, u] of Array.from(users)) if (u.id === userId) users.delete(email);
   for (const [tok, sess] of Array.from(sessions)) {
@@ -1207,6 +1262,60 @@ async function deleteAccountData(userId) {
   }
   for (const key of Array.from(friendships.keys())) {
     if (key.startsWith(userId + ':') || key.endsWith(':' + userId)) friendships.delete(key);
+  }
+  // F3: sweep the rest of the in-memory user state (rooms keep a tombstone
+  // member entry; audit rows stay for abuse tracing).
+  for (const key of Array.from(friendMeta.keys())) {
+    if (key.startsWith(userId + ':') || key.endsWith(':' + userId)) friendMeta.delete(key);
+  }
+  for (const key of Array.from(chatMeta.keys())) {
+    if (key.endsWith(':' + userId)) chatMeta.delete(key);
+  }
+  for (const [cid, list] of Array.from(messages)) {
+    const kept = (list || []).filter(m => m.sender_id !== userId);
+    if (kept.length !== (list || []).length) messages.set(cid, kept);
+  }
+  for (const key of Array.from(readCursors.keys())) {
+    if (key.endsWith(':' + userId)) readCursors.delete(key);
+  }
+  for (const [mid, rm] of Array.from(reactionStore)) {
+    for (const [emoji, set] of Array.from(rm)) {
+      set.delete(userId);
+      if (!set.size) rm.delete(emoji);
+    }
+    if (!rm.size) reactionStore.delete(mid);
+  }
+  for (const [cid, list] of Array.from(noteStore)) noteStore.set(cid, (list || []).filter(n => n.author_id !== userId));
+  for (const [cid, list] of Array.from(eventStore)) eventStore.set(cid, (list || []).filter(e => e.created_by !== userId));
+  for (const [pid, poll] of Array.from(polls)) {
+    if (poll && poll.created_by === userId) { polls.delete(pid); pollVotes.delete(pid); }
+  }
+  for (const [cid, list] of Array.from(pinnedMessages)) pinnedMessages.set(cid, (list || []).filter(p => p.pinned_by !== userId));
+  for (const [cid, list] of Array.from(albums)) albums.set(cid, (list || []).filter(a => a.created_by !== userId));
+  savedMessages.delete(userId);
+  hiddenMsgs.delete(userId);
+  wallets.delete(userId);
+  ownedPacks.delete(userId);
+  ownedThemes.delete(userId);
+  userPrefs.delete(userId);
+  pushTokens.delete(userId);
+  userKeys.delete(userId);
+  for (const [dev, bundle] of Array.from(deviceKeys)) {
+    if (bundle && bundle.user_id === userId) deviceKeys.delete(dev);
+  }
+  for (const [credId, cred] of Array.from(passkeyCreds)) {
+    if (cred && cred.userId === userId) passkeyCreds.delete(credId);
+  }
+  followedOfficial.delete(userId);
+  for (const [ticket, t] of Array.from(wsTickets)) {
+    if (t && t.userId === userId) wsTickets.delete(ticket);
+  }
+  for (const conv of conversations.values()) {
+    if (conv.members && conv.members.includes(userId)) conv.members = conv.members.filter(x => x !== userId);
+  }
+  for (const cid of [`conv-keep-${userId}`, `conv-oa-notice-${userId}`]) {
+    conversations.delete(cid);
+    messages.delete(cid);
   }
   const db = dbOf();
   if (!db) return;
@@ -1221,7 +1330,7 @@ async function deleteAccountData(userId) {
     } catch (_) {}
   }
   await d1Batch(db, [
-    ["UPDATE users SET state = 'deleted', display_name = ?, password_hash = 'pbkdf2$deleted', bio = '', status_message = '', avatar_url = '', phone_number = '', birthday = '', updated_at = ? WHERE id = ?", '탈퇴한 사용자', at, userId],
+    ["UPDATE users SET state = 'deleted', display_name = ?, password_hash = 'pbkdf2$deleted', bio = '', status_message = '', avatar_url = '', phone_number = '', birthday = '', deletion_reason = '', updated_at = ? WHERE id = ?", '탈퇴한 사용자', at, userId],
     ['DELETE FROM luno_sessions WHERE user_id = ?', userId],
     ['DELETE FROM refresh_tokens WHERE user_id = ?', userId],
     ['DELETE FROM friends WHERE user_id = ? OR friend_id = ?', userId, userId],
@@ -1238,7 +1347,23 @@ async function deleteAccountData(userId) {
     ['DELETE FROM poll_votes WHERE user_id = ?', userId],
     ['DELETE FROM reactions WHERE user_id = ?', userId],
     ['DELETE FROM message_reactions WHERE user_id = ?', userId],
+    ['DELETE FROM wallets WHERE user_id = ?', userId],
+    ['DELETE FROM polls WHERE created_by = ?', userId],
+    ['DELETE FROM conversation_events WHERE created_by = ?', userId],
+    ['DELETE FROM albums WHERE created_by = ?', userId],
+    ['DELETE FROM keep_items WHERE user_id = ?', userId],
+    ['DELETE FROM luno_hidden_messages WHERE user_id = ?', userId],
+    ['DELETE FROM luno_pins WHERE pinned_by = ?', userId],
+    ['DELETE FROM luno_email_codes WHERE email = (SELECT email FROM users WHERE id = ?)', userId],
+    ['DELETE FROM luno_translate_usage WHERE user_id = ?', userId],
   ]);
+  const acctEmail = (usersById.get(userId) || {}).email || '';
+  if (acctEmail) {
+    await db.prepare('DELETE FROM login_attempts WHERE key = ?').bind('acct:' + String(acctEmail).toLowerCase()).run().catch(() => null);
+  }
+  // Migration-only tables may not exist on every database; purge past them.
+  await db.prepare('DELETE FROM luno_conversation_members WHERE user_id = ?').bind(userId).run().catch(() => null);
+  await db.prepare('DELETE FROM luno_user_roles WHERE user_id = ?').bind(userId).run().catch(() => null);
 }
 async function listSessionsFor(userId, currentSid) {
   const db = dbOf();
@@ -2231,7 +2356,8 @@ function cacheUserRow(row, granted) {
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: granted,
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
-    state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1
+    state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
+    deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
   }, row.password_hash);
   if (isEnvAdmin(u.id)) u.role = 'admin';
   users.set(row.email.toLowerCase(), u);
@@ -2248,7 +2374,8 @@ async function loadUserFromD1(id, knownRole) {
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', created_at: row.created_at,
-    state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1
+    state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
+    deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
   }, row.password_hash);
   users.set(row.email.toLowerCase(), u);
   usersById.set(u.id, u);
@@ -3327,19 +3454,17 @@ async function extended(p, request, url, me, token) {
       return json({ ...publicUser(me), email: me.email, role: me.role });
     }
     if (method === 'DELETE') {
-      // A-10 canonical route: password confirmation, then the shared
-      // deleteAccountData() wipe. POST /me/delete-account is a
-      // compatibility alias into the same path.
+      // F3: password + reason + email confirm phrase schedule a 30-day
+      // grace; the wipe runs only after expiry (see login). POST
+      // /me/delete-account is a compatibility alias into the same path.
       const b = await readJson(request);
-      if (!b.password) return json({ error: 'password required for account deletion' }, 400);
-      if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
-      if (['user@luno.local'].includes((me.email || '').toLowerCase())) {
-        return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
-      }
-      await deleteAccountData(myId);
+      const invalid = await checkDeletionBody(me, b);
+      if (invalid) return invalid;
+      const reason = b.reason === undefined || b.reason === null || b.reason === '' ? '' : String(b.reason);
+      const stamped = await scheduleAccountDeletion(me, reason);
       await revokeOtherSessions(myId, '', myId);
-      await persistAudit(myId, 'account.delete', myId, {});
-      return json({ status: 'account_deleted' });
+      await persistAudit(myId, 'account.delete_request', myId, { reason });
+      return json({ status: 'deletion_scheduled', grace_until: deletionGraceUntil(stamped), message: '계정 삭제가 예약되었습니다. 30일 안에 로그인하면 복구됩니다.' });
     }
   }
   if (p === 'me/settings') {
@@ -5305,27 +5430,38 @@ async function extended(p, request, url, me, token) {
         if (m.sender_id === myId) myMsgs.push(m);
       }
     }
+    // F3: read records (cursors), device records (sessions), delete/manage
+    // records (own audit trail + deletion state) ride the export.
+    let cursors = [];
+    let trail = [];
+    if (dbOf()) {
+      await ensureSchema();
+      cursors = (await dbOf().prepare('SELECT conversation_id, sequence, updated_at FROM luno_read_cursors WHERE user_id = ?').bind(myId).all().catch(() => ({ results: [] }))).results || [];
+      trail = (await dbOf().prepare('SELECT action, target, detail, created_at FROM luno_audit WHERE actor = ? ORDER BY id DESC LIMIT 200').bind(myId).all().catch(() => ({ results: [] }))).results || [];
+    }
     return json({
-      export_version: '1.0',
+      export_version: '1.1',
       exported_at: now(),
       user: publicUser(me),
       friends: friendIds(myId).map(id => publicUser(usersById.get(id))),
       conversations_count: mine.length,
       messages_count: myMsgs.length,
-      messages: myMsgs
+      messages: myMsgs,
+      read_cursors: cursors,
+      sessions: await listSessionsFor(myId, null),
+      audit_trail: trail,
+      deletion: { state: me.state || 'active', deleted_at: me.deleted_at || '', reason: me.deletion_reason || '' }
     });
   }
   if (p === 'me/delete-account' && method === 'POST') {
     const b = await readJson(request);
-    if (!b.password) return json({ error: 'password required for account deletion' }, 400);
-    if (!(await checkPassword(me, b.password))) return json({ error: 'password incorrect' }, 401);
-    if (['user@luno.local'].includes((me.email || '').toLowerCase())) {
-      return json({ error: 'shared demo accounts cannot be deleted', code: 'DEMO_PROTECTED' }, 403);
-    }
-    await deleteAccountData(myId);
+    const invalid = await checkDeletionBody(me, b);
+    if (invalid) return invalid;
+    const reason = b.reason === undefined || b.reason === null || b.reason === '' ? '' : String(b.reason);
+    const stamped = await scheduleAccountDeletion(me, reason);
     await revokeOtherSessions(myId, '', myId);
-    await persistAudit(myId, 'account.delete', myId, {});
-    return json({ status: 'account_deleted', message: '계정이 영구 삭제 처리되었습니다.' });
+    await persistAudit(myId, 'account.delete_request', myId, { reason });
+    return json({ status: 'deletion_scheduled', message: '계정 삭제가 예약되었습니다. 30일 안에 로그인하면 복구됩니다.' });
   }
 
   return null;
@@ -5823,7 +5959,14 @@ const workerCore = {
           const fresh = await loadUserFromD1ByLogin(identifier);
           if (fresh) user = fresh;
         }
-        if (!user || user.state === 'suspended' || user.state === 'deleted') {
+        if (!user || user.state === 'suspended') {
+          await recordLoginFailure(identifier, loginIp);
+          return json({ error: 'invalid credentials' }, 401);
+        }
+        // F3: expired grace purges lazily (no cron); in-grace accounts
+        // restore below, but only after the password verifies.
+        if (user.state === 'deleted' && deletionExpired(user)) {
+          await deleteAccountData(user.id);
           await recordLoginFailure(identifier, loginIp);
           return json({ error: 'invalid credentials' }, 401);
         }
@@ -5854,6 +5997,12 @@ const workerCore = {
         // F1: verified email required (checked after the password so the
         // gate never confirms whether an address exists).
         if (user.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
+        // F3: correct password inside grace restores the account.
+        let recovered = false;
+        if (user.state === 'deleted') {
+          await restoreDeletion(user);
+          recovered = true;
+        }
         await clearLoginFailures(identifier, loginIp);
         const { token, deviceId, refreshToken } = await createSession(user, request);
         return json({
@@ -5863,7 +6012,8 @@ const workerCore = {
           expires_in: 900,
           user_id: user.id,
           role: user.role,
-          device_id: deviceId
+          device_id: deviceId,
+          ...(recovered ? { recovered: true } : {})
         }, 200, refreshToken ? { 'Set-Cookie': refreshCookie(refreshToken, request) } : {});
       }
       // 2b. Auth: Refresh rotation (A-15). Single-use refresh tokens: each

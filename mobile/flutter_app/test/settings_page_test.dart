@@ -108,10 +108,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('계정 탈퇴'));
     await tester.pumpAndSettle();
-    expect(find.text('계정을 영구 삭제할까요?'), findsOneWidget);
+    expect(find.text('계정을 삭제할까요?'), findsOneWidget);
     await tester.enterText(
         find.widgetWithText(TextField, '비밀번호 확인'), 'pw-1234');
-    await tester.tap(find.text('영구 삭제'));
+    await tester.enterText(
+        find.widgetWithText(TextField, '확인 이메일 입력'), 'a@x.test');
+    await tester.tap(find.text('삭제 예약'));
     await tester.pumpAndSettle();
     expect(s.error, isNotEmpty);
   });

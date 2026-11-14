@@ -346,6 +346,7 @@ class SessionController extends ChangeNotifier {
       selfCoverUrl = me['cover_url'] ?? '';
       selfBirthday = me['birthday'] ?? '';
       selfRole = me['role'] ?? 'user';
+      if (result['recovered'] == true) notice = '계정이 복구되었습니다.';
       notifyListeners();
       await loadPrefs();
       await reload();
@@ -1803,12 +1804,18 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// H-4: permanently delete the account (server DELETE /api/v1/me with
-  /// password confirmation), then wipe local state.
-  Future<void> deleteAccount(String password) {
+  /// H-4/F3: schedule account deletion (server DELETE /api/v1/me with
+  /// password, reason and email confirm phrase), then wipe local state.
+  /// The server keeps a 30-day grace; logging in inside restores.
+  Future<void> deleteAccount(String password,
+      {String reason = '', required String confirmText}) {
     return run(() async {
-      await api.call('/api/v1/me', method: 'DELETE', data: {'password': password});
-      notice = '계정이 영구 삭제되었습니다.';
+      await api.call('/api/v1/me', method: 'DELETE', data: {
+        'password': password,
+        if (reason.isNotEmpty) 'reason': reason,
+        'confirm_text': confirmText,
+      });
+      notice = '계정 삭제가 예약되었습니다. 30일 안에 로그인하면 복구됩니다.';
       await logout();
     });
   }

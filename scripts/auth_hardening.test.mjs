@@ -203,7 +203,7 @@ test('B1: per-minute rate limits return 429 past the cap', async () => {
   assert.equal(capped, 1, 'exactly the 121st call in the window is rate limited');
 });
 
-test('B1: DELETE /me wipes the account via batch; alias behaves identically', async () => {
+test('B1: DELETE /me schedules grace, expiry wipes via batch; alias identical', async () => {
   const { api, db, bucket } = await isolate();
   const u = await signup(api, 'b1-wipe@local.test', 'b1wipe');
   const peer = await signup(api, 'b1-wipe-peer@local.test', 'b1wipepeer');
@@ -214,8 +214,16 @@ test('B1: DELETE /me wipes the account via batch; alias behaves identically', as
   assert.equal(up.status, 201);
   assert.equal((await api('push-tokens', 'POST', { token: 'tok', platform: 'android', device_id: 'd1' }, u.access_token)).status, 201);
   assert.equal((await api('devices/d1/keys', 'PUT', { identity_key: 'ik' }, u.access_token)).status, 200);
-  const del = await api('me', 'DELETE', { password: 'Hard3n#Passw0rd' }, u.access_token);
+  // F3: confirm phrase required; delete schedules grace, data intact.
+  assert.equal((await api('me', 'DELETE', { password: 'Hard3n#Passw0rd' }, u.access_token)).status, 400, 'confirm phrase required');
+  const del = await api('me', 'DELETE', { password: 'Hard3n#Passw0rd', confirm_text: 'b1-wipe@local.test' }, u.access_token);
   assert.equal(del.status, 200);
+  assert.equal((await del.json()).status, 'deletion_scheduled');
+  assert.equal(db.raw.prepare('SELECT COUNT(*) n FROM luno_messages WHERE sender_id = ?').get(u.id).n, 1, 'grace keeps data');
+  assert.equal((await api('me', 'GET', null, u.access_token)).status, 401, 'token dead at request');
+  // F3: expiry purges through db.batch on next login.
+  db.raw.exec(`UPDATE users SET deleted_at = '2020-01-01T00:00:00.000Z' WHERE id = '${u.id}'`);
+  assert.equal((await api('auth/login', 'POST', { email: 'b1-wipe@local.test', password: 'Hard3n#Passw0rd' })).status, 401, 'expired login dead');
   assert.ok(db.batched > 0, 'wipe ran through db.batch');
   const row = db.raw.prepare('SELECT * FROM users WHERE email = ?').get('b1-wipe@local.test');
   assert.equal(row.state, 'deleted');
@@ -228,16 +236,14 @@ test('B1: DELETE /me wipes the account via batch; alias behaves identically', as
   }
   const fr = db.raw.prepare('SELECT COUNT(*) n FROM friends WHERE user_id = ? OR friend_id = ?').get(u.id, u.id).n;
   assert.equal(Number(fr), 0, 'friendships wiped');
-  assert.equal((await api('me', 'GET', null, u.access_token)).status, 401, 'token dead');
-  assert.equal((await api('auth/login', 'POST', { email: 'b1-wipe@local.test', password: 'Hard3n#Passw0rd' })).status, 401, 'login dead');
-  // Compatibility alias: same guards, same wipe.
+  // Compatibility alias: same guards, same grace.
   const v = await signup(api, 'b1-alias@local.test', 'b1alias');
   assert.equal((await api('me/delete-account', 'POST', {}, v.access_token)).status, 400, 'alias requires the password');
   assert.equal((await api('me/delete-account', 'POST', { password: 'nope' }, v.access_token)).status, 401, 'alias rejects wrong password');
-  const del2 = await api('me/delete-account', 'POST', { password: 'Hard3n#Passw0rd' }, v.access_token);
+  const del2 = await api('me/delete-account', 'POST', { password: 'Hard3n#Passw0rd', confirm_text: 'b1-alias@local.test' }, v.access_token);
   assert.equal(del2.status, 200);
-  assert.equal((await del2.json()).status, 'account_deleted');
+  assert.equal((await del2.json()).status, 'deletion_scheduled');
   const row2 = db.raw.prepare('SELECT state FROM users WHERE email = ?').get('b1-alias@local.test');
   assert.equal(row2.state, 'deleted');
-  assert.equal((await api('auth/login', 'POST', { email: 'b1-alias@local.test', password: 'Hard3n#Passw0rd' })).status, 401);
+  assert.equal((await api('auth/login', 'POST', { email: 'b1-alias@local.test', password: 'Hard3n#Passw0rd' })).status, 200, 'alias grace recovers');
 });

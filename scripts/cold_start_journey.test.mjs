@@ -155,14 +155,19 @@ test('§5.2: full journey survives a cold start between every step', async () =>
     const act = await api('admin/moderation/actions', 'POST', { subject_user_id: aId, action: 'activate' }, (await adm.json()).access_token);
     assert.equal(act.status, 200, 'activate cold');
   }
-  // delete on a cold isolate, verified on the next
+  // F3: delete schedules grace on a cold isolate; expiry purges on the next.
   {
     a = await login('cold-a@local.test');
-    assert.equal((await a.api('me', 'DELETE', { password: PW }, a.access_token)).status, 200, 'delete cold');
+    assert.equal((await a.api('me', 'DELETE', { password: PW, confirm_text: 'cold-a@local.test' }, a.access_token)).status, 200, 'delete cold');
   }
   {
     const api = await step();
-    assert.equal((await api('auth/login', 'POST', { email: 'cold-a@local.test', password: PW })).status, 401, 'login dead after delete');
+    assert.equal((await api('auth/login', 'POST', { email: 'cold-a@local.test', password: PW })).status, 200, 'grace login recovers cold');
+    db.raw.exec(`UPDATE users SET state = 'deleted', deleted_at = '2020-01-01T00:00:00.000Z' WHERE id = '${aId}'`);
+  }
+  {
+    const api = await step();
+    assert.equal((await api('auth/login', 'POST', { email: 'cold-a@local.test', password: PW })).status, 401, 'login dead after expiry');
     assert.equal(db.raw.prepare("SELECT state FROM users WHERE email = 'cold-a@local.test'").get().state, 'deleted');
     assert.equal(Number(db.raw.prepare('SELECT COUNT(*) n FROM luno_messages WHERE sender_id = ?').get(aId).n), 0, 'messages wiped');
   }

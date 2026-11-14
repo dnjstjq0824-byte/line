@@ -25,6 +25,7 @@ export type LoginResult = {
   user_id: string
   role: string
   expires_in: number
+  recovered?: boolean
 }
 export type User = {
   id: string

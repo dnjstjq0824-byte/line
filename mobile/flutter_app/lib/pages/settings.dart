@@ -492,38 +492,62 @@ Future<void> _qrDialog(BuildContext context) async {
 Future<void> _confirmDeleteAccount(
     BuildContext context, SessionController session) async {
   final password = TextEditingController();
+  final confirm = TextEditingController();
+  String reason = '';
   // No synchronous dispose: the pop transition still touches this while
   // the session notify rebuilds. Unmount unregisters; GC collects.
   final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('계정을 영구 삭제할까요?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('모든 데이터가 삭제되며 되돌릴 수 없습니다. 계속하려면 비밀번호를 입력하세요.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: password,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  labelText: '비밀번호 확인', isDense: true),
+      builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setState) => AlertDialog(
+              title: const Text('계정을 삭제할까요?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('30일의 유예 뒤 모든 데이터가 삭제됩니다. 유예 안에 로그인하면 복구됩니다. 계속하려면 비밀번호와 이메일을 입력하세요.'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: password,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                        labelText: '비밀번호 확인', isDense: true),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: confirm,
+                    decoration: const InputDecoration(
+                        labelText: '확인 이메일 입력', isDense: true),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    initialValue: reason.isEmpty ? null : reason,
+                    hint: const Text('탈퇴 사유 (선택)'),
+                    items: const [
+                      DropdownMenuItem(value: 'not_using', child: Text('사용하지 않음')),
+                      DropdownMenuItem(value: 'privacy', child: Text('개인정보 우려')),
+                      DropdownMenuItem(value: 'hard_to_use', child: Text('사용하기 어려움')),
+                      DropdownMenuItem(value: 'other', child: Text('기타')),
+                    ],
+                    onChanged: (v) => setState(() => reason = v ?? ''),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('취소')),
+                FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text('삭제 예약')),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('취소')),
-          FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('영구 삭제')),
-        ],
-      ),
-    );
-    if (confirmed == true && password.text.isNotEmpty) {
-      await session.deleteAccount(password.text);
+          ));
+    if (confirmed == true &&
+        password.text.isNotEmpty &&
+        confirm.text.isNotEmpty) {
+      await session.deleteAccount(password.text,
+          reason: reason, confirmText: confirm.text);
     }
 }
 

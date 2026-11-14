@@ -57,16 +57,19 @@ test('D-01: DELETE /me requires the password and kills the account on every surf
   assert.equal((await api('me', 'DELETE', { password: 'Wrong#2026!' }, t1)).status, 401, 'wrong password is 401');
   assert.equal((await api('me', 'GET', null, t1)).status, 200, 'failed deletes leave the token alive');
 
-  const del = await api('me', 'DELETE', { password }, t1);
+  const del = await api('me', 'DELETE', { password, confirm_text: email, reason: 'privacy' }, t1);
   assert.equal(del.status, 200);
-  assert.equal((await del.json()).status, 'account_deleted');
+  assert.equal((await del.json()).status, 'deletion_scheduled');
 
   assert.equal((await api('me', 'GET', null, t1)).status, 401, 'deleter token is dead');
   assert.equal((await api('me', 'GET', null, t2)).status, 401, 'second session is dead too');
-  assert.equal((await api('auth/login', 'POST', { email, password })).status, 401, 'login after deletion fails');
+  // F3: login inside the 30-day grace recovers the account.
+  const back = await api('auth/login', 'POST', { email, password });
+  assert.equal(back.status, 200, 'grace login recovers');
+  assert.equal((await back.json()).recovered, true);
 
   const row = db.raw.prepare('SELECT state FROM users WHERE email = ?').get(email);
-  assert.equal(row.state, 'deleted', 'D1 row soft-deleted (column migrated on legacy table)');
+  assert.equal(row.state, 'active', 'D1 row restored after grace login');
 });
 
 test('D-02: shared demo accounts cannot self-delete', async () => {
@@ -87,9 +90,15 @@ test('D-03: deletion survives a redeploy (fresh isolate, same D1)', async () => 
   const password = 'DelMeStrong#2026!';
   assert.equal((await api('auth/register', 'POST', { email, password, display_name: 'DelMe2' })).status, 201);
   const { access_token } = await (await api('auth/login', 'POST', { email, password })).json();
-  assert.equal((await api('me', 'DELETE', { password }, access_token)).status, 200);
+  assert.equal((await api('me', 'DELETE', { password, confirm_text: email }, access_token)).status, 200);
   const redeployed = await isolate();
-  assert.equal((await redeployed('auth/login', 'POST', { email, password })).status, 401, 'deleted stays deleted after redeploy');
+  // F3: grace survives redeploy (row durable), then expiry purges.
+  assert.equal((await redeployed('auth/login', 'POST', { email, password })).status, 200, 'grace login recovers after redeploy');
+  db.raw.exec(`UPDATE users SET state = 'deleted', deleted_at = '2020-01-01T00:00:00.000Z' WHERE email = '${email}'`);
+  const cold = await isolate();
+  assert.equal((await cold('auth/login', 'POST', { email, password })).status, 401, 'expired grace purges');
+  const row = db.raw.prepare('SELECT display_name FROM users WHERE email = ?').get(email);
+  assert.equal(row.display_name, '탈퇴한 사용자', 'expiry anonymizes');
 });
 
 test('D-04: password checks work on a fresh isolate (iteration count persisted)', async () => {
@@ -103,8 +112,8 @@ test('D-04: password checks work on a fresh isolate (iteration count persisted)'
   const login = await cold('auth/login', 'POST', { email, password });
   assert.equal(login.status, 200, 'login works on a cold isolate');
   const { access_token } = await login.json();
-  assert.equal((await cold('me', 'DELETE', { password }, access_token)).status, 200, 'delete works on a cold isolate');
-  assert.equal((await cold('auth/login', 'POST', { email, password })).status, 401, 'login after deletion fails');
+  assert.equal((await cold('me', 'DELETE', { password, confirm_text: email }, access_token)).status, 200, 'delete works on a cold isolate');
+  assert.equal((await cold('auth/login', 'POST', { email, password })).status, 200, 'grace login recovers on a cold isolate');
 });
 
 test('D-05: legacy 3-segment rows (1000 iterations) still verify without upgrade (S4)', async () => {
