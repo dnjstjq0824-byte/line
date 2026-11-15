@@ -95,6 +95,13 @@ const TRANSLATE_PER_MINUTE = 60;
 const STT_MAX_B64 = 14_000_000;
 const STT_PER_MINUTE = 30;
 const TRANSLATE_CHARS_PER_DAY = 50000;
+// F23: every money-adjacent cap (H2 quotas above, T1 guards above, L-09 bot
+// budgets below) lives in this one block. Product limits (group sizes,
+// preview bytes) stay with the features they shape.
+// L-09: daily cost caps per bot. Requests count completions (+explicit
+// extras), tokens count runner-reported LLM usage.
+const BOT_DAILY_REQUESTS = 1000;
+const BOT_DAILY_TOKENS = 1000000;
 
 // Unstamped placeholder for local runs and tests. scripts/build_cf.js never edits
 // this file: it writes a stamped copy to dist_worker/cf_worker.js, which is what
@@ -975,20 +982,44 @@ async function persistWsTicket(ticket, userId, expiresAt) {
 
 // Returns the granted user id, or null. One use only: the row is deleted in the
 // same statement that reads it, so two concurrent upgrades cannot both win.
+// F23: a storage failure is not an invalid ticket. D1 stays the only
+// authority while reachable (a missing row is still null: no replay, ever);
+// when D1 itself errors, the minting isolate honours its memory copy once
+// and every other isolate throws TICKET_STORAGE_DOWN so the upgrade answers
+// 503 (retry with a fresh ticket), never a misleading 401.
+function ticketStorageDown() {
+  const e = new Error('ticket storage unavailable');
+  e.code = 'TICKET_STORAGE_DOWN';
+  return e;
+}
 async function redeemWsTicket(ticket) {
   if (!ticket) return null;
   const db = dbOf();
   if (db) {
-    // Drop any local copy first so this isolate cannot honour it after the
-    // authoritative row is gone.
-    wsTickets.delete(ticket);
     await ensureSchema();
-    const row = await db
-      .prepare('DELETE FROM luno_ws_tickets WHERE ticket = ? AND expires_at > ? RETURNING user_id')
-      .bind(ticket, Date.now())
-      .first()
-      .catch(() => null);
-    return row && row.user_id ? row.user_id : null;
+    let row = null;
+    let storageOk = true;
+    try {
+      row = await db
+        .prepare('DELETE FROM luno_ws_tickets WHERE ticket = ? AND expires_at > ? RETURNING user_id')
+        .bind(ticket, Date.now())
+        .first();
+    } catch {
+      storageOk = false;
+    }
+    if (storageOk) {
+      // D1 answered: drop any local copy so this isolate cannot honour a
+      // ticket that is now gone everywhere.
+      wsTickets.delete(ticket);
+      return row && row.user_id ? row.user_id : null;
+    }
+    const local = wsTickets.get(ticket);
+    if (!local) throw ticketStorageDown();
+    wsTickets.delete(ticket);
+    // Expiry is checkable locally, so an expired ticket is honestly a 401
+    // even mid-outage; only the storage verdict is unknown.
+    if (local.expiresAt <= Date.now()) return null;
+    return local.userId;
   }
   // No database: a single isolate's Map is all there is.
   const local = wsTickets.get(ticket);
@@ -2728,11 +2759,8 @@ async function botMayAct(roomId, authorId) {
   if (!(await botAllowListed('room', roomId))) return false;
   return botAllowListed('user', authorId);
 }
-// L-09: daily cost caps per bot (single place; F23 consolidates these with
-// the H2/T1 caps). Requests count completions (+explicit extras), tokens
-// count runner-reported LLM usage.
-const BOT_DAILY_REQUESTS = 1000;
-const BOT_DAILY_TOKENS = 1000000;
+// L-09: daily cost caps per bot live in the caps block at the top of this
+// file (F23: next to the H2/T1 caps); only the counters stay here.
 function botDayUTC(d = new Date()) { return d.toISOString().slice(0, 10); }
 async function botUsage(botId, day) {
   const db = dbOf();
@@ -6761,7 +6789,16 @@ const workerCore = {
         return new Response('Expected Upgrade: websocket', { status: 426 });
       }
       const ticket = url.searchParams.get('ticket');
-      const grantedUserId = await redeemWsTicket(ticket);
+      let grantedUserId = null;
+      try {
+        grantedUserId = await redeemWsTicket(ticket);
+      } catch (err) {
+        // F23: storage down is retryable (fresh ticket), not a logout.
+        if (err && err.code === 'TICKET_STORAGE_DOWN') {
+          return json({ error: 'ticket storage unavailable, retry with a fresh ticket', code: 'TICKET_STORAGE_DOWN' }, 503);
+        }
+        throw err;
+      }
       if (!grantedUserId) {
         return json({ error: 'invalid or expired websocket ticket' }, 401);
       }
@@ -7384,8 +7421,17 @@ const workerCore = {
         const ticketExpiresAt = Date.now() + 60000;
         wsTickets.set(ticket, { userId: authUser.id, expiresAt: ticketExpiresAt });
         // Also persist it, so the upgrade can be served by a different isolate.
-        await persistWsTicket(ticket, authUser.id, ticketExpiresAt).catch(err =>
-          logx('error', 'ws ticket persist failed', { error: err && err.message ? err.message : String(err) }));
+        const persisted = await persistWsTicket(ticket, authUser.id, ticketExpiresAt).catch(err => {
+          logx('error', 'ws ticket persist failed', { error: err && err.message ? err.message : String(err) });
+          return false;
+        });
+        if (!persisted && dbOf()) {
+          // F23: D1 is configured but the write failed. A memory-only ticket
+          // would 401 on every other isolate, so fail here (503) and let the
+          // client retry cleanly instead of minting a half-ticket.
+          wsTickets.delete(ticket);
+          return json({ error: 'ticket unavailable, retry', code: 'TICKET_STORAGE_DOWN' }, 503);
+        }
         return json({ ticket, expires_in: 60 });
       }
 

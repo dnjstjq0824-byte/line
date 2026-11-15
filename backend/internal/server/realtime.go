@@ -34,7 +34,11 @@ func (a *App) consumeWSTicket(ctx context.Context, ticket string) (string, error
 	if err != nil {
 		return "", err
 	}
-	if expires <= time.Now().Unix() {
+	// F23: the ticket promises expires_in seconds from issue. Issued and
+	// compared in whole seconds, `<=` steals up to one of them: a ticket
+	// redeemed inside its final second reads as expired. `<` honours the
+	// full window (effective TTL 30-31s, never below the promise).
+	if expires < time.Now().Unix() {
 		return "", sql.ErrNoRows
 	}
 	return userID, nil
