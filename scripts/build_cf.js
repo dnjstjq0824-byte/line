@@ -72,6 +72,11 @@ versionData.worker_source_sha256 = createHash('sha256').update(fs.readFileSync(p
 
 fs.writeFileSync(path.join(distRoot, 'version.json'), JSON.stringify(versionData, null, 2));
 
+// F18: version the service worker with the deploy commit + shell file list.
+const { stampServiceWorker } = require('./pwa_stamp.cjs');
+const stampedSw = stampServiceWorker(distRoot, versionData.short_commit);
+console.log(`Service worker stamped (${stampedSw.buildId}, ${stampedSw.precached} shell files)`);
+
 // The source worker is left untouched; wrangler.jsonc deploys this stamped copy.
 // Stamping the source itself made every deploy produce a commit that only
 // recorded the previous commit's SHA.
