@@ -1,5 +1,64 @@
 package com.bookingnetwork.messenger.global_messenger
 
+import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity()
+// F21: inbound links + shares. Cold VIEW links ride the engine route
+// (go_router initial location); warm VIEW links, cold SEND shares and
+// warm SEND shares funnel through the luno.links channel:
+//
+// - getInitialShare -> {text: String?, hasImages: Boolean}? (one-shot)
+// - onLink {uri} / onShare {text, hasImages} pushed on warm intents.
+class MainActivity : FlutterActivity() {
+    private lateinit var linkChannel: MethodChannel
+    private var pendingShare: Map<String, Any?>? = null
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        linkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "luno.links")
+        linkChannel.setMethodCallHandler(object : MethodChannel.MethodCallHandler {
+            override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+                if (call.method == "getInitialShare") {
+                    result.success(pendingShare)
+                    pendingShare = null
+                } else {
+                    result.notImplemented()
+                }
+            }
+        })
+        collectShareIntent(intent, true)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == Intent.ACTION_VIEW) {
+            val uri = intent.dataString
+            if (uri != null) {
+                linkChannel.invokeMethod("onLink", mapOf("uri" to uri))
+            }
+        }
+        collectShareIntent(intent, false)
+    }
+
+    private fun collectShareIntent(intent: Intent, cold: Boolean) {
+        if (intent.action != Intent.ACTION_SEND) return
+        val type = intent.type ?: return
+        val payload: Map<String, Any?> = when {
+            type == "text/plain" -> mapOf(
+                "text" to intent.getStringExtra(Intent.EXTRA_TEXT),
+                "hasImages" to false)
+            type.startsWith("image/") -> mapOf(
+                "text" to null, "hasImages" to true)
+            else -> return
+        }
+        if (cold) {
+            if (pendingShare == null) pendingShare = payload
+        } else {
+            linkChannel.invokeMethod("onShare", payload)
+        }
+    }
+}

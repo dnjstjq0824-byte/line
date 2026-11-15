@@ -3545,6 +3545,60 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'Español (ES)'**
   String get settingsLangEs;
+
+  /// joinTitle (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'초대 수락'**
+  String get joinTitle;
+
+  /// joinDesc (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'초대 링크로 그룹 대화방에 참여합니다.'**
+  String get joinDesc;
+
+  /// joinConfirm (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'참여하기'**
+  String get joinConfirm;
+
+  /// inviteInvalid (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'유효하지 않은 초대 링크입니다.'**
+  String get inviteInvalid;
+
+  /// inviteExpired (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'만료된 초대 링크입니다.'**
+  String get inviteExpired;
+
+  /// inviteAlreadyIn (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'이미 참여한 방입니다.'**
+  String get inviteAlreadyIn;
+
+  /// shareBannerTitle (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'공유 도착'**
+  String get shareBannerTitle;
+
+  /// shareBannerDesc (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'방을 선택하면 내용이 입력됩니다.'**
+  String get shareBannerDesc;
+
+  /// sharePhotosPreparing (F21)
+  ///
+  /// In ko, this message translates to:
+  /// **'사진 공유는 준비 중입니다.'**
+  String get sharePhotosPreparing;
 }
 
 class _AppLocalizationsDelegate

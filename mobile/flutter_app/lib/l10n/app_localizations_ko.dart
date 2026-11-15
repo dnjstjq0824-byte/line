@@ -1843,4 +1843,31 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsLangEs => 'Español (ES)';
+
+  @override
+  String get joinTitle => '초대 수락';
+
+  @override
+  String get joinDesc => '초대 링크로 그룹 대화방에 참여합니다.';
+
+  @override
+  String get joinConfirm => '참여하기';
+
+  @override
+  String get inviteInvalid => '유효하지 않은 초대 링크입니다.';
+
+  @override
+  String get inviteExpired => '만료된 초대 링크입니다.';
+
+  @override
+  String get inviteAlreadyIn => '이미 참여한 방입니다.';
+
+  @override
+  String get shareBannerTitle => '공유 도착';
+
+  @override
+  String get shareBannerDesc => '방을 선택하면 내용이 입력됩니다.';
+
+  @override
+  String get sharePhotosPreparing => '사진 공유는 준비 중입니다.';
 }

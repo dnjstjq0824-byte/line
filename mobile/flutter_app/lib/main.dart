@@ -12,6 +12,7 @@ import 'pages/call_overlay.dart';
 import 'pages/group_call_overlay.dart';
 import 'router.dart';
 import 'state/session.dart';
+import 'util/deep_links.dart';
 
 export 'api/client.dart';
 export 'legacy_tokens.dart';
@@ -29,6 +30,7 @@ class _MessengerAppState extends State<MessengerApp>
     with WidgetsBindingObserver {
   late final SessionController _session;
   late final GoRouter _router;
+  DeepLinkHandler? _links;
   String _appLocale = 'ko';
 
   @override
@@ -37,6 +39,8 @@ class _MessengerAppState extends State<MessengerApp>
     _session = SessionController();
     _session.addListener(_syncLocale);
     _router = buildRouter(_session);
+    // F21: warm links + shares (cold VIEW links ride the engine route).
+    _links = DeepLinkHandler(session: _session, go: _router.go)..start();
     _session.restore();
     _session.checkForUpdate();
     _session.ensureTranslateLanguages();
@@ -56,6 +60,7 @@ class _MessengerAppState extends State<MessengerApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _session.removeListener(_syncLocale);
+    _links?.dispose();
     _session.disposeAll();
     super.dispose();
   }

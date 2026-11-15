@@ -59,6 +59,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       if (session.selectedId != widget.conversationId) {
         session.openChat(widget.conversationId);
       }
+      final shared = session.consumeShareText();
+      if (shared.isNotEmpty) message.text = shared;
       if (mounted) setState(() => _opened = true);
     });
   }

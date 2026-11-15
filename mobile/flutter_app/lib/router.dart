@@ -18,6 +18,7 @@ import 'pages/group_settings.dart';
 import 'pages/console.dart';
 import 'pages/feed.dart';
 import 'pages/home.dart';
+import 'pages/join.dart';
 import 'pages/keep.dart';
 import 'pages/lounge.dart';
 import 'pages/more.dart';
@@ -110,6 +111,10 @@ GoRouter buildRouter(SessionController session) {
                 pageBuilder: (c, s) => harborPage(
                     c, s, GroupSettingsPage(conversationId: s.pathParameters['cid']!))),
             ],
+          ),
+          GoRoute(
+            path: '/invite/:token',
+            pageBuilder: (c, s) => harborPage(c, s, JoinPage(token: s.pathParameters['token']!)),
           ),
           GoRoute(path: '/feed', pageBuilder: (c, s) => harborPage(c, s, const FeedPage())),
           GoRoute(path: '/lounge', pageBuilder: (c, s) => harborPage(c, s, const LoungePage())),

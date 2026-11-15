@@ -35,6 +35,38 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- F21: App Links (verified by /.well-known/assetlinks.json). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:host="luno-messenger.dnjstjqppk.workers.dev"/>
+                <data android:pathPattern="/invite/..*"/>
+                <data android:path="/chats"/>
+                <data android:pathPattern="/chats/..*"/>
+            </intent-filter>
+            <!-- F21: custom scheme fallback (same paths under luno://app/). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="luno"/>
+                <data android:host="app"/>
+            </intent-filter>
+            <!-- F21: receive shared text into the composer. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <!-- F21: shared images are accepted but honest: the app says
+                 photo sharing is still preparing instead of dropping them. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"

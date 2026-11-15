@@ -573,5 +573,14 @@
   "msgPayDone10k": "Completed the LUNO Pay ₩10,000 transfer.",
   "msgGdprBackup": "GDPR backup file ready ({count} chats)",
   "settingsLangEn": "English (EN)",
-  "settingsLangEs": "Spanish (ES)"
+  "settingsLangEs": "Spanish (ES)",
+  "joinTitle": "Accept invite",
+  "joinDesc": "Join a group room with this invite link.",
+  "joinConfirm": "Join",
+  "inviteInvalid": "This invite link is invalid.",
+  "inviteExpired": "This invite link expired.",
+  "inviteAlreadyIn": "Already in this room.",
+  "shareBannerTitle": "Share arrived",
+  "shareBannerDesc": "Pick a room to fill it in.",
+  "sharePhotosPreparing": "Photo sharing is coming soon."
 }

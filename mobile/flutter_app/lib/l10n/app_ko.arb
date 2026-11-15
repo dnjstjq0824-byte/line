@@ -2608,5 +2608,41 @@
   "settingsLangEs": "Español (ES)",
   "@settingsLangEs": {
     "description": "settingsLangEs (F20)"
+  },
+  "joinTitle": "초대 수락",
+  "@joinTitle": {
+    "description": "joinTitle (F21)"
+  },
+  "joinDesc": "초대 링크로 그룹 대화방에 참여합니다.",
+  "@joinDesc": {
+    "description": "joinDesc (F21)"
+  },
+  "joinConfirm": "참여하기",
+  "@joinConfirm": {
+    "description": "joinConfirm (F21)"
+  },
+  "inviteInvalid": "유효하지 않은 초대 링크입니다.",
+  "@inviteInvalid": {
+    "description": "inviteInvalid (F21)"
+  },
+  "inviteExpired": "만료된 초대 링크입니다.",
+  "@inviteExpired": {
+    "description": "inviteExpired (F21)"
+  },
+  "inviteAlreadyIn": "이미 참여한 방입니다.",
+  "@inviteAlreadyIn": {
+    "description": "inviteAlreadyIn (F21)"
+  },
+  "shareBannerTitle": "공유 도착",
+  "@shareBannerTitle": {
+    "description": "shareBannerTitle (F21)"
+  },
+  "shareBannerDesc": "방을 선택하면 내용이 입력됩니다.",
+  "@shareBannerDesc": {
+    "description": "shareBannerDesc (F21)"
+  },
+  "sharePhotosPreparing": "사진 공유는 준비 중입니다.",
+  "@sharePhotosPreparing": {
+    "description": "sharePhotosPreparing (F21)"
   }
 }

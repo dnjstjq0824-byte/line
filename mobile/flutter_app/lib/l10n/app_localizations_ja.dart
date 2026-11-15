@@ -1843,4 +1843,31 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsLangEs => 'スペイン語 (ES)';
+
+  @override
+  String get joinTitle => '招待を受ける';
+
+  @override
+  String get joinDesc => '招待リンクでグループトークに参加します。';
+
+  @override
+  String get joinConfirm => '参加する';
+
+  @override
+  String get inviteInvalid => '無効な招待リンクです。';
+
+  @override
+  String get inviteExpired => '期限切れの招待リンクです。';
+
+  @override
+  String get inviteAlreadyIn => 'すでに参加済みのルームです。';
+
+  @override
+  String get shareBannerTitle => '共有が届きました';
+
+  @override
+  String get shareBannerDesc => 'ルームを選ぶと内容が入力されます。';
+
+  @override
+  String get sharePhotosPreparing => '写真共有は準備中です。';
 }

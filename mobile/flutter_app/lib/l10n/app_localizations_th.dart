@@ -1851,4 +1851,31 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get settingsLangEs => 'สเปน (ES)';
+
+  @override
+  String get joinTitle => 'ยอมรับคำเชิญ';
+
+  @override
+  String get joinDesc => 'เข้าร่วมห้องแชทกลุ่มด้วยลิงก์เชิญนี้';
+
+  @override
+  String get joinConfirm => 'เข้าร่วม';
+
+  @override
+  String get inviteInvalid => 'ลิงก์เชิญไม่ถูกต้อง';
+
+  @override
+  String get inviteExpired => 'ลิงก์เชิญหมดอายุ';
+
+  @override
+  String get inviteAlreadyIn => 'อยู่ในห้องนี้แล้ว';
+
+  @override
+  String get shareBannerTitle => 'มีแชร์เข้ามา';
+
+  @override
+  String get shareBannerDesc => 'เลือกห้องเพื่อใส่เนื้อหา';
+
+  @override
+  String get sharePhotosPreparing => 'แชร์รูปกำลังเตรียม';
 }

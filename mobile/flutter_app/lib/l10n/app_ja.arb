@@ -573,5 +573,14 @@
   "msgPayDone10k": "LUNO Pay ₩10,000の送金を完了しました。",
   "msgGdprBackup": "GDPRデータバックアップファイルを作成しました（{count}件のトーク）",
   "settingsLangEn": "英語 (EN)",
-  "settingsLangEs": "スペイン語 (ES)"
+  "settingsLangEs": "スペイン語 (ES)",
+  "joinTitle": "招待を受ける",
+  "joinDesc": "招待リンクでグループトークに参加します。",
+  "joinConfirm": "参加する",
+  "inviteInvalid": "無効な招待リンクです。",
+  "inviteExpired": "期限切れの招待リンクです。",
+  "inviteAlreadyIn": "すでに参加済みのルームです。",
+  "shareBannerTitle": "共有が届きました",
+  "shareBannerDesc": "ルームを選ぶと内容が入力されます。",
+  "sharePhotosPreparing": "写真共有は準備中です。"
 }

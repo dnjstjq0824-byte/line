@@ -573,5 +573,14 @@
   "msgPayDone10k": "โอน LUNO Pay ₩10,000 สำเร็จ",
   "msgGdprBackup": "สร้างไฟล์สำรอง GDPR แล้ว ({count} แชท)",
   "settingsLangEn": "อังกฤษ (EN)",
-  "settingsLangEs": "สเปน (ES)"
+  "settingsLangEs": "สเปน (ES)",
+  "joinTitle": "ยอมรับคำเชิญ",
+  "joinDesc": "เข้าร่วมห้องแชทกลุ่มด้วยลิงก์เชิญนี้",
+  "joinConfirm": "เข้าร่วม",
+  "inviteInvalid": "ลิงก์เชิญไม่ถูกต้อง",
+  "inviteExpired": "ลิงก์เชิญหมดอายุ",
+  "inviteAlreadyIn": "อยู่ในห้องนี้แล้ว",
+  "shareBannerTitle": "มีแชร์เข้ามา",
+  "shareBannerDesc": "เลือกห้องเพื่อใส่เนื้อหา",
+  "sharePhotosPreparing": "แชร์รูปกำลังเตรียม"
 }

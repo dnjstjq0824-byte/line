@@ -1862,4 +1862,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsLangEs => 'Spanish (ES)';
+
+  @override
+  String get joinTitle => 'Accept invite';
+
+  @override
+  String get joinDesc => 'Join a group room with this invite link.';
+
+  @override
+  String get joinConfirm => 'Join';
+
+  @override
+  String get inviteInvalid => 'This invite link is invalid.';
+
+  @override
+  String get inviteExpired => 'This invite link expired.';
+
+  @override
+  String get inviteAlreadyIn => 'Already in this room.';
+
+  @override
+  String get shareBannerTitle => 'Share arrived';
+
+  @override
+  String get shareBannerDesc => 'Pick a room to fill it in.';
+
+  @override
+  String get sharePhotosPreparing => 'Photo sharing is coming soon.';
 }

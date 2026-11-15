@@ -116,6 +116,9 @@ class _ChatsPageState extends State<ChatsPage> {
                 ),
               ),
               const SizedBox(height: 8),
+              if (session.pendingShareText != null &&
+                  session.pendingShareText!.isNotEmpty)
+                const _ShareBanner(),
               if (session.channelSlot != null &&
                   !session.dismissedChannelSlots
                       .contains(session.channelSlot!.id))
@@ -269,6 +272,29 @@ class _ChatsPageState extends State<ChatsPage> {
               child: Text(context.l10n.createWord),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// F21: inbound shares wait here until the user picks a room, whose
+// composer consumes the text.
+class _ShareBanner extends StatelessWidget {
+  const _ShareBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context, listen: false);
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.share_outlined),
+        title: Text(context.l10n.shareBannerTitle),
+        subtitle: Text(context.l10n.shareBannerDesc),
+        trailing: IconButton(
+          tooltip: context.l10n.mvCancel,
+          icon: const Icon(Icons.close),
+          onPressed: session.clearPendingShare,
         ),
       ),
     );

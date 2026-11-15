@@ -6503,6 +6503,22 @@ const workerCore = {
     if (url.pathname === '/healthz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
       return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
     }
+    // F21: Android App Links verification. Public by design (no boot,
+    // no auth): the OS fetches this to bind the package to the host.
+    // Fingerprints: luno-release (prod) + androiddebugkey (dev builds).
+    if (url.pathname === '/.well-known/assetlinks.json' && request.method === 'GET') {
+      return new Response(JSON.stringify([{
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: 'com.bookingnetwork.messenger.global_messenger',
+          sha256_cert_fingerprints: [
+            '6D:CD:CD:38:DB:6A:48:5C:E9:99:FE:EC:9D:B5:8F:E5:CD:C7:80:63:16:AA:63:6A:56:90:8B:FD:F0:BA:64:F0',
+            '15:09:C9:EE:A6:53:6E:9C:F4:9C:53:61:47:E0:66:27:0A:A9:B2:EC:93:C3:35:43:65:CF:2F:BD:D9:6C:BE:A9',
+          ],
+        },
+      }]), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+    }
     if (url.pathname === '/readyz') {
       if (!env.DB) return json({ status: 'not_ready', checks: { database: 'not_configured' } }, 503);
       try {

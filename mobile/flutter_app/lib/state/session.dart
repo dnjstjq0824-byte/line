@@ -102,6 +102,29 @@ class SessionController extends ChangeNotifier {
   // notice string; the settings picker persists changes below.
   String locale = 'ko';
   AppLocalizations get strings => stringsFor(locale);
+  // F21: text shared into the app waits here until a room is opened,
+  // which consumes it into the composer. Images are not held: the app
+  // only promises text until the photo pipeline lands.
+  String? pendingShareText;
+  String consumeShareText() {
+    final text = pendingShareText ?? '';
+    pendingShareText = null;
+    notifyListeners();
+    return text;
+  }
+
+  void clearPendingShare() {
+    pendingShareText = null;
+    notifyListeners();
+  }
+
+  // F21: inbound platform share (text lands in the next opened room).
+  void receiveShare({String? text, bool hasImages = false}) {
+    if (hasImages) notice = strings.sharePhotosPreparing;
+    if (text != null && text.isNotEmpty) pendingShareText = text;
+    notifyListeners();
+  }
+
   Future<void> setLocale(String code) async {
     if (!appLocaleCodes.contains(code) || code == locale) return;
     locale = code;
@@ -1965,14 +1988,25 @@ class SessionController extends ChangeNotifier {
   }
 
   /// Returns the joined conversation id so the page can navigate to it.
+  /// F21: invite links land here; failures surface localized notices.
   Future<String?> joinGroup(String token) async {
     String? conversationId;
     await run(() async {
-      final c = await api.call('/api/v1/conversations/join',
-          method: 'POST', data: {'token': token.trim()});
-      conversationId = c['id'] as String?;
-      notice = strings.msgJoinedGroup;
-      await reload();
+      try {
+        final c = await api.call('/api/v1/conversations/join',
+            method: 'POST', data: {'token': token.trim()});
+        conversationId = c['id'] as String?;
+        notice = strings.msgJoinedGroup;
+        await reload();
+      } on ApiException catch (e) {
+        notice = switch (e.statusCode) {
+          404 => strings.inviteInvalid,
+          410 => strings.inviteExpired,
+          409 => strings.inviteAlreadyIn,
+          _ => strings.errTransient,
+        };
+        notifyListeners();
+      }
     });
     return conversationId;
   }
