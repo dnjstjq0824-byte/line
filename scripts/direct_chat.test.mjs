@@ -7,8 +7,8 @@ import { F24_CONSENT } from './test_helpers.mjs';
 // The client reuses the listed direct room when one exists (mirroring the
 // worker's findDirect dedupe) and fails honestly when a fresh room is not
 // in the reloaded list (pre-durable cross-isolate miss) instead of showing
-// an empty canvas. Prod persistence needs DURABLE_CONVERSATIONS + the
-// 20261105_durable_conversations.sql D1 migration (see wrangler pin below).
+// an empty canvas. Prod persistence rides DURABLE_CONVERSATIONS, whose
+// tables the worker creates itself (see the wrangler pin below).
 const helperSource = await readFile(new URL('../apps/shared/direct_chat.ts', import.meta.url), 'utf8');
 const { findDirectChatId } = await import(`data:text/javascript;base64,${Buffer.from(helperSource).toString('base64')}`);
 const viewSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
@@ -70,9 +70,12 @@ test('worker POST direct returns a top-level id the client can select immediatel
   assert.ok(typeof room.id === 'string' && room.id.length > 0);
 });
 
-test('durable conversations flag stays off until the prod D1 migration lands', () => {
-  assert.ok(
-    !/"DURABLE_CONVERSATIONS"\s*:\s*"true"/.test(wranglerSource),
-    'flip to "true" only after applying scripts/migrations/20261105_durable_conversations.sql to prod D1',
-  );
+test('durable conversations flag is on only because the worker creates its own tables', async () => {
+  // The flag used to be pinned off until a hand-applied prod migration.
+  // Both tables now ride ensureSchema, so "true" is safe exactly as long as
+  // the two CREATE statements stay in the worker.
+  assert.ok(/"DURABLE_CONVERSATIONS"\s*:\s*"true"/.test(wranglerSource));
+  const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
+  assert.ok(workerSource.includes('CREATE TABLE IF NOT EXISTS luno_conversations ('), 'runtime schema creates luno_conversations');
+  assert.ok(workerSource.includes('CREATE TABLE IF NOT EXISTS luno_conversation_members ('), 'runtime schema creates luno_conversation_members');
 });

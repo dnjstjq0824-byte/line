@@ -506,7 +506,22 @@ const LUNO_SCHEMA_PHASE1 = [
   `CREATE TABLE IF NOT EXISTS luno_bot_usage (
     bot_id TEXT NOT NULL, day TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0,
     tokens INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (bot_id, day))`,
-  `CREATE TABLE IF NOT EXISTS luno_bot_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`
+  `CREATE TABLE IF NOT EXISTS luno_bot_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  // PC agent: durable rooms ship with the runtime schema, so a fresh D1 no
+  // longer depends on a hand-applied migration. Same shapes as
+  // migrations/20261105_durable_conversations.sql + 20261114_group_roles.sql;
+  // IF NOT EXISTS keeps databases that already ran them untouched.
+  `CREATE TABLE IF NOT EXISTS luno_conversations (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('direct','group')), title TEXT NOT NULL,
+    notice TEXT NOT NULL DEFAULT '', avatar_url TEXT NOT NULL DEFAULT '',
+    owner_id TEXT NOT NULL REFERENCES users(id), direct_key TEXT UNIQUE,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0), mutation_token TEXT, deleted_at TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_conversation_members (
+    conversation_id TEXT NOT NULL REFERENCES luno_conversations(id), user_id TEXT NOT NULL REFERENCES users(id),
+    role TEXT NOT NULL CHECK (role IN ('owner','member','admin')), joined_at TEXT NOT NULL,
+    PRIMARY KEY (conversation_id,user_id))`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_members_user ON luno_conversation_members(user_id,conversation_id)`
 ];
 // Additive columns for tables that predate Phase 1. Applied with a
 // PRAGMA guard because SQLite has no idempotent ADD COLUMN.
@@ -2976,6 +2991,93 @@ async function routeBotMentions(conv, authorId, msg) {
       payload: { message_id: msg.id, author_id: authorId, body: String(msg.body || '').slice(0, 4000) } });
   }
 }
+// PC agent: a slash command in an allow-listed room becomes one command job
+// per target bot. Targets are the mentioned bots, or every bot member when
+// nothing is mentioned (one runner merges those by message_id). A reply to
+// a bot message counts as a command for that bot even without the slash.
+// Returns true when the message was handled as a command (mention routing
+// then stays out of the way, so one message never becomes two jobs).
+function botCommandText(msg) {
+  if (!msg || msg.kind !== 'text') return '';
+  const body = String(msg.body || '').trim();
+  if (body.startsWith('/')) return body;
+  const mentions = msg.metadata && Array.isArray(msg.metadata.mentions) ? msg.metadata.mentions : [];
+  if (!mentions.length) return '';
+  const at = body.search(/(^|\s)\/[a-z]{2,12}!?(\s|$)/);
+  return at < 0 ? '' : body.slice(at).trim();
+}
+async function routeBotCommands(conv, authorId, msg) {
+  if (!msg || msg.kind !== 'text') return false;
+  const author = usersById.get(authorId) || await loadUserFromD1(authorId, 'user');
+  if (!author || userKind(author) === 'bot') return false;
+  let text = botCommandText(msg);
+  const mentions = (msg.metadata && Array.isArray(msg.metadata.mentions) ? msg.metadata.mentions : []);
+  if (mentions.includes('all')) return false;
+  let replyBot = '';
+  if (!text && msg.reply_to) {
+    const orig = (messages.get(conv.id) || []).find(x => x.id === msg.reply_to);
+    const origSender = orig ? (usersById.get(orig.sender_id) || await loadUserFromD1(orig.sender_id, 'user')) : null;
+    if (origSender && userKind(origSender) === 'bot') { replyBot = origSender.id; text = String(msg.body || '').trim(); }
+  }
+  if (!text) return false;
+  if (!(await botMayAct(conv.id, authorId))) return false;
+  const candidates = replyBot ? [replyBot] : (mentions.length ? [...new Set(mentions)] : conv.members);
+  let queued = 0;
+  for (const targetId of candidates) {
+    if (targetId === authorId || !conv.members.includes(targetId)) continue;
+    const target = usersById.get(targetId) || await loadUserFromD1(targetId, 'user');
+    if (!target || userKind(target) !== 'bot') continue;
+    if (!(await botQuotaOk(targetId))) continue;
+    await enqueueBotJob({ botId: targetId, roomId: conv.id, kind: 'command',
+      payload: { message_id: msg.id, author_id: authorId, body: text.slice(0, 4000), created_at: msg.created_at,
+        ...(msg.reply_to ? { reply_to: msg.reply_to } : {}) } });
+    queued++;
+  }
+  return queued > 0;
+}
+// PC agent presence: runners report ready/busy on every claim. One row per
+// bot in luno_bot_config, rewritten at most every BOT_PRESENCE_WRITE_MS
+// unless the state changed; a bot unseen for BOT_PRESENCE_TTL_MS is offline.
+const BOT_PRESENCE_TTL_MS = 90 * 1000;
+const BOT_PRESENCE_WRITE_MS = 25 * 1000;
+const botPresenceCache = new Map();
+function botPresenceView(bot, row) {
+  let p = null;
+  try { p = row && row.value ? JSON.parse(row.value) : null; } catch { p = null; }
+  const at = Number(p && p.at) || 0;
+  const online = at > 0 && Date.now() - at <= BOT_PRESENCE_TTL_MS;
+  return {
+    id: bot.id, display_name: bot.display_name || '', handle: bot.handle || '',
+    state: online ? (p.state === 'busy' ? 'busy' : 'ready') : 'offline',
+    detail: online ? String(p.detail || '') : '', queue: online ? (Number(p.queue) || 0) : 0,
+    version: String((p && p.version) || ''), last_seen_at: at ? new Date(at).toISOString() : null
+  };
+}
+async function botPresenceTouch(bot, input) {
+  const db = dbOf();
+  if (!db) return;
+  const src = input && typeof input === 'object' ? input : {};
+  const next = {
+    state: src.state === 'busy' ? 'busy' : 'ready', detail: clip(String(src.detail || ''), 200),
+    queue: Math.max(0, Math.min(999, Number.isInteger(src.queue) ? src.queue : 0)),
+    version: clip(String(src.version || ''), 40), at: Date.now()
+  };
+  const prev = botPresenceCache.get(bot.id);
+  const changed = !prev || prev.state !== next.state || prev.detail !== next.detail || prev.queue !== next.queue;
+  if (!changed && next.at - prev.at < BOT_PRESENCE_WRITE_MS) return;
+  botPresenceCache.set(bot.id, next);
+  const value = JSON.stringify(next);
+  await db.prepare('INSERT INTO luno_bot_config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = ?')
+    .bind('presence:' + bot.id, value, value).run().catch(() => null);
+  if (!changed) return;
+  const view = botPresenceView(bot, { value });
+  for (const roomId of (bot.botScope && bot.botScope.rooms) || []) {
+    try {
+      await hydrateConversation(roomId);
+      if (conversations.get(roomId)) broadcast({ type: 'bot.presence', conversation_id: roomId, bot: view });
+    } catch { /* presence fan-out never fails a claim */ }
+  }
+}
 // L-04: append one decision. Called by approvals (L-05) only. Returns the
 // decision id, or null when the proposal was already decided.
 async function recordDecision({ roomId, proposalMessageId, decidedBy, decision }) {
@@ -4665,7 +4767,9 @@ async function followedMap(userId) {
       await persistCursor(cid, myId, msg.sequence);
       // L-02: bot mentions become jobs. Routing must never break messaging,
       // so failures are logged, not thrown.
-      try { await routeBotMentions(conv, myId, msg); } catch (err) { logx('error', 'bot route failed', { error: err && err.message ? err.message : String(err) }); }
+      try {
+        if (!(await routeBotCommands(conv, myId, msg))) await routeBotMentions(conv, myId, msg);
+      } catch (err) { logx('error', 'bot route failed', { error: err && err.message ? err.message : String(err) }); }
       // N1-L: fan the message out to the notification provider leg.
       await notify(notifyEnv(), conv.members, {
         kind: 'message',
@@ -4797,9 +4901,38 @@ async function deleteAttachmentEverywhere(attId) {
     const decisionId = await recordDecision({ roomId: cid, proposalMessageId: target.id, decidedBy: myId, decision: b.decision });
     if (!decisionId) return json({ error: 'proposal already decided' }, 409);
     const verdict = b.decision === 'approved' ? '승인되었습니다' : '거절되었습니다';
-    const posted = await pushPersistent(cid, target.sender_id, { kind: 'decision', body: `제안 '${clip(target.body, 120)}'이 ${verdict}.` });
+    const posted = await pushPersistent(cid, target.sender_id, { kind: 'decision', body: `제안 '${clip(target.body, 120)}'이 ${verdict}.`,
+      metadata: { proposal_message_id: target.id, decision: b.decision } });
+    // PC agent: a decided bot proposal becomes a decision job for that bot.
+    try {
+      const proposer = usersById.get(target.sender_id) || await loadUserFromD1(target.sender_id, 'user');
+      if (proposer && userKind(proposer) === 'bot' && await botMayAct(cid, myId)) {
+        await enqueueBotJob({ botId: proposer.id, roomId: cid, kind: 'decision',
+          payload: { proposal_message_id: target.id, decision: b.decision, decided_by: myId } });
+      }
+    } catch (err) { logx('error', 'bot decision route failed', { error: err && err.message ? err.message : String(err) }); }
     await persistAudit(myId, 'proposal.decide', target.id, { room: cid, decision: b.decision, decision_id: decisionId });
     return json({ id: decisionId, message_id: posted.id, state: b.decision }, 201);
+  }
+  if ((m = p.match(/^conversations\/([\w-]+)\/bots$/)) && method === 'GET') {
+    const cid = resolveConversationId(m[1], myId);
+    await hydrateConversation(cid);
+    const conv = conversations.get(cid);
+    if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
+    const db = dbOf();
+    const bots = [];
+    for (const id of conv.members) {
+      if (id === myId) continue;
+      const u = usersById.get(id) || await loadUserFromD1(id, 'user');
+      if (!u || userKind(u) !== 'bot') continue;
+      let row = null;
+      if (db) {
+        await ensureSchema();
+        row = await db.prepare('SELECT value FROM luno_bot_config WHERE key = ?').bind('presence:' + id).first().catch(() => null);
+      }
+      bots.push(botPresenceView(u, row));
+    }
+    return json({ bots, commands_allowed: bots.length > 0 && await botMayAct(cid, myId), presence_ttl_ms: BOT_PRESENCE_TTL_MS });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/proposals$/)) && method === 'GET') {
     const cid = resolveConversationId(m[1], myId);
@@ -5752,6 +5885,8 @@ function entitled(u, feature) {
     const db = dbOf();
     if (!db) return json({ error: 'job queue requires a configured database' }, 501);
     await ensureSchema();
+    const claimBody = await readJson(request).catch(() => ({}));
+    await botPresenceTouch(me, claimBody && claimBody.presence);
     if (await botKilled()) return json({ error: 'bot work halted by operator', code: 'LLM_KILLED' }, 403);
     if (!(await botQuotaOk(myId))) return json({ error: 'daily bot quota exceeded', code: 'BOT_QUOTA_EXCEEDED' }, 429);
     const rooms = (me.botScope && me.botScope.rooms) || [];
@@ -8288,8 +8423,36 @@ const workerCore = {
       return json({ error: 'not_found', path: p }, 404);
     }
 
+    // /download hands over the recommended APK itself (streamed from the
+    // release asset, so nothing is stored here); the landing page with every
+    // ABI stays at /download.html and is the fallback when the asset is
+    // unreachable. Range passes through so an interrupted download resumes.
+    if (url.pathname === '/download' || url.pathname === '/download/') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
+      const asset = LATEST_ANDROID_BUILD.assets.find(a => a.recommended) || LATEST_ANDROID_BUILD.assets[0];
+      const range = request.headers.get('Range');
+      let upstream = null;
+      try {
+        upstream = await fetch(asset.url, { method: request.method, redirect: 'follow', headers: range ? { Range: range } : {} });
+      } catch { upstream = null; }
+      if (!upstream || (upstream.status !== 200 && upstream.status !== 206)) {
+        return Response.redirect(url.origin + '/download.html', 302);
+      }
+      const headers = new Headers({
+        'Content-Type': 'application/vnd.android.package-archive',
+        'Content-Disposition': 'attachment; filename="luno-messenger.apk"',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'X-Content-Type-Options': 'nosniff',
+        'Accept-Ranges': 'bytes'
+      });
+      const length = upstream.headers.get('content-length') || (upstream.status === 200 ? String(asset.size_bytes) : '');
+      if (length) headers.set('Content-Length', length);
+      const contentRange = upstream.headers.get('content-range');
+      if (contentRange) headers.set('Content-Range', contentRange);
+      return new Response(request.method === 'HEAD' ? null : upstream.body, { status: upstream.status, headers });
+    }
     // Mobile APK Download Landing Page
-    if (['/download', '/download/', '/app', '/mobile', '/apk'].includes(url.pathname)) {
+    if (['/app', '/mobile', '/apk'].includes(url.pathname)) {
       return Response.redirect(url.origin + "/download.html", 302);
     }
 

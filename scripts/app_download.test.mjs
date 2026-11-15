@@ -1,5 +1,6 @@
-// APK download surface on the LUNO URL (canonical design):
-// /download (and family) 302-redirects to the static /download.html page,
+// APK download surface on the LUNO URL:
+// /download streams the recommended APK itself (attachment headers, never
+// cached); /app, /mobile and /apk 302 to the static /download.html page,
 // which links the per-ABI release assets; /api/v1/app/latest is the
 // machine-readable twin for in-app update checks. All public, no auth.
 import test from 'node:test';
@@ -18,16 +19,65 @@ async function isolate() {
   return { api };
 }
 
-test('GET /download redirects to the static download page (canonical, no shadow)', async () => {
+// The release asset lives on GitHub; tests stand in for that fetch.
+async function withUpstream(handler, run) {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (target, init = {}) => { calls.push({ url: String(target), init }); return handler(String(target), init); };
+  try { return await run(calls); } finally { globalThis.fetch = real; }
+}
+
+test('GET /download streams the recommended APK with attachment headers', async () => {
   const { api } = await isolate();
-  const res = await api('/download', { redirect: 'manual' });
-  assert.equal(res.status, 302);
-  assert.equal(res.headers.get('location'), `${BASE}/download.html`);
+  const bytes = new Uint8Array([80, 75, 3, 4, 1, 2, 3, 4]);
+  await withUpstream(async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length), 'content-type': 'application/octet-stream' } }), async (calls) => {
+    for (const p of ['/download', '/download/']) {
+      const res = await api(p, { redirect: 'manual' });
+      assert.equal(res.status, 200, p);
+      assert.equal(res.headers.get('content-type'), 'application/vnd.android.package-archive');
+      assert.equal(res.headers.get('content-disposition'), 'attachment; filename="luno-messenger.apk"');
+      assert.equal(res.headers.get('cache-control'), 'no-store, no-cache, must-revalidate');
+      assert.equal(res.headers.get('content-length'), String(bytes.length));
+      assert.deepEqual(new Uint8Array(await res.arrayBuffer()), bytes);
+    }
+    assert.ok(calls.every((c) => c.url === `${GH}/luno-messenger-arm64.apk`), 'always the recommended (arm64) asset');
+  });
 });
 
-test('GET /download family (/download/, /app, /mobile, /apk) shares the redirect', async () => {
+test('HEAD /download answers with the size and no body; Range passes through', async () => {
   const { api } = await isolate();
-  for (const p of ['/download/', '/app', '/mobile', '/apk']) {
+  await withUpstream(async (target, init) => {
+    if (init.method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': '29662696' } });
+    return new Response(new Uint8Array(4), { status: 206, headers: { 'content-length': '4', 'content-range': 'bytes 0-3/29662696' } });
+  }, async (calls) => {
+    const head = await api('/download', { method: 'HEAD' });
+    assert.equal(head.status, 200);
+    assert.equal(head.headers.get('content-length'), '29662696');
+    assert.equal((await head.arrayBuffer()).byteLength, 0);
+    const part = await api('/download', { headers: { Range: 'bytes=0-3' } });
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get('content-range'), 'bytes 0-3/29662696');
+    assert.equal(calls.at(-1).init.headers.Range, 'bytes=0-3');
+    assert.equal((await api('/download', { method: 'POST' })).status, 405);
+  });
+});
+
+test('GET /download falls back to the download page when the asset is unreachable', async () => {
+  const { api } = await isolate();
+  await withUpstream(async () => new Response('gone', { status: 404 }), async () => {
+    const res = await api('/download', { redirect: 'manual' });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.get('location'), `${BASE}/download.html`);
+  });
+  await withUpstream(async () => { throw new Error('network down'); }, async () => {
+    const res = await api('/download', { redirect: 'manual' });
+    assert.equal(res.status, 302);
+  });
+});
+
+test('GET /app, /mobile and /apk redirect to the static download page', async () => {
+  const { api } = await isolate();
+  for (const p of ['/app', '/mobile', '/apk']) {
     const res = await api(p, { redirect: 'manual' });
     assert.equal(res.status, 302, p);
     assert.equal(res.headers.get('location'), `${BASE}/download.html`, p);

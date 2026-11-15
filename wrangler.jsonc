@@ -37,10 +37,14 @@
     // Preserve the existing standalone service on its one approved hostname.
     // All other public hosts still fail closed. Demo-account policy is unchanged.
     "STANDALONE_HOSTS": "luno-messenger.dnjstjqppk.workers.dev",
-    "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,http://localhost:5173,http://localhost:8080"
-    // Item 1: set DURABLE_CONVERSATIONS to true here ONLY after
-    // scripts/migrations/20261105_durable_conversations.sql is applied to
-    // prod D1; without those tables every conversation read/write 500s.
-    // Pinned off by scripts/direct_chat.test.mjs until then.
+    "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,http://localhost:5173,http://localhost:8080",
+    // Rooms persist in D1. The two tables behind this flag are part of the
+    // worker's runtime schema (ensureSchema), so no hand-applied migration
+    // is needed first. Pinned by scripts/direct_chat.test.mjs.
+    "DURABLE_CONVERSATIONS": "true",
+    // PC agent (remote work): master switch for bot routing. Only rooms and
+    // users on the admin allowlist can create bot work (L-17), and the
+    // killswitch (PUT admin/llm/kill) stops it at once.
+    "LLM_ENABLED": "true"
   }
 }
