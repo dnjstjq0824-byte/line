@@ -101,6 +101,7 @@ const testSeams = [
   'export { recoveryMailOutbox, verificationMailOutbox, smsOutbox };',
   'export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };',
   'export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };',
+  'export { maskTelemetryValue, logSafe };',
 ];
 let stamped = workerCode.replace(buildInfoPattern, `const BUILD_INFO = ${JSON.stringify(versionData, null, 2)};`);
 for (const seam of testSeams) {

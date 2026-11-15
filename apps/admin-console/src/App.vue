@@ -21,6 +21,10 @@ const users = ref<Array<Record<string, string>>>([])
 const reports = ref<Array<Record<string, string>>>([])
 const auditLogs = ref<Array<Record<string, string>>>([])
 const featureFlags = ref<Array<Record<string, unknown>>>([])
+// F22: masked client telemetry (errors + API timings).
+const telemetry = ref<Array<Record<string, unknown>>>([])
+const teleCounts = ref({ error: 0, perf: 0 })
+const teleKind = ref('error')
 const newFlagKey = ref(''), newFlagEnabled = ref(false)
 // F12: admin-managed official accounts + news.
 const oaList = ref<Array<Record<string, string>>>([])
@@ -39,6 +43,12 @@ const auditColumns = computed(() => [
   { key: 'actor_user_id', label: t('admin.colActor') },
   { key: 'action', label: t('admin.colAction') },
   { key: 'target_id', label: t('admin.colTarget') },
+])
+const teleColumns = computed(() => [
+  { key: 'received_at', label: t('admin.colTime') },
+  { key: 'reporter', label: 'reporter' },
+  { key: 'name', label: 'name' },
+  { key: 'message', label: 'message' },
 ])
 
 async function run(fn: () => Promise<void>) {
@@ -73,6 +83,16 @@ async function load() {
     featureFlags.value = f.feature_flags
     oaList.value = oa.accounts
     newsList.value = nw.articles
+    await loadTelemetry()
+  })
+}
+
+async function loadTelemetry() {
+  await run(async () => {
+    const res = await request<{ telemetry: Array<Record<string, unknown>>; counts: { error: number; perf: number } }>(
+      `/api/v1/admin/telemetry?kind=${teleKind.value}&limit=50`, token.value)
+    telemetry.value = res.telemetry
+    teleCounts.value = res.counts
   })
 }
 
@@ -278,6 +298,24 @@ async function deleteNewsArticle(id: string) {
           <span><strong>{{ n.title }}</strong> <small class="muted">{{ n.press }} · {{ n.category }}</small></span>
           <BaseButton size="sm" variant="danger" @click="deleteNewsArticle(n.id)">{{ t('admin.newsDelete') }}</BaseButton>
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>{{ t('admin.telemetry') }} <small class="muted">{{ t('admin.teleErrors') }} {{ teleCounts.error }} · {{ t('admin.telePerf') }} {{ teleCounts.perf }}</small></h2>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <label style="font-size:12px;color:#64748b">{{ t('admin.teleKind') }}</label>
+          <select v-model="teleKind" @change="loadTelemetry" style="padding:6px 10px;border:1px solid #b6c5d5;border-radius:8px">
+            <option value="error">{{ t('admin.teleErrors') }}</option>
+            <option value="perf">{{ t('admin.telePerf') }}</option>
+          </select>
+        </div>
+        <BaseEmpty v-if="!telemetry.length" :title="t('admin.teleEmpty')" hint="" />
+        <BaseTable v-else :columns="teleColumns" :rows="telemetry" row-key="id">
+          <template #cell-received_at="{ value }"><small>{{ new Date(String(value)).toLocaleString() }}</small></template>
+          <template #cell-reporter="{ value }"><BaseBadge tone="info">{{ String(value ?? '') }}</BaseBadge></template>
+          <template #cell-name="{ value }"><code>{{ String(value ?? '') }}</code></template>
+          <template #cell-message="{ value }"><small>{{ String(value ?? '').slice(0, 160) }}</small></template>
+        </BaseTable>
       </section>
 
       <section class="panel">

@@ -10,6 +10,15 @@ const sessions = new Map();
 const revokedTokens = new Set();
 let CURRENT_ENV = null;
 let CURRENT_CTX = null;
+// F22: request id for structured logs + per-isolate request/error counters.
+// Counters reset on isolate eviction; /metrics labels them honestly.
+let CURRENT_RID = '';
+const f22Requests = new Map();
+const f22Errors = new Map();
+function f22RouteOf(pathname) {
+  return String(pathname || '/').replace(/[0-9a-fA-F]{8}-[0-9a-fA-F-]{4,}/g, '{id}').replace(/\/\d+(?=\/|$)/g, '/{id}');
+}
+function f22Bump(map, key) { map.set(key, (map.get(key) || 0) + 1); }
 const AUTH_CTX = new WeakMap();
 const qrChallenges = new Map();
 const phoneVerificationCodes = new Map();
@@ -196,6 +205,11 @@ const LUNO_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS luno_owned_resources (
     kind TEXT NOT NULL CHECK (kind IN ('creator_pack','ad_campaign')), id TEXT NOT NULL, owner_id TEXT NOT NULL REFERENCES users(id), payload TEXT NOT NULL CHECK (json_valid(payload)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(kind,id))`,
   `CREATE INDEX IF NOT EXISTS idx_luno_owned_owner ON luno_owned_resources(kind,owner_id,id)`,
+  // F22: client telemetry (errors + perf), masked at ingest. user_id is the
+  // only identity column; payloads never carry secrets or message bodies.
+  `CREATE TABLE IF NOT EXISTS luno_telemetry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, received_at TEXT NOT NULL, reporter TEXT NOT NULL DEFAULT '', user_id TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', stack TEXT NOT NULL DEFAULT '', context_json TEXT NOT NULL DEFAULT '{}', ms INTEGER)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_telemetry_kind ON luno_telemetry(kind,received_at)`,
   `CREATE TABLE IF NOT EXISTS luno_ws_tickets (
     ticket TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_ws_tickets_exp ON luno_ws_tickets(expires_at)`,
@@ -1894,7 +1908,7 @@ async function pbkdf2(password, saltHex, iterations = PBKDF2_LEGACY_ITERATIONS) 
     const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
     return Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
   } catch (err) {
-    console.error('[LUNO pbkdf2 failed]', err?.message || err);
+    logx('error', 'pbkdf2 failed', { error: err?.message || String(err) });
     return null;
   }
 }
@@ -2264,7 +2278,7 @@ async function hubDeliver(userIds, payload) {
     } catch (err) {
       // A hub that cannot be reached must never fail the write that triggered it:
       // the message is already committed and will be picked up by the next fetch.
-      console.error('[LUNO hub push failed]', userId, err && err.message ? err.message : err);
+      logx('error', 'hub push failed', { user_id: userId, error: err && err.message ? err.message : String(err) });
       return 0;
     }
   }));
@@ -2455,7 +2469,8 @@ function resolveSmsDriver(env) {
 // Deliver one code; returns false on none (caller decides quiet vs closed).
 function deliverCode(driver, outbox, entry) {
   if (driver === 'none') return false;
-  if (driver === 'log') console.log(`[LUNO ${entry.channel}] purpose=${entry.purpose} to=${entry.email || entry.phone}`);
+  // F22: recipient addresses never reach logs (outbox seam keeps them for tests).
+  if (driver === 'log') logx('info', 'code delivered', { channel: entry.channel, purpose: entry.purpose });
   outbox.push({ ...entry, created_at: Date.now() });
   return true;
 }
@@ -2580,6 +2595,63 @@ async function isBanned(userId) {
 }
 // F16: a suspension with a past expiry lifts itself; permanent bans
 // (expires_at = 0) never auto-lift, and warn-only states have no row.
+const F22_SECRET_CONTAINS = ['password', 'passwd', 'secret', 'token', 'credential', 'otp', 'captcha', 'apikey', 'api_key', 'privatekey', 'private_key', 'cookie', 'authorization', 'authtoken', 'sdp'];
+const F22_SECRET_EXACT = ['code', 'pin'];
+const F22_BODY_EXACT = ['body', 'text', 'message', 'content', 'caption', 'bio', 'status_message', 'statusmessage'];
+const F22_EMAIL_EXACT = ['email', 'emails', 'email_address'];
+function f22IsSecretKey(lower) {
+  if (F22_SECRET_EXACT.includes(lower)) return true;
+  return F22_SECRET_CONTAINS.some(part => lower.includes(part));
+}
+function f22ScrubText(value) {
+  return String(value)
+    .replace(/Bearer [A-Za-z0-9\-._~+/]+=*/g, 'Bearer [redacted]')
+    .replace(/cf-(?:token|refresh)-[0-9a-fA-F-]+/g, '[token]')
+    .replace(/eyJ[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]*){0,2}/g, '[jwt]')
+    .replace(/-----BEGIN [^-]+-----[^-]*-----END [^-]+-----/g, '[private-key]');
+}
+function maskTelemetryValue(value, seen, depth) {
+  seen = seen || new Set();
+  depth = depth || 0;
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') return f22ScrubText(value);
+  if (typeof value !== 'object') return value;
+  if (depth > 10) return '[depth]';
+  if (seen.has(value)) return '[circular]';
+  seen.add(value);
+  let out;
+  if (Array.isArray(value)) {
+    out = value.map(v => maskTelemetryValue(v, seen, depth + 1));
+  } else {
+    out = {};
+    for (const key of Object.keys(value)) {
+      const lower = key.toLowerCase();
+      const v = value[key];
+      if (f22IsSecretKey(lower)) out[key] = typeof v === 'string' ? '[redacted]' : v;
+      else if (F22_BODY_EXACT.includes(lower)) out[key] = typeof v === 'string' ? `[text len=${v.length}]` : maskTelemetryValue(v, seen, depth + 1);
+      else if (F22_EMAIL_EXACT.includes(lower)) out[key] = typeof v === 'string' ? '[email]' : v;
+      else out[key] = maskTelemetryValue(v, seen, depth + 1);
+    }
+  }
+  seen.delete(value);
+  return out;
+}
+// Worker log lines get the value-pattern scan (never key rules: free text).
+function logSafe(value) {
+  try {
+    return f22ScrubText(typeof value === 'string' ? value : (value && value.stack) || String(value));
+  } catch { return '[unloggable]'; }
+}
+// F22: structured log line, always with the request id. `extra` gets full
+// key-based masking, so callers may pass small context objects freely.
+function logx(level, event, extra) {
+  try {
+    const line = { ts: now(), rid: CURRENT_RID || '-', level, event };
+    if (extra !== undefined) line.extra = maskTelemetryValue(extra);
+    if (level === 'error') console.error(JSON.stringify(line));
+    else console.log(JSON.stringify(line));
+  } catch { /* logging must never throw */ }
+}
 async function suspensionExpired(userId) {
   const db = dbOf();
   if (!db || !userId) return false;
@@ -4511,7 +4583,7 @@ async function followedMap(userId) {
       await persistCursor(cid, myId, msg.sequence);
       // L-02: bot mentions become jobs. Routing must never break messaging,
       // so failures are logged, not thrown.
-      try { await routeBotMentions(conv, myId, msg); } catch (err) { console.error('[LUNO bot route failed]', err && err.message ? err.message : err); }
+      try { await routeBotMentions(conv, myId, msg); } catch (err) { logx('error', 'bot route failed', { error: err && err.message ? err.message : String(err) }); }
       // N1-L: fan the message out to the notification provider leg.
       await notify(notifyEnv(), conv.members, {
         kind: 'message',
@@ -5879,6 +5951,19 @@ function entitled(u, feature) {
       }
       return json({ reports: adminReports.slice(0, 100) });
     }
+    if (p === 'admin/telemetry' && method === 'GET') {
+      const kind = url.searchParams.get('kind');
+      const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10) || 50));
+      if (!dbOf()) return json({ telemetry: [], counts: { error: 0, perf: 0 } });
+      await ensureSchema();
+      const where = kind === 'error' || kind === 'perf' ? 'WHERE kind = ?' : '';
+      const args = kind === 'error' || kind === 'perf' ? [kind] : [];
+      const rows = (await dbOf().prepare(`SELECT id, received_at, reporter, user_id, kind, name, message, stack, context_json, ms FROM luno_telemetry ${where} ORDER BY id DESC LIMIT ?`).bind(...args, limit).all().catch(() => ({ results: [] }))).results || [];
+      const counts = { error: 0, perf: 0 };
+      const crows = (await dbOf().prepare('SELECT kind, COUNT(*) n FROM luno_telemetry GROUP BY kind').all().catch(() => ({ results: [] }))).results || [];
+      for (const r of crows) counts[r.kind] = Number(r.n) || 0;
+      return json({ telemetry: rows, counts });
+    }
     if (p === 'admin/audit-logs' && method === 'GET') {
       // F16: the D1 trail is the source of truth; memory covers no-DB mode.
       if (dbOf()) {
@@ -6368,7 +6453,7 @@ async function d1Run(db, query, ...params) {
   try {
     return await db.prepare(query).bind(...params).run();
   } catch (e) {
-    console.error('[D1 Error]', e);
+    logx('error', 'd1 error', { error: e && e.message ? e.message : String(e) });
     return null;
   }
 }
@@ -6382,7 +6467,7 @@ async function syncFromD1(db) {
     // already queries D1 on a cache miss).
     await ensureSchema();
   } catch (err) {
-    console.error('[D1 Sync Error]', err);
+    logx('error', 'd1 sync error', { error: err && err.message ? err.message : String(err) });
   }
 }
 async function hydrateSocialGraph(userId) {
@@ -6649,6 +6734,23 @@ const workerCore = {
         '# TYPE luno_build_info gauge',
         `luno_build_info{commit="${BUILD_INFO.short_commit || 'unknown'}"} 1`,
       ];
+      // F22: per-isolate request/error counters (reset on evict) + durable
+      // client-telemetry counts from D1.
+      out.push('# HELP luno_requests_total Requests served by this isolate (resets on evict)');
+      out.push('# TYPE luno_requests_total counter');
+      for (const [r, n] of f22Requests) out.push(`luno_requests_total{route="${r}"} ${n}`);
+      out.push('# HELP luno_errors_total Error responses served by this isolate (resets on evict)');
+      out.push('# TYPE luno_errors_total counter');
+      for (const [k, n] of f22Errors) {
+        const sp = k.lastIndexOf(' ');
+        out.push(`luno_errors_total{route="${k.slice(0, sp)}",code="${k.slice(sp + 1)}"} ${n}`);
+      }
+      try {
+        const trows = (await mdb.prepare('SELECT kind, COUNT(*) n FROM luno_telemetry GROUP BY kind').all().catch(() => ({ results: [] }))).results || [];
+        out.push('# HELP luno_telemetry_total Client telemetry rows (D1)');
+        out.push('# TYPE luno_telemetry_total counter');
+        for (const t of trows) out.push(`luno_telemetry_total{kind="${t.kind}"} ${Number(t.n || 0)}`);
+      } catch { /* telemetry table missing pre-migration: skip */ }
       return new Response(out.join('\n') + '\n', { headers: { 'Content-Type': 'text/plain; version=0.0.4' } });
     }
 
@@ -6988,6 +7090,33 @@ const workerCore = {
       }
 
 
+      // F22: client telemetry ingest (errors + perf). Authed so reports
+      // attribute to a user; masked again here because clients err.
+      if (p === 'telemetry' && request.method === 'POST') {
+        const teleUser = await getAuthUser(request);
+        if (!teleUser) return json({ error: 'unauthorized' }, 401);
+        if (!await rateLimit('rl:telemetry:' + teleUser.id, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        const b = await readJson(request);
+        const errors = Array.isArray(b.errors) ? b.errors.slice(0, 20) : [];
+        const perf = Array.isArray(b.perf) ? b.perf.slice(0, 50) : [];
+        if (!dbOf()) return json({ status: 'dropped', reason: 'no database' }, 202);
+        await ensureSchema();
+        const at = now();
+        for (const e of errors.slice(0, 20)) {
+          if (!e || typeof e !== 'object') continue;
+          const ctx = e.context && typeof e.context === 'object' ? maskTelemetryValue(e.context) : {};
+          await dbOf().prepare('INSERT INTO luno_telemetry (received_at, reporter, user_id, kind, name, message, stack, context_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(at, clip(b.reporter, 20) || 'unknown', teleUser.id, 'error', clip(f22ScrubText(e.name || ''), 120), clip(f22ScrubText(e.message || ''), 2000), clip(f22ScrubText(e.stack || ''), 4000), JSON.stringify(ctx).slice(0, 8000)).run().catch(() => null);
+        }
+        for (const e of perf.slice(0, 50)) {
+          if (!e || typeof e !== 'object') continue;
+          const ms = Number(e.ms);
+          if (!Number.isSafeInteger(ms) || ms < 0 || ms > 3600000) continue;
+          await dbOf().prepare('INSERT INTO luno_telemetry (received_at, reporter, user_id, kind, name, message, ms) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .bind(at, clip(b.reporter, 20) || 'unknown', teleUser.id, 'perf', clip(e.op, 120), '', ms).run().catch(() => null);
+        }
+        return json({ status: 'accepted' }, 202);
+      }
       // 2c. Auth: password recovery (Go parity). Fails closed without a
       // configured mail sender: no challenge is created. With a sender, the
       // single-use secret is delivered out-of-band and the HTTP response
@@ -7256,7 +7385,7 @@ const workerCore = {
         wsTickets.set(ticket, { userId: authUser.id, expiresAt: ticketExpiresAt });
         // Also persist it, so the upgrade can be served by a different isolate.
         await persistWsTicket(ticket, authUser.id, ticketExpiresAt).catch(err =>
-          console.error('[LUNO ws ticket persist failed]', err && err.message ? err.message : err));
+          logx('error', 'ws ticket persist failed', { error: err && err.message ? err.message : String(err) }));
         return json({ ticket, expires_in: 60 });
       }
 
@@ -8125,10 +8254,23 @@ export class UserSocketHub {
 export { recoveryMailOutbox, verificationMailOutbox, smsOutbox };
 export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };
 export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };
+export { maskTelemetryValue, logSafe };
 export default {
   async fetch(request, env, ctx) {
     CURRENT_ENV = env;
     CURRENT_CTX = ctx || null;
+    // F22: every request gets an id. It rides the structured logs and the
+    // x-request-id response header, so a client report pins a server trace.
+    CURRENT_RID = uid().slice(0, 8);
+    const route = f22RouteOf(new URL(request.url).pathname);
+    f22Bump(f22Requests, route);
+    const tag = (res) => {
+      try {
+        if (res && res.status >= 400) f22Bump(f22Errors, `${route} ${res.status}`);
+      } catch { /* counters must never break the response */ }
+      try { res.headers.set('x-request-id', CURRENT_RID); } catch { /* immutable (upstream/101): logs still carry the rid */ }
+      return res;
+    };
     try {
       const gwOrigin = gatewayOriginFor(request, env);
       if (gwOrigin && gwOrigin !== 'invalid') {
@@ -8140,16 +8282,18 @@ export default {
         const upstream = new Request(url, request);
         upstream.headers.delete('Host');
         try {
-          return await fetch(new Request(upstream, { redirect: 'manual' }));
+          return tag(await fetch(new Request(upstream, { redirect: 'manual' })));
         } catch {
-          return withSecurityHeaders(request, await withCors(request, env, json({ error: 'backend unavailable' }, 502)));
+          return tag(await withSecurityHeaders(request, await withCors(request, env, json({ error: 'backend unavailable' }, 502))));
         }
       }
-      return withSecurityHeaders(request, await withCors(request, env, await workerCore.fetch(request, env, ctx)));
+      return tag(await withSecurityHeaders(request, await withCors(request, env, await workerCore.fetch(request, env, ctx))));
     } catch (err) {
-      if (err?.code === 'CONVERSATION_CONFLICT') return json({ error: err.message, code: err.code }, 409);
-      console.error('[LUNO internal error]', err && err.stack ? err.stack : err);
-      return withCors(request, env, json({ error: 'internal_error' }, 500));
+      if (err?.code === 'CONVERSATION_CONFLICT') return tag(json({ error: err.message, code: err.code }, 409));
+      logx('error', 'internal', { error: err instanceof Error ? (err.stack || err.message) : err });
+      return tag(withCors(request, env, json({ error: 'internal_error' }, 500)));
+    } finally {
+      CURRENT_RID = '';
     }
   }
 };

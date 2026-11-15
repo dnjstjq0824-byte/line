@@ -3,6 +3,8 @@
 // Thin entrypoint: theme + session + go_router. Feature code lives in
 // pages/, shared logic in state/session.dart, HTTP in api/client.dart.
 // Legacy names are re-exported so existing callers and tests keep working.
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:luno_messenger/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
@@ -13,11 +15,24 @@ import 'pages/group_call_overlay.dart';
 import 'router.dart';
 import 'state/session.dart';
 import 'util/deep_links.dart';
+import 'util/error_report.dart';
 
 export 'api/client.dart';
 export 'legacy_tokens.dart';
 
-void main() => runApp(const MessengerApp());
+// F22: framework + async errors land in first-party telemetry (masked).
+void main() {
+  FlutterError.onError = (details) {
+    reportError(details.exception,
+        {'surface': 'app', 'source': 'FlutterError', 'silent': details.silent});
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    reportError(error, {'surface': 'app', 'source': 'async'});
+    return true;
+  };
+  runApp(const MessengerApp());
+}
 
 class MessengerApp extends StatefulWidget {
   const MessengerApp({super.key});
@@ -46,6 +61,16 @@ class _MessengerAppState extends State<MessengerApp>
     _session.ensureTranslateLanguages();
     _session.notifyTap = (route) async => _router.go(route);
     _session.initNotifier();
+    // F22: first-party telemetry upload (D1-backed /api/v1/telemetry, masked
+    // at both ends). Logged-out clients keep data local only.
+    setTelemetrySender(({required errors, required perf}) async {
+      if (_session.api.token == null) return;
+      await _session.api.call('/api/v1/telemetry', method: 'POST', data: {
+        'reporter': 'app',
+        'errors': errors.take(20).map((e) => e.toJson()).toList(),
+        'perf': perf.take(50).map((s) => s.toJson()).toList(),
+      });
+    });
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -61,6 +86,9 @@ class _MessengerAppState extends State<MessengerApp>
     WidgetsBinding.instance.removeObserver(this);
     _session.removeListener(_syncLocale);
     _links?.dispose();
+    // F22: the telemetry uploader is global; release it with the shell so no
+    // flush timer outlives the widget tree (widget tests enforce this).
+    setTelemetrySender(null);
     _session.disposeAll();
     super.dispose();
   }

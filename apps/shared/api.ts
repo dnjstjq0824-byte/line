@@ -102,6 +102,11 @@ export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly code?: string) { super(message); this.name = 'ApiError' }
 }
 export async function request<T>(path: string, token: string | null = null, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+  // F22: every API call is timed for first-party telemetry (~1 sample per
+  // call locally, uploaded on error or once a minute). Opt out via the
+  // telemetry path itself so uploads never measure themselves.
+  const timed = !path.startsWith('/api/v1/telemetry') && typeof performance !== 'undefined' && typeof performance.now === 'function'
+  const started = timed ? performance.now() : 0
   const resp = await fetch(API_URL + path, {
     method,
     ...(signal ? { signal } : {}),
@@ -112,6 +117,12 @@ export async function request<T>(path: string, token: string | null = null, meth
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   })
   const payload = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
+  if (timed) {
+    try {
+      const { recordPerf } = await import('./monitor')
+      recordPerf(`${method} ${path.split('?')[0]}`, performance.now() - started)
+    } catch { /* telemetry must never break the call */ }
+  }
   if (!resp.ok) throw new ApiError(payload.error || `HTTP ${resp.status}`, resp.status, payload.code)
   return payload as T
 }

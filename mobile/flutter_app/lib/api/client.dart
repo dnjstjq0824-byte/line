@@ -14,6 +14,7 @@ import 'package:http/http.dart' as http;
 
 import '../legacy_tokens.dart';
 import '../util/app_l10n.dart';
+import '../util/error_report.dart';
 
 /// Non-2xx responses. Display text is identical to the previous
 /// `Exception(message)`, and it is still caught by `on Exception` sites.
@@ -44,14 +45,30 @@ class Api {
     String method = 'GET',
     Map<String, dynamic>? data,
   }) async {
+    // F22: every API call is timed for first-party telemetry. The telemetry
+    // path itself is excluded so uploads never measure themselves.
+    final timed = !path.startsWith('/api/v1/telemetry');
+    final sw = timed ? (Stopwatch()..start()) : null;
     try {
-      return await _rawCall(path, method: method, data: data, token: token);
+      final res =
+          await _rawCall(path, method: method, data: data, token: token);
+      if (sw != null) {
+        sw.stop();
+        recordPerf('$method ${path.split('?').first}', sw.elapsedMilliseconds);
+      }
+      return res;
     } on ApiException catch (e) {
       // Login/register failures are credential errors, never a refresh case.
       if (e.statusCode != 401 || path.startsWith('/api/v1/auth/')) rethrow;
       final fresh = await _singleflightRefresh();
       if (fresh == null) rethrow;
-      return await _rawCall(path, method: method, data: data, token: fresh);
+      final res =
+          await _rawCall(path, method: method, data: data, token: fresh);
+      if (sw != null) {
+        sw.stop();
+        recordPerf('$method ${path.split('?').first}', sw.elapsedMilliseconds);
+      }
+      return res;
     }
   }
 

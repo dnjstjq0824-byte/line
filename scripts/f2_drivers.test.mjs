@@ -45,8 +45,9 @@ test('F2: log driver persists entries, mock stays silent', async () => {
       await logged.api('auth/phone/send-code', 'POST', { phone: '+821011112222' });
       assert.equal(logged.mod.verificationMailOutbox.length, 1);
       assert.equal(logged.mod.smsOutbox.length, 1);
-      assert.ok(lines.some((l) => l.includes('[LUNO mail]')), 'mail persisted to log');
-      assert.ok(lines.some((l) => l.includes('[LUNO sms]')), 'sms persisted to log');
+      // F22: deliveries log as structured lines (rid + masked extra), one per channel.
+      assert.ok(lines.some((l) => l.includes('"event":"code delivered"') && l.includes('"channel":"mail"')), 'mail persisted to log');
+      assert.ok(lines.some((l) => l.includes('"event":"code delivered"') && l.includes('"channel":"sms"')), 'sms persisted to log');
     } finally { db.raw.close(); }
     const db2 = makeD1();
     try {
@@ -56,7 +57,7 @@ test('F2: log driver persists entries, mock stays silent', async () => {
       await mocked.api('auth/phone/send-code', 'POST', { phone: '+821011112222' });
       assert.equal(mocked.mod.verificationMailOutbox.length, 1);
       assert.equal(mocked.mod.smsOutbox.length, 1);
-      assert.ok(!lines.some((l) => l.includes('[LUNO mail]') || l.includes('[LUNO sms]')), 'mock stays silent');
+      assert.ok(!lines.some((l) => l.includes('"event":"code delivered"')), 'mock stays silent');
     } finally { db2.raw.close(); }
   } finally {
     console.log = origLog;

@@ -26,6 +26,7 @@ const STATIC = new Set([
   'translateProviders', // T1: provider registry, populated once at module load
   'sttProviders', // F14: STT provider registry, populated once at module load
   'pushProviders', // N1-L: push provider registry, populated once at module load
+  'F22_SECRET_CONTAINS', 'F22_SECRET_EXACT', 'F22_BODY_EXACT', 'F22_EMAIL_EXACT', // F22: frozen mask vocabulary
 ]);
 const EPHEMERAL = new Set([
   'activeSockets', 'AUTH_CTX', 'callSessions', 'groupCallRooms',
@@ -33,6 +34,7 @@ const EPHEMERAL = new Set([
   'recoveryChallenges', 'recoveryMailOutbox', 'verificationMailOutbox', 'smsOutbox',
   'translateProviderCalls', // T1: per-isolate provider-call probe for tests
   'sttProviderCalls', // F14: per-isolate provider-call probe for tests
+  'f22Requests', 'f22Errors', // F22: per-isolate request/error counters (reset on evict, /metrics-labeled)
 ]);
 const CACHE = new Set([
   'users', 'usersById', 'sessions', 'revokedTokens', 'wsTickets',
