@@ -97,7 +97,8 @@ test('UX3: translate languages load only after the token is restored (no 401 on 
   const view = await readFile(join(root, 'views', 'MessengerView.vue'), 'utf8');
   const mounted = view.indexOf('onMounted(async () => {');
   assert.ok(mounted >= 0, 'mounted hook present');
-  const restore = view.indexOf('token.value = savedToken', mounted);
+  // F19: restore is the silent cookie refresh, not a stored token read.
+  const restore = view.indexOf('await ensureSession()', mounted);
   const fire = view.indexOf('void ensureTranslateLanguages()', mounted);
   assert.ok(restore >= 0 && fire >= 0, 'restore and translate kickoff both present');
   assert.ok(fire > restore, 'translate kickoff runs after token restore');

@@ -2402,7 +2402,10 @@ function cookieValue(request, name) {
 function refreshCookie(token, request, maxAge = 30 * 86400) {
   let secure = false;
   try { secure = new URL(request.url).protocol === 'https:'; } catch { secure = false; }
-  return `luno_refresh=${token}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+  // F19: null/undefined maxAge yields a session cookie (no Max-Age) for
+  // logins without "stay signed in"; 0 still expires (logout).
+  const age = (maxAge === null || maxAge === undefined) ? '' : `; Max-Age=${maxAge}`;
+  return `luno_refresh=${token}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict; Path=/${age}`;
 }
 // I-3: hardening headers on every response. The strict CSP applies to API
 // payloads only; hosted app assets keep their own document policy.
@@ -2416,6 +2419,11 @@ async function withSecurityHeaders(request, res) {
     const path = new URL(request.url).pathname;
     if (path.startsWith('/api/') || path === '/metrics') {
       headers.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    } else if ((res.headers.get('Content-Type') || '').toLowerCase().includes('text/html')) {
+      // F19: shipped HTML (app shell, consoles, landing) runs scripts and
+      // styles from self only, never frames, and leaks no referrer path.
+      headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"); // fonts: luno-v2.css @import (first-party design dependency)
+      headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     }
   } catch { /* keep the other headers */ }
   const nullBody = res.status === 204 || res.status === 304 || res.status === 101;
@@ -6814,7 +6822,7 @@ const workerCore = {
             user_id: user.id,
             role: user.role,
             device_id: pdevice,
-          });
+          }, 200, pre ? { 'Set-Cookie': refreshCookie(pre, request, body.remember === false ? null : 30 * 86400) } : {});
         } catch (e) {
           return json({ error: 'invalid credentials' }, 401);
         }
@@ -6899,7 +6907,7 @@ const workerCore = {
           role: user.role,
           device_id: deviceId,
           ...(recovered ? { recovered: true } : {})
-        }, 200, refreshToken ? { 'Set-Cookie': refreshCookie(refreshToken, request) } : {});
+        }, 200, refreshToken ? { 'Set-Cookie': refreshCookie(refreshToken, request, body.remember === false ? null : 30 * 86400) } : {});
       }
       // 2b. Auth: Refresh rotation (A-15). Single-use refresh tokens: each
       // successful call burns the presented token and mints a fresh pair on
@@ -6909,6 +6917,11 @@ const workerCore = {
       if (p === 'auth/refresh' && request.method === 'POST') {
         if (!await rateLimit('rl:refresh:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
         const rbody = await request.json().catch(() => ({}));
+        // F19: cookie-presented refreshes must look like XHR (JSON body),
+        // never a cross-site form post. Body tokens (native clients) skip it.
+        if (!rbody.refresh_token && (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+          return json({ error: 'forbidden' }, 403);
+        }
         const presented = String(rbody.refresh_token || cookieValue(request, 'luno_refresh') || '');
         const rdb = dbOf();
         if (!rdb) return json({ error: 'token refresh requires a configured database' }, 501);
@@ -6955,7 +6968,7 @@ const workerCore = {
           user_id: ruser.id,
           role: ruser.role,
           device_id: rrow.device_id
-        }, 200, { 'Set-Cookie': refreshCookie(newRefresh, request) });
+        }, 200, { 'Set-Cookie': refreshCookie(newRefresh, request, rbody.remember === false ? null : 30 * 86400) });
       }
 
 
@@ -7117,14 +7130,15 @@ const workerCore = {
         if (!user) return bad('가입되지 않은 전화번호입니다', 404);
         if (user.role === 'admin') return bad('관리자 계정은 전화번호로 로그인할 수 없습니다', 403);
         if (user.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
-        const { token, deviceId } = await createSession(user, request);
+        const { token, deviceId, refreshToken: phoneRefresh } = await createSession(user, request);
         return json({
           status: 'authenticated',
           access_token: token,
+          ...(phoneRefresh ? { refresh_token: phoneRefresh } : {}),
           user_id: user.id,
           role: user.role,
           device_id: deviceId
-        });
+        }, 200, phoneRefresh ? { 'Set-Cookie': refreshCookie(phoneRefresh, request, body.remember === false ? null : 30 * 86400) } : {});
       }
 
       // 3. Auth: QR Login
@@ -7164,9 +7178,9 @@ const workerCore = {
             || (dbOf() ? await loadUserFromD1(c.user_id) : null);
           if (!u) return bad('승인한 사용자를 찾을 수 없습니다', 400);
           if (u.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
-          const { token } = await createSession(u, request);
+          const { token, deviceId: qrDevice, refreshToken: qrRefresh } = await createSession(u, request);
           await qrDeleteChallenge(body.challenge_id); // Invalidate immediately upon consumption
-          return json({ status: 'authenticated', access_token: token, user_id: u.id, role: u.role });
+          return json({ status: 'authenticated', access_token: token, ...(qrRefresh ? { refresh_token: qrRefresh } : {}), user_id: u.id, role: u.role, device_id: qrDevice }, 200, qrRefresh ? { 'Set-Cookie': refreshCookie(qrRefresh, request, body.remember === false ? null : 30 * 86400) } : {});
         }
         return json({ status: 'pending' }, 202);
       }

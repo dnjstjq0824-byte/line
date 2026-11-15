@@ -32,8 +32,8 @@ import {
   isDarkMode,
   note,
   paymentsEnabled,
+  ensureSession,
   readStoredDeviceId,
-  readStoredToken,
   setLocale,
   t,
   toggleDarkMode,
@@ -2741,9 +2741,8 @@ onMounted(async () => {
   await fetchAppVersion()
   void ensureLinkPreviewPref()
   applyRouteNav()
-  const savedToken = token.value || readStoredToken()
-  if (savedToken) {
-    token.value = savedToken
+  const resumed = await ensureSession()
+  if (resumed) {
     currentDeviceId.value = readStoredDeviceId()
     try {
       if (!currentUser.value) currentUser.value = await api<User>('/api/v1/me')

@@ -91,6 +91,8 @@ export function useAuth(deps: AuthDeps) {
     sessionStorage.removeItem('luno.auth_token')
     localStorage.removeItem('luno.device_id')
     sessionStorage.removeItem('luno.device_id')
+    localStorage.removeItem('luno.remember')
+    sessionStorage.removeItem('luno.remember')
     currentDeviceId.value = ''
     token.value = ''
     currentUser.value = null

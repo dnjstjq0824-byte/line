@@ -67,6 +67,22 @@ export async function fetchAppVersion() {
 // I-2: access tokens live 15 minutes; the httpOnly refresh cookie renews
 // them. One in-flight refresh is shared (singleflight); a failed refresh
 // means re-login, never a retry loop.
+// F19: access tokens live in memory only. Reload survival comes from one
+// silent cookie refresh; storage keeps the non-secret device marker and
+// remember flag only. Legacy `luno.auth_token` rows purge on sight.
+const REMEMBER_KEY = 'luno.remember'
+const DEVICE_KEY = 'luno.device_id'
+const LEGACY_TOKEN_KEY = 'luno.auth_token'
+function purgeLegacyTokens() {
+  for (const storage of [localStorage, sessionStorage]) {
+    storage.removeItem(LEGACY_TOKEN_KEY)
+  }
+}
+purgeLegacyTokens()
+function readRemember(): boolean {
+  const v = localStorage.getItem(REMEMBER_KEY) ?? sessionStorage.getItem(REMEMBER_KEY)
+  return v === null ? true : v === '1'
+}
 let refreshing: Promise<string | null> | null = null
 function tryRefresh(): Promise<string | null> {
   if (!refreshing) {
@@ -76,14 +92,12 @@ function tryRefresh(): Promise<string | null> {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: '{}',
+          body: JSON.stringify({ remember: readRemember() }),
         })
         if (!res.ok) return null
         const pair = await res.json()
         if (!pair?.access_token) return null
         token.value = pair.access_token
-        const storage = localStorage.getItem('luno.auth_token') ? localStorage : sessionStorage
-        if (storage.getItem('luno.auth_token')) storage.setItem('luno.auth_token', token.value)
         return token.value
       } catch {
         return null
@@ -93,6 +107,11 @@ function tryRefresh(): Promise<string | null> {
     })()
   }
   return refreshing
+}
+export async function ensureSession(): Promise<boolean> {
+  purgeLegacyTokens()
+  if (token.value) return true
+  return (await tryRefresh()) !== null
 }
 export const api = async <T,>(path: string, method = 'GET', body?: unknown): Promise<T> => {
   try {
@@ -116,27 +135,25 @@ export const wrap = async (job: () => Promise<void>) => {
   }
 }
 
-export function readStoredToken(): string {
-  return localStorage.getItem('luno.auth_token') || sessionStorage.getItem('luno.auth_token') || ''
-}
 export function readStoredDeviceId(): string {
-  const storage = localStorage.getItem('luno.auth_token') ? localStorage : sessionStorage
-  return storage.getItem('luno.device_id') || ''
+  return localStorage.getItem(DEVICE_KEY) || sessionStorage.getItem(DEVICE_KEY) || ''
 }
 export function storeSession(session: LoginResult, persistent: boolean) {
   token.value = session.access_token
+  purgeLegacyTokens()
   for (const storage of [localStorage, sessionStorage]) {
-    storage.removeItem('luno.auth_token')
-    storage.removeItem('luno.device_id')
+    storage.removeItem(DEVICE_KEY)
+    storage.removeItem(REMEMBER_KEY)
   }
   const storage = persistent ? localStorage : sessionStorage
-  storage.setItem('luno.auth_token', token.value)
-  if (session.device_id) storage.setItem('luno.device_id', session.device_id)
+  if (session.device_id) storage.setItem(DEVICE_KEY, session.device_id)
+  storage.setItem(REMEMBER_KEY, persistent ? '1' : '0')
 }
 export function clearStoredToken() {
+  purgeLegacyTokens()
   for (const storage of [localStorage, sessionStorage]) {
-    storage.removeItem('luno.auth_token')
-    storage.removeItem('luno.device_id')
+    storage.removeItem(DEVICE_KEY)
+    storage.removeItem(REMEMBER_KEY)
   }
 }
 export type { LunoLocale, User }

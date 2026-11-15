@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AuthView from './views/AuthView.vue'
-import { readStoredToken } from './store/session'
+import { ensureSession } from './store/session'
 
 // Menu = URL: every reachable pane has an independent address.
 export const NAV_PATHS = ['chats', 'home', 'news', 'calls', 'voom', 'openchat', 'wallet', 'shop'] as const
@@ -14,11 +14,13 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
-router.beforeEach((to) => {
-  if (to.path === '/login') return readStoredToken() ? '/chats' : true
+router.beforeEach(async (to) => {
+  // F19: no stored access token exists anymore; the guard resumes via one
+  // silent cookie refresh (shared singleflight, so parallel guards cost one).
+  if (to.path === '/login') return (await ensureSession()) ? '/chats' : true
   const nav = typeof to.params.nav === 'string' ? to.params.nav : ''
   if (!nav || !(NAV_PATHS as readonly string[]).includes(nav)) return '/chats'
-  if (!readStoredToken()) return '/login'
+  if (!(await ensureSession())) return '/login'
   return true
 })
 

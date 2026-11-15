@@ -77,6 +77,9 @@ const { stampServiceWorker } = require('./pwa_stamp.cjs');
 const stampedSw = stampServiceWorker(distRoot, versionData.short_commit);
 console.log(`Service worker stamped (${stampedSw.buildId}, ${stampedSw.precached} shell files)`);
 
+// F19: static assets bypass the worker, so their headers ship as _headers.
+require('./security_headers.cjs').writeHeadersFile(distRoot);
+
 // The source worker is left untouched; wrangler.jsonc deploys this stamped copy.
 // Stamping the source itself made every deploy produce a commit that only
 // recorded the previous commit's SHA.

@@ -172,7 +172,8 @@ async function authAction() {
         email: email.value.trim(),
         password: password.value,
         device_name: 'LUNO Web Desktop Client',
-        platform: 'web'
+        platform: 'web',
+        remember: autoLoginCheck.value
       })
       storeSession(data, autoLoginCheck.value)
       currentUser.value = await api<User>('/api/v1/me')
@@ -222,6 +223,7 @@ async function startQrLoginChallenge() {
           challenge_id: qrChallengeID.value,
           qr_token: qrToken.value,
           device_name: 'Open Messenger Web QR Client',
+          remember: autoLoginCheck.value,
           platform: 'web'
         })
         if (p && p.access_token) {
@@ -274,7 +276,8 @@ async function verifyPhoneLogin() {
     const res = await request<any>('/api/v1/auth/phone/verify', null, 'POST', {
       phone_number: phoneInput.value.trim(),
       code: phoneCodeInput.value.trim(),
-      device_name: 'Open Messenger Desktop PC'
+      device_name: 'Open Messenger Desktop PC',
+      remember: autoLoginCheck.value
     })
     storeSession(res, autoLoginCheck.value)
     currentUser.value = res.user || await api<User>('/api/v1/me')
@@ -323,6 +326,7 @@ async function passkeyLogin() {
       id: cred.id,
       rawId: bytesToB64(cred.rawId),
       type: cred.type,
+      remember: autoLoginCheck.value,
       response: {
         clientDataJSON: bytesToB64(cred.response.clientDataJSON),
         authenticatorData: bytesToB64(cred.response.authenticatorData),

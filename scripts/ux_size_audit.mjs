@@ -33,10 +33,12 @@ async function api(path, method = 'GET', body, token) {
 
 // ---- seed: audit user + one friend + one Keep message (best effort) ----
 const creds = { email: 'ux5audit@example.com', handle: 'ux5audit', password: 'Ux5audit!234567890', display_name: 'UX5 Audit' };
-let r = await api('/api/v1/auth/register', 'POST', creds);
-if (!r.json?.access_token) r = await api('/api/v1/auth/login', 'POST', { email: creds.email, password: creds.password });
+await api('/api/v1/auth/register', 'POST', creds);
+const r = await api('/api/v1/auth/login', 'POST', { email: creds.email, password: creds.password, remember: true });
 const token = r.json?.access_token;
-if (!token) { console.error('seed login failed', r.status); process.exit(2); }
+const refresh = r.json?.refresh_token;
+if (!token || !refresh) { console.error('seed login failed', r.status); process.exit(2); }
+const cookieDomain = new URL(BASE).hostname;
 try {
   const b = { email: 'ux5friend@example.com', handle: 'ux5friend', password: 'Ux5fr!nd234567890', display_name: 'UX5 Friend' };
   await api('/api/v1/auth/register', 'POST', b);
@@ -196,7 +198,8 @@ for (const [browserName, launcher] of BROWSERS) {
   for (const [device, width, height] of SIZES) {
     for (const screen of SCREENS) {
       const ctx = await browser.newContext({ viewport: { width, height }, locale: 'ko-KR', timezoneId: 'Asia/Seoul' });
-      await ctx.addInitScript((t) => localStorage.setItem('luno.auth_token', t), token);
+      await ctx.addCookies([{ name: 'luno_refresh', value: refresh, domain: cookieDomain, path: '/' }]);
+      await ctx.addInitScript(() => localStorage.setItem('luno.remember', '1'));
       const page = await ctx.newPage();
       const loads = [];
       page.on('console', (m) => { if (m.type() === 'error') loads.push('console: ' + m.text().slice(0, 160)); });
