@@ -628,8 +628,8 @@ onBeforeUnmount(() => {
           <!-- RIGHT COLUMN: QR Code Login (Matching Screenshots 2 & 3) -->
           <div class="pc-auth-col qr-col">
             <div class="pc-qr-box-inner">
-              <h3 class="pc-qr-heading">{{ t('loginQrTab') }}</h3>
-              <div class="pc-qr-matrix-card" :aria-label="t('loginQrTab')">
+              <h2 class="pc-qr-heading">{{ t('loginQrTab') }}</h2>
+              <div class="pc-qr-matrix-card" role="img" :aria-label="t('loginQrTab')">
                 <div v-if="loginQrSvg" v-html="loginQrSvg" class="ln-qr-matrix"></div>
                 <img v-else :src="lunoMark" alt="LUNO" class="ln-qr-brand" />
               </div>

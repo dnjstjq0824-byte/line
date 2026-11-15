@@ -481,7 +481,8 @@ import { activeTheme, darkMode, error, note } from './store/session'
 
 .pc-qr-manual {
   font-size: 11px;
-  color: #64748b;
+  /* F25: AA contrast on the tinted QR card (was #64748b). */
+  color: #3f4c63;
   word-break: break-all;
 }
 
