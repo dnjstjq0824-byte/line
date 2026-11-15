@@ -712,3 +712,10 @@ ul, ol {list-style:none;margin:0;padding:0}
 .story-ring.viewed{border-color:var(--ln-muted)}
 .story-ring.new{border-color:var(--ln-accent);box-shadow:0 0 0 4px var(--ln-accent)}
 .story-ring.plus{border-color:var(--ln-accent);background-color:var(--ln-accent);color:var(--ln-on-accent)}
+/* Chat composer: one bordered box holds the textarea and its send row, so the
+   send button sits inside the box (bottom right) instead of hanging under it. */
+.luno-desktop-app .pc-chat-input-dock .pc-textarea-form{padding:0;margin-top:8px;border:1px solid var(--ln-line);border-radius:12px;background:var(--ln-bg);overflow:hidden}
+.luno-desktop-app .pc-chat-input-dock .pc-textarea-form:focus-within{border-color:var(--ln-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--ln-accent) 22%,transparent)}
+.luno-desktop-app .pc-chat-input-dock .pc-textarea-form textarea{border:0!important;border-radius:0!important;background:transparent!important;padding:12px 14px 4px!important;outline:none}
+.luno-desktop-app .pc-chat-input-dock .pc-textarea-bottom{padding:6px 8px 8px 14px;gap:10px}
+.luno-desktop-app .pc-chat-input-dock .btn-green-send{height:36px;min-width:68px;padding:0 16px;border-radius:10px;font-size:14px}

@@ -75,6 +75,33 @@ test('GET /download falls back to the download page when the asset is unreachabl
   });
 });
 
+test('with the assets binding the landing page is served in place, never looped', async () => {
+  const mod = await import(`./cf_worker.js?dl=${++isoCounter}`);
+  const asked = [];
+  const env = { ASSETS: { fetch: async (req) => { asked.push(new URL(req.url).pathname); return new Response('<html>page</html>', { status: 200, headers: { 'content-type': 'text/html' } }); } } };
+  const call = (path) => mod.default.fetch(new Request(`${BASE}${path}`, { redirect: 'manual' }), env);
+  for (const p of ['/download.html', '/app', '/mobile', '/apk']) {
+    const res = await call(p);
+    assert.equal(res.status, 200, p);
+    assert.equal(await res.text(), '<html>page</html>', p);
+  }
+  // The APK route falls back to the same page when the release asset is down.
+  await withUpstream(async () => new Response('gone', { status: 404 }), async () => {
+    const res = await call('/download');
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'text/html');
+  });
+  assert.ok(asked.every((p) => p === '/download'), 'the page is always read as the /download asset');
+  const wrangler = await (await import('node:fs/promises')).readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+  assert.match(wrangler, /"run_worker_first"\s*:\s*\[\s*"\/download"/, 'the worker must run before the asset layer for /download');
+  // With a list, unlisted paths never reach the worker (the asset layer
+  // answers them, 405 for a POST): the API and the probes must stay on it.
+  const listed = JSON.parse(/"run_worker_first"\s*:\s*(\[[^\]]*\])/.exec(wrangler)[1]);
+  for (const route of ['/api/*', '/healthz', '/readyz', '/metrics', '/.well-known/*', '/download.html']) {
+    assert.ok(listed.includes(route), `${route} must be in run_worker_first`);
+  }
+});
+
 test('GET /app, /mobile and /apk redirect to the static download page', async () => {
   const { api } = await isolate();
   for (const p of ['/app', '/mobile', '/apk']) {

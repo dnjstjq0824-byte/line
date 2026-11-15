@@ -6720,6 +6720,24 @@ async function hydrateSocialGraph(userId) {
   for (const r of blocks?.results || []) fMeta(userId, r.blocked_id).blocked = true;
 }
 
+// The landing page is the static asset download.html. The asset layer would
+// answer /download itself (it maps /download to download.html), so wrangler
+// runs the worker first for these paths and the page is read through the
+// ASSETS binding. Without the binding (tests, bare isolates) it is a redirect.
+async function downloadPage(env, url) {
+  if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+    try {
+      const page = await env.ASSETS.fetch(new Request(url.origin + '/download'));
+      if (page.ok) {
+        const headers = new Headers(page.headers);
+        headers.set('Cache-Control', 'public, max-age=0, must-revalidate');
+        return new Response(page.body, { status: 200, headers });
+      }
+    } catch { /* fall through to the redirect */ }
+  }
+  if (url.pathname === '/download.html') return new Response('download page unavailable', { status: 503 });
+  return Response.redirect(url.origin + '/download.html', 302);
+}
 // Latest Android build served from the LUNO URL (/download). Bumped on every
 // APK release (release checklist in memory); routes below stay unchanged.
 const LATEST_ANDROID_BUILD = {
@@ -8436,7 +8454,7 @@ const workerCore = {
         upstream = await fetch(asset.url, { method: request.method, redirect: 'follow', headers: range ? { Range: range } : {} });
       } catch { upstream = null; }
       if (!upstream || (upstream.status !== 200 && upstream.status !== 206)) {
-        return Response.redirect(url.origin + '/download.html', 302);
+        return downloadPage(env, url);
       }
       const headers = new Headers({
         'Content-Type': 'application/vnd.android.package-archive',
@@ -8451,9 +8469,9 @@ const workerCore = {
       if (contentRange) headers.set('Content-Range', contentRange);
       return new Response(request.method === 'HEAD' ? null : upstream.body, { status: upstream.status, headers });
     }
-    // Mobile APK Download Landing Page
-    if (['/app', '/mobile', '/apk'].includes(url.pathname)) {
-      return Response.redirect(url.origin + "/download.html", 302);
+    // Mobile APK Download Landing Page (every ABI + QR).
+    if (['/download.html', '/app', '/mobile', '/apk'].includes(url.pathname)) {
+      return downloadPage(env, url);
     }
 
     // Sub-console route redirects

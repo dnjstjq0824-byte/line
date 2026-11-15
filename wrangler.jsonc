@@ -9,7 +9,13 @@
   "assets": {
     "directory": "./dist_cf",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // /download must reach the worker (it streams the APK); the asset layer
+    // would otherwise answer it with download.html, so the worker serves the
+    // page itself for the download paths. Once this list exists, ONLY listed
+    // paths reach the worker: every worker route has to be on it (leaving
+    // out /api/* answers every API call with 405 from the asset layer).
+    "run_worker_first": ["/download", "/download/", "/download.html", "/app", "/mobile", "/apk", "/api/*", "/healthz", "/readyz", "/metrics", "/.well-known/*"]
   },
   "d1_databases": [
     {

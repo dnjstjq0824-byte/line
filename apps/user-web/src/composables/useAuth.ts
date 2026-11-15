@@ -70,10 +70,12 @@ export function useAuth(deps: AuthDeps) {
   }
 
   // --- Logout ---
+  // The server ends the session that owns this access token and clears the
+  // refresh cookie. It needs no device id, so it also works after a reload
+  // (the id only lives in memory). The warning is for a real failure only.
   async function logout() {
     try {
-      if (currentDeviceId.value) await api(`/api/v1/devices/${currentDeviceId.value}`, 'DELETE')
-      else throw new Error('Current device unavailable')
+      await api('/api/v1/auth/logout', 'POST', {})
     } catch { error.value = t('logout_unconfirmed') }
     clearLocalSession()
     void router.push('/login')
