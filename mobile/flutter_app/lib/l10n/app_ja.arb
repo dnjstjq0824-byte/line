@@ -592,5 +592,14 @@
   "inviteAlreadyIn": "すでに参加済みのルームです。",
   "shareBannerTitle": "共有が届きました",
   "shareBannerDesc": "ルームを選ぶと内容が入力されます。",
-  "sharePhotosPreparing": "写真共有は準備中です。"
+  "sharePhotosPreparing": "写真共有は準備中です。",
+  "pcAgentReady": "待機中",
+  "pcAgentBusy": "作業中",
+  "pcAgentOffline": "オフライン",
+  "pcAgentLastSeen": "最終接続 {time}",
+  "pcAgentQueue": "待機 {count}件",
+  "pcQuickStatus": "現在の作業状況を報告",
+  "pcQuickGit": "git status・ブランチ確認",
+  "pcQuickCheck": "静的解析・ビルド点検",
+  "pcQuickContinue": "Muse Spark 1.3 で続行"
 }

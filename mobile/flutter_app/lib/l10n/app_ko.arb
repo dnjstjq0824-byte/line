@@ -2654,5 +2654,51 @@
   "sharePhotosPreparing": "사진 공유는 준비 중입니다.",
   "@sharePhotosPreparing": {
     "description": "sharePhotosPreparing (F21)"
+  },
+  "pcAgentReady": "준비됨",
+  "@pcAgentReady": {
+    "description": "pcAgentReady (PC agent)"
+  },
+  "pcAgentBusy": "작업 중",
+  "@pcAgentBusy": {
+    "description": "pcAgentBusy (PC agent)"
+  },
+  "pcAgentOffline": "오프라인",
+  "@pcAgentOffline": {
+    "description": "pcAgentOffline (PC agent)"
+  },
+  "pcAgentLastSeen": "마지막 접속 {time}",
+  "@pcAgentLastSeen": {
+    "description": "pcAgentLastSeen (PC agent)",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "pcAgentQueue": "대기 {count}건",
+  "@pcAgentQueue": {
+    "description": "pcAgentQueue (PC agent)",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pcQuickStatus": "현재 작업 상태 보고",
+  "@pcQuickStatus": {
+    "description": "pcQuickStatus (PC agent)"
+  },
+  "pcQuickGit": "git status·브랜치 확인",
+  "@pcQuickGit": {
+    "description": "pcQuickGit (PC agent)"
+  },
+  "pcQuickCheck": "정적 분석·빌드 점검",
+  "@pcQuickCheck": {
+    "description": "pcQuickCheck (PC agent)"
+  },
+  "pcQuickContinue": "Muse Spark 1.3 이어서 진행",
+  "@pcQuickContinue": {
+    "description": "pcQuickContinue (PC agent)"
   }
 }

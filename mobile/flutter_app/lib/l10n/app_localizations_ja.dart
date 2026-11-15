@@ -1900,4 +1900,35 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sharePhotosPreparing => '写真共有は準備中です。';
+
+  @override
+  String get pcAgentReady => '待機中';
+
+  @override
+  String get pcAgentBusy => '作業中';
+
+  @override
+  String get pcAgentOffline => 'オフライン';
+
+  @override
+  String pcAgentLastSeen(String time) {
+    return '最終接続 $time';
+  }
+
+  @override
+  String pcAgentQueue(int count) {
+    return '待機 $count件';
+  }
+
+  @override
+  String get pcQuickStatus => '現在の作業状況を報告';
+
+  @override
+  String get pcQuickGit => 'git status・ブランチ確認';
+
+  @override
+  String get pcQuickCheck => '静的解析・ビルド点検';
+
+  @override
+  String get pcQuickContinue => 'Muse Spark 1.3 で続行';
 }

@@ -1900,4 +1900,35 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get sharePhotosPreparing => '사진 공유는 준비 중입니다.';
+
+  @override
+  String get pcAgentReady => '준비됨';
+
+  @override
+  String get pcAgentBusy => '작업 중';
+
+  @override
+  String get pcAgentOffline => '오프라인';
+
+  @override
+  String pcAgentLastSeen(String time) {
+    return '마지막 접속 $time';
+  }
+
+  @override
+  String pcAgentQueue(int count) {
+    return '대기 $count건';
+  }
+
+  @override
+  String get pcQuickStatus => '현재 작업 상태 보고';
+
+  @override
+  String get pcQuickGit => 'git status·브랜치 확인';
+
+  @override
+  String get pcQuickCheck => '정적 분석·빌드 점검';
+
+  @override
+  String get pcQuickContinue => 'Muse Spark 1.3 이어서 진행';
 }

@@ -592,5 +592,14 @@
   "inviteAlreadyIn": "Already in this room.",
   "shareBannerTitle": "Share arrived",
   "shareBannerDesc": "Pick a room to fill it in.",
-  "sharePhotosPreparing": "Photo sharing is coming soon."
+  "sharePhotosPreparing": "Photo sharing is coming soon.",
+  "pcAgentReady": "Ready",
+  "pcAgentBusy": "Working",
+  "pcAgentOffline": "Offline",
+  "pcAgentLastSeen": "Last seen {time}",
+  "pcAgentQueue": "{count} queued",
+  "pcQuickStatus": "Report current status",
+  "pcQuickGit": "Check git status & branch",
+  "pcQuickCheck": "Run analysis & build checks",
+  "pcQuickContinue": "Continue with Muse Spark 1.3"
 }

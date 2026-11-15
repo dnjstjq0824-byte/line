@@ -22,6 +22,7 @@ import '../util/video_bubble.dart';
 import '../util/chat_time.dart';
 import '../util/call_groups.dart';
 import '../util/app_l10n.dart';
+import '../widgets/pc_agent_bar.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String conversationId;
@@ -186,6 +187,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             ],
           ),
         ),
+        PcAgentBar(conversationId: widget.conversationId),
         if (session.showStickerPicker) const _StickerDeck(),
         if (session.replyToId.isNotEmpty)
           Container(

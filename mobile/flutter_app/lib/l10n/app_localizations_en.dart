@@ -1920,4 +1920,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sharePhotosPreparing => 'Photo sharing is coming soon.';
+
+  @override
+  String get pcAgentReady => 'Ready';
+
+  @override
+  String get pcAgentBusy => 'Working';
+
+  @override
+  String get pcAgentOffline => 'Offline';
+
+  @override
+  String pcAgentLastSeen(String time) {
+    return 'Last seen $time';
+  }
+
+  @override
+  String pcAgentQueue(int count) {
+    return '$count queued';
+  }
+
+  @override
+  String get pcQuickStatus => 'Report current status';
+
+  @override
+  String get pcQuickGit => 'Check git status & branch';
+
+  @override
+  String get pcQuickCheck => 'Run analysis & build checks';
+
+  @override
+  String get pcQuickContinue => 'Continue with Muse Spark 1.3';
 }

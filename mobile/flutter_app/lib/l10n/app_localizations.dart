@@ -3659,6 +3659,60 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'사진 공유는 준비 중입니다.'**
   String get sharePhotosPreparing;
+
+  /// pcAgentReady (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'준비됨'**
+  String get pcAgentReady;
+
+  /// pcAgentBusy (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'작업 중'**
+  String get pcAgentBusy;
+
+  /// pcAgentOffline (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'오프라인'**
+  String get pcAgentOffline;
+
+  /// pcAgentLastSeen (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'마지막 접속 {time}'**
+  String pcAgentLastSeen(String time);
+
+  /// pcAgentQueue (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'대기 {count}건'**
+  String pcAgentQueue(int count);
+
+  /// pcQuickStatus (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 작업 상태 보고'**
+  String get pcQuickStatus;
+
+  /// pcQuickGit (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'git status·브랜치 확인'**
+  String get pcQuickGit;
+
+  /// pcQuickCheck (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'정적 분석·빌드 점검'**
+  String get pcQuickCheck;
+
+  /// pcQuickContinue (PC agent)
+  ///
+  /// In ko, this message translates to:
+  /// **'Muse Spark 1.3 이어서 진행'**
+  String get pcQuickContinue;
 }
 
 class _AppLocalizationsDelegate

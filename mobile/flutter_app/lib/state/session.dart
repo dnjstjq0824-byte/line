@@ -231,6 +231,17 @@ class SessionController extends ChangeNotifier {
   StreamSubscription? wsSubscription;
   Timer? reconnectTimer;
   int reconnectAttempt = 0;
+  // Heartbeat: a mobile network can drop a socket without closing it, so the
+  // app pings every 25 s and reconnects when nothing came back for 70 s.
+  Timer? _pingTimer;
+  DateTime _lastSocketEvent = DateTime.now();
+  static const pingEvery = Duration(seconds: 25);
+  static const socketSilenceLimit = Duration(seconds: 70);
+
+  // PC agent: bots in the open room with the presence of their home-PC runner.
+  List<Map<String, dynamic>> roomBots = [];
+  bool roomBotCommands = false;
+  String roomBotsFor = '';
 
   // Real-time AI Translation Cache
   final Map<String, Map<String, dynamic>> translations = {};
@@ -544,6 +555,8 @@ class SessionController extends ChangeNotifier {
   Future<void> connect() async {
     reconnectTimer?.cancel();
     reconnectTimer = null;
+    _pingTimer?.cancel();
+    _pingTimer = null;
     await wsSubscription?.cancel();
     await socket?.sink.close();
     try {
@@ -554,10 +567,20 @@ class SessionController extends ChangeNotifier {
       socket = WebSocketChannel.connect(
         Uri.parse('$wsBase/api/v1/ws?ticket=${Uri.encodeQueryComponent(ticket['ticket'])}'),
       );
+      _lastSocketEvent = DateTime.now();
+      // The heartbeat starts once the handshake succeeded (a socket that
+      // never opens is the reconnect path's job, not the heartbeat's).
+      final opened = socket!;
+      unawaited(opened.ready.then((_) {
+        if (identical(socket, opened)) _startHeartbeat();
+      }).catchError((_) {}));
       wsSubscription = socket!.stream.listen((event) {
+        _lastSocketEvent = DateTime.now();
         try {
           final data = jsonDecode(event);
-          if (data['type'] == 'message.created') {
+          if (data['type'] == 'bot.presence') {
+            applyBotPresence(data);
+          } else if (data['type'] == 'message.created') {
             applyMessageCreated(data);
             maybeNotifyMessage(data);
           } else if (data['type'] == 'message.updated') {
@@ -599,6 +622,78 @@ class SessionController extends ChangeNotifier {
     } catch (_) {
       scheduleReconnect();
     }
+  }
+
+  void _startHeartbeat() {
+    _lastSocketEvent = DateTime.now();
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(pingEvery, (_) => heartbeatTick(DateTime.now()));
+  }
+
+  /// One heartbeat step (public so tests drive it with a clock): reconnect
+  /// when the socket has been silent too long, otherwise send a ping.
+  void heartbeatTick(DateTime now) {
+    if (!authed || api.token == null) return;
+    if (reconnectTimer != null) return; // a reconnect is already scheduled
+    if (now.difference(_lastSocketEvent) > socketSilenceLimit) {
+      scheduleReconnect();
+      return;
+    }
+    try {
+      socket?.sink.add(jsonEncode({'type': 'ping'}));
+    } catch (_) {
+      scheduleReconnect();
+    }
+  }
+
+  /// Coming back to the foreground: a socket that died in the background is
+  /// replaced at once instead of waiting for the next heartbeat.
+  Future<void> resumeConnection() async {
+    // Catch up first; then, if the socket did not survive the background,
+    // replace it and catch up once more for anything sent in between.
+    unawaited(deltaResync());
+    if (!authed || api.token == null) return;
+    final current = socket;
+    final dead = current != null && current.closeCode != null;
+    final silent = current != null &&
+        DateTime.now().difference(_lastSocketEvent) > socketSilenceLimit;
+    if (dead || silent || reconnectTimer != null) {
+      reconnectAttempt = 0;
+      await connect();
+      await deltaResync();
+    }
+    if (roomBotsFor.isNotEmpty) await loadRoomBots(roomBotsFor);
+  }
+
+  /// PC agent: bots of one room and whether my commands are allowed there.
+  Future<void> loadRoomBots(String roomId) async {
+    roomBotsFor = roomId;
+    try {
+      final res = await api.call('/api/v1/conversations/$roomId/bots');
+      if (roomBotsFor != roomId) return; // the user moved to another room
+      roomBots = ((res['bots'] as List?) ?? [])
+          .whereType<Map>()
+          .map((b) => Map<String, dynamic>.from(b))
+          .toList();
+      roomBotCommands = res['commands_allowed'] == true;
+    } catch (_) {
+      if (roomBotsFor != roomId) return;
+      roomBots = [];
+      roomBotCommands = false;
+    }
+    notifyListeners();
+  }
+
+  /// PC agent: a presence push for the open room replaces that bot's row.
+  void applyBotPresence(dynamic data) {
+    if ('${data['conversation_id']}' != roomBotsFor) return;
+    final bot = data['bot'];
+    if (bot is! Map) return;
+    final next = Map<String, dynamic>.from(bot);
+    final at = roomBots.indexWhere((b) => '${b['id']}' == '${next['id']}');
+    if (at < 0) return;
+    roomBots = [...roomBots]..[at] = next;
+    notifyListeners();
   }
 
   /// A-23: schedule one reconnect attempt with exponential backoff (1s->30s)
@@ -680,7 +775,7 @@ class SessionController extends ChangeNotifier {
   void setForeground(bool value) {
     final was = isForeground;
     isForeground = value;
-    if (value && !was) unawaited(deltaResync());
+    if (value && !was) unawaited(resumeConnection());
   }
 
   void setNotifyEnabled(bool value) {
@@ -2671,6 +2766,11 @@ class SessionController extends ChangeNotifier {
   Future<void> logout() async {
     reconnectTimer?.cancel();
     reconnectTimer = null;
+    _pingTimer?.cancel();
+    _pingTimer = null;
+    roomBots = [];
+    roomBotCommands = false;
+    roomBotsFor = '';
     reconnectAttempt = 0;
     await wsSubscription?.cancel();
     await socket?.sink.close();
@@ -2864,6 +2964,7 @@ class SessionController extends ChangeNotifier {
 
   void disposeAll() {
     reconnectTimer?.cancel();
+    _pingTimer?.cancel();
     _noAnswerTimer?.cancel();
     _callTimer?.cancel();
     _groupCallTimer?.cancel();

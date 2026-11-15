@@ -592,5 +592,14 @@
   "inviteAlreadyIn": "อยู่ในห้องนี้แล้ว",
   "shareBannerTitle": "มีแชร์เข้ามา",
   "shareBannerDesc": "เลือกห้องเพื่อใส่เนื้อหา",
-  "sharePhotosPreparing": "แชร์รูปกำลังเตรียม"
+  "sharePhotosPreparing": "แชร์รูปกำลังเตรียม",
+  "pcAgentReady": "พร้อม",
+  "pcAgentBusy": "กำลังทำงาน",
+  "pcAgentOffline": "ออฟไลน์",
+  "pcAgentLastSeen": "ออนไลน์ล่าสุด {time}",
+  "pcAgentQueue": "รอ {count} งาน",
+  "pcQuickStatus": "รายงานสถานะปัจจุบัน",
+  "pcQuickGit": "ตรวจ git status และ branch",
+  "pcQuickCheck": "ตรวจ static analysis และ build",
+  "pcQuickContinue": "ให้ Muse Spark 1.3 ทำต่อ"
 }

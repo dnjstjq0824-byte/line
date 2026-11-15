@@ -1910,4 +1910,35 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get sharePhotosPreparing => 'แชร์รูปกำลังเตรียม';
+
+  @override
+  String get pcAgentReady => 'พร้อม';
+
+  @override
+  String get pcAgentBusy => 'กำลังทำงาน';
+
+  @override
+  String get pcAgentOffline => 'ออฟไลน์';
+
+  @override
+  String pcAgentLastSeen(String time) {
+    return 'ออนไลน์ล่าสุด $time';
+  }
+
+  @override
+  String pcAgentQueue(int count) {
+    return 'รอ $count งาน';
+  }
+
+  @override
+  String get pcQuickStatus => 'รายงานสถานะปัจจุบัน';
+
+  @override
+  String get pcQuickGit => 'ตรวจ git status และ branch';
+
+  @override
+  String get pcQuickCheck => 'ตรวจ static analysis และ build';
+
+  @override
+  String get pcQuickContinue => 'ให้ Muse Spark 1.3 ทำต่อ';
 }
