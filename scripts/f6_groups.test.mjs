@@ -4,7 +4,7 @@
 // mentions, and leaver isolation. All durable across isolates.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeD1, makeBucket } from './test_helpers.mjs';
+import { makeD1, makeBucket , F24_CONSENT } from './test_helpers.mjs';
 
 let f6Serial = 0;
 async function f6Isolate(db, bucket, extraEnv = {}) {
@@ -24,7 +24,7 @@ const PNG_MAGIC = [137, 80, 78, 71, 13, 10, 26, 10];
 const pngDataUrl = (...tail) => `data:image/png;base64,${Buffer.from([...PNG_MAGIC, ...tail]).toString('base64')}`;
 
 async function registerLogin(api, email) {
-  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(reg.status, 201);
   const s = await api('auth/login', 'POST', { email, password: PW });
   assert.equal(s.status, 200);

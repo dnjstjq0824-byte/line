@@ -472,6 +472,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authCreateNew => 'Create a new LUNO account';
 
   @override
+  String get consentTerms => 'I agree to the Terms of Service (required)';
+
+  @override
+  String get consentPrivacy => 'I agree to the Privacy Policy (required)';
+
+  @override
+  String get consentViewTerms => 'View terms';
+
+  @override
+  String get consentViewPrivacy => 'View policy';
+
+  @override
+  String get birthdateLabel => 'Date of birth (YYYY-MM-DD)';
+
+  @override
+  String get birthdateRequiredErr => 'Please enter your date of birth.';
+
+  @override
+  String get underageErr => 'You must be at least 14 years old to sign up.';
+
+  @override
+  String get consentRequiredErr =>
+      'Please agree to both the Terms and the Privacy Policy.';
+
+  @override
+  String get consentStaleTitle => 'Our terms have changed';
+
+  @override
+  String get consentStaleNote => 'Please accept the updated terms to sign in.';
+
+  @override
   String get callsEmpty => 'No call history';
 
   @override

@@ -471,6 +471,38 @@ class AppLocalizationsTh extends AppLocalizations {
   String get authCreateNew => 'สร้างบัญชี LUNO ใหม่';
 
   @override
+  String get consentTerms => 'ฉันยอมรับข้อกำหนดการใช้งาน (จำเป็น)';
+
+  @override
+  String get consentPrivacy => 'ฉันยอมรับนโยบายความเป็นส่วนตัว (จำเป็น)';
+
+  @override
+  String get consentViewTerms => 'ดูข้อกำหนด';
+
+  @override
+  String get consentViewPrivacy => 'ดูนโยบาย';
+
+  @override
+  String get birthdateLabel => 'วันเกิด (ปปปป-ดด-วว)';
+
+  @override
+  String get birthdateRequiredErr => 'โปรดกรอกวันเกิด';
+
+  @override
+  String get underageErr => 'ต้องมีอายุ 14 ปีขึ้นไปจึงจะสมัครได้';
+
+  @override
+  String get consentRequiredErr =>
+      'โปรดยอมรับทั้งข้อกำหนดและนโยบายความเป็นส่วนตัว';
+
+  @override
+  String get consentStaleTitle => 'ข้อกำหนดมีการเปลี่ยนแปลง';
+
+  @override
+  String get consentStaleNote =>
+      'โปรดยอมรับข้อกำหนดฉบับปรับปรุงเพื่อเข้าสู่ระบบ';
+
+  @override
   String get callsEmpty => 'ไม่มีประวัติการโทร';
 
   @override

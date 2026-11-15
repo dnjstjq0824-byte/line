@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // Item 6: group rooms must show who said what. The server ships sender_name
 // on every message; the clients resolve it with a members-list fallback and
@@ -41,7 +42,7 @@ test('worker decorates group messages with the sender display name', async () =>
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), env);
   const register = async (email, display_name) => {
-    const reg = await call('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
+    const reg = await call('auth/register', null, 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
     assert.equal(reg.status, 201);
     const id = (await reg.json()).id;
     const token = (await (await call('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' })).json()).access_token;

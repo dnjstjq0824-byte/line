@@ -469,6 +469,36 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authCreateNew => '新しいLUNOアカウントを作成';
 
   @override
+  String get consentTerms => '利用規約に同意します（必須）';
+
+  @override
+  String get consentPrivacy => 'プライバシーポリシーに同意します（必須）';
+
+  @override
+  String get consentViewTerms => '規約を見る';
+
+  @override
+  String get consentViewPrivacy => 'ポリシーを見る';
+
+  @override
+  String get birthdateLabel => '生年月日 (YYYY-MM-DD)';
+
+  @override
+  String get birthdateRequiredErr => '生年月日を入力してください。';
+
+  @override
+  String get underageErr => '14歳以上の方のみ登録できます。';
+
+  @override
+  String get consentRequiredErr => '利用規約とプライバシーポリシーの両方に同意してください。';
+
+  @override
+  String get consentStaleTitle => '規約が変更されました';
+
+  @override
+  String get consentStaleNote => 'ログインするには、更新された規約に同意してください。';
+
+  @override
   String get callsEmpty => '通話履歴がありません';
 
   @override

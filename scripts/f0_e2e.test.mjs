@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 let f0Serial = 0;
 async function f0Isolate(db, extraEnv = {}) {
@@ -19,7 +19,7 @@ async function f0Isolate(db, extraEnv = {}) {
 }
 
 async function register(api, email, password = 'Str0ng!Passw0rd', extra = {}) {
-  const res = await api('auth/register', 'POST', { email, password, display_name: email.split('@')[0], ...extra });
+  const res = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: email.split('@')[0], ...extra });
   assert.equal(res.status, 201, `register ${email}: ${res.status}`);
   return res.json();
 }

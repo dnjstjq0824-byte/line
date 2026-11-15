@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { makeBucket } from './test_helpers.mjs';
+import { makeBucket , F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 const PW = 'Str0ng!Passw0rd';
@@ -46,7 +46,7 @@ async function isolate(extraEnv = {}, database = db) {
   return api;
 }
 async function signup(api, email, handle) {
-  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: handle, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const { id } = await reg.json();
   const login = await api('auth/login', 'POST', { email, password: PW });
@@ -325,7 +325,7 @@ test('SEC: phone login can no longer mint an admin (or any) session without a ve
 test('LV-01 policy: password change keeps current session, revokes all others, survives redeploy', async () => {
   const ownDb = makeD1();
   const api = await isolate({}, ownDb);
-  const reg = await api('auth/register', 'POST', { email: 'pwtest@luno.test', password: 'Initial#Pass123', display_name: 'PW Test' });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email: 'pwtest@luno.test', password: 'Initial#Pass123', display_name: 'PW Test' });
   assert.equal(reg.status, 201);
   const login = async (call, pw) => (await call('auth/login', 'POST', { email: 'pwtest@luno.test', password: pw }));
   const s1 = await (await login(api, 'Initial#Pass123')).json(), s2 = await (await login(api, 'Initial#Pass123')).json();

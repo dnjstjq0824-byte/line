@@ -2,7 +2,7 @@
 // One-time prekeys are consumed persistently; bundles survive a redeploy.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 
@@ -18,7 +18,7 @@ async function isolate(database) {
   return { api, db };
 }
 async function signup(api, email, handle) {
-  const reg = await api('auth/register', 'POST', { email, password: 'E2e#Keypass9', display_name: handle, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: 'E2e#Keypass9', display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const login = await api('auth/login', 'POST', { email, password: 'E2e#Keypass9' });
   assert.equal(login.status, 200, `login ${email}`);

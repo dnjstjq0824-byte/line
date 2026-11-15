@@ -1014,6 +1014,66 @@ abstract class AppLocalizations {
   /// **'새 LUNO 계정 만들기'**
   String get authCreateNew;
 
+  /// No description provided for @consentTerms.
+  ///
+  /// In ko, this message translates to:
+  /// **'이용약관에 동의합니다 (필수)'**
+  String get consentTerms;
+
+  /// No description provided for @consentPrivacy.
+  ///
+  /// In ko, this message translates to:
+  /// **'개인정보 처리방침에 동의합니다 (필수)'**
+  String get consentPrivacy;
+
+  /// No description provided for @consentViewTerms.
+  ///
+  /// In ko, this message translates to:
+  /// **'약관 보기'**
+  String get consentViewTerms;
+
+  /// No description provided for @consentViewPrivacy.
+  ///
+  /// In ko, this message translates to:
+  /// **'방침 보기'**
+  String get consentViewPrivacy;
+
+  /// No description provided for @birthdateLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'생년월일 (YYYY-MM-DD)'**
+  String get birthdateLabel;
+
+  /// No description provided for @birthdateRequiredErr.
+  ///
+  /// In ko, this message translates to:
+  /// **'생년월일을 입력해 주세요.'**
+  String get birthdateRequiredErr;
+
+  /// No description provided for @underageErr.
+  ///
+  /// In ko, this message translates to:
+  /// **'만 14세 이상만 가입할 수 있습니다.'**
+  String get underageErr;
+
+  /// No description provided for @consentRequiredErr.
+  ///
+  /// In ko, this message translates to:
+  /// **'이용약관과 개인정보 처리방침에 모두 동의해 주세요.'**
+  String get consentRequiredErr;
+
+  /// No description provided for @consentStaleTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'약관이 변경되었습니다'**
+  String get consentStaleTitle;
+
+  /// No description provided for @consentStaleNote.
+  ///
+  /// In ko, this message translates to:
+  /// **'변경된 약관에 다시 동의해야 로그인할 수 있습니다.'**
+  String get consentStaleNote;
+
   /// callsEmpty (F20)
   ///
   /// In ko, this message translates to:

@@ -347,18 +347,65 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  /// F24: set when the server demands fresh terms consent (CONSENT_STALE);
+  /// the login page swaps to the re-consent step until [submitReconsent].
+  bool needsReconsent = false;
+  String legalTermsVersion = '';
+  String legalPrivacyVersion = '';
+
+  Future<void> loadLegalVersions() async {
+    try {
+      final v = await api.call('/api/v1/legal');
+      legalTermsVersion = '${v['terms_version'] ?? ''}';
+      legalPrivacyVersion = '${v['privacy_version'] ?? ''}';
+    } catch (_) {
+      legalTermsVersion = '';
+      legalPrivacyVersion = '';
+    }
+  }
+
   Future<void> login({
     required String email,
     required String password,
     required String displayName,
+    String birthdate = '',
+    bool agreeTerms = false,
+    bool agreePrivacy = false,
+    bool withConsent = false,
   }) async {
     await run(() async {
       if (registerMode) {
-        final reg = await api.call('/api/v1/auth/register', method: 'POST', data: {
-          'email': email.trim(),
-          'password': password,
-          'display_name': displayName.trim(),
-        });
+        Map<String, dynamic> reg;
+        try {
+          reg = await api.call('/api/v1/auth/register', method: 'POST', data: {
+            'email': email.trim(),
+            'password': password,
+            'display_name': displayName.trim(),
+            'birthdate': birthdate,
+            'consent': {
+              'terms': agreeTerms ? legalTermsVersion : '',
+              'privacy': agreePrivacy ? legalPrivacyVersion : '',
+            },
+          });
+        } on ApiException catch (e) {
+          // F24: consent failures stay on the form with a localized message.
+          if (e.code == 'CONSENT_REQUIRED') {
+            error = strings.consentRequiredErr;
+            notifyListeners();
+            return;
+          }
+          if (e.code == 'BIRTHDATE_REQUIRED') {
+            error = strings.birthdateRequiredErr;
+            notifyListeners();
+            return;
+          }
+          if (e.code == 'UNDERAGE') {
+            error = strings.underageErr;
+            notifyListeners();
+            return;
+          }
+          rethrow;
+        }
         registerMode = false;
         if (reg['email_verified'] == false) {
           needsEmailVerify = true;
@@ -378,6 +425,11 @@ class SessionController extends ChangeNotifier {
           'password': password,
           'platform': 'android',
           'device_name': 'LUNO Android Client',
+          if (withConsent)
+            'consent': {
+              'terms': legalTermsVersion,
+              'privacy': legalPrivacyVersion,
+            },
         });
       } on ApiException catch (e) {
         if (e.code == 'EMAIL_NOT_VERIFIED') {
@@ -387,8 +439,16 @@ class SessionController extends ChangeNotifier {
           notifyListeners();
           return;
         }
+        if (e.code == 'CONSENT_STALE') {
+          needsReconsent = true;
+          await loadLegalVersions();
+          notice = strings.consentStaleNote;
+          notifyListeners();
+          return;
+        }
         rethrow;
       }
+      needsReconsent = false;
       api.token = result['access_token'];
       api.refreshToken = result['refresh_token'] as String?;
       if (api.refreshToken != null) {
@@ -414,6 +474,18 @@ class SessionController extends ChangeNotifier {
       await loadOutbox();
       await flushOutbox();
     });
+  }
+
+  /// F24: retry the login that hit CONSENT_STALE with fresh agreement.
+  Future<void> submitReconsent({required String email, required String password}) {
+    return login(email: email, password: password, displayName: '', withConsent: true);
+  }
+
+  /// F24: surface a form-level error without a round trip (an under-14
+  /// birthdate never leaves the device).
+  void formError(String message) {
+    error = message;
+    notifyListeners();
   }
 
   Future<void> approveDesktopQR(String challengeId, String qrToken) {

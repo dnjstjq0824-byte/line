@@ -28,7 +28,7 @@ func newParityApp(t *testing.T, name string) (*App, *httptest.Server) {
 func parityLogin(t *testing.T, srv *httptest.Server, email, name string) *apiClient {
 	t.Helper()
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": email, "password": "ParityPass#2026!", "display_name": name,
 	}); st != 201 {
 		t.Fatalf("register %s: %d %v", email, st, out)

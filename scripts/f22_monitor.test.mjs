@@ -3,7 +3,7 @@
 // server-side masking, and worker/shared mask parity.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 import { maskTelemetryValue as tsMask } from '../apps/shared/mask_telemetry.ts';
 
 let f22Serial = 0;
@@ -22,7 +22,7 @@ async function f22Isolate(db, extraEnv = {}) {
 const PW = 'Str0ng!Passw0rd';
 
 async function register(api, email) {
-  const res = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const res = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(res.status, 201);
   return res.json();
 }

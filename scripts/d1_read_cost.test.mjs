@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 let serial = 0;
 function database({ roles = false } = {}) {
   const raw = new DatabaseSync(':memory:');
@@ -36,7 +37,7 @@ async function isolate(db) {
   }), { ALLOW_LOCAL_DEMO: 'true', DB: db });
 }
 async function account(api) {
-  const body = { email: `readcost-${serial}@example.test`, password: 'ReadCost#Audit2026', display_name: 'Read cost' };
+  const body = { ...F24_CONSENT, email: `readcost-${serial}@example.test`, password: 'ReadCost#Audit2026', display_name: 'Read cost' };
   const registration = await api('auth/register', null, 'POST', body); assert.equal(registration.status, 201);
   const user = await registration.json();
   const login = await api('auth/login', null, 'POST', body); assert.equal(login.status, 200);

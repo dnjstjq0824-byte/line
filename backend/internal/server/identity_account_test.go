@@ -16,7 +16,7 @@ func TestIdentityAccountLifecycle(t *testing.T) {
 	defer func() { srv.Close(); app.Close() }()
 
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"email": "acct@example.test", "password": "OldStrongPass#2026!", "display_name": "Acct"}); st != 201 {
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), "email": "acct@example.test", "password": "OldStrongPass#2026!", "display_name": "Acct"}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)
 	}
 	st, out := c.req("POST", "/api/v1/auth/login", map[string]any{"email": "acct@example.test", "password": "OldStrongPass#2026!", "platform": "web", "device_name": "test"})
@@ -122,7 +122,7 @@ func TestRecoveryFailsClosedWithoutMailProvider(t *testing.T) {
 	defer func() { srv.Close(); app.Close() }()
 
 	c := &apiClient{t: t, srv: srv}
-	if st, _ := c.req("POST", "/api/v1/auth/register", map[string]any{"email": "norecover@example.test", "password": "OldStrongPass#2026!", "display_name": "NoRecover"}); st != 201 {
+	if st, _ := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), "email": "norecover@example.test", "password": "OldStrongPass#2026!", "display_name": "NoRecover"}); st != 201 {
 		t.Fatalf("register: %d", st)
 	}
 	// Known and unknown emails fail identically: 501, no code, no challenge.

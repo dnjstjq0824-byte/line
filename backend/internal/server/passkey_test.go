@@ -171,7 +171,7 @@ func pkTestApp(t *testing.T, name string) (*App, *httptest.Server) {
 func pkLogin(t *testing.T, srv *httptest.Server, email, password, name string) *apiClient {
 	t.Helper()
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": email, "password": password, "display_name": name,
 	}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)

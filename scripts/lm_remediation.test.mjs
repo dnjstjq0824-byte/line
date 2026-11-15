@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from './cf_worker.js';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 function req(path, method = 'GET', body = null, token = null, headers = {}) {
   const h = { 'Content-Type': 'application/json', ...headers };
@@ -84,7 +85,7 @@ test('LM-03 & A-05: Official Accounts and conversation isolation', async () => {
   assert.ok(keep, 'Keep memo must exist for user');
 
   // Verify another user cannot access user A keep memo
-  assert.equal((await api('auth/register', 'POST', { email: 'lm-alice@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'lmalice', handle: 'lmalice' })).status, 201);
+  assert.equal((await api('auth/register', 'POST', { ...F24_CONSENT, email: 'lm-alice@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'lmalice', handle: 'lmalice' })).status, 201);
   const aliceLogin = await api('auth/login', 'POST', { email: 'lm-alice@luno-test.local', password: 'Str0ng!Passw0rd' });
   const { access_token: aliceToken } = await aliceLogin.json();
   const aliceConvs = await (await api('conversations', 'GET', null, aliceToken)).json();

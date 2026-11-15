@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 
@@ -54,7 +55,7 @@ async function isolate(database) {
   return { api, db };
 }
 async function signup(api, email, handle) {
-  const reg = await api('auth/register', 'POST', { email, password: 'Gu4rd#Passw0rd', display_name: handle, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: 'Gu4rd#Passw0rd', display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const login = await api('auth/login', 'POST', { email, password: 'Gu4rd#Passw0rd' });
   assert.equal(login.status, 200, `login ${email}`);

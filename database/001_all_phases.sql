@@ -38,6 +38,16 @@ CREATE TABLE identity.passkey_credentials (
  last_used_at TIMESTAMPTZ
 );
 CREATE INDEX passkey_credentials_user_idx ON identity.passkey_credentials(user_id);
+-- F24: legal consent records. One row per user; age14_confirmed NULL means
+-- grandfathered (consented to versions, age never verified at signup).
+-- The verification birthdate is never stored anywhere.
+CREATE TABLE identity.consents (
+ user_id UUID PRIMARY KEY REFERENCES identity.users(id) ON DELETE CASCADE,
+ terms_version TEXT NOT NULL, privacy_version TEXT NOT NULL,
+ age14_confirmed BOOLEAN,
+ consented_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE identity.passkey_challenges (
  challenge TEXT PRIMARY KEY,
  user_id UUID NOT NULL REFERENCES identity.users(id) ON DELETE CASCADE,

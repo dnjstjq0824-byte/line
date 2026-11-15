@@ -37,7 +37,7 @@ func TestSystemHealthUsesPerInstanceOutboxDelivery(t *testing.T) {
 	srv := httptest.NewServer(app.Handler())
 	defer srv.Close()
 	c := &apiClient{t: t, srv: srv}
-	if st, body := c.req("POST", "/api/v1/auth/register", map[string]any{"email": "health@example.test", "password": "HealthStrong#2026!", "display_name": "Health"}); st != 201 {
+	if st, body := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), "email": "health@example.test", "password": "HealthStrong#2026!", "display_name": "Health"}); st != 201 {
 		t.Fatalf("register: %d %v", st, body)
 	}
 	_, session := c.req("POST", "/api/v1/auth/login", map[string]any{"email": "health@example.test", "password": "HealthStrong#2026!", "device_name": "health", "platform": "web"})

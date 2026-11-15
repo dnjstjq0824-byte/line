@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import lunoLogo from '../../../shared/brand/luno-logo-horizontal.svg'
 import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
 import LunoIcon from '../components/LunoIcon.vue'
@@ -6,6 +6,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SUPPORTED_LOCALES } from '../luno-i18n'
 import { ApiError, request, type LoginResult, type User } from '../../../shared/api'
+import { ageOnDate, todayUTC } from '../../../shared/legal'
 import { makeLoginQrSvg } from '../../../shared/login_qr'
 import {
   api,
@@ -29,6 +30,31 @@ const email = ref('')
 const password = ref('')
 const displayName = ref('')
 const registerMode = ref(false)
+
+// F24: terms consent + birthdate. Versions come from the server so the form
+// always submits exactly what the gates demand; the birthdate verifies age
+// and is never stored anywhere.
+const birthdate = ref('')
+const agreeTerms = ref(false)
+const agreePrivacy = ref(false)
+const legalVersions = ref({ terms: '', privacy: '' })
+const showConsentModal = ref(false)
+
+async function loadLegalVersions() {
+  try {
+    const v = await request<{ terms_version: string; privacy_version: string }>('/api/v1/legal', null, 'GET')
+    legalVersions.value = { terms: v.terms_version, privacy: v.privacy_version }
+  } catch {
+    legalVersions.value = { terms: '', privacy: '' }
+  }
+}
+function consentOf() {
+  return { terms: legalVersions.value.terms, privacy: legalVersions.value.privacy }
+}
+// Canonical Korean docs keep their short names; other locales are suffixed.
+function legalUrl(doc: string) {
+  return currentLocale.value === 'ko' ? `/legal/${doc}.html` : `/legal/${doc}.${currentLocale.value}.html`
+}
 
 const authMethod = ref<'email' | 'phone'>('email')
 // SMS provider contract required (commercialization P1): the phone form stays
@@ -152,42 +178,83 @@ async function verifyRecoverCode() {
 async function authAction() {
   await wrap(async () => {
     if (registerMode.value) {
-      const reg = await request<{ email_verified?: boolean }>('/api/v1/auth/register', null, 'POST', {
-        email: email.value.trim(),
-        password: password.value,
-        display_name: displayName.value.trim() || email.value.split('@')[0]
-      })
-      if (reg.email_verified === false) {
-        note.value = t('verifyNeededNote')
+      // Client pre-checks are UX only; the server re-verifies everything.
+      if (!agreeTerms.value || !agreePrivacy.value) throw new Error(t('consentRequiredErr'))
+      if (!birthdate.value) throw new Error(t('birthdateRequiredErr'))
+      const age = ageOnDate(birthdate.value, todayUTC())
+      if (age === null) throw new Error(t('birthdateRequiredErr'))
+      if (age < 14) throw new Error(t('underageErr'))
+      if (!legalVersions.value.terms) await loadLegalVersions()
+      try {
+        const reg = await request<{ email_verified?: boolean }>('/api/v1/auth/register', null, 'POST', {
+          email: email.value.trim(),
+          password: password.value,
+          display_name: displayName.value.trim() || email.value.split('@')[0],
+          birthdate: birthdate.value,
+          consent: consentOf()
+        })
+        if (reg.email_verified === false) {
+          note.value = t('verifyNeededNote')
+          registerMode.value = false
+          openVerifyModal(email.value.trim())
+          return
+        }
+        note.value = t('registerDoneNote')
         registerMode.value = false
-        openVerifyModal(email.value.trim())
+        birthdate.value = ''
+        agreeTerms.value = false
+        agreePrivacy.value = false
         return
+      } catch (e) {
+        if (e instanceof ApiError && e.code === 'CONSENT_REQUIRED') throw new Error(t('consentRequiredErr'))
+        if (e instanceof ApiError && e.code === 'BIRTHDATE_REQUIRED') throw new Error(t('birthdateRequiredErr'))
+        if (e instanceof ApiError && e.code === 'UNDERAGE') throw new Error(t('underageErr'))
+        throw e
       }
-      note.value = t('registerDoneNote')
-      registerMode.value = false
-      return
     }
     try {
-      const data = await request<LoginResult>('/api/v1/auth/login', null, 'POST', {
-        email: email.value.trim(),
-        password: password.value,
-        device_name: 'LUNO Web Desktop Client',
-        platform: 'web',
-        remember: autoLoginCheck.value
-      })
-      storeSession(data, autoLoginCheck.value)
-      currentUser.value = await api<User>('/api/v1/me')
-      if (data.recovered) note.value = t('accountRecoveredNote')
-      password.value = ''
-      await router.push('/chats')
+      await loginWithConsent()
     } catch (e) {
       if (e instanceof ApiError && e.code === 'EMAIL_NOT_VERIFIED') {
         note.value = t('verifyNeededNote')
         openVerifyModal(email.value.trim())
         return
       }
+      if (e instanceof ApiError && e.code === 'CONSENT_STALE') {
+        // F24: terms changed since this account consented. The modal collects
+        // fresh agreement, then the same credentials retry with consent.
+        agreeTerms.value = false
+        agreePrivacy.value = false
+        await loadLegalVersions()
+        showConsentModal.value = true
+        return
+      }
       throw e
     }
+  })
+}
+
+async function loginWithConsent(withConsent = false) {
+  const data = await request<LoginResult>('/api/v1/auth/login', null, 'POST', {
+    email: email.value.trim(),
+    password: password.value,
+    device_name: 'LUNO Web Desktop Client',
+    platform: 'web',
+    remember: autoLoginCheck.value,
+    ...(withConsent ? { consent: consentOf() } : {})
+  })
+  storeSession(data, autoLoginCheck.value)
+  currentUser.value = await api<User>('/api/v1/me')
+  if (data.recovered) note.value = t('accountRecoveredNote')
+  password.value = ''
+  showConsentModal.value = false
+  await router.push('/chats')
+}
+
+async function submitReconsent() {
+  await wrap(async () => {
+    if (!agreeTerms.value || !agreePrivacy.value) throw new Error(t('consentRequiredErr'))
+    await loginWithConsent(true)
   })
 }
 
@@ -351,7 +418,7 @@ async function quickDemoLogin(account: 'user' | 'alice') {
   })
 }
 
-onMounted(() => { void fetchAppVersion(); void startQrLoginChallenge() })
+onMounted(() => { void fetchAppVersion(); void startQrLoginChallenge(); void loadLegalVersions() })
 onBeforeUnmount(() => {
   if (qrPollInterval) clearInterval(qrPollInterval)
   if (qrCountdownInterval) clearInterval(qrCountdownInterval)
@@ -427,6 +494,24 @@ onBeforeUnmount(() => {
                   required
                   class="pc-login-input"
                 />
+              </div>
+              <div v-if="registerMode" class="pc-input-row">
+                <label class="pc-custom-check" style="width:100%">
+                  <span>{{ t('birthdateLabel') }}</span>
+                  <input v-model="birthdate" type="date" class="pc-login-input" required style="margin-left:8px" />
+                </label>
+              </div>
+              <div v-if="registerMode" class="pc-login-options-row" style="flex-direction:column;align-items:stretch;gap:4px">
+                <label class="pc-custom-check">
+                  <input type="checkbox" v-model="agreeTerms" />
+                  <span>{{ t('consentTerms') }}</span>
+                  <a :href="legalUrl('terms')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewTerms') }}</a>
+                </label>
+                <label class="pc-custom-check">
+                  <input type="checkbox" v-model="agreePrivacy" />
+                  <span>{{ t('consentPrivacy') }}</span>
+                  <a :href="legalUrl('privacy')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewPrivacy') }}</a>
+                </label>
               </div>
               <div class="pc-input-row password-wrap">
                 <input
@@ -630,6 +715,31 @@ onBeforeUnmount(() => {
               {{ t('verifySubmit') }}
             </button>
             <button class="btn-secondary" type="button" @click="resendVerifyCode">{{ t('verifyResend') }}</button>
+          </div>
+        </div>
+      </div>
+      <div v-if="showConsentModal" class="modal-backdrop" @click.self="showConsentModal = false">
+        <div class="standard-modal-box" role="dialog" :aria-label="t('consentStaleTitle')">
+          <div class="modal-header">
+            <h3>{{ t('consentStaleTitle') }}</h3>
+            <button class="btn-modal-close" @click="showConsentModal = false">✕</button>
+          </div>
+          <div class="modal-body-form">
+            <p class="ln-charge-notice" role="note">{{ t('consentStaleNote') }}</p>
+            <label class="pc-custom-check">
+              <input type="checkbox" v-model="agreeTerms" />
+              <span>{{ t('consentTerms') }}</span>
+              <a :href="legalUrl('terms')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewTerms') }}</a>
+            </label>
+            <label class="pc-custom-check">
+              <input type="checkbox" v-model="agreePrivacy" />
+              <span>{{ t('consentPrivacy') }}</span>
+              <a :href="legalUrl('privacy')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewPrivacy') }}</a>
+            </label>
+            <button class="btn-pc-submit-full" type="button" :disabled="!agreeTerms || !agreePrivacy" @click="submitReconsent">
+              {{ t('signInBtn') }}
+            </button>
+            <button class="btn-secondary" type="button" @click="showConsentModal = false">{{ t('mvRecoverCancel') }}</button>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // Item 2: the outgoing call screen must appear even when the mic/camera is
 // unavailable. startCall raises the ringing UI first and treats media as
@@ -53,7 +54,7 @@ test('worker starts a call session without any SDP (signaling needs no media)', 
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), env);
   const register = async (email) => {
-    const reg = await call('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
+    const reg = await call('auth/register', null, 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
     assert.equal(reg.status, 201);
     const id = (await reg.json()).id;
     const token = (await (await call('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' })).json()).access_token;

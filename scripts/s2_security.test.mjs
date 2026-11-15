@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // S2 security pins: CORS allowlist, admin-only real metrics. Grows with the
 // S2 batch (demo removal, plaintext fallback, kinds, blocks, delete, wallet).
@@ -77,7 +78,7 @@ test('preflight gates methods on the allowlist', async () => {
 test('metrics requires admin and reports real D1 counts', async () => {
   const anon = await workerDb.fetch(new Request('http://localhost/metrics'), { ALLOW_LOCAL_DEMO: 'true', ADMIN_INITIAL_PASSWORD: 'S2#Admin2026!' });
   assert.equal(anon.status, 401);
-  const reg = await callDb('auth/register', { method: 'POST', body: { email: 's2m@example.test', password: 'S2#Metr2026', display_name: 'S2 M' } });
+  const reg = await callDb('auth/register', { method: 'POST', body: { ...F24_CONSENT, email: 's2m@example.test', password: 'S2#Metr2026', display_name: 'S2 M' } });
   assert.equal(reg.status, 201);
   const login = await callDb('auth/login', { method: 'POST', body: { email: 's2m@example.test', password: 'S2#Metr2026' } });
   const userTok = (await login.json()).access_token;

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 process.env.ADMIN_INITIAL_PASSWORD = 'Track4#Admin1';
 process.env.DEMO_MODE = 'true'; // U1: this track asserts the demo world
@@ -26,7 +27,7 @@ async function api(path, token, method = 'GET', body = null) {
 
 test('Track 4: Official Account Rich Menu & Chatbot CRM engine', async () => {
   // 1. Register + login user
-  const regRes = await api('/api/v1/auth/register', null, 'POST', {
+  const regRes = await api('/api/v1/auth/register', null, 'POST', { ...F24_CONSENT, 
     email: 'track4-user@luno-test.local', password: 'Str0ng!Passw0rd',
     display_name: 'track4user', handle: 'track4user',
   });

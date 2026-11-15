@@ -17,7 +17,7 @@ func TestRefreshExpiryRevocationAndSingleUse(t *testing.T) {
 	srv := httptest.NewServer(app.Handler())
 	defer srv.Close()
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"email": "refresh@example.test", "password": "RefreshStrong#2026!", "display_name": "Refresh"}); st != 201 {
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), "email": "refresh@example.test", "password": "RefreshStrong#2026!", "display_name": "Refresh"}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)
 	}
 	login := func() map[string]any {

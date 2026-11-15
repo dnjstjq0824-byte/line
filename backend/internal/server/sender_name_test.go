@@ -21,7 +21,7 @@ func TestGroupMessagesCarrySenderName(t *testing.T) {
 
 	login := func(email, password, name, handle string) *apiClient {
 		c := &apiClient{t: t, srv: srv}
-		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 			"email": email, "password": password, "display_name": name, "handle": handle,
 		}); st != 201 {
 			t.Fatalf("register %s: %d %v", email, st, out)

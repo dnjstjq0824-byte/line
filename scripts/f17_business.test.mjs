@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 let f17Serial = 0;
 async function f17Isolate(db, extraEnv = {}) {
@@ -24,7 +24,7 @@ async function f17Isolate(db, extraEnv = {}) {
 const PW = 'Str0ng!Passw0rd';
 
 async function registerLogin(api, email) {
-  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(reg.status, 201);
   const s = await api('auth/login', 'POST', { email, password: PW });
   assert.equal(s.status, 200);
@@ -164,7 +164,7 @@ test('F17: memory mode keeps working, webhooks stay 503', async () => {
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: body === null ? undefined : JSON.stringify(body),
     }), {});
-  const reg = await api('auth/register', 'POST', { email: 'f17-m@luno-test.local', password: PW, display_name: 'm' });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f17-m@luno-test.local', password: PW, display_name: 'm' });
   assert.equal(reg.status, 201);
   const s = await (await api('auth/login', 'POST', { email: 'f17-m@luno-test.local', password: PW })).json();
   const t = s.access_token;

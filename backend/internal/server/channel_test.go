@@ -20,7 +20,7 @@ func TestChannelSlotServesActiveNotice(t *testing.T) {
 	defer func() { srv.Close(); app.Close() }()
 
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": "alice-channel@example.test", "password": "AliceChannel#2026!", "display_name": "Alice Channel",
 	}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)

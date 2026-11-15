@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // Mobile P1-14: PC/web login QR is a real scannable matrix. Payload format
 // LUNO-LOGIN:<challenge_id>:<qr_token> mirrors POST auth/qr/challenge; the
@@ -56,7 +57,7 @@ test('challenge payload approves and polls to authenticated', async () => {
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), env);
-  const reg = await call('auth/register', null, 'POST', { email: 'qr-l@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'QRL' });
+  const reg = await call('auth/register', null, 'POST', { ...F24_CONSENT, email: 'qr-l@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'QRL' });
   assert.equal(reg.status, 201);
   const token = (await (await call('auth/login', null, 'POST', { email: 'qr-l@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
   const ch = await (await call('auth/qr/challenge', null, 'POST', {})).json();

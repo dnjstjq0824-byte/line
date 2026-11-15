@@ -107,7 +107,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	// E2E Scenario 1: Android 앱에서 회원가입 및 로그인한다.
 	// -------------------------------------------------------------------------
 	androidA := &apiClient{t: t, srv: srv}
-	st, regA := androidA.req("POST", "/api/v1/auth/register", map[string]any{
+	st, regA := androidA.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email":        "alice@luno-test.local",
 		"password":     "AliceStrongPass#2026",
 		"display_name": "Alice Kim",
@@ -192,7 +192,7 @@ func TestFullMessenger12CriticalE2EScenariosAndAllDomains(t *testing.T) {
 	// E2E Scenario 3: 다른 사용자(iOS)를 가입시키고 친구로 추가한다.
 	// -------------------------------------------------------------------------
 	iosB := &apiClient{t: t, srv: srv}
-	st, regB := iosB.req("POST", "/api/v1/auth/register", map[string]any{
+	st, regB := iosB.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email":        "bob@luno-test.local",
 		"password":     "BobStrongPass#2026",
 		"display_name": "Bob Lee",

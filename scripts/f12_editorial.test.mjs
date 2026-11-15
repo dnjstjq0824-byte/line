@@ -4,7 +4,7 @@
 // seed rows (U1: nothing pre-inserted on a fresh database).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeD1, makeBucket } from './test_helpers.mjs';
+import { makeD1, makeBucket , F24_CONSENT } from './test_helpers.mjs';
 
 let f12Serial = 0;
 async function f12Isolate(db, bucket, extraEnv = {}) {
@@ -22,7 +22,7 @@ async function f12Isolate(db, bucket, extraEnv = {}) {
 const PW = 'Str0ng!Passw0rd';
 
 async function registerLogin(api, email) {
-  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(reg.status, 201);
   const s = await api('auth/login', 'POST', { email, password: PW });
   assert.equal(s.status, 200);

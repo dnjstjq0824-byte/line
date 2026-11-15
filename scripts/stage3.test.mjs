@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 
@@ -21,7 +21,7 @@ async function stage3Isolate(db, extraEnv = {}) {
 }
 
 async function registerLogin(api, email, password = 'Str0ng!Passw0rd') {
-  const reg = await api('auth/register', 'POST', { email, password, display_name: email.split('@')[0] });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: email.split('@')[0] });
   assert.equal(reg.status, 201, `register ${email}`);
   const id = (await reg.json()).id;
   const login = await api('auth/login', 'POST', { email, password });
@@ -67,9 +67,9 @@ test('U1: DEMO_USER_IDS enables demo per user id, not email', async () => {
   const db = makeD1();
   try {
     const plain = await stage3Isolate(db);
-    const regA = await plain.api('auth/register', 'POST', { email: 'u1-pick@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'pick' });
+    const regA = await plain.api('auth/register', 'POST', { ...F24_CONSENT, email: 'u1-pick@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'pick' });
     const idA = (await regA.json()).id;
-    await plain.api('auth/register', 'POST', { email: 'u1-other@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'other' });
+    await plain.api('auth/register', 'POST', { ...F24_CONSENT, email: 'u1-other@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'other' });
     const { api } = await stage3Isolate(db, { DEMO_USER_IDS: ` ${idA} ,` });
     const loginA = await (await api('auth/login', 'POST', { email: 'u1-pick@luno-test.local', password: 'Str0ng!Passw0rd' })).json();
     const friendsA = await (await api('friends', 'GET', null, loginA.access_token)).json();
@@ -163,7 +163,7 @@ test('A1: ADMIN_USER_IDS grants admin by user id', async () => {
   const db = makeD1();
   try {
     const plain = await stage3Isolate(db);
-    const reg = await plain.api('auth/register', 'POST', { email: 'a1-admin@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'admin' });
+    const reg = await plain.api('auth/register', 'POST', { ...F24_CONSENT, email: 'a1-admin@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'admin' });
     const id = (await reg.json()).id;
     const { api } = await stage3Isolate(db, { ADMIN_USER_IDS: ` ${id} ,` });
     const login = await (await api('auth/login', 'POST', { email: 'a1-admin@luno-test.local', password: 'Str0ng!Passw0rd' })).json();
@@ -176,7 +176,7 @@ test('A1: unlisted ids stay non-admin; emails grant nothing', async () => {
   const db = makeD1();
   try {
     const plain = await stage3Isolate(db);
-    await plain.api('auth/register', 'POST', { email: 'a1-user@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'user' });
+    await plain.api('auth/register', 'POST', { ...F24_CONSENT, email: 'a1-user@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'user' });
     const attempt = async (extraEnv) => {
       const { api } = await stage3Isolate(db, extraEnv);
       const login = await (await api('auth/login', 'POST', { email: 'a1-user@luno-test.local', password: 'Str0ng!Passw0rd' })).json();

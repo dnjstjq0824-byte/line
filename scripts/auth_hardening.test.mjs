@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { makeBucket } from './test_helpers.mjs';
+import { makeBucket , F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 
@@ -55,7 +55,7 @@ async function isolate(database) {
   return { api, db, bucket: env.MEDIA_BUCKET };
 }
 async function signup(api, email, handle, password = 'Hard3n#Passw0rd') {
-  const reg = await api('auth/register', 'POST', { email, password, display_name: handle, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const login = await api('auth/login', 'POST', { email, password });
   assert.equal(login.status, 200, `login ${email}`);
@@ -77,7 +77,9 @@ test('B1: register hashes at PBKDF2-100k (workerd cap); 1k rows verify without r
   const hash = Buffer.from(bits).toString('hex');
   db.raw.prepare('INSERT INTO users (id, email, password_hash, display_name) VALUES (?, ?, ?, ?)').run('b1-old1k', 'b1-old1k@local.test', `pbkdf2$1000$${salt}$${hash}`, 'Old');
   const cold = await isolate(db);
-  const login = await cold.api('auth/login', 'POST', { email: 'b1-old1k@local.test', password: 'Old1k#Pass' });
+  // Pre-F24 row: completes terms re-consent inline at login (goes to
+  // luno_consents, never rewrites the legacy digest under test).
+  const login = await cold.api('auth/login', 'POST', { email: 'b1-old1k@local.test', password: 'Old1k#Pass', consent: F24_CONSENT.consent });
   assert.equal(login.status, 200, '1k digest still verifies');
   const kept = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get('b1-old1k@local.test');
   assert.equal(kept.password_hash, `pbkdf2$1000$${salt}$${hash}`, '1k row untouched by login (S4: upgrade path removed)');

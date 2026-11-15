@@ -44,6 +44,7 @@ const CACHE = new Set([
   'wallets', 'ownedPacks', 'ownedThemes', 'userPrefs',
   'pushTokens', 'deviceKeys', 'userKeys',
   'partnerCoupons', // F17: D1 write-through coupon cache (luno_partner_coupons)
+  'userConsents', // F24: D1 write-through consent cache (luno_consents; seeds are memory bootstrap like seed users)
 ]);
 const UNBACKED = new Set([
   'passkeyCreds', 'storeOrders',

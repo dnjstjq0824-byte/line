@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { generateKeyPairSync, createSign, createHash, randomBytes } from 'node:crypto';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -15,7 +16,7 @@ async function api(path, token, method = 'GET', body) {
 }
 
 async function login(email, password) {
-  await api('auth/register', null, 'POST', { email, password, display_name: email.split('@')[0] });
+  await api('auth/register', null, 'POST', { ...F24_CONSENT, email, password, display_name: email.split('@')[0] });
   return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
 }
 

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 // Item 12 (profile): cover photo roundtrips like avatars, and the ID-search
 // toggle persists in D1 so it (and the friend-search gate honoring it)
@@ -30,7 +30,7 @@ async function d1Api(db) {
 }
 
 async function register(api, email, handle) {
-  const reg = await api('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: handle, handle });
+  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name: handle, handle });
   assert.equal(reg.status, 201);
   return (await reg.json()).id;
 }
@@ -91,7 +91,7 @@ test('friend search honors the persisted ID toggle cross-isolate', async () => {
     const first = await d1Api(db);
     await register(first, 'pf-s1@luno-test.local', 'pf_s1');
     // Display name deliberately excludes the handle so only the ID gate can match.
-    const reg2 = await first('auth/register', null, 'POST', { email: 'pf-s2@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'Second User', handle: 'pf_s2' });
+    const reg2 = await first('auth/register', null, 'POST', { ...F24_CONSENT, email: 'pf-s2@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'Second User', handle: 'pf_s2' });
     assert.equal(reg2.status, 201);
     const t1 = await login(first, 'pf-s1@luno-test.local');
     const t2 = await login(first, 'pf-s2@luno-test.local');

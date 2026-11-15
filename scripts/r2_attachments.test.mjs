@@ -2,7 +2,7 @@
 // Base64 intake stays (client compat) but no new b64 is written to D1.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeBucket, makeD1 } from './test_helpers.mjs';
+import { makeBucket, makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 
@@ -21,7 +21,7 @@ async function isolate(extraEnv = {}) {
   return { api, db, bucket };
 }
 async function signup(api, email, handle) {
-  const reg = await api('auth/register', 'POST', { email, password: 'R2#Testpass9', display_name: handle, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: 'R2#Testpass9', display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const login = await api('auth/login', 'POST', { email, password: 'R2#Testpass9' });
   assert.equal(login.status, 200, `login ${email}`);

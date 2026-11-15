@@ -78,7 +78,7 @@ func TestPostgreSQLMessagePersistence(t *testing.T) {
 	const password = "PgStrongPass#2026!"
 
 	client := &apiClient{t: t, srv: srv}
-	if st, out := client.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := client.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": email, "password": password, "display_name": "pg persist",
 	}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)

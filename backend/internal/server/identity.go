@@ -15,12 +15,14 @@ import (
 
 func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Email       string `json:"email"`
-		Password    string `json:"password"`
-		DisplayName string `json:"display_name"`
-		PhoneE164   string `json:"phone_e164"`
-		Handle      string `json:"handle"`
-		Locale      string `json:"locale"`
+		Email       string        `json:"email"`
+		Password    string        `json:"password"`
+		DisplayName string        `json:"display_name"`
+		PhoneE164   string        `json:"phone_e164"`
+		Handle      string        `json:"handle"`
+		Locale      string        `json:"locale"`
+		Birthdate   string        `json:"birthdate"`
+		Consent     *consentOffer `json:"consent"`
 	}
 	if e := decode(r, &input); e != nil {
 		fail(w, 400, "invalid request")
@@ -35,6 +37,22 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	}
 	if !strings.Contains(input.Email, "@") || len(input.Email) > 254 || len(input.DisplayName) < 1 || len(input.DisplayName) > 120 {
 		fail(w, 400, "invalid email or name")
+		return
+	}
+	// F24: current-version consent and a 14+ birthdate are mandatory,
+	// checked after the field validations so malformed requests keep their
+	// original errors. The birthdate verifies age and is never stored.
+	if !consentOfferedValid(input.Consent) {
+		send(w, 400, map[string]any{"error": "terms and privacy consent required", "code": "CONSENT_REQUIRED", "current": consentCurrent()})
+		return
+	}
+	age := ageOnDate(input.Birthdate, time.Now().UTC().Format("2006-01-02"))
+	if age < 0 {
+		send(w, 400, map[string]any{"error": "birthdate required (YYYY-MM-DD)", "code": "BIRTHDATE_REQUIRED"})
+		return
+	}
+	if age < 14 {
+		send(w, 403, map[string]any{"error": "you must be at least 14 years old to sign up", "code": "UNDERAGE"})
 		return
 	}
 	hash, e := auth.HashPassword(input.Password)
@@ -62,15 +80,20 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = a.db.ExecContext(r.Context(), "INSERT INTO identity.user_settings(user_id) VALUES ($1) ON CONFLICT DO NOTHING", id)
+	if err := a.saveConsent(r.Context(), id, consentRecord{Terms: legalTermsVersion, Privacy: legalPrivacyVersion, Age14: sql.NullBool{Bool: true, Valid: true}}); err != nil {
+		fail(w, 500, "registration failed")
+		return
+	}
 	send(w, 201, map[string]string{"id": id, "status": "created"})
 }
 
 func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Email      string `json:"email"`
-		Password   string `json:"password"`
-		DeviceName string `json:"device_name"`
-		Platform   string `json:"platform"`
+		Email      string        `json:"email"`
+		Password   string        `json:"password"`
+		DeviceName string        `json:"device_name"`
+		Platform   string        `json:"platform"`
+		Consent    *consentOffer `json:"consent"`
 	}
 	if decode(r, &input) != nil {
 		fail(w, 400, "invalid request")
@@ -82,6 +105,23 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	if e != nil || state != "active" || !auth.CheckPassword(input.Password, hash) {
 		fail(w, 401, "invalid credentials")
 		return
+	}
+	// F24: a version bump re-gates login; fresh consent rides the same
+	// request. Grandfathered rows keep age14 unknown.
+	prior, err := a.loadConsent(r.Context(), id)
+	if err != nil || prior.Terms != legalTermsVersion || prior.Privacy != legalPrivacyVersion {
+		if !consentOfferedValid(input.Consent) {
+			send(w, 403, map[string]any{"error": "updated terms consent required", "code": "CONSENT_STALE", "current": consentCurrent()})
+			return
+		}
+		age14 := sql.NullBool{}
+		if err == nil {
+			age14 = prior.Age14
+		}
+		if err := a.saveConsent(r.Context(), id, consentRecord{Terms: legalTermsVersion, Privacy: legalPrivacyVersion, Age14: age14}); err != nil {
+			fail(w, 500, "consent unavailable")
+			return
+		}
 	}
 	if input.DeviceName == "" {
 		input.DeviceName = "Primary Client"

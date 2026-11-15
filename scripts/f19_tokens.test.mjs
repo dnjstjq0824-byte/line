@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -28,7 +28,7 @@ async function f19Isolate(db, extraEnv = {}) {
 const PW = 'Str0ng!Passw0rd';
 
 async function registerLogin(api, email, extra = {}) {
-  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(reg.status, 201);
   const s = await api('auth/login', 'POST', { email, password: PW, ...extra });
   assert.equal(s.status, 200);
@@ -104,7 +104,7 @@ test('F19: served HTML carries CSP, frame-ancestors and referrer policy', async 
     assert.ok((res.headers.get('strict-transport-security') || '').includes('max-age'), 'HSTS kept');
     // API payloads keep the strict policy.
     const { api } = await f19Isolate(db);
-    await api('auth/register', 'POST', { email: 'f19-e@luno-test.local', password: PW, display_name: 'e' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f19-e@luno-test.local', password: PW, display_name: 'e' });
     const me = await api('me', 'GET', null, (await (await api('auth/login', 'POST', { email: 'f19-e@luno-test.local', password: PW })).json()).access_token);
     assert.equal(me.headers.get('content-security-policy'), "default-src 'none'; frame-ancestors 'none'");
   } finally { db.raw.close(); }

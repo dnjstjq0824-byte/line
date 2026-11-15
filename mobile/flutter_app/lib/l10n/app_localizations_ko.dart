@@ -469,6 +469,36 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authCreateNew => '새 LUNO 계정 만들기';
 
   @override
+  String get consentTerms => '이용약관에 동의합니다 (필수)';
+
+  @override
+  String get consentPrivacy => '개인정보 처리방침에 동의합니다 (필수)';
+
+  @override
+  String get consentViewTerms => '약관 보기';
+
+  @override
+  String get consentViewPrivacy => '방침 보기';
+
+  @override
+  String get birthdateLabel => '생년월일 (YYYY-MM-DD)';
+
+  @override
+  String get birthdateRequiredErr => '생년월일을 입력해 주세요.';
+
+  @override
+  String get underageErr => '만 14세 이상만 가입할 수 있습니다.';
+
+  @override
+  String get consentRequiredErr => '이용약관과 개인정보 처리방침에 모두 동의해 주세요.';
+
+  @override
+  String get consentStaleTitle => '약관이 변경되었습니다';
+
+  @override
+  String get consentStaleNote => '변경된 약관에 다시 동의해야 로그인할 수 있습니다.';
+
+  @override
   String get callsEmpty => '통화 기록이 없습니다';
 
   @override

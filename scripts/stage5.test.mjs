@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeBucket, makeD1 } from './test_helpers.mjs';
+import { makeBucket, makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 
@@ -20,7 +20,7 @@ async function stage5Isolate(db, extraEnv = {}) {
 }
 
 async function registerLogin(api, email, handle, password = 'Str0ng!Passw0rd') {
-  const reg = await api('auth/register', 'POST', { email, password, display_name: handle, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const id = (await reg.json()).id;
   const login = await api('auth/login', 'POST', { email, password });
@@ -253,7 +253,7 @@ test('H4: cross-isolate add ignores display names', async () => {
 });
 
 async function registerAs(api, email, handle, displayName, password = 'Str0ng!Passw0rd') {
-  const reg = await api('auth/register', 'POST', { email, password, display_name: displayName, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: displayName, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   const id = (await reg.json()).id;
   const login = await api('auth/login', 'POST', { email, password });

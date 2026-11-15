@@ -21,7 +21,7 @@ func TestPollsParityAndAuthorization(t *testing.T) {
 
 	login := func(email, password string) *apiClient {
 		c := &apiClient{t: t, srv: srv}
-		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"email": email, "password": password, "display_name": email}); st != 201 {
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), "email": email, "password": password, "display_name": email}); st != 201 {
 			t.Fatalf("register: %d %v", st, out)
 		}
 		status, result := c.req("POST", "/api/v1/auth/login", map[string]any{"email": email, "password": password, "platform": "web", "device_name": "test"})
@@ -231,7 +231,7 @@ func TestReactionsParityAndAuthorization(t *testing.T) {
 
 	login := func(email, password string) *apiClient {
 		c := &apiClient{t: t, srv: srv}
-		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"email": email, "password": password, "display_name": email}); st != 201 {
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), "email": email, "password": password, "display_name": email}); st != 201 {
 			t.Fatalf("register: %d %v", st, out)
 		}
 		status, result := c.req("POST", "/api/v1/auth/login", map[string]any{"email": email, "password": password, "platform": "web", "device_name": "test"})

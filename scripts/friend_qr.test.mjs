@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // Item 8: "my QR" is a real scannable matrix, not a scan icon. The payload
 // mirrors GET me/qr (LUNO-FRIEND:<handle>); the finder-pattern test below
@@ -52,7 +53,7 @@ test('worker me/qr returns the code format the client mirrors', async () => {
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), env);
-  const reg = await call('auth/register', null, 'POST', { email: 'qr-u@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'QR', handle: 'qr_user' });
+  const reg = await call('auth/register', null, 'POST', { ...F24_CONSENT, email: 'qr-u@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'QR', handle: 'qr_user' });
   assert.equal(reg.status, 201);
   const token = (await (await call('auth/login', null, 'POST', { email: 'qr-u@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
   const mine = await (await call('me/qr', token)).json();

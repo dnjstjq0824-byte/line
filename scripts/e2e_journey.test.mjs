@@ -8,6 +8,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 let goAvailable = true;
 try {
@@ -58,7 +59,7 @@ test('E2E: full messenger journey on the Go backend', { skip: !goAvailable }, as
     // 1. register + login two users
     const pw = 'E2eJourney#2026!';
     for (const [email, name] of [['e2e-a@local.test', 'E2E A'], ['e2e-b@local.test', 'E2E B']]) {
-      const reg = await api('/api/v1/auth/register', 'POST', { email, password: pw, display_name: name });
+      const reg = await api('/api/v1/auth/register', 'POST', { ...F24_CONSENT, email, password: pw, display_name: name });
       assert.equal(reg.status, 201, `register ${email}`);
     }
     const la = await api('/api/v1/auth/login', 'POST', { email: 'e2e-a@local.test', password: pw });

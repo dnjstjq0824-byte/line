@@ -3,7 +3,7 @@
 // still serve. Name/status/color/QR survive a cold isolate.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeD1, makeBucket } from './test_helpers.mjs';
+import { makeD1, makeBucket , F24_CONSENT } from './test_helpers.mjs';
 
 let f5Serial = 0;
 async function f5Isolate(db, bucket, extraEnv = {}) {
@@ -23,7 +23,7 @@ const PNG_MAGIC = [137, 80, 78, 71, 13, 10, 26, 10];
 const pngDataUrl = (...tail) => `data:image/png;base64,${Buffer.from([...PNG_MAGIC, ...tail]).toString('base64')}`;
 
 async function register(api, email) {
-  const res = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const res = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(res.status, 201);
   return res.json();
 }

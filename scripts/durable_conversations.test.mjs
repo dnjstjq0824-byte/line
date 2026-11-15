@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 let serial = 0;
 function database() {
   const raw = new DatabaseSync(':memory:');
@@ -24,7 +25,7 @@ async function isolate(db) {
   return async (path, token, method = 'GET', body) => worker.fetch(new Request('http://localhost/api/v1/' + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }), { ALLOW_LOCAL_DEMO: 'true', DB: db, DURABLE_CONVERSATIONS: 'true', DURABLE_BUSINESS: 'true' });
 }
 async function account(api, index) {
-  const body = { email: `durable-${serial}-${index}@example.test`, password: 'Durable#Audit2026', display_name: `Durable ${index}` };
+  const body = { ...F24_CONSENT, email: `durable-${serial}-${index}@example.test`, password: 'Durable#Audit2026', display_name: `Durable ${index}` };
   const registration = await api('auth/register', null, 'POST', body); assert.equal(registration.status, 201);
   const user = await registration.json();
   const login = await api('auth/login', null, 'POST', body); assert.equal(login.status, 200);

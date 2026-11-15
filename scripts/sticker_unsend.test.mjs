@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // Item 3: sticker unsend must visibly remove the sticker. The worker already
 // clears body+metadata kind-agnostically; the web client must mirror that
@@ -45,7 +46,7 @@ test('worker sticker unsend clears art payload and persists the recall', async (
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), env);
   const register = async (email) => {
-    const reg = await call('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
+    const reg = await call('auth/register', null, 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
     assert.equal(reg.status, 201);
     const id = (await reg.json()).id;
     const token = (await (await call('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' })).json()).access_token;

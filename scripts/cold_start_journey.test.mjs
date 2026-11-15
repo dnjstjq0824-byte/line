@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 const ADMIN_PW = 'Cold#Admin99';
@@ -58,7 +59,7 @@ async function step() {
 const PW = 'J0urney#Passw0rd';
 async function signup(email, handle) {
   const api = await step();
-  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: handle, handle });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: handle, handle });
   assert.equal(reg.status, 201, `register ${email}`);
   return (await reg.json()).id;
 }

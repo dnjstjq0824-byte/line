@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 // Item 9: read state sticks, and row times never masquerade as "future".
 // The 'N' badge derives from the persisted read cursor (a read room never
@@ -66,7 +66,7 @@ test('N badge derives from unread: read-all clears it for good', async () => {
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), env);
-  const reg = await call('auth/register', null, 'POST', { email: 'rn-u@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'RN', handle: 'rn_user' });
+  const reg = await call('auth/register', null, 'POST', { ...F24_CONSENT, email: 'rn-u@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'RN', handle: 'rn_user' });
   assert.equal(reg.status, 201);
   const token = (await (await call('auth/login', null, 'POST', { email: 'rn-u@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
   const dodo = async () => (await (await call('conversations', token)).json()).conversations.find((c) => c.id.startsWith('conv-dodo-'));
@@ -93,7 +93,7 @@ test('cleared N stays cleared on a fresh isolate (D1 cursors)', async () => {
       }), env);
     };
     const first = await apiFor();
-    assert.equal((await first('auth/register', null, 'POST', { email: 'rn-d1@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'RN', handle: 'rn_d1' })).status, 201);
+    assert.equal((await first('auth/register', null, 'POST', { ...F24_CONSENT, email: 'rn-d1@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'RN', handle: 'rn_d1' })).status, 201);
     const token = (await (await first('auth/login', null, 'POST', { email: 'rn-d1@luno-test.local', password: 'Str0ng!Passw0rd' })).json()).access_token;
     const dodoOn = async (api) => (await (await api('conversations', token)).json()).conversations.find((c) => c.id.startsWith('conv-dodo-'));
     assert.equal((await dodoOn(first)).badge_n, true);

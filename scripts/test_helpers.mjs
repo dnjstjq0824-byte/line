@@ -3,6 +3,14 @@
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
+// F24: legal consent preset spread into every test signup body. Versions MUST
+// track LEGAL_VERSIONS in cf_worker.js; scripts/f24_consent.test.mjs fails on
+// drift, so a version bump breaks loudly instead of silently.
+export const F24_CONSENT = {
+  birthdate: '1990-01-01',
+  consent: { terms: '2026-11-15.1', privacy: '2026-11-15.1' },
+};
+
 export function makeD1() {
   const raw = new DatabaseSync(':memory:');
   raw.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, password_hash TEXT, display_name TEXT, bio TEXT, status_message TEXT, created_at TEXT, updated_at TEXT);

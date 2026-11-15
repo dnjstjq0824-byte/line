@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { makeBucket, makeD1 } from './test_helpers.mjs'
+import { makeBucket, makeD1 , F24_CONSENT } from './test_helpers.mjs'
 
 // Mobile P1 (2026-11-10): server shapes the new archive/album/lounge/
 // profile/friend/file/QR features rely on. All green at pinning time;
@@ -22,8 +22,8 @@ async function api(path, token, method = 'GET', body, env = { ALLOW_LOCAL_DEMO: 
 }
 
 const PW = 'T3st#Migrated2026'
-await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
-await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
 const login = await api('auth/login', null, 'POST', { email: 'user@luno.local', password: PW })
 const token = login.data.access_token
 assert.ok(token, 'demo login works')
@@ -70,7 +70,7 @@ test('community rooms: create join posts like leave', async () => {
     try { data = await res.json() } catch { data = null }
     return { status: res.status, data }
   }
-  await call('auth/register', null, 'POST', { email: 'probe@luno-test.local', password: PW, display_name: 'Prober' })
+  await call('auth/register', null, 'POST', { ...F24_CONSENT, email: 'probe@luno-test.local', password: PW, display_name: 'Prober' })
   const me = (await call('auth/login', null, 'POST', { email: 'probe@luno-test.local', password: PW })).data.access_token
   const room = await call('community/rooms', me, 'POST', { name: 'probe room', description: 'd' })
   assert.equal(room.status, 201)
@@ -115,8 +115,8 @@ test('friend block toggles and qr approve roundtrips', async () => {
 
 test('file attachments roundtrip and cap size', async () => {
   const env = { DB: makeD1(), DURABLE_CONVERSATIONS: 'true', MEDIA_BUCKET: makeBucket() }
-  await api('auth/register', null, 'POST', { email: 'file-a@luno-test.local', password: PW, display_name: 'File A', handle: 'file_a' }, env)
-  await api('auth/register', null, 'POST', { email: 'file-b@luno-test.local', password: PW, display_name: 'File B', handle: 'file_b' }, env)
+  await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'file-a@luno-test.local', password: PW, display_name: 'File A', handle: 'file_a' }, env)
+  await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'file-b@luno-test.local', password: PW, display_name: 'File B', handle: 'file_b' }, env)
   const ltk = (await api('auth/login', null, 'POST', { email: 'file-a@luno-test.local', password: PW }, env)).data.access_token
   const peer = (await api('auth/login', null, 'POST', { email: 'file-b@luno-test.local', password: PW }, env)).data
   const room = (await api('conversations', ltk, 'POST', { kind: 'group', member_ids: [peer.user_id], title: 'file room' }, env)).data

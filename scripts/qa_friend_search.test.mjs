@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // QA-P0-3: the Add Friend UI promises ID-or-email search, so existing demo
 // users must be found by handle and opted-in email. Since H4, exact display
@@ -27,8 +28,8 @@ async function login(email, password) {
 }
 
 const PW = 'T3st#Migrated2026'
-await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
-await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
 const me = await login('user@luno.local', PW)
 assert.ok(me.access_token, 'demo login works')
 await api('friends', me.access_token, 'POST', { handle: 'alice_kim' })
@@ -56,7 +57,7 @@ test('add-friend rejects partial names (no wrong-person add)', async () => {
 })
 
 test('email lookup honors searchable_by_email for ordinary users', async () => {
-  const reg = await api('auth/register', null, 'POST', { email: 'carol-qa@example.test', password: 'Carol#Qa2026!', display_name: 'Carol QA' })
+  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'carol-qa@example.test', password: 'Carol#Qa2026!', display_name: 'Carol QA' })
   assert.equal(reg.status, 201)
   const byEmail = await api('friends', me.access_token, 'POST', { handle: 'carol-qa@example.test' })
   assert.equal(byEmail.status, 404)

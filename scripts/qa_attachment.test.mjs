@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // QA-P0-4: attachment + drawer + collapse + favorite controls must each show a
 // visible effect. Live click evidence (2026-11-10, Chromium 1920px, demo user):
@@ -27,8 +28,8 @@ async function api(path, token, method = 'GET', body) {
 }
 
 const PW = 'T3st#Migrated2026'
-await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
-await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
 const me = (await api('auth/login', null, 'POST', { email: 'user@luno.local', password: PW })).data || {}
 assert.ok(me.access_token, 'demo login works')
 await api('friends', me.access_token, 'POST', { handle: 'alice_kim' })

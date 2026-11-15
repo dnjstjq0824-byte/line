@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 // Item 7: password recovery actually works (Go parity). S1 contract: the
 // single-use code is NEVER in the HTTP response. Without a configured mail
@@ -42,7 +42,7 @@ function mockCode(outbox, email) {
 }
 
 async function register(api, email) {
-  const reg = await api('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
+  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name: email, handle: email.split('@')[0].replace(/[^a-z0-9_.]/g, '_') });
   assert.equal(reg.status, 201);
   return (await reg.json()).id;
 }

@@ -1,11 +1,13 @@
-// Route: /login — harbour gate. One page, one job: authenticate.
+﻿// Route: /login — harbour gate. One page, one job: authenticate.
 // Contract strings pinned by messenger_test.dart are preserved verbatim.
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../util/app_l10n.dart';
+import '../util/legal.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,6 +21,10 @@ class _LoginPageState extends State<LoginPage> {
   final password = TextEditingController();
   final name = TextEditingController();
   final code = TextEditingController();
+  final birthdate = TextEditingController();
+  bool agreeTerms = false;
+  bool agreePrivacy = false;
+  bool _legalLoaded = false;
 
   @override
   void dispose() {
@@ -26,14 +32,54 @@ class _LoginPageState extends State<LoginPage> {
     password.dispose();
     name.dispose();
     code.dispose();
+    birthdate.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_legalLoaded) {
+      _legalLoaded = true;
+      SessionScope.of(context, listen: false).loadLegalVersions();
+    }
+  }
+
+  Future<void> _openLegal(SessionController session, String doc) async {
+    // Canonical Korean docs keep their short names; others are suffixed.
+    final file =
+        session.locale == 'ko' ? '$doc.html' : '$doc.${session.locale}.html';
+    final uri = Uri.parse('${session.api.baseUrl}/legal/$file');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      session.formError(uri.host);
+    }
+  }
+
   Future<void> _submit(SessionController session) async {
+    // Client pre-checks are UX only (and keep an under-14 birthdate on the
+    // device); the server re-verifies everything.
+    if (session.registerMode) {
+      if (!agreeTerms || !agreePrivacy) {
+        session.formError(context.l10n.consentRequiredErr);
+        return;
+      }
+      final age = ageOnDate(birthdate.text, todayUtc());
+      if (birthdate.text.trim().isEmpty || age == null) {
+        session.formError(context.l10n.birthdateRequiredErr);
+        return;
+      }
+      if (age < 14) {
+        session.formError(context.l10n.underageErr);
+        return;
+      }
+    }
     await session.login(
       email: email.text,
       password: password.text,
       displayName: name.text,
+      birthdate: birthdate.text.trim(),
+      agreeTerms: agreeTerms,
+      agreePrivacy: agreePrivacy,
     );
     if (session.authed) password.clear();
   }
@@ -59,7 +105,21 @@ class _LoginPageState extends State<LoginPage> {
                             padding: const EdgeInsets.all(32),
                             child: SizedBox(
                               width: 400,
-                              child: session.needsEmailVerify
+                              child: session.needsReconsent
+                                  ? _ReconsentCard(
+                                      agreeTerms: agreeTerms,
+                                      agreePrivacy: agreePrivacy,
+                                      onAgreeTerms: (v) =>
+                                          setState(() => agreeTerms = v),
+                                      onAgreePrivacy: (v) =>
+                                          setState(() => agreePrivacy = v),
+                                      onOpenLegal: (doc) =>
+                                          _openLegal(session, doc),
+                                      onSubmit: () => session.submitReconsent(
+                                          email: email.text,
+                                          password: password.text),
+                                    )
+                                  : session.needsEmailVerify
                                   ? _VerifyCard(
                                       code: code,
                                       onVerify: () =>
@@ -70,6 +130,15 @@ class _LoginPageState extends State<LoginPage> {
                                       email: email,
                                       password: password,
                                       name: name,
+                                      birthdate: birthdate,
+                                      agreeTerms: agreeTerms,
+                                      agreePrivacy: agreePrivacy,
+                                      onAgreeTerms: (v) =>
+                                          setState(() => agreeTerms = v),
+                                      onAgreePrivacy: (v) =>
+                                          setState(() => agreePrivacy = v),
+                                      onOpenLegal: (doc) =>
+                                          _openLegal(session, doc),
                                       onSubmit: () => _submit(session),
                                     ),
                             ),
@@ -89,7 +158,19 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           const HarborWordmark(compact: false),
                           const SizedBox(height: 12),
-                          if (session.needsEmailVerify)
+                          if (session.needsReconsent)
+                            _ReconsentCard(
+                              agreeTerms: agreeTerms,
+                              agreePrivacy: agreePrivacy,
+                              onAgreeTerms: (v) =>
+                                  setState(() => agreeTerms = v),
+                              onAgreePrivacy: (v) =>
+                                  setState(() => agreePrivacy = v),
+                              onOpenLegal: (doc) => _openLegal(session, doc),
+                              onSubmit: () => session.submitReconsent(
+                                  email: email.text, password: password.text),
+                            )
+                          else if (session.needsEmailVerify)
                             _VerifyCard(
                               code: code,
                               onVerify: () => session.verifyEmailCode(code.text),
@@ -100,6 +181,14 @@ class _LoginPageState extends State<LoginPage> {
                               email: email,
                               password: password,
                               name: name,
+                              birthdate: birthdate,
+                              agreeTerms: agreeTerms,
+                              agreePrivacy: agreePrivacy,
+                              onAgreeTerms: (v) =>
+                                  setState(() => agreeTerms = v),
+                              onAgreePrivacy: (v) =>
+                                  setState(() => agreePrivacy = v),
+                              onOpenLegal: (doc) => _openLegal(session, doc),
                               onSubmit: () => _submit(session),
                             ),
                         ],
@@ -260,11 +349,23 @@ class _GateForm extends StatelessWidget {
   final TextEditingController email;
   final TextEditingController password;
   final TextEditingController name;
+  final TextEditingController birthdate;
+  final bool agreeTerms;
+  final bool agreePrivacy;
+  final ValueChanged<bool> onAgreeTerms;
+  final ValueChanged<bool> onAgreePrivacy;
+  final ValueChanged<String> onOpenLegal;
   final Future<void> Function() onSubmit;
   const _GateForm({
     required this.email,
     required this.password,
     required this.name,
+    required this.birthdate,
+    required this.agreeTerms,
+    required this.agreePrivacy,
+    required this.onAgreeTerms,
+    required this.onAgreePrivacy,
+    required this.onOpenLegal,
     required this.onSubmit,
   });
 
@@ -313,6 +414,33 @@ class _GateForm extends StatelessWidget {
             TextField(controller: email, decoration: InputDecoration(labelText: context.l10n.verifyEmailLabel)),
             if (register)
               TextField(controller: name, decoration: InputDecoration(labelText: context.l10n.authDisplayName)),
+            // F24: birthdate verifies age (never stored); both consents are
+            // mandatory. Client checks are UX only — the server re-verifies.
+            if (register)
+              TextField(
+                controller: birthdate,
+                decoration: InputDecoration(
+                  labelText: context.l10n.birthdateLabel,
+                  hintText: '1990-01-01',
+                ),
+                keyboardType: TextInputType.datetime,
+              ),
+            if (register)
+              _ConsentRow(
+                value: agreeTerms,
+                onChanged: onAgreeTerms,
+                label: context.l10n.consentTerms,
+                linkLabel: context.l10n.consentViewTerms,
+                onOpenLink: () => onOpenLegal('terms'),
+              ),
+            if (register)
+              _ConsentRow(
+                value: agreePrivacy,
+                onChanged: onAgreePrivacy,
+                label: context.l10n.consentPrivacy,
+                linkLabel: context.l10n.consentViewPrivacy,
+                onOpenLink: () => onOpenLegal('privacy'),
+              ),
             TextField(
               controller: password,
               obscureText: true,
@@ -328,6 +456,108 @@ class _GateForm extends StatelessWidget {
               onPressed: () => SessionScope.of(context, listen: false)
                   .setRegisterMode(!register),
               child: Text(register ? context.l10n.authLoginExisting : context.l10n.authCreateNew),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// F24: one mandatory consent checkbox with a link to the full document.
+class _ConsentRow extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String label;
+  final String linkLabel;
+  final VoidCallback onOpenLink;
+  const _ConsentRow({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+    required this.linkLabel,
+    required this.onOpenLink,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Checkbox(
+          value: value,
+          onChanged: (v) => onChanged(v ?? false),
+        ),
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
+        TextButton(
+          onPressed: onOpenLink,
+          child: Text(linkLabel),
+        ),
+      ],
+    );
+  }
+}
+
+/// F24: re-consent step after a CONSENT_STALE login. Same checkboxes as
+/// signup; submitting retries the login with fresh agreement attached.
+class _ReconsentCard extends StatelessWidget {
+  final bool agreeTerms;
+  final bool agreePrivacy;
+  final ValueChanged<bool> onAgreeTerms;
+  final ValueChanged<bool> onAgreePrivacy;
+  final ValueChanged<String> onOpenLegal;
+  final Future<void> Function() onSubmit;
+  const _ReconsentCard({
+    required this.agreeTerms,
+    required this.agreePrivacy,
+    required this.onAgreeTerms,
+    required this.onAgreePrivacy,
+    required this.onOpenLegal,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final text = Theme.of(context).textTheme;
+    return Card(
+      color: dark ? HarborDark.surface : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(HarborRadius.card),
+        side: BorderSide(color: dark ? HarborDark.channel : HarborLight.channel),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(context.l10n.consentStaleTitle, style: text.headlineSmall),
+            const SizedBox(height: 4),
+            Text(context.l10n.consentStaleNote, style: text.bodySmall),
+            const SizedBox(height: 12),
+            _ConsentRow(
+              value: agreeTerms,
+              onChanged: onAgreeTerms,
+              label: context.l10n.consentTerms,
+              linkLabel: context.l10n.consentViewTerms,
+              onOpenLink: () => onOpenLegal('terms'),
+            ),
+            _ConsentRow(
+              value: agreePrivacy,
+              onChanged: onAgreePrivacy,
+              label: context.l10n.consentPrivacy,
+              linkLabel: context.l10n.consentViewPrivacy,
+              onOpenLink: () => onOpenLegal('privacy'),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: session.busy || !agreeTerms || !agreePrivacy
+                  ? null
+                  : onSubmit,
+              child: Text(context.l10n.signInBtn),
             ),
           ],
         ),

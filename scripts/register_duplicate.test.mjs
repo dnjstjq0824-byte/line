@@ -6,6 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 const FULL_USERS = `CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, handle TEXT UNIQUE, password_hash TEXT NOT NULL, display_name TEXT NOT NULL, bio TEXT DEFAULT '', phone_number TEXT DEFAULT '', status_message TEXT DEFAULT '', avatar_url TEXT DEFAULT '', birthday TEXT DEFAULT '', state TEXT DEFAULT 'active', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`;
@@ -59,13 +60,13 @@ test('re-register on a cold isolate returns 409 and keeps the original account',
   const db = makeD1(FULL_USERS);
   const email = 'dup@local.test';
   const first = await step(db);
-  const reg = await first('auth/register', 'POST', { email, password: 'First#Pass99', display_name: 'dup' });
+  const reg = await first('auth/register', 'POST', { ...F24_CONSENT, email, password: 'First#Pass99', display_name: 'dup' });
   assert.equal(reg.status, 201, 'initial register');
   const before = db.raw.prepare('SELECT id, password_hash FROM users WHERE email = ?').get(email);
 
   // Fresh isolate: empty memory, same D1. This must NOT overwrite.
   const cold = await step(db);
-  const again = await cold('auth/register', 'POST', { email, password: 'Second#Pass99', display_name: 'dup2' });
+  const again = await cold('auth/register', 'POST', { ...F24_CONSENT, email, password: 'Second#Pass99', display_name: 'dup2' });
   assert.equal(again.status, 409, 'duplicate register on cold isolate');
   assert.match((await again.json()).error || '', /already exists/);
 
@@ -87,7 +88,7 @@ test('register heals a pre-Phase-1 users table instead of 500', async () => {
   db.raw.prepare('INSERT INTO users (id, email) VALUES (?, ?)').run('husk-1', 'husk@local.test');
 
   const api = await step(db);
-  const reg = await api('auth/register', 'POST', { email: 'legacy@local.test', password: 'Legacy#Pass99', display_name: 'legacy' });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email: 'legacy@local.test', password: 'Legacy#Pass99', display_name: 'legacy' });
   assert.equal(reg.status, 201, 'register on legacy table');
 
   const cols = db.raw.prepare('PRAGMA table_info(users)').all().map((c) => c.name);

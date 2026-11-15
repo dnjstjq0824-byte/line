@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -14,7 +15,7 @@ async function api(path, token, method = 'GET', body) {
 }
 
 async function signup(email, handle) {
-  const res = await api('auth/register', null, 'POST', {
+  const res = await api('auth/register', null, 'POST', { ...F24_CONSENT, 
     email, password: 'Str0ng!Passw0rd', display_name: handle, handle,
   });
   assert.equal(res.status, 201);

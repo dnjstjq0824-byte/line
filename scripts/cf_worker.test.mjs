@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
-import { makeBucket, makeD1 } from './test_helpers.mjs';
+import { makeBucket, makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -44,7 +44,7 @@ async function login(email, password) {
   return (await (await api('auth/login', null, 'POST', { email, password })).json()).access_token;
 }
 async function signup(email, handle) {
-  const reg = await api('auth/register', null, 'POST', {
+  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, 
     email, password: 'Str0ng!Passw0rd', display_name: handle, handle,
   });
   assert.equal(reg.status, 201, `register ${email}`);
@@ -203,7 +203,7 @@ test('openchat community rooms persist on D1 (D4)', async () => {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }), env);
   const setup = async (email, handle) => {
-    assert.equal((await call('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: handle, handle })).status, 201);
+    assert.equal((await call('auth/register', null, 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name: handle, handle })).status, 201);
     return (await (await call('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' })).json()).access_token;
   };
   const alice = await setup('comm-alice@luno-test.local', 'commalice');
@@ -298,7 +298,7 @@ test('translate fails closed without an engine and e2ee flag stays off', async (
 test('attachments serve identical bytes at the content alias', async () => {
   const env = { DB: makeD1(), DURABLE_CONVERSATIONS: 'true', MEDIA_BUCKET: makeBucket() };
   const register = async (email, handle) => {
-    const reg = await api('auth/register', null, 'POST', { email, password: 'Str0ng!Passw0rd', display_name: handle, handle }, {}, env);
+    const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name: handle, handle }, {}, env);
     assert.equal(reg.status, 201, `register ${email}`);
     const id = (await reg.json()).id;
     const token = (await (await api('auth/login', null, 'POST', { email, password: 'Str0ng!Passw0rd' }, {}, env)).json()).access_token;

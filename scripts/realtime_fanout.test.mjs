@@ -19,6 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 const PW = 'Str0ng!Passw0rd';
@@ -142,7 +143,7 @@ async function isolate({ db, hub, extraEnv = {} } = {}) {
     api,
     settle: async () => { while (pending.length) await pending.shift(); },
     async signup(email, handle) {
-      const reg = await api('auth/register', 'POST', { email, password: PW, display_name: handle, handle });
+      const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: handle, handle });
       assert.equal(reg.status, 201, `register failed for ${email}`);
       return { id: (await reg.json()).id, email };
     },

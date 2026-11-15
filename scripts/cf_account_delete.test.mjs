@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 const BASE = 'https://localhost';
 
@@ -45,7 +46,7 @@ test('D-01: DELETE /me requires the password and kills the account on every surf
   const api = await isolate();
   const email = `delme-${Date.now()}@local.test`;
   const password = 'DelMeStrong#2026!';
-  const reg = await api('auth/register', 'POST', { email, password, display_name: 'DelMe' });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: 'DelMe' });
   assert.equal(reg.status, 201);
   const login = await api('auth/login', 'POST', { email, password });
   assert.equal(login.status, 200);
@@ -88,7 +89,7 @@ test('D-03: deletion survives a redeploy (fresh isolate, same D1)', async () => 
   const api = await isolate();
   const email = `delme2-${Date.now()}@local.test`;
   const password = 'DelMeStrong#2026!';
-  assert.equal((await api('auth/register', 'POST', { email, password, display_name: 'DelMe2' })).status, 201);
+  assert.equal((await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: 'DelMe2' })).status, 201);
   const { access_token } = await (await api('auth/login', 'POST', { email, password })).json();
   assert.equal((await api('me', 'DELETE', { password, confirm_text: email }, access_token)).status, 200);
   const redeployed = await isolate();
@@ -105,7 +106,7 @@ test('D-04: password checks work on a fresh isolate (iteration count persisted)'
   const api = await isolate();
   const email = `delme3-${Date.now()}@local.test`;
   const password = 'DelMeStrong#2026!';
-  assert.equal((await api('auth/register', 'POST', { email, password, display_name: 'DelMe3' })).status, 201);
+  assert.equal((await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: 'DelMe3' })).status, 201);
   const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get(email);
   assert.match(row.password_hash, /^pbkdf2\$\d+\$.+\$.+$/, 'register persists 4-segment digest with iterations');
   const cold = await isolate();
@@ -125,7 +126,8 @@ test('D-05: legacy 3-segment rows (1000 iterations) still verify without upgrade
   const email = `legacy-${Date.now()}@local.test`;
   db.raw.prepare('INSERT INTO users (id, email, password_hash, display_name) VALUES (?, ?, ?, ?)').run(crypto.randomUUID(), email, `pbkdf2$${salt}$${hash}`, 'Legacy');
   const cold = await isolate();
-  const login = await cold('auth/login', 'POST', { email, password: 'Legacy#2026!' });
+  // Pre-F24 row: completes terms re-consent inline at login.
+  const login = await cold('auth/login', 'POST', { email, password: 'Legacy#2026!', consent: F24_CONSENT.consent });
   assert.equal(login.status, 200, 'legacy 3-segment login works');
   const row = db.raw.prepare('SELECT password_hash FROM users WHERE email = ?').get(email);
   assert.equal(row.password_hash, `pbkdf2$${salt}$${hash}`, 'legacy row never rewritten on login (S4: upgrade path removed)');
@@ -136,7 +138,7 @@ test('B3: suspending accounts by SQL blocks login until reactivated', async () =
   const api = await isolate({}, local);
   const email = `suspend-${Date.now()}@local.test`;
   const password = 'Suspend#2026!';
-  assert.equal((await api('auth/register', 'POST', { email, password, display_name: 'Susp' })).status, 201);
+  assert.equal((await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: 'Susp' })).status, 201);
   local.raw.prepare('INSERT INTO users (id, email, handle, password_hash, display_name) VALUES (?, ?, ?, ?, ?)').run('b3-plain', 'b3-plain@local.test', 'b3_plain', 'LegacyPlain#1', 'Plain');
   const mine = local.raw.prepare('SELECT id FROM users WHERE email = ?').get(email);
   // Inspection query from the stage report: only the plaintext row matches.

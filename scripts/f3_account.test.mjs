@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 let f3Serial = 0;
 async function f3Isolate(db, extraEnv = {}) {
@@ -23,7 +23,7 @@ const PW = 'Str0ng!Passw0rd';
 const GRACE_MS = 30 * 24 * 3600 * 1000;
 
 async function register(api, email) {
-  const res = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const res = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(res.status, 201, `register ${email}`);
   return res.json();
 }

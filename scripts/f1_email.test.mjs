@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 let f1Serial = 0;
 async function f1Isolate(db, extraEnv = {}) {
@@ -25,7 +25,7 @@ test('F1: register mails a code, login and send wait for verify', async () => {
   const db = makeD1();
   try {
     const { api, outbox } = await f1Isolate(db, { RECOVERY_MAIL_PROVIDER: 'mock' });
-    const reg = await api('auth/register', 'POST', { email: 'f1-a@luno-test.local', password: PW, display_name: 'f1a' });
+    const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-a@luno-test.local', password: PW, display_name: 'f1a' });
     assert.equal(reg.status, 201);
     const regBody = await reg.json();
     assert.equal(regBody.email_verified, false);
@@ -49,8 +49,8 @@ test('F1: unverified send blocked even with a live session', async () => {
   const db = makeD1();
   try {
     const { api, outbox } = await f1Isolate(db, { RECOVERY_MAIL_PROVIDER: 'mock' });
-    await api('auth/register', 'POST', { email: 'f1-c@luno-test.local', password: PW, display_name: 'f1c' });
-    await api('auth/register', 'POST', { email: 'f1-d@luno-test.local', password: PW, display_name: 'f1d' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-c@luno-test.local', password: PW, display_name: 'f1c' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-d@luno-test.local', password: PW, display_name: 'f1d' });
     const code = outbox.find((m) => m.email === 'f1-c@luno-test.local').code;
     await api('auth/verify-email', 'POST', { email: 'f1-c@luno-test.local', code });
     const s = await (await api('auth/login', 'POST', { email: 'f1-c@luno-test.local', password: PW })).json();
@@ -68,18 +68,18 @@ test('F1: resend rotates the code, expiry and attempts fail closed', async () =>
   const db = makeD1();
   try {
     const { api, outbox } = await f1Isolate(db, { RECOVERY_MAIL_PROVIDER: 'mock' });
-    await api('auth/register', 'POST', { email: 'f1-e@luno-test.local', password: PW, display_name: 'f1e' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-e@luno-test.local', password: PW, display_name: 'f1e' });
     const first = outbox.find((m) => m.email === 'f1-e@luno-test.local').code;
     assert.equal((await api('auth/verify-email/resend', 'POST', { email: 'f1-e@luno-test.local' })).status, 200);
     const mails = outbox.filter((m) => m.email === 'f1-e@luno-test.local');
     assert.equal(mails.length, 2);
     assert.equal((await api('auth/verify-email', 'POST', { email: 'f1-e@luno-test.local', code: first })).status, 400, 'old code dead after resend');
     assert.equal((await api('auth/verify-email', 'POST', { email: 'f1-e@luno-test.local', code: mails[1].code })).status, 200);
-    await api('auth/register', 'POST', { email: 'f1-f@luno-test.local', password: PW, display_name: 'f1f' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-f@luno-test.local', password: PW, display_name: 'f1f' });
     db.raw.exec(`UPDATE luno_email_codes SET expires_at = 1 WHERE email = 'f1-f@luno-test.local'`);
     const fresh = outbox.find((m) => m.email === 'f1-f@luno-test.local').code;
     assert.equal((await api('auth/verify-email', 'POST', { email: 'f1-f@luno-test.local', code: fresh })).status, 400, 'expired code rejected');
-    await api('auth/register', 'POST', { email: 'f1-g@luno-test.local', password: PW, display_name: 'f1g' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-g@luno-test.local', password: PW, display_name: 'f1g' });
     const gcode = outbox.find((m) => m.email === 'f1-g@luno-test.local').code;
     for (let i = 0; i < 5; i++) {
       await api('auth/verify-email', 'POST', { email: 'f1-g@luno-test.local', code: '000000' });
@@ -92,7 +92,7 @@ test('F1: codes never appear in API responses', async () => {
   const db = makeD1();
   try {
     const { api, outbox } = await f1Isolate(db, { RECOVERY_MAIL_PROVIDER: 'mock' });
-    const reg = await (await api('auth/register', 'POST', { email: 'f1-h@luno-test.local', password: PW, display_name: 'f1h' })).text();
+    const reg = await (await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-h@luno-test.local', password: PW, display_name: 'f1h' })).text();
     const code = outbox.find((m) => m.email === 'f1-h@luno-test.local').code;
     assert.ok(!reg.includes(code), 'register leaks no code');
     const resend = await (await api('auth/verify-email/resend', 'POST', { email: 'f1-h@luno-test.local' })).text();
@@ -106,7 +106,7 @@ test('F1: no provider auto-verifies, legacy rows grandfathered', async () => {
   const db = makeD1();
   try {
     const { api, outbox } = await f1Isolate(db);
-    await api('auth/register', 'POST', { email: 'f1-i@luno-test.local', password: PW, display_name: 'f1i' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-i@luno-test.local', password: PW, display_name: 'f1i' });
     assert.equal(db.raw.prepare('SELECT email_verified FROM users WHERE email = ?').get('f1-i@luno-test.local').email_verified, 1, 'auto-verify without provider');
     assert.equal(outbox.length, 0, 'no mail without provider');
     assert.equal((await api('auth/login', 'POST', { email: 'f1-i@luno-test.local', password: PW })).status, 200);
@@ -116,7 +116,7 @@ test('F1: no provider auto-verifies, legacy rows grandfathered', async () => {
     old.raw.exec(`INSERT INTO users (id, email, password_hash, display_name, created_at, updated_at)
       VALUES ('f1-legacy', 'f1-legacy@luno-test.local', 'pbkdf2$100000$salt$hash', 'Legacy', '2026-01-01', '2026-01-01')`);
     const { api } = await f1Isolate(old, { RECOVERY_MAIL_PROVIDER: 'mock' });
-    await api('auth/register', 'POST', { email: 'f1-new@luno-test.local', password: PW, display_name: 'f1new' });
+    await api('auth/register', 'POST', { ...F24_CONSENT, email: 'f1-new@luno-test.local', password: PW, display_name: 'f1new' });
     assert.equal(old.raw.prepare('SELECT email_verified FROM users WHERE id = ?').get('f1-legacy').email_verified, 1, 'pre-existing accounts stay verified');
     assert.equal(old.raw.prepare('SELECT email_verified FROM users WHERE email = ?').get('f1-new@luno-test.local').email_verified, 0, 'new accounts verify');
   } finally { old.raw.close(); }

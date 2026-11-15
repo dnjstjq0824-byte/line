@@ -74,6 +74,12 @@ const ownedThemes = new Map();
 const officialAccounts = new Map();
 const followedOfficial = new Map();
 const adminReports = [];
+// F24: legal consent. Versions are the single source of truth for what the
+// signup/login gates demand; userConsents is a D1 write-through cache of who
+// agreed to what, when (luno_consents). The verification birthdate is NEVER
+// stored — only the age14 confirmation bit and timestamp survive.
+const LEGAL_VERSIONS = { terms: '2026-11-15.1', privacy: '2026-11-15.1' };
+const userConsents = new Map();
 // A-20/B-3: attachment bytes live in R2 (MEDIA_BUCKET); D1 keeps metadata
 // only. Base64 intake is kept so existing clients keep working.
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -217,6 +223,10 @@ const LUNO_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS luno_telemetry (
     id INTEGER PRIMARY KEY AUTOINCREMENT, received_at TEXT NOT NULL, reporter TEXT NOT NULL DEFAULT '', user_id TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', stack TEXT NOT NULL DEFAULT '', context_json TEXT NOT NULL DEFAULT '{}', ms INTEGER)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_telemetry_kind ON luno_telemetry(kind,received_at)`,
+  // F24: legal consent records. One row per user; age14_confirmed NULL means
+  // grandfathered (consented to versions, age never verified at signup).
+  `CREATE TABLE IF NOT EXISTS luno_consents (
+    user_id TEXT PRIMARY KEY, terms_version TEXT NOT NULL, privacy_version TEXT NOT NULL, age14_confirmed INTEGER, consented_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS luno_ws_tickets (
     ticket TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_ws_tickets_exp ON luno_ws_tickets(expires_at)`,
@@ -1035,6 +1045,47 @@ async function persistAudit(actor, action, target, detail) {
   await ensureSchema();
   await db.prepare('INSERT INTO luno_audit (actor, action, target, detail, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(actor || null, action, target || null, detail ? JSON.stringify(detail) : null, now()).run();
+}
+
+// ---------- Legal consent (F24) ----------
+// Full years between a YYYY-MM-DD birthdate and a YYYY-MM-DD day, or null
+// for anything malformed (including impossible dates like Feb 30 and any
+// future birthdate). Pure: the same inputs decide identically everywhere.
+function ageOnDate(birthdate, onDay) {
+  if (typeof birthdate !== 'string' || typeof onDay !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthdate.trim());
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(onDay.trim());
+  if (!m || !d) return null;
+  const by = Number(m[1]), bm = Number(m[2]), bd = Number(m[3]);
+  const oy = Number(d[1]), om = Number(d[2]), od = Number(d[3]);
+  if (bm < 1 || bm > 12 || om < 1 || om > 12) return null;
+  const dim = (y, mo) => new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  if (bd < 1 || bd > dim(by, bm) || od < 1 || od > dim(oy, om)) return null;
+  let age = oy - by;
+  if (om < bm || (om === bm && od < bd)) age--;
+  return age < 0 ? null : age;
+}
+function consentOfferedValid(offered) {
+  return !!offered && offered.terms === LEGAL_VERSIONS.terms && offered.privacy === LEGAL_VERSIONS.privacy;
+}
+async function loadConsent(userId) {
+  if (userConsents.has(userId)) return userConsents.get(userId);
+  const db = dbOf();
+  if (!db) return null;
+  await ensureSchema();
+  const row = await db.prepare('SELECT terms_version, privacy_version, age14_confirmed, consented_at FROM luno_consents WHERE user_id = ?').bind(userId).first().catch(() => null);
+  if (!row) return null;
+  const rec = { terms: row.terms_version, privacy: row.privacy_version, age14: row.age14_confirmed, at: row.consented_at };
+  userConsents.set(userId, rec);
+  return rec;
+}
+async function saveConsent(userId, rec) {
+  userConsents.set(userId, rec);
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT OR REPLACE INTO luno_consents (user_id, terms_version, privacy_version, age14_confirmed, consented_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(userId, rec.terms, rec.privacy, rec.age14, rec.at, now()).run();
 }
 
 // ---------- Sessions ----------
@@ -2399,6 +2450,9 @@ function ensureSeed(env) {
   for (const s of seeds) {
     users.set(s.email.toLowerCase(), s);
     usersById.set(s.id, s);
+    // F24: operator-provisioned accounts carry current-version consent from
+    // birth (age never verified: null, like any grandfathered account).
+    userConsents.set(s.id, { terms: LEGAL_VERSIONS.terms, privacy: LEGAL_VERSIONS.privacy, age14: null, at: now() });
   }
   // Demo identities are explicitly public: email search finds them.
   for (const s of seeds) {
@@ -6671,6 +6725,11 @@ const workerCore = {
     if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
       return json({ ...BUILD_INFO, payments_enabled: !!(env && env.PAYMENTS_ENABLED === 'true') });
     }
+    // F24: current legal versions, public so signup screens (and tests) pin
+    // the consent they submit to exactly what the gates demand.
+    if (url.pathname === '/api/v1/legal' && request.method === 'GET') {
+      return json({ terms_version: LEGAL_VERSIONS.terms, privacy_version: LEGAL_VERSIONS.privacy });
+    }
     if (url.pathname === '/api/v1/app/latest' && request.method === 'GET') {
       const b = LATEST_ANDROID_BUILD;
       return json({ platform: b.platform, version: b.version, build: b.build, package: b.package, assets: b.assets });
@@ -6874,6 +6933,16 @@ const workerCore = {
           if (!handle) return json({ error: 'could not allocate a unique handle' }, 500);
         }
         // L-01: public signup always mints human accounts; body.kind is ignored.
+        // F24: terms + privacy consent (current versions) and a 14+ birthdate
+        // are mandatory, checked after the field validations so malformed
+        // requests keep their original errors. The birthdate verifies age and
+        // is never stored — only the confirmation bit survives, in luno_consents.
+        if (!consentOfferedValid(body.consent)) {
+          return json({ error: 'terms and privacy consent required', code: 'CONSENT_REQUIRED', current: { ...LEGAL_VERSIONS } }, 400);
+        }
+        const age = ageOnDate(body.birthdate, new Date().toISOString().slice(0, 10));
+        if (age === null) return json({ error: 'birthdate required (YYYY-MM-DD)', code: 'BIRTHDATE_REQUIRED' }, 400);
+        if (age < 14) return json({ error: 'you must be at least 14 years old to sign up', code: 'UNDERAGE' }, 403);
         // F1: strict verification only when a mail provider exists AND codes
         // can persist; otherwise registration auto-verifies (documented
         // dev-mode behavior — unenforceable checks fail open, never half-on).
@@ -6912,6 +6981,7 @@ const workerCore = {
         }
         users.set(email, newUser);
         usersById.set(newUser.id, newUser);
+        await saveConsent(newUser.id, { terms: LEGAL_VERSIONS.terms, privacy: LEGAL_VERSIONS.privacy, age14: 1, at: now() });
         return json({ id: newUser.id, email: newUser.email, display_name: newUser.display_name, email_verified: newUser.email_verified === 1 }, 201);
       }
 
@@ -7045,6 +7115,17 @@ const workerCore = {
         // F1: verified email required (checked after the password so the
         // gate never confirms whether an address exists).
         if (user.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
+        // F24: a version bump re-gates login. The client may attach fresh
+        // consent to the same request (one round trip); otherwise 403 with
+        // the current versions. Grandfathered rows keep age14 unknown (null).
+        const priorConsent = await loadConsent(user.id);
+        if (!priorConsent || priorConsent.terms !== LEGAL_VERSIONS.terms || priorConsent.privacy !== LEGAL_VERSIONS.privacy) {
+          if (consentOfferedValid(body.consent)) {
+            await saveConsent(user.id, { terms: LEGAL_VERSIONS.terms, privacy: LEGAL_VERSIONS.privacy, age14: priorConsent ? priorConsent.age14 : null, at: now() });
+          } else {
+            return json({ error: 'updated terms consent required', code: 'CONSENT_STALE', current: { ...LEGAL_VERSIONS } }, 403);
+          }
+        }
         // F3: correct password inside grace restores the account.
         let recovered = false;
         if (user.state === 'deleted') {

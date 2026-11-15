@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 // --- Upgrade shims (same shape as realtime_fanout.test.mjs) ----------------
 const nativeResponse = globalThis.Response;
@@ -54,7 +54,7 @@ function outageD1(db) {
 const PW = 'Str0ng!Passw0rd';
 
 async function userToken(api, email) {
-  const reg = await api('auth/register', 'POST', { email, password: PW, display_name: email.split('@')[0] });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: email.split('@')[0] });
   assert.equal(reg.status, 201);
   const login = await api('auth/login', 'POST', { email, password: PW });
   assert.equal(login.status, 200);

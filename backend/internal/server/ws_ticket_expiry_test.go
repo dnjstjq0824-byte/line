@@ -22,7 +22,7 @@ func TestWSTicketHonoursFullWindow(t *testing.T) {
 	srv := httptest.NewServer(app.Handler())
 	defer srv.Close()
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"email": "wsexp@example.test", "password": "WsExpiryStrong#2026!", "display_name": "WsExp"}); st != 201 {
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), "email": "wsexp@example.test", "password": "WsExpiryStrong#2026!", "display_name": "WsExp"}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)
 	}
 	st, login := c.req("POST", "/api/v1/auth/login", map[string]any{"email": "wsexp@example.test", "password": "WsExpiryStrong#2026!"})

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { F24_CONSENT } from './test_helpers.mjs';
 
 // S1 (Phase 1 schema): the worker's runtime ensure must create every base
 // + phase1 table on a fresh database (prod D1 is migrated by deploy, not by
@@ -44,7 +45,7 @@ const tablesOf = (raw) => raw.prepare("SELECT name FROM sqlite_master WHERE type
 test('fresh database gains all base + phase1 tables via runtime ensure', async () => {
   const raw = new DatabaseSync(':memory:');
   const api = await apiFor(shim(raw));
-  const reg = await api('auth/register', null, 'POST', { email: 's1a@example.test', password: 'S1#Schema2026', display_name: 'S1 A' });
+  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 's1a@example.test', password: 'S1#Schema2026', display_name: 'S1 A' });
   assert.equal(reg.status, 201);
   const tables = tablesOf(raw);
   for (const t of ['users', 'refresh_tokens', 'login_attempts', 'rate_limits', 'friends', 'blocks',
@@ -62,7 +63,7 @@ test('legacy users rows gain handle backfill and unique index', async () => {
   raw.exec('CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, display_name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)');
   raw.exec(`INSERT INTO users VALUES ('u-legacy-1', 'legacy@example.test', 'x', 'Legacy', '2026-01-01', '2026-01-01')`);
   const api = await apiFor(shim(raw));
-  const reg = await api('auth/register', null, 'POST', { email: 's1b@example.test', password: 'S1#Schema2026', display_name: 'S1 B' });
+  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 's1b@example.test', password: 'S1#Schema2026', display_name: 'S1 B' });
   assert.equal(reg.status, 201);
   const cols = raw.prepare('PRAGMA table_info(users)').all().map((r) => r.name);
   assert.ok(cols.includes('handle') && cols.includes('birthday'));

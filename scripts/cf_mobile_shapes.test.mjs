@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { makeD1 } from './test_helpers.mjs'
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs'
 
 // Mobile P0 audit (2026-11-10): the app broke silently whenever the worker's
 // response keys drifted from what the client reads. This pins the shapes the
@@ -23,8 +23,8 @@ async function api(path, token, method = 'GET', body) {
 }
 
 const PW = 'T3st#Migrated2026'
-await api('auth/register', null, 'POST', { email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
-await api('auth/register', null, 'POST', { email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'user@luno.local', password: PW, display_name: 'LUNO Demo User' })
+await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'alice@luno-test.local', password: PW, display_name: 'Alice Kim', handle: 'alice_kim' })
 const login = await api('auth/login', null, 'POST', { email: 'user@luno.local', password: PW })
 const token = login.data.access_token
 assert.ok(token, 'demo login works')

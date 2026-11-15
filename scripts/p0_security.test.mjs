@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { makeD1 } from './test_helpers.mjs';
+import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 
@@ -25,7 +25,7 @@ async function p0Isolate(db, extraEnv = {}) {
 }
 
 async function register(api, email, password = 'Str0ng!Passw0rd', extra = {}) {
-  const res = await api('auth/register', 'POST', { email, password, display_name: email.split('@')[0], ...extra });
+  const res = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: email.split('@')[0], ...extra });
   assert.equal(res.status, 201, `register ${email}: ${res.status}`);
   return res.json();
 }
@@ -38,7 +38,7 @@ function codeFor(outbox, email) {
 }
 
 async function registerAndLogin(api, email, password = 'Str0ng!Passw0rd') {
-  const reg = await api('auth/register', 'POST', { email, password, display_name: email.split('@')[0] });
+  const reg = await api('auth/register', 'POST', { ...F24_CONSENT, email, password, display_name: email.split('@')[0] });
   assert.equal(reg.status, 201, `register ${email}`);
   const login = await api('auth/login', 'POST', { email, password });
   assert.equal(login.status, 200, `login ${email}`);
@@ -188,13 +188,13 @@ test('S2: fresh handle registers and is lowercased; rule violations are 400', as
   const db = makeD1();
   try {
     const { api } = await p0Isolate(db);
-    const ok = await api('auth/register', 'POST', { email: 's2-fresh@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'fresh', handle: 'Fresh_Handle.9' });
+    const ok = await api('auth/register', 'POST', { ...F24_CONSENT, email: 's2-fresh@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'fresh', handle: 'Fresh_Handle.9' });
     assert.equal(ok.status, 201);
     const row = db.raw.prepare('SELECT handle FROM users WHERE email = ?').get('s2-fresh@luno-test.local');
     assert.equal(row.handle, 'fresh_handle.9', 'handle stored lowercased');
     let n = 0;
     for (const badHandle of ['ab', 'a'.repeat(21), 'with space', 'with-hyphen', 'with@at', 'UPPER-HYPHEN', 'under_score_ok?']) {
-      const res = await api('auth/register', 'POST', { email: `s2-bad${++n}@luno-test.local`, password: 'Str0ng!Passw0rd', display_name: 'bad', handle: badHandle });
+      const res = await api('auth/register', 'POST', { ...F24_CONSENT, email: `s2-bad${++n}@luno-test.local`, password: 'Str0ng!Passw0rd', display_name: 'bad', handle: badHandle });
       assert.equal(res.status, 400, `handle ${JSON.stringify(badHandle)}`);
     }
   } finally { db.raw.close(); }
@@ -204,11 +204,11 @@ test('S2: reserved handles are rejected with 409', async () => {
   const { api } = await p0Isolate(null);
   let n = 0;
   for (const reserved of ['admin', 'Admin', 'ADMIN', 'luno', 'LUNO', 'luno_notice', 'peer', 'peer_x', 'peer.9']) {
-    const res = await api('auth/register', 'POST', { email: `s2-rsv${++n}@luno-test.local`, password: 'Str0ng!Passw0rd', display_name: 'rsv', handle: reserved });
+    const res = await api('auth/register', 'POST', { ...F24_CONSENT, email: `s2-rsv${++n}@luno-test.local`, password: 'Str0ng!Passw0rd', display_name: 'rsv', handle: reserved });
     assert.equal(res.status, 409, `reserved ${reserved}`);
   }
   // Near-misses that are NOT the peer prefix stay available.
-  const near = await api('auth/register', 'POST', { email: 's2-rsv-near@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'rsv', handle: 'pearl_diver' });
+  const near = await api('auth/register', 'POST', { ...F24_CONSENT, email: 's2-rsv-near@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'rsv', handle: 'pearl_diver' });
   assert.equal(near.status, 201, 'pearl_diver is not the peer prefix');
 });
 
@@ -219,7 +219,7 @@ test('S2: existing handle in any case is 409 and the original row is untouched',
     await register(first.api, 's2-owner@luno-test.local', 'Owner#Pass99', { handle: 'owner_handle' });
     const before = db.raw.prepare('SELECT id, password_hash FROM users WHERE email = ?').get('s2-owner@luno-test.local');
     const cold = await p0Isolate(db);
-    const again = await cold.api('auth/register', 'POST', { email: 's2-thief@luno-test.local', password: 'Thief#Pass99', display_name: 'thief', handle: 'Owner_Handle' });
+    const again = await cold.api('auth/register', 'POST', { ...F24_CONSENT, email: 's2-thief@luno-test.local', password: 'Thief#Pass99', display_name: 'thief', handle: 'Owner_Handle' });
     assert.equal(again.status, 409, 'case-variant handle duplicate');
     const rows = db.raw.prepare('SELECT * FROM users WHERE LOWER(handle) = ?').all('owner_handle');
     assert.equal(rows.length, 1, 'exactly one row survives');
@@ -233,7 +233,7 @@ test('S2: existing handle in any case is 409 and the original row is untouched',
 test('S2: same-isolate handle duplicate is 409', async () => {
   const { api } = await p0Isolate(null);
   await register(api, 's2-mem1@luno-test.local', 'Str0ng!Passw0rd', { handle: 'mem_handle' });
-  assert.equal((await api('auth/register', 'POST', { email: 's2-mem2@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'm2', handle: 'MEM_HANDLE' })).status, 409);
+  assert.equal((await api('auth/register', 'POST', { ...F24_CONSENT, email: 's2-mem2@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'm2', handle: 'MEM_HANDLE' })).status, 409);
 });
 
 test('S2: auto-generated handles are valid and unique', async () => {
@@ -241,7 +241,7 @@ test('S2: auto-generated handles are valid and unique', async () => {
   const seen = new Set();
   for (let i = 0; i < 5; i++) {
     const email = `s2-auto${i}@luno-test.local`;
-    assert.equal((await api('auth/register', 'POST', { email, password: 'Str0ng!Passw0rd', display_name: `auto${i}` })).status, 201);
+    assert.equal((await api('auth/register', 'POST', { ...F24_CONSENT, email, password: 'Str0ng!Passw0rd', display_name: `auto${i}` })).status, 201);
     const login = await (await api('auth/login', 'POST', { email, password: 'Str0ng!Passw0rd' })).json();
     const me = await (await api('me', 'GET', null, login.access_token)).json();
     assert.match(me.handle, /^[a-z0-9_.]{3,20}$/, 'auto handle follows the profile rule');
@@ -267,7 +267,7 @@ test('S2: auto-generated handle collision retries instead of clobbering', async 
   cryptoObj.randomUUID = () => seq[Math.min(n++, seq.length - 1)];
   let res;
   try {
-    res = await api('auth/register', 'POST', { email: 's2-colb@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'colb' });
+    res = await api('auth/register', 'POST', { ...F24_CONSENT, email: 's2-colb@luno-test.local', password: 'Str0ng!Passw0rd', display_name: 'colb' });
   } finally {
     delete cryptoObj.randomUUID;
   }
@@ -294,7 +294,7 @@ test('S3: email registered on another isolate is 409 with the row untouched', as
     const aSide = await p0Isolate(db);
     await register(aSide.api, 's3-victim@luno-test.local', 'Victim#Pass99');
     const before = db.raw.prepare('SELECT id, password_hash FROM users WHERE email = ?').get('s3-victim@luno-test.local');
-    const again = await bSide.api('auth/register', 'POST', { email: 's3-victim@luno-test.local', password: 'Second#Pass99', display_name: 'second' });
+    const again = await bSide.api('auth/register', 'POST', { ...F24_CONSENT, email: 's3-victim@luno-test.local', password: 'Second#Pass99', display_name: 'second' });
     assert.equal(again.status, 409, 'cross-isolate duplicate email');
     const rows = db.raw.prepare('SELECT id, password_hash FROM users WHERE email = ?').all('s3-victim@luno-test.local');
     assert.equal(rows.length, 1, 'exactly one row survives');
@@ -312,7 +312,7 @@ test('S3: case-variant email on a stale isolate is 409', async () => {
     assert.equal((await stale.api('auth/login', 'POST', { email: 's3-boot2@luno-test.local', password: 'x' })).status, 401);
     const other = await p0Isolate(db);
     await register(other.api, 's3-case@luno-test.local');
-    assert.equal((await stale.api('auth/register', 'POST', { email: 'S3-Case@Luno-Test.Local', password: 'Second#Pass99', display_name: 'second' })).status, 409);
+    assert.equal((await stale.api('auth/register', 'POST', { ...F24_CONSENT, email: 'S3-Case@Luno-Test.Local', password: 'Second#Pass99', display_name: 'second' })).status, 409);
     assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM users').get().n, 1, 'no second row');
   } finally { db.raw.close(); }
 });
@@ -353,7 +353,8 @@ test('S4: weak-but-valid PBKDF2 rows still verify and are never rewritten on log
     const digest = `pbkdf2$1000$${salt}$${Buffer.from(bits).toString('hex')}`;
     db.raw.prepare('INSERT INTO users (id, email, handle, password_hash, display_name) VALUES (?, ?, ?, ?, ?)').run('s4-weak', 's4-weak@luno-test.local', 's4_weak', digest, 'Weak');
     const cold = await p0Isolate(db);
-    assert.equal((await cold.api('auth/login', 'POST', { email: 's4-weak@luno-test.local', password: 'Weak1k#Pass' })).status, 200);
+    // Pre-F24 row: completes terms re-consent inline at login.
+    assert.equal((await cold.api('auth/login', 'POST', { email: 's4-weak@luno-test.local', password: 'Weak1k#Pass', consent: F24_CONSENT.consent })).status, 200);
     assert.equal(db.raw.prepare('SELECT password_hash AS h FROM users WHERE email = ?').get('s4-weak@luno-test.local').h, digest, 'weak digest never rewritten (no login-time upgrade)');
   } finally { db.raw.close(); }
 });

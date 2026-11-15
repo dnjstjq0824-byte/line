@@ -24,7 +24,7 @@ func TestNewsSampleFeed(t *testing.T) {
 	if st, _ := c.req("GET", "/api/v1/news", nil); st != 401 {
 		t.Fatalf("news without token must be 401, got %d", st)
 	}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": "news@example.test", "password": "NewsReaderPass#2026!", "display_name": "News Reader",
 	}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)
@@ -59,7 +59,7 @@ func TestWalletChargeFailClosedWithoutSimulatorFlag(t *testing.T) {
 	srv := httptest.NewServer(app.Handler())
 	defer func() { srv.Close(); app.Close() }()
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": "failclosed@example.test", "password": "FailClosedPass#2026!", "display_name": "Fail Closed",
 	}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)
@@ -92,7 +92,7 @@ func TestLineFeaturesParity(t *testing.T) {
 
 	login := func(email, password, name, handle string) *apiClient {
 		c := &apiClient{t: t, srv: srv}
-		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 			"email":        email,
 			"password":     password,
 			"display_name": name,
@@ -324,7 +324,7 @@ func TestAddFriendByDisplayName(t *testing.T) {
 
 	register := func(email, password, name, handle string) *apiClient {
 		c := &apiClient{t: t, srv: srv}
-		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 			"email": email, "password": password, "display_name": name, "handle": handle,
 		}); st != 201 {
 			t.Fatalf("register: %d %v", st, out)
@@ -369,7 +369,7 @@ func TestTranslateFailClosedWithoutEngine(t *testing.T) {
 	if st, _ := c.req("POST", "/api/v1/translate", map[string]any{"text": "hello"}); st != 401 {
 		t.Fatalf("translate without token must be 401, got %d", st)
 	}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": "translate@example.test", "password": "TranslatePass#2026!", "display_name": "Translator",
 	}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)
@@ -414,7 +414,7 @@ func TestPushQueueNotMarkedDeliveredWhenUnconfigured(t *testing.T) {
 	srv := httptest.NewServer(app.Handler())
 	defer func() { srv.Close(); app.Close() }()
 	c := &apiClient{t: t, srv: srv}
-	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+	if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 		"email": "pushfail@example.test", "password": "PushFailPass#2026!", "display_name": "Push Fail",
 	}); st != 201 {
 		t.Fatalf("register: %d %v", st, out)
@@ -461,7 +461,7 @@ func TestFriendBirthdayToday(t *testing.T) {
 
 	login := func(email, password, name string) *apiClient {
 		c := &apiClient{t: t, srv: srv}
-		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{
+		if st, out := c.req("POST", "/api/v1/auth/register", map[string]any{"birthdate": "1990-01-01", "consent": consentInput(), 
 			"email": email, "password": password, "display_name": name,
 		}); st != 201 {
 			t.Fatalf("register: %d %v", st, out)
