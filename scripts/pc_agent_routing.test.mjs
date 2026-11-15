@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { makeD1, F24_CONSENT } from './test_helpers.mjs';
 
 const PW = 'Str0ng!Passw0rd';
@@ -154,6 +155,51 @@ test('deciding a bot proposal queues a decision job for that bot', async () => {
     assert.equal(jobs[1].payload.decision, 'rejected');
     const row = w.db.raw.prepare("SELECT metadata FROM luno_messages WHERE kind = 'decision' ORDER BY sequence LIMIT 1").get();
     assert.equal(JSON.parse(row.metadata).proposal_message_id, p1.id, 'decision message names its proposal');
+  } finally { w.db.raw.close(); }
+});
+
+test('friend-add the bot, open a 1:1 chat: the room id is predictable, commands and approvals work there', async () => {
+  const w = await world();
+  try {
+    // The everyday account adds the bot by its ID (handle), like any friend.
+    const added = await w.api('friends', 'POST', { handle: 'pc_luno' }, w.other);
+    assert.ok(added.status === 200 || added.status === 201, `friend add: ${added.status}`);
+    const friends = await (await w.api('friends', 'GET', null, w.other)).json();
+    assert.ok(friends.friends.some((f) => f.id === w.botA.id), 'the bot is in the friend list');
+    // provision.mjs authorises the 1:1 room before it exists, from this formula.
+    const expected = `dm-${createHash('sha256').update([w.otherId, w.botA.id].sort().join(':')).digest('hex')}`;
+    await w.api('admin/llm/allowlist', 'POST', { kind: 'user', ref_id: w.otherId }, w.adminToken);
+    await w.api('admin/llm/allowlist', 'POST', { kind: 'room', ref_id: expected }, w.adminToken);
+    const dm = await (await w.api('conversations', 'POST', { kind: 'direct', member_ids: [w.botA.id] }, w.other)).json();
+    assert.equal(dm.id, expected, 'the server derives the same 1:1 room id');
+    const tok = (await (await w.api(`admin/bots/${w.botA.id}/tokens`, 'POST', { rooms: [w.room.id, dm.id], ops: ['read', 'post', 'propose'], ttl_sec: 3600 }, w.adminToken)).json()).token;
+    assert.equal((await w.api(`conversations/${dm.id}/messages`, 'POST', { body: '/status' }, w.other)).status, 201);
+    const jobs = w.jobs('command');
+    assert.equal(jobs.length, 1);
+    assert.deepEqual([jobs[0].bot_id, jobs[0].payload.author_id, jobs[0].payload.body], [w.botA.id, w.otherId, '/status']);
+    // The bot answers and proposes in the 1:1 room; its one human member decides.
+    assert.equal((await w.api(`conversations/${dm.id}/messages`, 'POST', { body: 'ready' }, tok)).status, 201);
+    const proposal = await (await w.api(`conversations/${dm.id}/messages`, 'POST', { kind: 'proposal', body: 'merge?' }, tok)).json();
+    assert.equal((await w.api(`conversations/${dm.id}/messages/${proposal.id}/decide`, 'POST', { decision: 'approved' }, w.other)).status, 201);
+    assert.equal(w.jobs('decision').at(-1).payload.decided_by, w.otherId);
+    const status = await (await w.api(`conversations/${dm.id}/bots`, 'GET', null, w.other)).json();
+    assert.deepEqual([status.bots.length, status.commands_allowed], [1, true]);
+  } finally { w.db.raw.close(); }
+});
+
+test('the admin user list still names every account when the roles table does not exist', async () => {
+  // Production has no luno_user_roles table; provision.mjs add-owner finds an
+  // account by email through this list, from an isolate that never saw it.
+  const w = await world();
+  try {
+    w.db.raw.exec('DROP TABLE IF EXISTS luno_user_roles');
+    const adminRow = w.db.raw.prepare("SELECT id FROM users WHERE email = 'pca-admin@luno-test.local'").get();
+    const cold = await isolate(w.db, { LLM_ENABLED: 'true', ADMIN_USER_IDS: adminRow.id });
+    const token = await login(cold.api, 'pca-admin@luno-test.local');
+    const list = await (await cold.api('admin/users', 'GET', null, token)).json();
+    const emails = list.users.map((u) => u.email);
+    for (const email of ['pca-owner@luno-test.local', 'pca-other@luno-test.local']) assert.ok(emails.includes(email), email);
+    assert.equal(list.users.find((u) => u.id === adminRow.id).role, 'admin');
   } finally { w.db.raw.close(); }
 });
 

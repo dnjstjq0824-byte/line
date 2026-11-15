@@ -2,14 +2,15 @@
 //
 //   node setup/provision.mjs register   create the owner account (public signup), remember its id
 //   node setup/provision.mjs setup      as that owner (must be admin): bot, work room, allowlist, token, config
-//   node setup/provision.mjs rotate     mint a fresh 30-day bot token
+//   node setup/provision.mjs add-owner --email <email>   let another of your accounts command the bot from a 1:1 chat
+//   node setup/provision.mjs rotate     mint a fresh 30-day bot token (the old one is revoked)
 //   node setup/provision.mjs status     show what is configured (never prints secrets)
 //
 // Secrets (owner password, bot token) are written only to the state folder
 // (%USERPROFILE%\.luno-agent), never to the repository or the screen.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { userInfo } from 'node:os';
@@ -146,11 +147,61 @@ async function setup() {
   console.log(`config written: ${paths.config}`);
 }
 
+// Every room the bot token must cover: the work room plus the 1:1 rooms of
+// the extra owner accounts.
+function allRooms(state) {
+  return [...new Set([state.roomId, ...(state.dmRooms || [])].filter(Boolean))];
+}
+
+// The server derives a 1:1 room id from its two members, so the room between
+// an account and the bot can be authorised before the first message exists.
+function directRoomId(a, b) {
+  return `dm-${createHash('sha256').update([a, b].sort().join(':')).digest('hex')}`;
+}
+
+async function revokeToken(token, botId, tokenId) {
+  if (!tokenId) return;
+  await api(`admin/bots/${botId}/tokens/${tokenId}`, { method: 'DELETE', token });
+}
+
+// Lets another account of the same person (found by its email) command the
+// bot from a 1:1 chat: add the bot as a friend by its ID, open the chat, type.
+async function addOwner() {
+  const email = opt('email', '').toLowerCase();
+  if (!email.includes('@')) throw new Error('usage: provision.mjs add-owner --email <account email>');
+  const { token, role } = await loginOwner();
+  if (role !== 'admin') throw new Error('the provisioning account is not an admin on this server');
+  const state = read(paths.provision, {});
+  if (!state.botId || !state.roomId) throw new Error('nothing provisioned yet — run "provision.mjs setup"');
+  const users = must(await api('admin/users', { token }), 'user list', 200).users || [];
+  const user = users.find((u) => String(u.email || '').toLowerCase() === email);
+  if (!user) throw new Error(`no account with the email ${email} on ${BASE} — sign up with it in the app first, then run this again`);
+  const dm = directRoomId(user.id, state.botId);
+  must(await api('admin/llm/allowlist', { method: 'POST', token, body: { kind: 'user', ref_id: user.id } }), 'allowlist user', 200, 201);
+  must(await api('admin/llm/allowlist', { method: 'POST', token, body: { kind: 'room', ref_id: dm } }), 'allowlist room', 200, 201);
+  state.owners = [...(state.owners || []).filter((o) => o.id !== user.id), { email, id: user.id }];
+  state.dmRooms = [...new Set([...(state.dmRooms || []), dm])];
+  write(paths.provision, state);
+  const previous = (read(paths.secrets, {}).tokenIds || {}).line;
+  const expires = await mintToken(token, state.botId, allRooms(state));
+  await revokeToken(token, state.botId, previous);
+  const config = read(paths.config, null);
+  if (!config) throw new Error(`${paths.config} missing — run "provision.mjs setup"`);
+  config.ownerUserIds = [...new Set([...(config.ownerUserIds || []), user.id])];
+  config.projects[0].roomIds = allRooms(state);
+  write(paths.config, config);
+  console.log(`owner added: ${email} (id ${user.id})`);
+  console.log(`1:1 room with the bot authorised: ${dm}`);
+  console.log(`bot token re-issued for ${allRooms(state).length} rooms (expires ${new Date(expires).toISOString()}); restart the runner`);
+}
+
 async function rotate() {
   const { token } = await loginOwner();
   const state = read(paths.provision, {});
   if (!state.botId || !state.roomId) throw new Error('nothing provisioned yet — run "provision.mjs setup"');
-  const expires = await mintToken(token, state.botId, [state.roomId]);
+  const previous = (read(paths.secrets, {}).tokenIds || {}).line;
+  const expires = await mintToken(token, state.botId, allRooms(state));
+  await revokeToken(token, state.botId, previous);
   console.log(`bot token rotated (expires ${new Date(expires).toISOString()}); restart the runner`);
 }
 
@@ -167,6 +218,6 @@ function status() {
   }, null, 2));
 }
 
-const steps = { register, setup, rotate, status };
-if (!steps[step]) { console.error(`unknown step "${step}" (register | setup | rotate | status)`); process.exit(2); }
+const steps = { register, setup, rotate, status, 'add-owner': addOwner };
+if (!steps[step]) { console.error(`unknown step "${step}" (register | setup | add-owner | rotate | status)`); process.exit(2); }
 try { await steps[step](); } catch (error) { console.error(String(error.message || error)); process.exit(1); }

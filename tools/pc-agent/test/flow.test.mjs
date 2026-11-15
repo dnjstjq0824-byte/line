@@ -244,6 +244,29 @@ test('dedup, stale commands, limits, usage hold and presence', async () => {
   assert.ok(stop.luno.last().body.includes('STOP 파일'));
 });
 
+test('a second owner account commands the bot from its own 1:1 room; strangers there do not', async () => {
+  const SECOND = 'owner-second-0002';
+  const DM = 'dm-second-and-bot';
+  const w = world({ cfg: { ownerUserIds: [SECOND] }, project: { roomIds: [ROOM, DM] } });
+  assert.deepEqual(w.cfg.ownerUserIds, [OWNER, SECOND], 'the first owner stays on the list');
+  const from = (author, room, body) => w.luno.jobs.push({ id: `j-${++w.luno.n}`, room_id: room, kind: 'command',
+    payload: { message_id: `in-${w.luno.n}`, author_id: author, body, created_at: new Date().toISOString() } });
+  from(SECOND, DM, '/dev WRITE:from-second.txt');
+  await w.drain();
+  assert.equal(w.agent.queue.get('T-0001').state, 'reported');
+  assert.ok(w.luno.posts.every((p) => p.roomId === DM), 'replies go to the room the command came from');
+  const proposal = w.luno.last('proposal');
+  w.luno.jobs.push({ id: 'd1', room_id: DM, kind: 'decision', payload: { proposal_message_id: proposal.id, decision: 'approved', decided_by: SECOND } });
+  await w.drain();
+  assert.equal(w.agent.queue.get('T-0001').state, 'merged');
+  assert.ok(existsSync(join(w.repo, 'from-second.txt')));
+  const before = w.luno.posts.length;
+  from('someone-else', DM, '/dev WRITE:evil.txt');
+  await w.drain();
+  assert.equal(w.luno.posts.length, before, 'a non-owner in an authorised room gets no reply');
+  assert.equal(w.luno.completed.at(-1).status, 'failed');
+});
+
 test('/stop kills the running task; a restart marks interrupted work failed', async () => {
   const w = world();
   w.luno.command('/dev SLEEP:60000');

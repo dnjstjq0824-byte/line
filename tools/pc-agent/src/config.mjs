@@ -41,6 +41,12 @@ export function validateConfig(raw, secrets) {
   need(/^https:\/\/[^\s]+\/api\/v1$/.test(cfg.baseUrl || '') || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/api\/v1$/.test(cfg.baseUrl || ''),
     'baseUrl must be https://…/api/v1');
   need(typeof cfg.ownerUserId === 'string' && cfg.ownerUserId.length >= 8, 'ownerUserId is required');
+  // More accounts of the same person (e.g. the everyday account next to the
+  // one provision created) may command the runner; each must also be on the
+  // server allowlist. The list always includes ownerUserId.
+  const extra = cfg.ownerUserIds === undefined ? [] : cfg.ownerUserIds;
+  need(Array.isArray(extra) && extra.every((id) => typeof id === 'string' && id.length >= 8), 'ownerUserIds must be a list of user ids');
+  cfg.ownerUserIds = [...new Set([cfg.ownerUserId, ...extra])];
   need(Array.isArray(cfg.projects) && cfg.projects.length > 0, 'at least one project is required');
   const ids = new Set();
   cfg.projects = cfg.projects.map((p) => {

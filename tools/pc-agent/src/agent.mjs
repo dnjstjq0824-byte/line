@@ -97,7 +97,7 @@ export class Agent {
     const p = job.payload || {};
     const actor = job.kind === 'decision' ? p.decided_by : p.author_id;
     // Re-check what the server already checked: right room, right person.
-    if (!project.roomIds.includes(job.room_id) || actor !== this.cfg.ownerUserId) {
+    if (!project.roomIds.includes(job.room_id) || !this.cfg.ownerUserIds.includes(actor)) {
       await client.complete(job.id, 'failed', { error: 'not allowed' }).catch(() => {});
       return;
     }

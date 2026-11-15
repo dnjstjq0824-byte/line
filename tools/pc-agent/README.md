@@ -72,6 +72,19 @@ powershell -ExecutionPolicy Bypass -File tools\pc-agent\windows\install.ps1
 | `logs\agent.log`, `logs\<번호>.log`, `logs\<번호>.jsonl` | 러너 로그, 작업 로그, Muse 이벤트 원본 |
 | `heartbeat`, `agent.lock`, `STOP` | 생존 신호, 단일 실행 잠금, 비상 정지 |
 
+## 평소 쓰는 계정에서 봇을 친구로 추가해 쓰기
+
+`provision.mjs`가 만든 계정 말고, 평소 쓰는 내 계정에서도 지시할 수 있다.
+
+```powershell
+node tools\pc-agent\setup\provision.mjs add-owner --email <내 계정 이메일>
+powershell -ExecutionPolicy Bypass -File tools\pc-agent\windows\restart-agent.ps1
+```
+
+그다음 앱이나 웹에서 **ID로 친구 추가 → `luno_pc`** → 1:1 채팅을 열고 `/status` 같은 명령을 보낸다.
+이 명령은 그 계정을 허용목록에 넣고, 그 계정과 봇의 1:1 방을 미리 허용하고, 봇 토큰을 두 방 범위로 다시 발급한다(이전 토큰은 폐기).
+1:1 방에서는 내가 바로 [승인]할 수 있다. 다른 사람이 봇을 친구로 추가해도 허용목록에 없으면 아무 일도 일어나지 않는다.
+
 ## 운영
 
 - 봇 토큰은 30일 뒤 만료된다: `node tools\pc-agent\setup\provision.mjs rotate` 후 러너 재시작.

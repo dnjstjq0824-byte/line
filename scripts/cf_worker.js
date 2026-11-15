@@ -8385,7 +8385,11 @@ const workerCore = {
         if (authUser.role !== 'admin') return json({ error: 'forbidden' }, 403);
         if (dbOf()) {
           await ensureSchema();
-          const { results } = await dbOf().prepare('SELECT u.id, u.email, u.display_name, u.state, r.role AS granted_role FROM users u LEFT JOIN luno_user_roles r ON r.user_id = u.id').all().catch(() => ({ results: [] }));
+          // A database without the roles table (no grants yet) still lists every
+          // account: the join is retried without it instead of returning nothing.
+          let listed = await dbOf().prepare('SELECT u.id, u.email, u.display_name, u.state, r.role AS granted_role FROM users u LEFT JOIN luno_user_roles r ON r.user_id = u.id').all().catch(() => null);
+          if (!listed) listed = await dbOf().prepare('SELECT id, email, display_name, state, NULL AS granted_role FROM users').all().catch(() => ({ results: [] }));
+          const { results } = listed;
           const envAdmins = new Set(String(CURRENT_ENV?.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
           const out = (results || []).map(r => ({ id: r.id, email: r.email, display_name: r.display_name, role: envAdmins.has(r.id) ? 'admin' : grantedRole(r.granted_role), state: r.state || 'active' }));
           for (const u of users.values()) {
