@@ -76,7 +76,8 @@ async function load() {
   })
 }
 
-async function takeAction(subjectUserID: string, action: 'warn' | 'suspend' | 'activate' | 'dismiss', reportID = '') {
+async function takeAction(subjectUserID: string, action: 'warn' | 'suspend' | 'ban' | 'activate' | 'dismiss' | 'erase', reportID = '') {
+  if (action === 'erase' && !window.confirm(t('admin.eraseConfirm'))) return
   await run(async () => {
     await request('/api/v1/admin/moderation/actions', token.value, 'POST', {
       subject_user_id: subjectUserID,
@@ -211,6 +212,8 @@ async function deleteNewsArticle(id: string) {
               <BaseButton v-if="row.state === 'active'" size="sm" variant="danger" @click="takeAction(row.id, 'suspend')">{{ t('admin.suspend') }}</BaseButton>
               <BaseButton v-else-if="row.state === 'suspended'" size="sm" variant="primary" @click="takeAction(row.id, 'activate')">{{ t('admin.unsuspend') }}</BaseButton>
               <BaseButton size="sm" @click="takeAction(row.id, 'warn')">{{ t('admin.warn') }}</BaseButton>
+              <BaseButton v-if="row.state === 'active'" size="sm" variant="danger" @click="takeAction(row.id, 'ban')">{{ t('admin.ban') }}</BaseButton>
+              <BaseButton v-if="row.state !== 'deleted'" size="sm" variant="danger" @click="takeAction(row.id, 'erase')">{{ t('admin.erase') }}</BaseButton>
             </span>
           </template>
         </BaseTable>

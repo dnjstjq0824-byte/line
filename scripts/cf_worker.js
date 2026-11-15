@@ -155,6 +155,9 @@ const LUNO_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_luno_sessions_user_active ON luno_sessions(user_id, created_at) WHERE revoked_at IS NULL`,
   `CREATE TABLE IF NOT EXISTS luno_audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, target TEXT, detail TEXT, created_at TEXT NOT NULL)`,
+  // F16: feature flags ride D1 (no-DB isolates keep the memory seeds).
+  `CREATE TABLE IF NOT EXISTS luno_feature_flags (
+    key TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0, description TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS luno_ws_tickets (
     ticket TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_ws_tickets_exp ON luno_ws_tickets(expires_at)`,
@@ -2163,6 +2166,29 @@ const featureFlags = [
   { key: 'ai_smart_replies', enabled: true, description: 'AI-assisted quick responses' },
   { key: 'openchat_live_streaming', enabled: false, description: 'Public community voice stages' }
 ];
+// F16: D1-backed flags; the seed list above is the default overlay.
+async function listFeatureFlags() {
+  const out = featureFlags.map(f => ({ ...f }));
+  const db = dbOf();
+  if (!db) return out;
+  await ensureSchema();
+  const rows = (await db.prepare('SELECT key, enabled, description FROM luno_feature_flags').all().catch(() => ({ results: [] }))).results || [];
+  for (const r of rows) {
+    const t = out.find(f => f.key === r.key);
+    if (t) { t.enabled = Number(r.enabled) === 1; if (r.description) t.description = r.description; }
+    else out.push({ key: r.key, enabled: Number(r.enabled) === 1, description: r.description || '' });
+  }
+  return out;
+}
+async function saveFeatureFlag(key, enabled) {
+  const target = featureFlags.find(f => f.key === key);
+  if (target) target.enabled = enabled; else featureFlags.push({ key, enabled, description: '' });
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT INTO luno_feature_flags (key, enabled, description, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (key) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at')
+    .bind(key, enabled ? 1 : 0, (target && target.description) || '', now()).run();
+}
 
 // =====================================================================
 // Cross-isolate realtime delivery
@@ -2506,6 +2532,25 @@ async function isBanned(userId) {
   const exp = Number(row.expires_at || 0);
   return exp === 0 || exp > Date.now();
 }
+// F16: a suspension with a past expiry lifts itself; permanent bans
+// (expires_at = 0) never auto-lift, and warn-only states have no row.
+async function suspensionExpired(userId) {
+  const db = dbOf();
+  if (!db || !userId) return false;
+  const row = await db.prepare('SELECT expires_at FROM user_bans WHERE user_id = ?').bind(userId).first().catch(() => null);
+  if (!row) return false;
+  const exp = Number(row.expires_at || 0);
+  return exp > 0 && exp <= Date.now();
+}
+async function healExpiredSuspension(userId) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare("UPDATE users SET state = 'active' WHERE id = ?").bind(userId).run();
+  await db.prepare('DELETE FROM user_bans WHERE user_id = ?').bind(userId).run();
+  const u = usersById.get(userId);
+  if (u) u.state = 'active';
+}
 // Privilege assignments are provisioned separately by an authorized operator.
 // Email, demo seed data and the role copied into an old session are not grants.
 const GRANTABLE_ROLES = ['user', 'admin', 'partner', 'developer', 'creator', 'ads'];
@@ -2664,7 +2709,12 @@ async function getAuthUser(request) {
     if (user && standing && standing.email_verified !== undefined && standing.email_verified !== null) {
       user.email_verified = Number(standing.email_verified) === 0 ? 0 : 1;
     }
-    if (!user || state === 'suspended' || state === 'deleted' || await isBanned(userId)) {
+    // F16: an expired temporary suspension lifts itself on next use.
+    if (user && state === 'suspended' && await suspensionExpired(userId)) {
+      await healExpiredSuspension(userId);
+      user.state = 'active';
+    }
+    if (!user || user.state === 'suspended' || user.state === 'deleted' || await isBanned(userId)) {
       sessions.delete(token);
       return null;
     }
@@ -5486,6 +5536,20 @@ function entitled(u, feature) {
   if (p.startsWith('admin/')) {
     if (me.role !== 'admin') return bad('forbidden', 403);
     if (p === 'admin/stats' && method === 'GET') {
+      // F16: counts come from D1 so every isolate reports the same numbers.
+      // Live calls stay memory (ephemeral by nature); orders follow in F17.
+      if (dbOf()) {
+        await ensureSchema();
+        const count = async (sql) => Number((await dbOf().prepare(sql).first().catch(() => null))?.n || 0);
+        return json({ metrics: {
+          users: await count('SELECT COUNT(*) n FROM users'),
+          active_sessions: await count('SELECT COUNT(*) n FROM luno_sessions WHERE revoked_at IS NULL'),
+          conversations: await count('SELECT COUNT(*) n FROM luno_conversations'),
+          messages: await count('SELECT COUNT(*) n FROM luno_messages'),
+          open_reports: await count("SELECT COUNT(*) n FROM reports WHERE status = 'open'"),
+          calls: callSessions.size, orders: storeOrders.size
+        } });
+      }
       return json({ metrics: {
         users: users.size, active_sessions: sessions.size, conversations: conversations.size,
         messages: Array.from(messages.values()).reduce((n, l) => n + l.length, 0),
@@ -5508,6 +5572,7 @@ function entitled(u, feature) {
       await ensureSchema();
       await dbOf().prepare('INSERT INTO luno_official_accounts (id, name, handle, description, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, name, clip(String(b.handle || ''), 30), clip(String(b.description || ''), 200), color, at, at).run();
       officialAccounts.set(id, { id, name, handle: clip(String(b.handle || ''), 30), description: clip(String(b.description || ''), 200), color });
+      await persistAudit(myId, 'official_account.create', id);
       return json({ id, name, handle: clip(String(b.handle || ''), 30), description: clip(String(b.description || ''), 200), color }, 201);
     }
     if ((m = p.match(/^admin\/official-accounts\/([\w-]+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
@@ -5519,6 +5584,7 @@ function entitled(u, feature) {
         await dbOf().prepare('DELETE FROM luno_official_follows WHERE account_id = ?').bind(m[1]).run();
         await dbOf().prepare('DELETE FROM luno_official_accounts WHERE id = ?').bind(m[1]).run();
         officialAccounts.delete(m[1]);
+        await persistAudit(myId, 'official_account.delete', m[1]);
         return json({ status: 'deleted' });
       }
       const b = await readJson(request);
@@ -5528,6 +5594,7 @@ function entitled(u, feature) {
       await dbOf().prepare('UPDATE luno_official_accounts SET name = ?, handle = ?, description = ?, color = ?, updated_at = ? WHERE id = ?').bind(name, b.handle === undefined ? row.handle : clip(String(b.handle), 30), b.description === undefined ? row.description : clip(String(b.description), 200), color, now(), m[1]).run();
       const upd = await dbOf().prepare('SELECT * FROM luno_official_accounts WHERE id = ?').bind(m[1]).first();
       officialAccounts.set(m[1], { id: upd.id, name: upd.name, handle: upd.handle, description: upd.description, color: upd.color });
+      await persistAudit(myId, 'official_account.update', upd.id);
       return json({ id: upd.id, name: upd.name, handle: upd.handle, description: upd.description, color: upd.color });
     }
     if (p === 'admin/news' && method === 'GET') {
@@ -5545,6 +5612,7 @@ function entitled(u, feature) {
       const at = now();
       await ensureSchema();
       await dbOf().prepare('INSERT INTO luno_news (id, title, press, category, published_at, image_url, summary, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, title, clip(String(b.press || ''), 60), clip(String(b.category || ''), 30), clip(String(b.published_at || at), 30), clip(String(b.image_url || ''), 2000), clip(String(b.summary || ''), 500), clip(String(b.content || ''), 20000), at).run();
+      await persistAudit(myId, 'news.create', id);
       return json({ id, title }, 201);
     }
     if ((m = p.match(/^admin\/news\/([\w-]+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
@@ -5554,12 +5622,14 @@ function entitled(u, feature) {
       if (!row) return bad('기사를 찾을 수 없습니다', 404);
       if (method === 'DELETE') {
         await dbOf().prepare('DELETE FROM luno_news WHERE id = ?').bind(m[1]).run();
+        await persistAudit(myId, 'news.delete', m[1]);
         return json({ status: 'deleted' });
       }
       const b = await readJson(request);
       const title = b.title === undefined ? row.title : clip(String(b.title), 200);
       if (!title) return bad('제목을 입력하세요');
       await dbOf().prepare('UPDATE luno_news SET title = ?, press = ?, category = ?, published_at = ?, image_url = ?, summary = ?, content = ? WHERE id = ?').bind(title, b.press === undefined ? row.press : clip(String(b.press), 60), b.category === undefined ? row.category : clip(String(b.category), 30), b.published_at === undefined ? row.published_at : clip(String(b.published_at), 30), b.image_url === undefined ? row.image_url : clip(String(b.image_url), 2000), b.summary === undefined ? row.summary : clip(String(b.summary), 500), b.content === undefined ? row.content : clip(String(b.content), 20000), m[1]).run();
+      await persistAudit(myId, 'news.update', row.id);
       return json({ id: row.id, title });
     }
     // L-01: admin-only bot issuance. Bots carry no password material and
@@ -5600,6 +5670,7 @@ function entitled(u, feature) {
       }
       users.set(bot.email, bot);
       usersById.set(bot.id, bot);
+      await persistAudit(myId, 'bot.issue', bot.id);
       return json({ id: bot.id, email: bot.email, handle: bot.handle, display_name: bot.display_name, kind: 'bot' }, 201);
     }
     // L-06: scoped bot token mint/revoke. The guard above already returned 403.
@@ -5622,6 +5693,7 @@ function entitled(u, feature) {
       const expiresAt = Date.now() + ttl * 1000;
       await db.prepare('INSERT INTO luno_bot_tokens (id, token_hash, bot_id, rooms_json, ops_json, expires_at, revoked, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, datetime(\'now\'))')
         .bind(id, await sha256Hex(token), bot.id, JSON.stringify(rooms), JSON.stringify(ops), expiresAt).run();
+      await persistAudit(myId, 'bot.token_issue', bot.id, { token_id: id });
       return json({ id, token, bot_id: bot.id, rooms, ops, expires_at: expiresAt }, 201);
     }
     if ((m = p.match(/^admin\/bots\/([\w-]+)\/tokens\/([\w-]+)$/)) && method === 'DELETE') {
@@ -5630,6 +5702,7 @@ function entitled(u, feature) {
       await ensureSchema();
       const done = await db.prepare('UPDATE luno_bot_tokens SET revoked = 1 WHERE id = ? AND bot_id = ?').bind(m[2], m[1]).run().catch(() => null);
       if (!done || !done.meta || Number(done.meta.changes) < 1) return json({ error: 'token not found' }, 404);
+      await persistAudit(myId, 'bot.token_revoke', m[1], { token_id: m[2] });
       return json({ status: 'revoked', id: m[2] }, 200);
     }
     // L-17: allowlist management. The guard above already returned 403.
@@ -5656,9 +5729,11 @@ function entitled(u, feature) {
       if (method === 'POST') {
         const done = await db.prepare('INSERT OR IGNORE INTO luno_bot_allowlist (kind, ref_id, created_at) VALUES (?, ?, datetime(\'now\'))').bind(kind, refId).run().catch(() => null);
         const added = done && done.meta && Number(done.meta.changes) > 0;
+        if (added) await persistAudit(myId, 'llm.allowlist_add', refId, { kind });
         return json({ status: added ? 'added' : 'exists', kind, ref_id: refId }, added ? 201 : 200);
       }
       await db.prepare('DELETE FROM luno_bot_allowlist WHERE kind = ? AND ref_id = ?').bind(kind, refId).run();
+      await persistAudit(myId, 'llm.allowlist_remove', refId, { kind });
       return json({ status: 'removed', kind, ref_id: refId }, 200);
     }
     // L-09: killswitch. Stopped halts enqueue (routing) and claims at once;
@@ -5671,6 +5746,7 @@ function entitled(u, feature) {
       await ensureSchema();
       await db.prepare('INSERT INTO luno_bot_config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = ?')
         .bind('kill', b.stopped ? '1' : '0', b.stopped ? '1' : '0').run();
+      await persistAudit(myId, b.stopped ? 'llm.kill_on' : 'llm.kill_off', null);
       return json({ stopped: b.stopped }, 200);
     }
     if (p === 'admin/reports' && method === 'GET') {
@@ -5681,30 +5757,54 @@ function entitled(u, feature) {
       }
       return json({ reports: adminReports.slice(0, 100) });
     }
-    if (p === 'admin/audit-logs' && method === 'GET') return json({ audit_logs: auditLogs.slice(0, 100) });
+    if (p === 'admin/audit-logs' && method === 'GET') {
+      // F16: the D1 trail is the source of truth; memory covers no-DB mode.
+      if (dbOf()) {
+        await ensureSchema();
+        const rows = (await dbOf().prepare('SELECT id, actor, action, target, detail, created_at FROM luno_audit ORDER BY id DESC LIMIT 100').all().catch(() => ({ results: [] }))).results || [];
+        return json({ audit_logs: rows.map(r => ({ id: r.id, actor_user_id: r.actor, action: r.action, target_id: r.target, detail: r.detail, created_at: r.created_at })) });
+      }
+      return json({ audit_logs: auditLogs.slice(0, 100) });
+    }
+    if (p === 'admin/feature-flags' && method === 'GET') {
+      return json({ feature_flags: await listFeatureFlags() });
+    }
     if (p === 'admin/feature-flags' && method === 'PUT') {
       const b = await readJson(request);
       const key = clip(b.key, 60);
       if (!/^[a-z0-9_]{3,60}$/.test(key) || typeof b.enabled !== 'boolean') return bad('플래그 키(영문 소문자·숫자·_)와 enabled 값이 필요합니다');
-      const target = featureFlags.find(f => f.key === key);
-      if (target) target.enabled = b.enabled; else featureFlags.push({ key, enabled: b.enabled, description: '' });
-      addAudit(myId, `feature_flag.${b.enabled ? 'enable' : 'disable'}`, key);
-      return json({ status: 'updated', feature_flags: featureFlags });
+      await saveFeatureFlag(key, b.enabled);
+      await persistAudit(myId, `feature_flag.${b.enabled ? 'enable' : 'disable'}`, key);
+      return json({ status: 'updated', feature_flags: await listFeatureFlags() });
     }
     if (p === 'admin/moderation/actions' && method === 'POST') {
       const b = await readJson(request);
       const uidTarget = b.subject_user_id || b.user_id;
       let target = usersById.get(uidTarget);
       if (!target && dbOf()) target = await loadUserFromD1(uidTarget, undefined);
-      if (!target || !['warn', 'suspend', 'activate', 'dismiss'].includes(b.action)) return bad('잘못된 제재 요청입니다');
+      if (!target || !['warn', 'suspend', 'ban', 'activate', 'dismiss', 'erase'].includes(b.action)) return bad('잘못된 제재 요청입니다');
       if (target.role === 'admin') return bad('관리자 계정에는 제재를 적용할 수 없습니다', 403);
-      if (b.action === 'suspend') {
+      if (b.action === 'erase') {
+        // F16: under-14 procedure — immediate F3 wipe, no 30-day grace.
+        const reason = clip(b.reason, 300);
+        if (!reason) return bad('삭제 사유를 입력하세요');
+        await deleteAccountData(target.id);
+        if (dbOf()) {
+          await ensureSchema();
+          await dbOf().prepare('DELETE FROM user_bans WHERE user_id = ?').bind(target.id).run();
+        }
+        await persistAudit(myId, 'moderation.erase', target.id, { reason });
+      } else if (b.action === 'suspend' || b.action === 'ban') {
+        // F16: suspend is temporary (default 30 days, 1..365); ban is
+        // permanent (expires 0). Both kill every session immediately.
+        const days = b.action === 'ban' ? 0 : Math.min(365, Math.max(1, Number(b.duration_days) || 30));
+        const expires = days === 0 ? 0 : Date.now() + days * 86400000;
         target.state = 'suspended';
         await revokeOtherSessions(target.id, '', myId);
         if (dbOf()) {
           await ensureSchema();
           await dbOf().prepare("UPDATE users SET state = 'suspended' WHERE id = ?").bind(target.id).run();
-          await dbOf().prepare('INSERT OR REPLACE INTO user_bans (user_id, reason, banned_by, expires_at, created_at) VALUES (?, ?, ?, 0, ?)').bind(target.id, clip(b.reason, 300), myId, now()).run();
+          await dbOf().prepare('INSERT OR REPLACE INTO user_bans (user_id, reason, banned_by, expires_at, created_at) VALUES (?, ?, ?, ?, ?)').bind(target.id, clip(b.reason, 300), myId, expires, now()).run();
         }
       } else if (b.action === 'activate') {
         target.state = 'active';
@@ -5722,7 +5822,7 @@ function entitled(u, feature) {
           await dbOf().prepare('UPDATE reports SET status = ? WHERE id = ?').bind(b.action === 'dismiss' ? 'dismissed' : 'resolved', b.report_id).run().catch(() => null);
         }
       }
-      addAudit(myId, `moderation.${b.action}`, target.id);
+      if (b.action !== 'erase') await persistAudit(myId, `moderation.${b.action}`, target.id, b.reason ? { reason: clip(b.reason, 300) } : undefined);
       return json({ status: 'action_applied', user_id: target.id, action: b.action });
     }
   }
@@ -6571,6 +6671,11 @@ const workerCore = {
           await ensureSchema();
           const fresh = await loadUserFromD1ByLogin(identifier);
           if (fresh) user = fresh;
+        }
+        // F16: an expired temporary suspension lifts itself on next login.
+        if (user && user.state === 'suspended' && dbOf() && await suspensionExpired(user.id)) {
+          await healExpiredSuspension(user.id);
+          user.state = 'active';
         }
         if (!user || user.state === 'suspended') {
           await recordLoginFailure(identifier, loginIp);
