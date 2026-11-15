@@ -33,6 +33,7 @@ const partnerOrgs = new Map();
 const partnerAccounts = new Map();
 const partnerTickets = new Map();
 const partnerCampaigns = new Map();
+const partnerCoupons = new Map();
 const oaBotRules = new Map();
 const devOrgs = new Map();
 const devApps = new Map();
@@ -158,6 +159,43 @@ const LUNO_SCHEMA = [
   // F16: feature flags ride D1 (no-DB isolates keep the memory seeds).
   `CREATE TABLE IF NOT EXISTS luno_feature_flags (
     key TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0, description TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)`,
+  // F17: business consoles ride D1 behind DURABLE_BUSINESS; the Maps
+  // stay the no-DB cache (webhooks stay 503 without durable storage).
+  `CREATE TABLE IF NOT EXISTS luno_partner_orgs (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, country TEXT NOT NULL DEFAULT 'KR', owner_id TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_partner_accounts (
+    id TEXT PRIMARY KEY, org_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_partner_tickets (
+    id TEXT PRIMARY KEY, account_id TEXT NOT NULL, contact_id TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT 'normal', note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_partner_campaigns (
+    id TEXT PRIMARY KEY, account_id TEXT NOT NULL, name TEXT NOT NULL, template_json TEXT NOT NULL DEFAULT 'null', status TEXT NOT NULL DEFAULT 'scheduled', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_partner_coupons (
+    id TEXT PRIMARY KEY, account_id TEXT NOT NULL, code TEXT NOT NULL, max_redemptions INTEGER NOT NULL DEFAULT 50, redeemed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_rich_menus (
+    account_id TEXT PRIMARY KEY, menu_json TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_oa_bot_rules (
+    id TEXT PRIMARY KEY, account_id TEXT NOT NULL, keywords_json TEXT NOT NULL, reply TEXT NOT NULL, match_type TEXT NOT NULL DEFAULT 'contains', updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_dev_orgs (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, owner_id TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_dev_apps (
+    id TEXT PRIMARY KEY, org_id TEXT, owner_id TEXT NOT NULL, name TEXT NOT NULL, client_id TEXT NOT NULL, client_secret_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_dev_webhooks (
+    id TEXT PRIMARY KEY, app_id TEXT NOT NULL, endpoint_url TEXT NOT NULL, secret_hash TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_dev_miniapps (
+    id TEXT PRIMARY KEY, app_id TEXT NOT NULL, origin TEXT NOT NULL, manifest_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_creator_profiles (
+    user_id TEXT PRIMARY KEY, display_name TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_creator_items (
+    id TEXT PRIMARY KEY, pack_id TEXT NOT NULL, object_key TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'static', ordinal INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_ads_advertisers (
+    id TEXT PRIMARY KEY, organization_id TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, owner_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS luno_ads_groups (
+    id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, name TEXT NOT NULL, targeting_json TEXT NOT NULL DEFAULT '{}', bid_minor INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+  // F17: owned resources were migration-only; fresh databases 500ed on
+  // packs/campaigns under DURABLE_BUSINESS. Same shape as the migration.
+  `CREATE TABLE IF NOT EXISTS luno_owned_resources (
+    kind TEXT NOT NULL CHECK (kind IN ('creator_pack','ad_campaign')), id TEXT NOT NULL, owner_id TEXT NOT NULL REFERENCES users(id), payload TEXT NOT NULL CHECK (json_valid(payload)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(kind,id))`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_owned_owner ON luno_owned_resources(kind,owner_id,id)`,
   `CREATE TABLE IF NOT EXISTS luno_ws_tickets (
     ticket TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_ws_tickets_exp ON luno_ws_tickets(expires_at)`,
@@ -3012,6 +3050,79 @@ async function ownedRead(kind, id) {
   const row = await dbOf().prepare('SELECT * FROM luno_owned_resources WHERE kind=? AND id=?').bind(kind, id).first();
   return row ? { ...JSON.parse(row.payload), id: row.id, owner_id: row.owner_id } : null;
 }
+function parseJsonSafe(text, fallback) {
+  try {
+    const v = JSON.parse(String(text ?? ''));
+    return v === undefined ? fallback : v;
+  } catch { return fallback; }
+}
+async function hmacSha256Hex(secret, text) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(secret)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(String(text)));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// F17: partner account ownership, cache first then D1 (cold isolates).
+async function partnerAccountOwnedBy(aid, userId) {
+  const account = partnerAccounts.get(aid);
+  const organization = account && partnerOrgs.get(account.org_id);
+  if (organization) return organization.owner_id === userId;
+  if (!ownedResourcesDurable()) return false;
+  await ensureSchema();
+  const row = await dbOf().prepare('SELECT o.owner_id FROM luno_partner_accounts a JOIN luno_partner_orgs o ON o.id = a.org_id WHERE a.id = ?').bind(aid).first().catch(() => null);
+  return !!row && row.owner_id === userId;
+}
+async function devOrgById(oid) {
+  const hit = devOrgs.get(oid);
+  if (hit) return hit;
+  if (!ownedResourcesDurable()) return null;
+  await ensureSchema();
+  const r = await dbOf().prepare('SELECT * FROM luno_dev_orgs WHERE id = ?').bind(oid).first().catch(() => null);
+  if (!r) return null;
+  const org = { id: r.id, name: r.name, owner_id: r.owner_id };
+  devOrgs.set(org.id, org);
+  return org;
+}
+async function devAppById(appId) {
+  const hit = devApps.get(appId);
+  if (hit) return hit;
+  if (!ownedResourcesDurable()) return null;
+  await ensureSchema();
+  const r = await dbOf().prepare('SELECT * FROM luno_dev_apps WHERE id = ?').bind(appId).first().catch(() => null);
+  if (!r) return null;
+  const app = { id: r.id, org_id: r.org_id, owner_id: r.owner_id, name: r.name, client_id: r.client_id, client_secret_hash: r.client_secret_hash, status: r.status };
+  devApps.set(app.id, app);
+  return app;
+}
+// F17: top-level copy of the link-preview URL gate (that helper nests
+// inside extended(); console routes in workerCore need the same rule).
+function httpsPublicHostBlocked(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  if (!h) return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.lan') || h.endsWith('.home') || h.endsWith('.corp')) return true;
+  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const o = v4.slice(1).map(Number);
+    if (o.some(n => n > 255)) return true;
+    if (o[0] === 10 || o[0] === 127 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168) || (o[0] === 169 && o[1] === 254) || o[0] === 0 || o[0] >= 224) return true;
+    return false;
+  }
+  if (h.includes(':')) return true;
+  return false;
+}
+function httpsPublicUrlError(value) {
+  let u;
+  try { u = new URL(String(value || '')); } catch { return 'valid URL required'; }
+  if (u.protocol !== 'https:') return 'https URLs only';
+  if (u.username || u.password) return 'credentialed URLs blocked';
+  if (httpsPublicHostBlocked(u.hostname)) return 'internal addresses blocked';
+  return null;
+}
+async function hydrateOaRules(aid) {
+  if (!ownedResourcesDurable()) return;
+  await ensureSchema();
+  const rows = (await dbOf().prepare('SELECT id, keywords_json, reply, match_type FROM luno_oa_bot_rules WHERE account_id = ?').bind(aid).all().catch(() => ({ results: [] }))).results || [];
+  if (rows.length) oaBotRules.set(aid, rows.map(r => ({ id: r.id, keywords: parseJsonSafe(r.keywords_json, []), reply: r.reply, match_type: r.match_type })));
+}
 async function ownedSave(kind, value, create = false) {
   if (ownedResourcesDurable()) {
     if (create) await dbOf().prepare('INSERT INTO luno_owned_resources (kind,id,owner_id,payload,created_at,updated_at) VALUES (?,?,?,?,?,?)').bind(kind, value.id, value.owner_id, JSON.stringify(value), now(), now()).run();
@@ -4403,7 +4514,10 @@ async function followedMap(userId) {
       });
       if (conv.official) {
         const acct = officialAccounts.get(conv.members.find(x => officialAccounts.has(x)));
-        if (acct && kind === 'text') await pushPersistent(cid, acct.id, { kind: 'text', body: botReply(body, acct) });
+        if (acct && kind === 'text') {
+          await hydrateOaRules(acct.id);
+          await pushPersistent(cid, acct.id, { kind: 'text', body: botReply(body, acct) });
+        }
       }
       if (userKind(me) === 'bot') await persistAudit(myId, BOT_ONLY_KINDS.has(kind) ? 'bot.propose' : 'bot.post', cid, { kind, message_id: msg.id });
       const decorated = decorateMessage(msg, myId, cid);
@@ -6046,7 +6160,16 @@ function entitled(u, feature) {
   if ((m = p.match(/^partner\/accounts\/([\w-]+)\/rich-menus$/))) {
     const aid = m[1];
     if (method === 'GET') {
-      const menu = richMenus.get(aid) || {
+      let menu = richMenus.get(aid);
+      if (!menu && ownedResourcesDurable()) {
+        await ensureSchema();
+        const row = await dbOf().prepare('SELECT menu_json FROM luno_rich_menus WHERE account_id = ?').bind(aid).first().catch(() => null);
+        if (row) {
+          menu = parseJsonSafe(row.menu_json, null);
+          if (menu) richMenus.set(aid, menu);
+        }
+      }
+      if (!menu) menu = {
         id: `menu_${aid}`,
         account_id: aid,
         title: '공식 채널 기본 메뉴',
@@ -6072,7 +6195,19 @@ function entitled(u, feature) {
     }
     if (method === 'POST') {
       const b = await readJson(request);
-      const menu = { id: uid(), account_id: aid, ...b, updated_at: now() };
+      const tiles = Array.isArray(b.tiles) ? b.tiles.slice(0, 12).map(t => ({
+        id: clip(t.id, 20) || uid(),
+        label: clip(t.label, 40),
+        icon: clip(t.icon, 10),
+        action: t.action && t.action.type === 'uri'
+          ? { type: 'uri', uri: clip(t.action.uri, 2000) }
+          : { type: 'message', text: clip(t.action ? t.action.text : '', 1000) }
+      })) : [];
+      const menu = { id: uid(), account_id: aid, title: clip(b.title, 100), layout: b.layout === 'grid_1x3' ? 'grid_1x3' : 'grid_2x3', tiles, enabled: b.enabled !== false, updated_at: now() };
+      if (ownedResourcesDurable()) {
+        await ensureSchema();
+        await dbOf().prepare('INSERT INTO luno_rich_menus (account_id, menu_json, updated_at) VALUES (?, ?, ?) ON CONFLICT (account_id) DO UPDATE SET menu_json = excluded.menu_json, updated_at = excluded.updated_at').bind(aid, JSON.stringify(menu), menu.updated_at).run();
+      }
       richMenus.set(aid, menu);
       return json({ rich_menu: menu, status: 'saved' }, 201);
     }
@@ -6080,6 +6215,7 @@ function entitled(u, feature) {
   if ((m = p.match(/^partner\/accounts\/([\w-]+)\/bot-rules$/))) {
     const aid = m[1];
     if (method === 'GET') {
+      await hydrateOaRules(aid);
       return json({ rules: oaBotRules.get(aid) || [] });
     }
     if (method === 'POST') {
@@ -6088,8 +6224,13 @@ function entitled(u, feature) {
       const keywords = rawKw.map(k => String(k).trim()).filter(Boolean);
       const reply = clip(String(b.reply || b.response || ''), 1000);
       if (!keywords.length || !reply) return bad('키워드와 답변 내용을 입력하세요');
+      await hydrateOaRules(aid);
       const rules = oaBotRules.get(aid) || [];
-      const newRule = { id: uid(), keywords, reply, match_type: b.match_type || 'contains', updated_at: now() };
+      const newRule = { id: uid(), keywords, reply, match_type: b.match_type === 'exact' ? 'exact' : 'contains', updated_at: now() };
+      if (ownedResourcesDurable()) {
+        await ensureSchema();
+        await dbOf().prepare('INSERT INTO luno_oa_bot_rules (id, account_id, keywords_json, reply, match_type, updated_at) VALUES (?, ?, ?, ?, ?, ?)').bind(newRule.id, aid, JSON.stringify(keywords), reply, newRule.match_type, newRule.updated_at).run();
+      }
       rules.push(newRule);
       oaBotRules.set(aid, rules);
       return json({ rule: newRule, rules }, 201);
@@ -6097,13 +6238,39 @@ function entitled(u, feature) {
   }
   if ((m = p.match(/^partner\/accounts\/([\w-]+)\/bot-rules\/([\w-]+)$/)) && method === 'DELETE') {
     const [_, aid, ruleId] = m;
+    if (ownedResourcesDurable()) {
+      await ensureSchema();
+      await dbOf().prepare('DELETE FROM luno_oa_bot_rules WHERE id = ? AND account_id = ?').bind(ruleId, aid).run();
+    }
     let rules = oaBotRules.get(aid) || [];
     rules = rules.filter(r => r.id !== ruleId);
     oaBotRules.set(aid, rules);
     return json({ status: 'deleted', rule_id: ruleId });
   }
   if ((m = p.match(/^developer\/apps\/([\w-]+)\/webhooks\/test$/)) && method === 'POST') {
-    return json({ error: 'Webhook delivery requires a configured delivery backend', code: 'WEBHOOK_DELIVERY_NOT_CONFIGURED' }, 503);
+    // F17: unknown apps and missing configs keep the pinned 503 shape (no
+    // delivered field); a stored webhook gets a real signed test delivery.
+    const app = await devAppById(m[1]);
+    if (!app) return json({ error: 'Webhook delivery requires a configured delivery backend', code: 'WEBHOOK_DELIVERY_NOT_CONFIGURED' }, 503);
+    if (app.owner_id !== myId) return json({ error: 'app forbidden' }, 403);
+    let hook = Array.from(devWebhooks.values()).find(h => h.app_id === app.id) || null;
+    if (!hook && ownedResourcesDurable()) {
+      await ensureSchema();
+      const r = await dbOf().prepare('SELECT * FROM luno_dev_webhooks WHERE app_id = ? ORDER BY created_at DESC LIMIT 1').bind(app.id).first().catch(() => null);
+      if (r) { hook = { id: r.id, app_id: r.app_id, endpoint_url: r.endpoint_url, secret_hash: r.secret_hash }; devWebhooks.set(hook.id, hook); }
+    }
+    if (!hook) return json({ error: 'Webhook delivery requires a configured delivery backend', code: 'WEBHOOK_DELIVERY_NOT_CONFIGURED' }, 503);
+    // The signing key is the stored secret hash (the plaintext secret is
+    // shown once at registration and never persisted); the signature echoes
+    // in the response so the operator can compare with what arrived.
+    const payload = JSON.stringify({ event: 'luno.webhook_test', app_id: app.id, at: now() });
+    const signature = 'sha256=' + await hmacSha256Hex(hook.secret_hash, payload);
+    try {
+      const res = await fetch(hook.endpoint_url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Luno-Event': 'luno.webhook_test', 'X-Luno-Signature': signature }, body: payload, signal: AbortSignal.timeout(5000) });
+      return json({ delivered: true, status: res.status, signature });
+    } catch (_) {
+      return json({ error: 'webhook delivery failed', code: 'WEBHOOK_DELIVERY_FAILED' }, 503);
+    }
   }
 
   // ==========================================
@@ -7014,9 +7181,7 @@ const workerCore = {
       // can merely open an official-account conversation.
       const partnerAccountRoute = p.match(/^partner\/accounts\/([\w-]+)(?:\/|$)/);
       if (partnerAccountRoute && authUser.role !== 'admin') {
-        const account = partnerAccounts.get(partnerAccountRoute[1]);
-        const organization = account && partnerOrgs.get(account.org_id);
-        if (!organization || organization.owner_id !== authUser.id) return json({ error: 'account forbidden' }, 403);
+        if (!await partnerAccountOwnedBy(partnerAccountRoute[1], authUser.id)) return json({ error: 'account forbidden' }, 403);
       }
 
       if (p === 'auth/sessions/revoke' && request.method === 'POST') {
@@ -7393,61 +7558,284 @@ const workerCore = {
           const body = await request.json().catch(() => ({}));
           const orgId = crypto.randomUUID();
           const org = { id: orgId, name: body.name || 'Partner Org', country: body.country || 'KR', owner_id: authUser.id, my_role: 'owner' };
-          partnerOrgs.set(orgId, org);
           const accId = crypto.randomUUID();
-          partnerAccounts.set(accId, { id: accId, org_id: orgId, name: `${org.name} Official`, status: 'active' });
+          const acc = { id: accId, org_id: orgId, name: `${org.name} Official`, status: 'active' };
+          if (ownedResourcesDurable()) {
+            const db = dbOf(); await ensureSchema();
+            await db.prepare('INSERT INTO luno_partner_orgs (id, name, country, owner_id, created_at) VALUES (?, ?, ?, ?, ?)').bind(orgId, org.name, org.country, authUser.id, now()).run();
+            await db.prepare('INSERT INTO luno_partner_accounts (id, org_id, name, status, created_at) VALUES (?, ?, ?, ?, ?)').bind(accId, orgId, acc.name, acc.status, now()).run();
+          } else {
+            partnerOrgs.set(orgId, org);
+            partnerAccounts.set(accId, acc);
+          }
           return json(org, 201);
         }
+        if (ownedResourcesDurable()) {
+          const db = dbOf(); await ensureSchema();
+          const mine = authUser.role !== 'admin';
+          const st = db.prepare(mine ? 'SELECT * FROM luno_partner_orgs WHERE owner_id = ?' : 'SELECT * FROM luno_partner_orgs');
+          const { results } = await (mine ? st.bind(authUser.id).all() : st.all());
+          return json({ organizations: (results || []).map(r => ({ id: r.id, name: r.name, country: r.country, owner_id: r.owner_id, my_role: 'owner' })) });
+        }
         return json({ organizations: Array.from(partnerOrgs.values()).filter(org => authUser.role === 'admin' || org.owner_id === authUser.id) });
+      }
+      const partnerOrgAccMatch = p.match(/^partner\/organizations\/([a-zA-Z0-9_-]+)\/accounts$/);
+      if (partnerOrgAccMatch) {
+        const oid = partnerOrgAccMatch[1];
+        let org = partnerOrgs.get(oid);
+        if (!org && ownedResourcesDurable()) {
+          const r = await dbOf().prepare('SELECT * FROM luno_partner_orgs WHERE id = ?').bind(oid).first().catch(() => null);
+          if (r) org = { id: r.id, name: r.name, country: r.country, owner_id: r.owner_id };
+        }
+        if (!org) return json({ error: 'organization not found' }, 404);
+        if (authUser.role !== 'admin' && org.owner_id !== authUser.id) return json({ error: 'organization forbidden' }, 403);
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const name = clip(body.name || '', 100);
+          if (!name) return json({ error: 'name required' }, 400);
+          const acc = { id: crypto.randomUUID(), org_id: oid, name, status: 'active' };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_partner_accounts (id, org_id, name, status, created_at) VALUES (?, ?, ?, ?, ?)').bind(acc.id, oid, name, acc.status, now()).run();
+          } else partnerAccounts.set(acc.id, acc);
+          return json(acc, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT * FROM luno_partner_accounts WHERE org_id = ?').bind(oid).all();
+          return json({ accounts: (results || []).map(r => ({ id: r.id, org_id: r.org_id, name: r.name, status: r.status })) });
+        }
+        return json({ accounts: Array.from(partnerAccounts.values()).filter(a => a.org_id === oid) });
       }
       const partnerTickMatch = p.match(/^partner\/accounts\/([a-zA-Z0-9_-]+)\/tickets$/);
       if (partnerTickMatch) {
         const aid = partnerTickMatch[1];
         if (request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
-          const tid = crypto.randomUUID();
-          const t = { id: tid, account_id: aid, title: body.title || 'Inquiry', priority: body.priority || 'medium', state: 'open' };
-          const tlist = partnerTickets.get(aid) || [];
-          tlist.push(t);
-          partnerTickets.set(aid, tlist);
+          const t = { id: crypto.randomUUID(), account_id: aid, contact_id: clip(body.contact_id || '', 100), priority: ['urgent', 'high', 'normal', 'low'].includes(body.priority) ? body.priority : 'normal', internal_note: clip(body.internal_note || '', 2000), status: 'open' };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_partner_tickets (id, account_id, contact_id, priority, note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(t.id, aid, t.contact_id, t.priority, t.internal_note, t.status, now()).run();
+          } else {
+            const tlist = partnerTickets.get(aid) || [];
+            tlist.push(t);
+            partnerTickets.set(aid, tlist);
+          }
           return json(t, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT * FROM luno_partner_tickets WHERE account_id = ? ORDER BY created_at DESC').bind(aid).all().catch(() => ({ results: [] }));
+          return json({ tickets: (results || []).map(r => ({ id: r.id, account_id: r.account_id, contact_id: r.contact_id, priority: r.priority, internal_note: r.note, status: r.status })) });
         }
         return json({ tickets: partnerTickets.get(aid) || [] });
       }
       const partnerCampMatch = p.match(/^partner\/accounts\/([a-zA-Z0-9_-]+)\/campaigns$/);
-      if (partnerCampMatch && request.method === 'POST') {
-        const body = await request.json().catch(() => ({}));
-        const cid = crypto.randomUUID();
-        const camp = { id: cid, title: body.title || 'Campaign', status: 'scheduled' };
-        return json(camp, 201);
+      if (partnerCampMatch) {
+        const aid = partnerCampMatch[1];
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const camp = { id: crypto.randomUUID(), account_id: aid, name: clip(body.name || 'Campaign', 100), message_template: body.message_template && typeof body.message_template === 'object' ? body.message_template : null, status: 'scheduled' };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_partner_campaigns (id, account_id, name, template_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(camp.id, aid, camp.name, JSON.stringify(camp.message_template), camp.status, now()).run();
+          } else {
+            const clist = partnerCampaigns.get(aid) || [];
+            clist.push(camp);
+            partnerCampaigns.set(aid, clist);
+          }
+          return json(camp, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT * FROM luno_partner_campaigns WHERE account_id = ? ORDER BY created_at DESC').bind(aid).all().catch(() => ({ results: [] }));
+          return json({ campaigns: (results || []).map(r => ({ id: r.id, account_id: r.account_id, name: r.name, message_template: parseJsonSafe(r.template_json, null), status: r.status })) });
+        }
+        return json({ campaigns: partnerCampaigns.get(aid) || [] });
+      }
+      const partnerCouponMatch = p.match(/^partner\/accounts\/([a-zA-Z0-9_-]+)\/coupons$/);
+      if (partnerCouponMatch) {
+        const aid = partnerCouponMatch[1];
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const code = clip(body.code || '', 40);
+          if (!code) return json({ error: 'code required' }, 400);
+          const coupon = { id: crypto.randomUUID(), account_id: aid, code, max_redemptions: Number.isSafeInteger(body.max_redemptions) && body.max_redemptions > 0 ? Math.min(body.max_redemptions, 1000000) : 50, redeemed: 0 };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_partner_coupons (id, account_id, code, max_redemptions, redeemed, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(coupon.id, aid, code, coupon.max_redemptions, 0, now()).run();
+          } else {
+            const colist = partnerCoupons.get(aid) || [];
+            colist.push(coupon);
+            partnerCoupons.set(aid, colist);
+          }
+          return json(coupon, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT * FROM luno_partner_coupons WHERE account_id = ? ORDER BY created_at DESC').bind(aid).all().catch(() => ({ results: [] }));
+          return json({ coupons: results || [] });
+        }
+        return json({ coupons: partnerCoupons.get(aid) || [] });
       }
 
       // 12. Developer Console
       if (p === 'developer/organizations') {
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const name = clip(body.name || '', 100);
+          if (!name) return json({ error: 'name required' }, 400);
+          const org = { id: crypto.randomUUID(), name, owner_id: authUser.id, role: 'owner' };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_dev_orgs (id, name, owner_id, created_at) VALUES (?, ?, ?, ?)').bind(org.id, name, authUser.id, now()).run();
+          } else devOrgs.set(org.id, org);
+          return json(org, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const mine = authUser.role !== 'admin';
+          const st = dbOf().prepare(mine ? 'SELECT * FROM luno_dev_orgs WHERE owner_id = ?' : 'SELECT * FROM luno_dev_orgs');
+          const { results } = await (mine ? st.bind(authUser.id).all() : st.all());
+          return json({ organizations: (results || []).map(r => ({ id: r.id, name: r.name, role: 'owner' })) });
+        }
+        const mine = Array.from(devOrgs.values()).filter(o => authUser.role === 'admin' || o.owner_id === authUser.id);
+        if (mine.length || devOrgs.size) return json({ organizations: mine.map(o => ({ id: o.id, name: o.name, role: 'owner' })) });
         return json({ organizations: [{ id: 'dev-org-1', name: 'LUNO Dev Team' }] });
+      }
+      const devOrgAppsMatch = p.match(/^developer\/organizations\/([a-zA-Z0-9_-]+)\/apps$/);
+      if (devOrgAppsMatch) {
+        const org = await devOrgById(devOrgAppsMatch[1]);
+        if (!org) return json({ error: 'organization not found' }, 404);
+        if (authUser.role !== 'admin' && org.owner_id !== authUser.id) return json({ error: 'organization forbidden' }, 403);
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const name = clip(body.name || '', 100);
+          if (!name) return json({ error: 'name required' }, 400);
+          const secret = crypto.randomUUID();
+          const app = { id: crypto.randomUUID(), org_id: org.id, owner_id: authUser.id, name, client_id: `cli_${crypto.randomUUID().slice(0, 8)}`, client_secret_hash: await sha256Hex(secret), status: 'active' };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_dev_apps (id, org_id, owner_id, name, client_id, client_secret_hash, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(app.id, org.id, authUser.id, name, app.client_id, app.client_secret_hash, app.status, now()).run();
+          }
+          devApps.set(app.id, app);
+          return json({ id: app.id, org_id: org.id, name, client_id: app.client_id, status: app.status, client_secret_once: secret }, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT id, org_id, name, client_id, status FROM luno_dev_apps WHERE org_id = ?').bind(org.id).all().catch(() => ({ results: [] }));
+          return json({ apps: results || [] });
+        }
+        return json({ apps: Array.from(devApps.values()).filter(a => a.org_id === org.id).map(({ client_secret, client_secret_hash, ...visible }) => visible) });
       }
       if (p === 'developer/apps') {
         if (request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const secret = crypto.randomUUID();
-          const app = { id: crypto.randomUUID(), owner_id: authUser.id, name: body.name || 'Bot App', client_id: `cli_${crypto.randomUUID().slice(0, 8)}`, client_secret_hash: await sha256Hex(secret) };
+          const app = { id: crypto.randomUUID(), org_id: null, owner_id: authUser.id, name: body.name || 'Bot App', client_id: `cli_${crypto.randomUUID().slice(0, 8)}`, client_secret_hash: await sha256Hex(secret) };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_dev_apps (id, org_id, owner_id, name, client_id, client_secret_hash, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(app.id, null, authUser.id, app.name, app.client_id, app.client_secret_hash, 'active', now()).run();
+          }
           devApps.set(app.id, app);
           const { client_secret_hash, ...visible } = app;
           return json({ ...visible, client_secret: secret }, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const mine = authUser.role !== 'admin';
+          const st = dbOf().prepare(mine ? 'SELECT id, org_id, name, client_id, status FROM luno_dev_apps WHERE owner_id = ?' : 'SELECT id, org_id, name, client_id, status FROM luno_dev_apps');
+          const { results } = await (mine ? st.bind(authUser.id).all() : st.all());
+          return json({ apps: results || [] });
         }
         return json({ apps: Array.from(devApps.values()).filter(app => authUser.role === 'admin' || app.owner_id === authUser.id).map(({ client_secret, client_secret_hash, ...visible }) => visible) });
       }
       const devWebMatch = p.match(/^developer\/apps\/([a-zA-Z0-9_-]+)\/webhooks$/);
       if (devWebMatch && request.method === 'POST') {
-        const app = devApps.get(devWebMatch[1]);
+        const app = await devAppById(devWebMatch[1]);
         if (!app) return json({ error: 'app not found' }, 404);
         if (app.owner_id !== authUser.id) return json({ error: 'app forbidden' }, 403);
-        return json({ error: 'Durable webhook configuration storage is not implemented', code: 'WEBHOOK_STORAGE_NOT_CONFIGURED' }, 503);
+        const body = await request.json().catch(() => ({}));
+        const urlErr = httpsPublicUrlError(body.endpoint_url);
+        if (urlErr) return json({ error: urlErr }, 400);
+        if (!ownedResourcesDurable()) return json({ error: 'Durable webhook configuration storage is not implemented', code: 'WEBHOOK_STORAGE_NOT_CONFIGURED' }, 503);
+        const secret = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
+        const hook = { id: crypto.randomUUID(), app_id: app.id, endpoint_url: String(body.endpoint_url), secret_hash: await sha256Hex(secret) };
+        await ensureSchema();
+        await dbOf().prepare('INSERT INTO luno_dev_webhooks (id, app_id, endpoint_url, secret_hash, created_at) VALUES (?, ?, ?, ?, ?)').bind(hook.id, app.id, hook.endpoint_url, hook.secret_hash, now()).run();
+        devWebhooks.set(hook.id, hook);
+        return json({ id: hook.id, signing_secret_once: secret }, 201);
+      }
+      const devMiniMatch = p.match(/^developer\/apps\/([a-zA-Z0-9_-]+)\/miniapps$/);
+      if (devMiniMatch) {
+        const app = await devAppById(devMiniMatch[1]);
+        if (!app) return json({ error: 'app not found' }, 404);
+        if (app.owner_id !== authUser.id) return json({ error: 'app forbidden' }, 403);
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const originErr = httpsPublicUrlError(body.origin);
+          if (originErr) return json({ error: originErr }, 400);
+          const mini = { id: crypto.randomUUID(), app_id: app.id, origin: String(body.origin), manifest: body.manifest && typeof body.manifest === 'object' ? body.manifest : {} };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_dev_miniapps (id, app_id, origin, manifest_json, created_at) VALUES (?, ?, ?, ?, ?)').bind(mini.id, app.id, mini.origin, JSON.stringify(mini.manifest), now()).run();
+          }
+          devMiniApps.set(mini.id, mini);
+          return json(mini, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT * FROM luno_dev_miniapps WHERE app_id = ?').bind(app.id).all().catch(() => ({ results: [] }));
+          return json({ miniapps: (results || []).map(r => ({ id: r.id, app_id: r.app_id, origin: r.origin, manifest: parseJsonSafe(r.manifest_json, {}) })) });
+        }
+        return json({ miniapps: Array.from(devMiniApps.values()).filter(m => m.app_id === app.id) });
       }
 
       // 13. Creator Console
       if (p === 'creator/profile') {
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const displayName = clip(body.display_name || '', 60);
+          if (!displayName) return json({ error: 'display_name required' }, 400);
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_creator_profiles (user_id, display_name, updated_at) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET display_name = excluded.display_name, updated_at = excluded.updated_at').bind(authUser.id, displayName, now()).run();
+          }
+          creatorProfiles.set(authUser.id, { user_id: authUser.id, display_name: displayName });
+          return json({ id: authUser.id, display_name: displayName, verified: true });
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const r = await dbOf().prepare('SELECT display_name FROM luno_creator_profiles WHERE user_id = ?').bind(authUser.id).first().catch(() => null);
+          if (r) return json({ id: authUser.id, display_name: r.display_name, verified: true });
+        }
+        const hit = creatorProfiles.get(authUser.id);
+        if (hit) return json({ id: authUser.id, display_name: hit.display_name, verified: true });
         return json({ id: 'creator-1', display_name: authUser.display_name, verified: true });
+      }
+      const creatorItemMatch = p.match(/^creator\/packs\/([a-zA-Z0-9_-]+)\/stickers$/);
+      if (creatorItemMatch) {
+        const pack = await ownedRead('creator_pack', creatorItemMatch[1]);
+        if (!pack) return json({ error: 'resource not found' }, 404);
+        if (pack.owner_id !== authUser.id && authUser.role !== 'admin') return json({ error: 'resource forbidden' }, 403);
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const objectKey = clip(body.object_key || '', 300);
+          if (!objectKey) return json({ error: 'object_key required' }, 400);
+          const item = { id: crypto.randomUUID(), pack_id: pack.id, object_key: objectKey, kind: body.kind === 'animated' ? 'animated' : 'static', ordinal: Number.isSafeInteger(body.ordinal) ? body.ordinal : 0 };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_creator_items (id, pack_id, object_key, kind, ordinal, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(item.id, pack.id, objectKey, item.kind, item.ordinal, now()).run();
+          }
+          creatorItems.set(item.id, item);
+          return json(item, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT * FROM luno_creator_items WHERE pack_id = ? ORDER BY ordinal, created_at').bind(pack.id).all().catch(() => ({ results: [] }));
+          return json({ stickers: results || [] });
+        }
+        return json({ stickers: Array.from(creatorItems.values()).filter(i => i.pack_id === pack.id) });
       }
       if (p === 'creator/packs') {
         if (request.method === 'POST') {
@@ -7464,7 +7852,54 @@ const workerCore = {
 
       // 14. Ads Console
       if (p === 'ads/advertisers') {
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const name = clip(body.name || '', 100);
+          if (!name) return json({ error: 'name required' }, 400);
+          const adv = { id: crypto.randomUUID(), organization_id: clip(body.organization_id || '', 100), name, owner_id: authUser.id, status: 'pending' };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_ads_advertisers (id, organization_id, name, owner_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(adv.id, adv.organization_id, name, authUser.id, adv.status, now()).run();
+          }
+          adsAdvertisers.set(adv.id, adv);
+          return json(adv, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const mine = authUser.role !== 'admin';
+          const st = dbOf().prepare(mine ? 'SELECT * FROM luno_ads_advertisers WHERE owner_id = ?' : 'SELECT * FROM luno_ads_advertisers');
+          const { results } = await (mine ? st.bind(authUser.id).all() : st.all());
+          const rows = (results || []).map(r => ({ id: r.id, organization_id: r.organization_id, name: r.name, status: r.status }));
+          if (rows.length) return json({ advertisers: rows });
+          return json({ advertisers: [{ id: 'adv-1', company_name: 'LUNO Global Ads', status: 'verified' }] });
+        }
+        const mine = Array.from(adsAdvertisers.values()).filter(a => authUser.role === 'admin' || a.owner_id === authUser.id);
+        if (mine.length) return json({ advertisers: mine });
         return json({ advertisers: [{ id: 'adv-1', company_name: 'LUNO Global Ads', status: 'verified' }] });
+      }
+      const adsGroupMatch = p.match(/^ads\/campaigns\/([a-zA-Z0-9_-]+)\/groups$/);
+      if (adsGroupMatch) {
+        const camp = await ownedRead('ad_campaign', adsGroupMatch[1]);
+        if (!camp) return json({ error: 'resource not found' }, 404);
+        if (camp.owner_id !== authUser.id && authUser.role !== 'admin') return json({ error: 'resource forbidden' }, 403);
+        if (request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const name = clip(body.name || '', 100);
+          if (!name) return json({ error: 'name required' }, 400);
+          const group = { id: crypto.randomUUID(), campaign_id: camp.id, name, targeting: body.targeting && typeof body.targeting === 'object' ? body.targeting : {}, bid_minor: Number.isSafeInteger(body.bid_minor) && body.bid_minor >= 0 ? body.bid_minor : 0 };
+          if (ownedResourcesDurable()) {
+            await ensureSchema();
+            await dbOf().prepare('INSERT INTO luno_ads_groups (id, campaign_id, name, targeting_json, bid_minor, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(group.id, camp.id, name, JSON.stringify(group.targeting), group.bid_minor, now()).run();
+          }
+          adsGroups.set(group.id, group);
+          return json(group, 201);
+        }
+        if (ownedResourcesDurable()) {
+          await ensureSchema();
+          const { results } = await dbOf().prepare('SELECT * FROM luno_ads_groups WHERE campaign_id = ?').bind(camp.id).all().catch(() => ({ results: [] }));
+          return json({ groups: (results || []).map(r => ({ id: r.id, campaign_id: r.campaign_id, name: r.name, targeting: parseJsonSafe(r.targeting_json, {}), bid_minor: r.bid_minor })) });
+        }
+        return json({ groups: Array.from(adsGroups.values()).filter(g => g.campaign_id === camp.id) });
       }
       if (p === 'ads/campaigns') {
         if (request.method === 'POST') {

@@ -41,6 +41,7 @@ const CACHE = new Set([
   'pinnedMessages', 'albums', 'savedMessages', 'hiddenMsgs',
   'wallets', 'ownedPacks', 'ownedThemes', 'userPrefs',
   'pushTokens', 'deviceKeys', 'userKeys',
+  'partnerCoupons', // F17: D1 write-through coupon cache (luno_partner_coupons)
 ]);
 const UNBACKED = new Set([
   'passkeyCreds', 'storeOrders',
