@@ -13,6 +13,7 @@ import '../state/session.dart';
 import '../theme/luno_theme.dart';
 import '../util/app_permissions.dart';
 import '../util/app_update.dart';
+import '../util/app_l10n.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -23,9 +24,9 @@ class SettingsPage extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final ink = dark ? LunoDark.textPrimary : LunoLight.textPrimary;
     final sub = dark ? LunoDark.textSecondary : LunoLight.textSecondary;
-    final name = session.selfName.isEmpty ? '내 프로필' : session.selfName;
+    final name = session.selfName.isEmpty ? context.l10n.myProfile : session.selfName;
     final status = session.selfStatusMessage.isEmpty
-        ? '설정 안 함'
+        ? context.l10n.profileUnset
         : session.selfStatusMessage;
     final searchable =
         session.myPrefs['searchable_by_id'] as bool? ?? true;
@@ -35,18 +36,18 @@ class SettingsPage extends StatelessWidget {
       children: [
         PageColumn(
           children: [
-            const Masthead(title: '설정'),
+            Masthead(title: context.l10n.settingsTitle),
             _ProfileRow(
                 name: name, status: status, ink: ink, sub: sub, dark: dark),
             _Section(
-              title: '개인 정보',
+              title: context.l10n.settingsPrivacy,
               sub: sub,
               children: [
                 _ToggleRow(
                   switchKey: const ValueKey('id-search-toggle'),
-                  title: 'ID로 친구 추가 허용',
+                  title: context.l10n.privacyIdAdd,
                   description:
-                      '다른 사람이 내 ID를 검색하여 친구로 추가할 수 있습니다.',
+                      context.l10n.privacyIdAddDesc,
                   value: searchable,
                   enabled: session.prefsLoaded,
                   ink: ink,
@@ -56,8 +57,8 @@ class SettingsPage extends StatelessWidget {
                 const _RowDivider(),
                 _ToggleRow(
                   switchKey: const ValueKey('link-preview-toggle'),
-                  title: '링크 미리보기',
-                  description: '대화의 https 링크 아래에 제목·설명·이미지를 보여줍니다.',
+                  title: context.l10n.settingsLinkPreview,
+                  description: context.l10n.settingsLinkPreviewDesc,
                   value: linkPreviews,
                   enabled: session.prefsLoaded,
                   ink: ink,
@@ -67,8 +68,8 @@ class SettingsPage extends StatelessWidget {
                 const _RowDivider(),
                 _ActionRow(
                   icon: Icons.download,
-                  title: '데이터 내보내기',
-                  subtitle: '대화·친구·미디어 메타데이터 (GDPR)',
+                  title: context.l10n.settingsExport,
+                  subtitle: context.l10n.settingsExportDesc,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -77,8 +78,8 @@ class SettingsPage extends StatelessWidget {
                 const _RowDivider(),
                 _ActionRow(
                   icon: Icons.privacy_tip_outlined,
-                  title: '개인 정보 보호',
-                  subtitle: 'ID 검색 허용·로그인 기기 관리',
+                  title: context.l10n.privacyTitle,
+                  subtitle: context.l10n.settingsPrivacyDesc,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -88,8 +89,8 @@ class SettingsPage extends StatelessWidget {
                 const _RowDivider(),
                 _ActionRow(
                   icon: Icons.shield_outlined,
-                  title: '내 신고 내역',
-                  subtitle: '접수한 신고와 처리 상태',
+                  title: context.l10n.reportHistoryTitle,
+                  subtitle: context.l10n.settingsReportsDesc,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -99,13 +100,13 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
             _Section(
-              title: '대화',
+              title: context.l10n.navChats,
               sub: sub,
               children: [
                 _ToggleRow(
                   switchKey: const ValueKey('notify-toggle'),
-                  title: '새 메시지·전화 알림',
-                  description: '앱이 백그라운드에 있을 때만 울립니다.',
+                  title: context.l10n.settingsNotify,
+                  description: context.l10n.settingsNotifyDesc,
                   value: session.notifyEnabled,
                   enabled: true,
                   ink: ink,
@@ -119,9 +120,9 @@ class SettingsPage extends StatelessWidget {
                     }
                     withPermissions(
                       context,
-                      permissions: const [
-                        (Permission.notification, '알림 권한 필요',
-                            '새 메시지와 수신 전화를 알려주는 데 사용합니다.'),
+                      permissions: [
+                        (Permission.notification, context.l10n.settingsNotifyPerm,
+                            context.l10n.settingsNotifyPermDesc),
                       ],
                       action: () async => ctl.setNotifyEnabled(true),
                     );
@@ -130,9 +131,9 @@ class SettingsPage extends StatelessWidget {
                 const _RowDivider(),
                 _ToggleRow(
                   switchKey: const ValueKey('auto-translate-toggle'),
-                  title: '새 메시지 자동 번역',
+                  title: context.l10n.settingsAutoTranslate,
                   description:
-                      '준비 중 — 번역 엔진 연결 전까지 켜도 번역되지 않습니다.',
+                      context.l10n.settingsTranslatePreparing,
                   value: session.autoTranslate,
                   enabled: true,
                   ink: ink,
@@ -143,7 +144,7 @@ class SettingsPage extends StatelessWidget {
                 const _RowDivider(),
                 _ActionRow(
                   icon: Icons.translate,
-                  title: '번역 대상 언어',
+                  title: context.l10n.settingsTargetLang,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -158,7 +159,7 @@ class SettingsPage extends StatelessWidget {
                             for (final lang in session.translateLanguages)
                               DropdownMenuItem(
                                   value: lang,
-                                  child: Text(_translateLangLabel(lang))),
+                                  child: Text(_translateLangLabel(lang, session.locale))),
                           ],
                           onChanged: (v) {
                             if (v != null) {
@@ -167,14 +168,38 @@ class SettingsPage extends StatelessWidget {
                             }
                           },
                         )
-                      : Text('번역 준비 중',
+                      : Text(context.l10n.translatePreparing,
                           style: TextStyle(fontSize: 13, color: sub)),
                 ),
                 const _RowDivider(),
                 _ActionRow(
+                  icon: Icons.language,
+                  title: context.l10n.settingsLanguage,
+                  subtitle: context.l10n.settingsLanguageDesc,
+                  ink: ink,
+                  sub: sub,
+                  dark: dark,
+                  trailing: DropdownButton<String>(
+                    value: session.locale,
+                    underline: const SizedBox(),
+                    items: [
+                      for (final code in appLocaleCodes)
+                        DropdownMenuItem(
+                            value: code,
+                            child: Text(appLocaleNames[code] ?? code)),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        SessionScope.of(context, listen: false).setLocale(v);
+                      }
+                    },
+                  ),
+                ),
+                const _RowDivider(),
+                _ActionRow(
                   icon: Icons.lock_outline,
-                  title: '종단간 암호화 (E2EE)',
-                  subtitle: '준비 중 — 현재 전송 구간 암호화(TLS)만 적용됩니다',
+                  title: context.l10n.privacyE2ee,
+                  subtitle: context.l10n.privacyE2eePreparing,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -182,13 +207,13 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
             _Section(
-              title: '기기',
+              title: context.l10n.deviceWord,
               sub: sub,
               children: [
                 _ActionRow(
                   icon: Icons.qr_code_scanner,
-                  title: '데스크톱 QR 로그인 승인',
-                  subtitle: 'PC/웹 QR 챌린지를 승인합니다',
+                  title: context.l10n.settingsQrApprove,
+                  subtitle: context.l10n.settingsQrApproveDesc,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -198,12 +223,12 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
             _Section(
-              title: '앱 정보',
+              title: context.l10n.settingsAppInfo,
               sub: sub,
               children: [
                 _ActionRow(
                   icon: Icons.system_update,
-                  title: '앱 업데이트',
+                  title: context.l10n.settingsAppUpdate,
                   subtitle: _updateSubtitle(session),
                   ink: ink,
                   sub: sub,
@@ -215,12 +240,12 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
             _Section(
-              title: '계정',
+              title: context.l10n.accountWord,
               sub: sub,
               children: [
                 _ActionRow(
                   icon: Icons.logout,
-                  title: '로그아웃',
+                  title: context.l10n.mvLogout,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -229,8 +254,8 @@ class SettingsPage extends StatelessWidget {
                 const _RowDivider(),
                 _ActionRow(
                   icon: Icons.delete_forever_outlined,
-                  title: '계정 탈퇴',
-                  subtitle: '모든 메시지·친구·미디어가 영구 삭제됩니다',
+                  title: context.l10n.settingsDeleteAccount,
+                  subtitle: context.l10n.settingsDeleteWarn,
                   ink: ink,
                   sub: sub,
                   dark: dark,
@@ -250,12 +275,12 @@ class SettingsPage extends StatelessWidget {
 String _updateSubtitle(SessionController session) {
   switch (session.appUpdate) {
     case UpdateKind.force:
-      return '필수 업데이트가 있습니다 (${session.latestAppVersion})';
+      return stringsFor(session.locale).appUpdateRequired(session.latestAppVersion);
     case UpdateKind.optional:
-      return '새 버전 ${session.latestAppVersion} 사용 가능';
+      return stringsFor(session.locale).appUpdateAvailable(session.latestAppVersion);
     case UpdateKind.none:
-      if (session.latestAppVersion.isEmpty) return '탭하여 새 버전 확인';
-      return '최신 버전입니다 (${session.currentAppVersion})';
+      if (session.latestAppVersion.isEmpty) return stringsFor(session.locale).settingsCheckUpdate;
+      return stringsFor(session.locale).appUpToDate(session.currentAppVersion);
   }
 }
 
@@ -476,7 +501,7 @@ Future<void> _qrDialog(BuildContext context) async {
   await showDialog<void>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('데스크톱 QR 로그인 승인'),
+        title: Text(context.l10n.settingsQrApprove),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -494,19 +519,19 @@ Future<void> _qrDialog(BuildContext context) async {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dialog).pop(),
-              child: const Text('취소')),
+              child: Text(context.l10n.mvCancel)),
           TextButton(
               onPressed: () {
                 Navigator.of(dialog).pop();
                 context.go('/qr/scan');
               },
-              child: const Text('카메라로 스캔')),
+              child: Text(context.l10n.homeScanCamera)),
           FilledButton(
             onPressed: () {
               session.approveDesktopQR(challenge.text, token.text);
               Navigator.of(dialog).pop();
             },
-            child: const Text('데스크톱 승인 완료'),
+            child: Text(context.l10n.settingsDesktopApproved),
           ),
         ],
       ),
@@ -524,34 +549,34 @@ Future<void> _confirmDeleteAccount(
       context: context,
       builder: (ctx) => StatefulBuilder(
             builder: (ctx, setState) => AlertDialog(
-              title: const Text('계정을 삭제할까요?'),
+              title: Text(context.l10n.settingsDeleteConfirm),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('30일의 유예 뒤 모든 데이터가 삭제됩니다. 유예 안에 로그인하면 복구됩니다. 계속하려면 비밀번호와 이메일을 입력하세요.'),
+                  Text(context.l10n.settingsDeleteGrace),
                   const SizedBox(height: 12),
                   TextField(
                     controller: password,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                        labelText: '비밀번호 확인', isDense: true),
+                    decoration: InputDecoration(
+                        labelText: context.l10n.settingsPwConfirm, isDense: true),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   TextField(
                     controller: confirm,
-                    decoration: const InputDecoration(
-                        labelText: '확인 이메일 입력', isDense: true),
+                    decoration: InputDecoration(
+                        labelText: context.l10n.mvDeleteConfirmAria, isDense: true),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: reason.isEmpty ? null : reason,
-                    hint: const Text('탈퇴 사유 (선택)'),
-                    items: const [
-                      DropdownMenuItem(value: 'not_using', child: Text('사용하지 않음')),
-                      DropdownMenuItem(value: 'privacy', child: Text('개인정보 우려')),
-                      DropdownMenuItem(value: 'hard_to_use', child: Text('사용하기 어려움')),
-                      DropdownMenuItem(value: 'other', child: Text('기타')),
+                    hint: Text(context.l10n.settingsDeleteReason),
+                    items: [
+                      DropdownMenuItem(value: 'not_using', child: Text(context.l10n.mvDeleteReasonNotUsing)),
+                      DropdownMenuItem(value: 'privacy', child: Text(context.l10n.mvDeleteReasonPrivacy)),
+                      DropdownMenuItem(value: 'hard_to_use', child: Text(context.l10n.mvDeleteReasonHardToUse)),
+                      DropdownMenuItem(value: 'other', child: Text(context.l10n.mvDeleteReasonOther)),
                     ],
                     onChanged: (v) => setState(() => reason = v ?? ''),
                   ),
@@ -560,10 +585,10 @@ Future<void> _confirmDeleteAccount(
               actions: [
                 TextButton(
                     onPressed: () => Navigator.of(ctx).pop(false),
-                    child: const Text('취소')),
+                    child: Text(context.l10n.mvCancel)),
                 FilledButton(
                     onPressed: () => Navigator.of(ctx).pop(true),
-                    child: const Text('삭제 예약')),
+                    child: Text(context.l10n.settingsScheduleDelete)),
               ],
             ),
           ));
@@ -577,14 +602,15 @@ Future<void> _confirmDeleteAccount(
 
 // T1: server language codes get a short native label; unknown codes fall
 // back to the upper-cased code so a future engine never renders blank.
-String _translateLangLabel(String code) {
-  return const {
-    'ko': '한국어 (KO)',
-    'en': 'English (EN)',
-    'th': 'ไทย (TH)',
-    'ja': '日本語 (JA)',
-    'zh': '中文 (ZH)',
-    'es': 'Español (ES)',
+String _translateLangLabel(String code, [String locale = 'ko']) {
+  final s = stringsFor(locale);
+  return {
+    'ko': s.settingsLangKo,
+    'en': s.settingsLangEn,
+    'th': s.settingsLangTh,
+    'ja': s.settingsLangJa,
+    'zh': s.settingsLangZh,
+    'es': s.settingsLangEs,
   }[code] ??
       code.toUpperCase();
 }

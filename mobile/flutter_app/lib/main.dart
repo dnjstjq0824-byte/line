@@ -4,6 +4,7 @@
 // pages/, shared logic in state/session.dart, HTTP in api/client.dart.
 // Legacy names are re-exported so existing callers and tests keep working.
 import 'package:flutter/material.dart';
+import 'package:luno_messenger/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import 'design/v3.dart';
@@ -28,11 +29,13 @@ class _MessengerAppState extends State<MessengerApp>
     with WidgetsBindingObserver {
   late final SessionController _session;
   late final GoRouter _router;
+  String _appLocale = 'ko';
 
   @override
   void initState() {
     super.initState();
     _session = SessionController();
+    _session.addListener(_syncLocale);
     _router = buildRouter(_session);
     _session.restore();
     _session.checkForUpdate();
@@ -42,9 +45,17 @@ class _MessengerAppState extends State<MessengerApp>
     WidgetsBinding.instance.addObserver(this);
   }
 
+  // F20: rebuild the app shell only when the UI locale changes.
+  void _syncLocale() {
+    if (mounted && _appLocale != _session.locale) {
+      setState(() => _appLocale = _session.locale);
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _session.removeListener(_syncLocale);
     _session.disposeAll();
     super.dispose();
   }
@@ -72,6 +83,9 @@ class _MessengerAppState extends State<MessengerApp>
         theme: LunoHarbor.theme(Brightness.light),
         darkTheme: LunoHarbor.theme(Brightness.dark),
         themeMode: ThemeMode.system,
+        locale: Locale(_appLocale),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         routerConfig: _router,
         builder: (context, child) => Stack(
           children: [child!, const CallOverlay(), const GroupCallOverlay()],

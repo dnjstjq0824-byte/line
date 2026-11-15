@@ -12,6 +12,7 @@ import '../theme/luno_theme.dart';
 import '../util/app_permissions.dart';
 import '../util/call_groups.dart';
 import '../util/chat_time.dart';
+import '../util/app_l10n.dart';
 
 class CallDetailPage extends StatelessWidget {
   final String conversationId;
@@ -37,7 +38,7 @@ class CallDetailPage extends StatelessWidget {
             Row(
               children: [
                 IconButton(
-                  tooltip: '뒤로',
+                  tooltip: context.l10n.backWord,
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => context.go('/calls'),
                 ),
@@ -53,7 +54,7 @@ class CallDetailPage extends StatelessWidget {
                         color:
                             dark ? HarborDark.channel : HarborLight.channel),
                     const SizedBox(height: 12),
-                    Text('통화 기록이 없습니다',
+                    Text(context.l10n.callsEmpty,
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.titleMedium),
                   ],
@@ -63,7 +64,7 @@ class CallDetailPage extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(name.isEmpty ? '알 수 없음' : name,
+                    child: Text(name.isEmpty ? context.l10n.unknownWord : name,
                         style: TextStyle(
                             fontSize: HarborType.display,
                             fontWeight: FontWeight.w700,
@@ -84,18 +85,18 @@ class CallDetailPage extends StatelessWidget {
                 children: [
                   _Action(
                     icon: Icons.chat_bubble,
-                    label: '대화',
+                    label: context.l10n.navChats,
                     ink: ink,
                     onTap: () => context.go('/chats/$conversationId'),
                   ),
                   _Action(
                     icon: Icons.phone,
-                    label: '음성통화',
+                    label: context.l10n.callVoice,
                     ink: ink,
                     onTap: () => withPermissions(
                       context,
-                      permissions: const [
-                        (Permission.microphone, '마이크 권한 필요', '음성통화에 사용합니다.'),
+                      permissions: [
+                        (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseVoice),
                       ],
                       action: () async =>
                           session.startCallIn(conversationId, 'voice'),
@@ -103,13 +104,13 @@ class CallDetailPage extends StatelessWidget {
                   ),
                   _Action(
                     icon: Icons.videocam,
-                    label: '영상통화',
+                    label: context.l10n.callVideo,
                     ink: ink,
                     onTap: () => withPermissions(
                       context,
-                      permissions: const [
-                        (Permission.microphone, '마이크 권한 필요', '영상통화에 사용합니다.'),
-                        (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
+                      permissions: [
+                        (Permission.microphone, context.l10n.permMicTitle, context.l10n.permCamUseVideo),
+                        (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUseVideo),
                       ],
                       action: () async =>
                           session.startCallIn(conversationId, 'video'),
@@ -192,7 +193,7 @@ class _HistoryRow extends StatelessWidget {
         entry['duration'] is num ? (entry['duration'] as num).toInt() : 0;
     final right = (result == 'completed' || result.isEmpty) && duration > 0
         ? session.formatDuration(duration)
-        : callOutcome(result);
+        : callOutcome(result, session.locale);
     final IconData arrow = missed
         ? (outgoing ? Icons.call_missed_outgoing : Icons.call_missed)
         : (outgoing ? Icons.call_made : Icons.call_received);
@@ -203,10 +204,10 @@ class _HistoryRow extends StatelessWidget {
         children: [
           Icon(arrow, size: 16, color: missed ? danger : sub),
           const SizedBox(width: 8),
-          Text(bubbleTime(entry['started_at']),
+          Text(bubbleTime(entry['started_at'], session.locale),
               style: TextStyle(fontSize: 14, color: ink)),
           const SizedBox(width: 8),
-          Text(kind == 'video' ? '영상통화' : '음성통화',
+          Text(kind == 'video' ? context.l10n.callVideo : context.l10n.callVoice,
               style: TextStyle(fontSize: 13, color: sub)),
           const Expanded(child: SizedBox()),
           Text(right,

@@ -21,6 +21,7 @@ import '../util/inapp_camera.dart';
 import '../util/video_bubble.dart';
 import '../util/chat_time.dart';
 import '../util/call_groups.dart';
+import '../util/app_l10n.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String conversationId;
@@ -90,7 +91,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       size: 18, color: dark ? HarborDark.harbor : HarborLight.harbor),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text('공지: ${session.pins.first['body'] ?? ''}',
+                    child: Text(context.l10n.roomPinBody(session.pins.first['body'] ?? ''),
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             fontSize: HarborType.small,
@@ -108,8 +109,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Text(
                 session.translateConfigured
-                    ? '자동 번역 켜짐 · ${session.targetTranslateLang.toUpperCase()}'
-                    : '자동 번역 켜짐 · 번역 준비 중',
+                    ? context.l10n.roomAutoOnLang(session.targetTranslateLang.toUpperCase())
+                    : context.l10n.roomAutoTranslateOn,
                 style: TextStyle(
                     fontSize: HarborType.micro,
                     color: dark ? HarborDark.ink : HarborLight.harbor)),
@@ -191,7 +192,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('답장 작성 중...',
+                Text(context.l10n.roomReplying,
                     style: TextStyle(
                         fontSize: HarborType.small,
                         fontWeight: FontWeight.w600,
@@ -233,7 +234,7 @@ class _DeckHeader extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                tooltip: '대화 목록',
+                tooltip: context.l10n.roomListTitle,
                 icon: Icon(Icons.arrow_back,
                     color: dark ? HarborDark.ink : Colors.white),
                 onPressed: () => context.go('/chats'),
@@ -258,61 +259,61 @@ class _DeckHeader extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: '음성통화',
+                tooltip: context.l10n.callVoice,
                 icon: Icon(Icons.phone, color: dark ? HarborDark.ink : Colors.white),
                 onPressed: () => withPermissions(
                   context,
-                  permissions: const [
-                    (Permission.microphone, '마이크 권한 필요', '음성통화에 사용합니다.'),
+                  permissions: [
+                    (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseVoice),
                   ],
                   action: () async => session.kindOf(conversationId) == 'group' ? session.joinGroupCall(conversationId, 'voice') : session.startCall('voice'),
                 ),
               ),
               IconButton(
-                tooltip: '영상통화',
+                tooltip: context.l10n.callVideo,
                 icon: Icon(Icons.videocam, color: dark ? HarborDark.ink : Colors.white),
                 onPressed: () => withPermissions(
                   context,
-                  permissions: const [
-                    (Permission.microphone, '마이크 권한 필요', '영상통화에 사용합니다.'),
-                    (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
+                  permissions: [
+                    (Permission.microphone, context.l10n.permMicTitle, context.l10n.permCamUseVideo),
+                    (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUseVideo),
                   ],
                   action: () async => session.kindOf(conversationId) == 'group' ? session.joinGroupCall(conversationId, 'video') : session.startCall('video'),
                 ),
               ),
               PopupMenuButton<String>(
-                tooltip: '보관함',
+                tooltip: context.l10n.roomKeepBox,
                 icon: Icon(Icons.inventory_2_outlined,
                     color: dark ? HarborDark.ink : Colors.white),
                 onSelected: (value) => context.go('/chats/$conversationId/$value'),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'pins', child: Text('공지')),
-                  PopupMenuItem(value: 'notes', child: Text('노트')),
-                  PopupMenuItem(value: 'events', child: Text('일정')),
-                  PopupMenuItem(value: 'polls', child: Text('투표')),
-                  PopupMenuItem(value: 'albums', child: Text('앨범')),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'pins', child: Text(context.l10n.gsNotice)),
+                  PopupMenuItem(value: 'notes', child: Text(context.l10n.noteWord)),
+                  PopupMenuItem(value: 'events', child: Text(context.l10n.scheduleWord)),
+                  PopupMenuItem(value: 'polls', child: Text(context.l10n.pollWord)),
+                  PopupMenuItem(value: 'albums', child: Text(context.l10n.albumWord)),
                 ],
               ),
               IconButton(
-                tooltip: '송금',
+                tooltip: context.l10n.mvSend,
                 icon: Icon(Icons.payments_outlined,
                     color: dark ? HarborDark.ink : Colors.white),
                 onPressed: session.sendPayInChat,
               ),
               IconButton(
-                tooltip: '승인함',
+                tooltip: context.l10n.apprTitle,
                 icon: Icon(Icons.fact_check_outlined,
                     color: dark ? HarborDark.ink : Colors.white),
                 onPressed: () => approvalsSheet(context, conversationId),
               ),
               IconButton(
-                tooltip: '오프라인 동기화',
+                tooltip: context.l10n.roomOfflineSync,
                 icon: Icon(Icons.sync, color: dark ? HarborDark.ink : Colors.white),
                 onPressed: session.syncOffline,
               ),
               if (session.kindOf(conversationId) == 'group')
                 IconButton(
-                  tooltip: '그룹 설정',
+                  tooltip: context.l10n.gsTitle,
                   icon: Icon(Icons.settings_outlined,
                       color: dark ? HarborDark.ink : Colors.white),
                   onPressed: () =>
@@ -342,8 +343,8 @@ class _ChatImage extends StatelessWidget {
           builder: (_) => Dialog(
             insetPadding: const EdgeInsets.all(16),
             child: Image.network(url, headers: {'Authorization': 'Bearer $token'},
-                errorBuilder: (_, __, ___) => const Padding(
-                    padding: EdgeInsets.all(24), child: Text('이미지를 불러올 수 없습니다'))),
+                errorBuilder: (_, __, ___) => Padding(
+                    padding: EdgeInsets.all(24), child: Text(context.l10n.roomImageFail))),
           ),
         ),
         child: ClipRRect(
@@ -476,7 +477,7 @@ class _LocationCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label.isEmpty ? '위치 공유' : label,
+              Text(label.isEmpty ? context.l10n.mvLocationShare : label,
                   style: TextStyle(
                       color: ink,
                       fontSize: HarborType.small,
@@ -518,7 +519,7 @@ class _ContactCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name.isEmpty ? '연락처' : name,
+              Text(name.isEmpty ? context.l10n.contactWord : name,
                   style: TextStyle(
                       color: ink,
                       fontSize: HarborType.small,
@@ -542,7 +543,7 @@ class _DateDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final label = dividerLabel(iso);
+    final label = dividerLabel(iso, locale: appLocaleOf(context));
     if (label.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -622,7 +623,7 @@ class _SignalBubble extends StatelessWidget {
     final faint = mine
         ? Colors.white.withValues(alpha: 0.75)
         : (dark ? HarborDark.drift : HarborLight.drift);
-    final time = groupTail ? bubbleTime(m['created_at']) : '';
+    final time = groupTail ? bubbleTime(m['created_at'], session.locale) : '';
     final screenW = MediaQuery.sizeOf(context).width;
     final kind = DeviceScope.of(context);
     final wide = kind == DeviceKind.tablet || kind == DeviceKind.desktop;
@@ -651,10 +652,10 @@ class _SignalBubble extends StatelessWidget {
                   mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 if (m['reply_to'] != null && '${m['reply_to']}'.isNotEmpty)
-                  Text('↩ ${m['reply_preview'] ?? '답장'}',
+                  Text('↩ ${m['reply_preview'] ?? context.l10n.roomReplyWord}',
                       style: TextStyle(fontSize: 10, color: faint)),
                 if (m['metadata'] is Map && m['metadata']['forwarded'] == true)
-                  Text('➦ 전달됨',
+                  Text(context.l10n.roomForwarded,
                       style: TextStyle(fontSize: 10, color: faint)),
                 if (m['kind'] == 'image' && attachmentIdOf(m) != null)
                   _ChatImage(
@@ -682,7 +683,7 @@ class _SignalBubble extends StatelessWidget {
                     onPressed: () => session.downloadAttachment(
                         attachmentIdOf(m)!, '${m['body']}'),
                     icon: Icon(Icons.download, size: 16, color: ink),
-                    label: Text('저장',
+                    label: Text(context.l10n.mvSave,
                         style: TextStyle(color: ink, fontSize: HarborType.small)),
                   ),
                 if (m['kind'] == 'location')
@@ -700,7 +701,7 @@ class _SignalBubble extends StatelessWidget {
                         borderRadius: BorderRadius.circular(HarborRadius.lamp),
                       ),
                       child: Text(
-                        m['kind'] == 'proposal' ? '제안' : m['kind'] == 'decision' ? '결정' : '보고',
+                        m['kind'] == 'proposal' ? context.l10n.msgKindProposal : m['kind'] == 'decision' ? context.l10n.msgKindDecision : context.l10n.msgKindReport,
                         style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: ink)),
                     ),
                   ),
@@ -712,12 +713,12 @@ class _SignalBubble extends StatelessWidget {
                       children: [
                         FilledButton(
                           onPressed: () => session.decideProposal(session.selectedId, msgId, 'approved'),
-                          child: const Text('승인'),
+                          child: Text(context.l10n.mvApprove),
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton(
                           onPressed: () => session.decideProposal(session.selectedId, msgId, 'rejected'),
-                          child: const Text('거절'),
+                          child: Text(context.l10n.apprReject),
                         ),
                       ],
                     ),
@@ -725,7 +726,7 @@ class _SignalBubble extends StatelessWidget {
                 if (m['kind'] == 'proposal' && proposalState != 'pending')
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text(proposalState == 'approved' ? '승인됨' : '거절됨',
+                    child: Text(proposalState == 'approved' ? context.l10n.apprApprovedState : context.l10n.apprRejectedState,
                         style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: faint)),
                   ),
                 if (m['kind'] == 'sticker')
@@ -753,7 +754,7 @@ class _SignalBubble extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: trans['loading'] == true
-                        ? const Text('AI 번역 중...',
+                        ? Text(context.l10n.translating,
                             style: TextStyle(fontSize: HarborType.micro, fontStyle: FontStyle.italic))
                         : trans['error'] != null
                             ? Text('${trans['error']}',
@@ -785,14 +786,14 @@ class _SignalBubble extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (groupTail && readCount > 0)
-                      Text('읽음 $readCount',
+                      Text(context.l10n.roomReadCount(readCount),
                           style: TextStyle(
                               fontSize: LunoType.stampSize,
                               fontWeight: LunoType.stampWeight,
                               fontFeatures: const [LunoType.tabular],
                               color: faint)),
                     if (m['edited_at'] != null && '${m['edited_at']}'.isNotEmpty)
-                      Text('(수정됨)', style: TextStyle(fontSize: 9, color: faint)),
+                      Text(context.l10n.roomEdited, style: TextStyle(fontSize: 9, color: faint)),
                     for (final emo in lunoReactions.take(3))
                       InkWell(
                         onTap: () => session.react(m['id'], emo),
@@ -928,7 +929,7 @@ class _CallBubble extends StatelessWidget {
     final faint = mine
         ? Colors.white.withValues(alpha: 0.75)
         : (dark ? HarborDark.drift : HarborLight.drift);
-    final time = groupTail ? bubbleTime(m['created_at']) : '';
+    final time = groupTail ? bubbleTime(m['created_at'], session.locale) : '';
     final muted = dark ? LunoDark.textMuted : LunoLight.textMuted;
     final timeStyle = TextStyle(
         fontSize: LunoType.stampSize,
@@ -1016,7 +1017,7 @@ class _CallBubble extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(callBubbleTitle(m),
+                          Text(callBubbleTitle(m, session.locale),
                               style: TextStyle(
                                   color: ink,
                                   fontSize: HarborType.body,
@@ -1077,7 +1078,7 @@ class _SecurityNoticeCard extends StatelessWidget {
     final location = data['location']?.toString() ?? '';
     final sessionId = data['session_id']?.toString() ?? '';
     final sample = data['sample'] == true;
-    final time = groupTail ? bubbleTime(m['created_at']) : '';
+    final time = groupTail ? bubbleTime(m['created_at'], session.locale) : '';
     final muted = dark ? LunoDark.textMuted : LunoLight.textMuted;
     final sub = dark ? LunoDark.textSecondary : LunoLight.textSecondary;
     final ink = dark ? LunoDark.textPrimary : LunoLight.textPrimary;
@@ -1138,27 +1139,27 @@ class _SecurityNoticeCard extends StatelessWidget {
                                 fontWeight: FontWeight.w800)),
                         const Divider(height: 16),
                         if (device.isNotEmpty)
-                          Text('$device에서 LUNO에 로그인했습니다.',
+                          Text(context.l10n.roomLoginNotice(device),
                               style:
                                   TextStyle(fontSize: 13, color: ink)),
                         const SizedBox(height: 8),
                         Text(
-                            '본인이 로그인하지 않았다면 아래 버튼을 눌러 로그아웃해 주세요. 안전한 LUNO 이용을 위해 비밀번호 변경을 권장합니다.',
+                            context.l10n.roomSecurityAdvice,
                             style: TextStyle(fontSize: 13, color: ink)),
                         if (ip.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          Text('IP 주소: $ip',
+                          Text(context.l10n.roomIpAddr(ip),
                               style:
                                   TextStyle(fontSize: HarborType.small, color: sub)),
                         ],
                         if (location.isNotEmpty)
-                          Text('위치: $location',
+                          Text(context.l10n.roomLocation(location),
                               style:
                                   TextStyle(fontSize: HarborType.small, color: sub)),
                         if (sample)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
-                            child: Text('샘플 데이터',
+                            child: Text(context.l10n.sampleDataWord,
                                 style: TextStyle(
                                     fontSize: HarborType.micro,
                                     fontStyle: FontStyle.italic,
@@ -1171,14 +1172,14 @@ class _SecurityNoticeCard extends StatelessWidget {
                             child: FilledButton(
                               onPressed: () => session
                                   .revokeNoticeSession(sessionId),
-                              child: const Text('로그아웃'),
+                              child: Text(context.l10n.mvLogout),
                             ),
                           ),
                         ],
                         Center(
                           child: TextButton(
                             onPressed: () => _passwordDialog(context),
-                            child: const Text('비밀번호 변경'),
+                            child: Text(context.l10n.mvRecoverReset),
                           ),
                         ),
                       ],
@@ -1213,19 +1214,19 @@ Future<void> _editMessageDialog(BuildContext context,
     context: context,
     builder: (dialog) => StatefulBuilder(
       builder: (dialog, setDialog) => AlertDialog(
-        title: const Text('메시지 수정'),
+        title: Text(context.l10n.roomEditTitle),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLines: 4,
           onChanged: (_) => setDialog(() {}),
           decoration:
-              const InputDecoration(labelText: '메시지', isDense: true),
+              InputDecoration(labelText: context.l10n.messageWord, isDense: true),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dialog).pop(),
-              child: const Text('취소')),
+              child: Text(context.l10n.mvCancel)),
           FilledButton(
             onPressed: controller.text.trim().isEmpty
                 ? null
@@ -1233,7 +1234,7 @@ Future<void> _editMessageDialog(BuildContext context,
                     Navigator.of(dialog).pop();
                     session.editMessage(msgId, controller.text);
                   },
-            child: const Text('저장'),
+            child: Text(context.l10n.mvSave),
           ),
         ],
       ),
@@ -1253,9 +1254,9 @@ Future<void> _forwardRoomSheet(BuildContext context,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(16),
-            child: Text('전달할 방 선택',
+            child: Text(context.l10n.mvForwardTo,
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
           Flexible(
@@ -1265,7 +1266,7 @@ Future<void> _forwardRoomSheet(BuildContext context,
                 for (final c in rooms)
                   ListTile(
                     dense: true,
-                    title: Text('${(c as Map)['title'] ?? '대화방'}'),
+                    title: Text('${(c as Map)['title'] ?? context.l10n.mvChatFallback}'),
                     onTap: () {
                       Navigator.of(sheet).pop();
                       session.forwardMessage('${c['id']}', msgId);
@@ -1297,7 +1298,7 @@ Future<void> _shareLocationDialog(BuildContext context) async {
     context: context,
     builder: (dialog) => StatefulBuilder(
       builder: (dialog, setDialog) => AlertDialog(
-        title: const Text('위치 공유'),
+        title: Text(context.l10n.mvLocationShare),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1306,29 +1307,29 @@ Future<void> _shareLocationDialog(BuildContext context) async {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setDialog(() {}),
-              decoration: const InputDecoration(
-                  labelText: '위도 (-90 ~ 90)', isDense: true),
+              decoration: InputDecoration(
+                  labelText: context.l10n.roomLatHint, isDense: true),
             ),
             TextField(
               controller: lng,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setDialog(() {}),
-              decoration: const InputDecoration(
-                  labelText: '경도 (-180 ~ 180)', isDense: true),
+              decoration: InputDecoration(
+                  labelText: context.l10n.roomLonHint, isDense: true),
             ),
             TextField(
               controller: label,
               onChanged: (_) => setDialog(() {}),
-              decoration: const InputDecoration(
-                  labelText: '장소 이름 (선택)', isDense: true),
+              decoration: InputDecoration(
+                  labelText: context.l10n.roomPlaceName, isDense: true),
             ),
           ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dialog).pop(),
-              child: const Text('취소')),
+              child: Text(context.l10n.mvCancel)),
           FilledButton(
             onPressed: !valid()
                 ? null
@@ -1340,7 +1341,7 @@ Future<void> _shareLocationDialog(BuildContext context) async {
                       label: label.text,
                     );
                   },
-            child: const Text('공유'),
+            child: Text(context.l10n.shareWord),
           ),
         ],
       ),
@@ -1357,9 +1358,9 @@ Future<void> _shareContactSheet(BuildContext context) async {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(16),
-            child: Text('연락처 공유',
+            child: Text(context.l10n.mvShareContact,
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
           Flexible(
@@ -1367,7 +1368,7 @@ Future<void> _shareContactSheet(BuildContext context) async {
               shrinkWrap: true,
               children: [
                 if (session.friends.isEmpty)
-                  const ListTile(title: Text('공유할 친구가 없습니다.')),
+                  ListTile(title: Text(context.l10n.roomNoShareFriends)),
                 for (final f in session.friends)
                   if (f is Map)
                     ListTile(
@@ -1417,11 +1418,11 @@ Future<void> approvalsSheet(BuildContext context, String conversationId) async {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('승인함', style: Theme.of(sheet).textTheme.titleLarge),
+              Text(context.l10n.apprTitle, style: Theme.of(sheet).textTheme.titleLarge),
               const SizedBox(height: 8),
               Expanded(
                 child: session.proposals.isEmpty
-                    ? const Center(child: Text('대기 중인 제안이 없습니다'))
+                    ? Center(child: Text(context.l10n.apprEmpty))
                     : ListView(
                         controller: controller,
                         children: [
@@ -1433,7 +1434,7 @@ Future<void> approvalsSheet(BuildContext context, String conversationId) async {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      Text('${p['author_name'] ?? ''} · ${p['state'] == 'approved' ? '승인됨' : p['state'] == 'rejected' ? '거절됨' : '대기 중'}',
+                                      Text('${p['author_name'] ?? ''} · ${p['state'] == 'approved' ? context.l10n.apprApprovedState : p['state'] == 'rejected' ? context.l10n.apprRejectedState : context.l10n.proposalPending}',
                                           style: Theme.of(sheet).textTheme.bodySmall),
                                       const SizedBox(height: 4),
                                       Text('${p['body'] ?? ''}'),
@@ -1444,14 +1445,14 @@ Future<void> approvalsSheet(BuildContext context, String conversationId) async {
                                             Expanded(
                                               child: FilledButton(
                                                 onPressed: () => session.decideProposal(conversationId, '${p['message_id']}', 'approved'),
-                                                child: const Text('승인'),
+                                                child: Text(context.l10n.mvApprove),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: OutlinedButton(
                                                 onPressed: () => session.decideProposal(conversationId, '${p['message_id']}', 'rejected'),
-                                                child: const Text('거절'),
+                                                child: Text(context.l10n.apprReject),
                                               ),
                                             ),
                                           ],
@@ -1490,29 +1491,29 @@ Future<void> _passwordDialog(BuildContext context) async {
       builder: (dialog) => ValueListenableBuilder<bool>(
         valueListenable: ready,
         builder: (dialog, ok, _) => AlertDialog(
-          title: const Text('비밀번호 변경'),
+          title: Text(context.l10n.mvRecoverReset),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: current,
                 obscureText: true,
-                decoration: const InputDecoration(
-                    labelText: '현재 비밀번호', isDense: true),
+                decoration: InputDecoration(
+                    labelText: context.l10n.mvPwCurrent, isDense: true),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: fresh,
                 obscureText: true,
-                decoration: const InputDecoration(
-                    labelText: '새 비밀번호 (8자 이상)', isDense: true),
+                decoration: InputDecoration(
+                    labelText: context.l10n.roomNewPwHint, isDense: true),
               ),
             ],
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(dialog).pop(),
-                child: const Text('취소')),
+                child: Text(context.l10n.mvCancel)),
             FilledButton(
               // Call first, pop second: the sync notify lands while the
               // dialog is active (controllers alive), matching _qrDialog.
@@ -1522,7 +1523,7 @@ Future<void> _passwordDialog(BuildContext context) async {
                       Navigator.of(dialog).pop();
                     }
                   : null,
-              child: const Text('변경'),
+              child: Text(context.l10n.changeWord),
             ),
           ],
         ),
@@ -1575,15 +1576,15 @@ Future<void> _recordVoice(BuildContext context) {
   final session = SessionScope.of(context, listen: false);
   return withPermissions(
     context,
-    permissions: const [
-      (Permission.microphone, '마이크 권한 필요', '음성 메시지를 녹음하는 데 사용합니다.'),
+    permissions: [
+      (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseVoiceMsg),
     ],
     action: () async {
       if (!context.mounted) return;
       final rec = await showDialog<VoiceRecording>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const VoiceRecordDialog(),
+        builder: (_) => VoiceRecordDialog(),
       );
       if (rec != null) session.sendVoice(rec.bytes, durationSec: rec.seconds);
     },
@@ -1596,8 +1597,8 @@ Future<void> _sendImageWithEffect(BuildContext context, ImageSource source) asyn
   if (source == ImageSource.camera) {
     final ok = await withPermissions(
       context,
-      permissions: const [
-        (Permission.camera, '카메라 권한 필요', '채팅에 보낼 사진을 촬영하는 데 사용합니다.'),
+      permissions: [
+        (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUsePhoto),
       ],
     );
     if (!ok || !context.mounted) return;
@@ -1616,8 +1617,8 @@ Future<void> _captureWithInAppCamera(BuildContext context) async {
   final session = SessionScope.of(context, listen: false);
   final ok = await withPermissions(
     context,
-    permissions: const [
-      (Permission.camera, '카메라 권한 필요', '채팅에 보낼 사진·동영상을 촬영하는 데 사용합니다.'),
+    permissions: [
+      (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUsePhotoVideo),
     ],
   );
   if (!ok || !context.mounted) return;
@@ -1647,7 +1648,7 @@ void _pickImageSource(BuildContext context) {
         children: [
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('갤러리에서 선택'),
+            title: Text(context.l10n.roomPickGallery),
             onTap: () {
               Navigator.of(sheet).pop();
               _sendImageWithEffect(context, ImageSource.gallery);
@@ -1655,7 +1656,7 @@ void _pickImageSource(BuildContext context) {
           ),
           ListTile(
             leading: const Icon(Icons.camera_alt_outlined),
-            title: const Text('카메라로 촬영'),
+            title: Text(context.l10n.roomTakePhoto),
             onTap: () {
               Navigator.of(sheet).pop();
               _captureWithInAppCamera(context);
@@ -1685,32 +1686,32 @@ class _Composer extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
-              tooltip: '사진',
+              tooltip: context.l10n.camPhoto,
               icon: Icon(Icons.photo_outlined,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onPressed: () => _pickImageSource(context),
             ),
             IconButton(
-              tooltip: '스티커',
+              tooltip: context.l10n.mvSticker,
               icon: Icon(Icons.stars_rounded,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onPressed: () =>
                   SessionScope.of(context, listen: false).toggleStickerPicker(),
             ),
             IconButton(
-              tooltip: '음성 메시지',
+              tooltip: context.l10n.voiceMsgWord,
               icon: Icon(Icons.mic_outlined,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onPressed: () => _recordVoice(context),
             ),
             IconButton(
-              tooltip: '파일',
+              tooltip: context.l10n.fileWord,
               icon: Icon(Icons.attach_file,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onPressed: session.busy ? null : () => session.sendFile(),
             ),
             PopupMenuButton<String>(
-              tooltip: '더보기',
+              tooltip: context.l10n.mvMoreActions,
               icon: Icon(Icons.add_circle_outline,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),
               onSelected: (v) {
@@ -1720,9 +1721,9 @@ class _Composer extends StatelessWidget {
                   _shareContactSheet(context);
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'location', child: Text('위치 공유')),
-                PopupMenuItem(value: 'contact', child: Text('연락처 공유')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'location', child: Text(context.l10n.mvLocationShare)),
+                PopupMenuItem(value: 'contact', child: Text(context.l10n.mvShareContact)),
               ],
             ),
             Expanded(
@@ -1731,15 +1732,15 @@ class _Composer extends StatelessWidget {
                 style: const TextStyle(fontSize: LunoType.inputSize),
                 minLines: 1,
                 maxLines: dense ? 2 : 4,
-                decoration: const InputDecoration(
-                  hintText: '메시지를 입력하세요',
+                decoration: InputDecoration(
+                  hintText: context.l10n.roomComposerHint,
                   isDense: true,
                 ),
                 onSubmitted: (_) => onSend(),
               ),
             ),
             IconButton(
-              tooltip: '전송',
+              tooltip: context.l10n.sendBtn,
               onPressed: session.busy ? null : onSend,
               icon: Icon(Icons.send_rounded,
                   color: dark ? HarborDark.harbor : HarborLight.harbor),

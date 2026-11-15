@@ -7,6 +7,7 @@ import '../design/responsive.dart';
 import '../state/session.dart';
 import '../widgets/harbor_card.dart';
 import '../widgets/harbor_empty.dart';
+import '../util/app_l10n.dart';
 
 class KeepPage extends StatelessWidget {
   const KeepPage({super.key});
@@ -20,11 +21,11 @@ class KeepPage extends StatelessWidget {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: 'Keep', subtitle: '보관한 신호 모음'),
+              Masthead(title: 'Keep', subtitle: context.l10n.keepTitle),
               if (session.bookmarks.isEmpty)
-                const HarborEmpty(
-                  title: '보관한 항목이 없습니다',
-                  hint: '대화방에서 책갈피 표시로 보관하세요',
+                HarborEmpty(
+                  title: context.l10n.keepEmpty,
+                  hint: context.l10n.keepHint,
                   icon: Icons.bookmark_outline,
                 ),
               for (final b in session.bookmarks)

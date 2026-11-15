@@ -26,13 +26,15 @@ const lunoWarningAmber = Color(0xFFF59E0B); // --luno-warning
 const lunoErrorRed = Color(0xFFEF4444); // --luno-error
 
 // LUNO Orbit Crew Official Characters (PO Master Directive v1.0)
+// F20: the label field was dead (picker/splash render emoji + character;
+// nothing reads ['label']) and is removed instead of translated.
 const lunoOrbitCrewStickers = [
-  {'id': 'lumi_hi', 'emoji': '🛸👋', 'label': '안녕!', 'character': 'Lumi'},
-  {'id': 'nori_warm', 'emoji': '🪐❤️', 'label': '최고야!', 'character': 'Nori'},
-  {'id': 'poko_love', 'emoji': '💫✨', 'label': '반짝여!', 'character': 'Poko'},
-  {'id': 'luno_cheer', 'emoji': '🚀🔥', 'label': '화이팅!', 'character': 'Luno'},
-  {'id': 'comet_laugh', 'emoji': '☄️😂', 'label': 'ㅋㅋㅋ', 'character': 'Comet'},
-  {'id': 'astro_bow', 'emoji': '👨‍🚀🙇', 'label': '감사합니다', 'character': 'Astro'},
+  {'id': 'lumi_hi', 'emoji': '🛸👋', 'character': 'Lumi'},
+  {'id': 'nori_warm', 'emoji': '🪐❤️', 'character': 'Nori'},
+  {'id': 'poko_love', 'emoji': '💫✨', 'character': 'Poko'},
+  {'id': 'luno_cheer', 'emoji': '🚀🔥', 'character': 'Luno'},
+  {'id': 'comet_laugh', 'emoji': '☄️😂', 'character': 'Comet'},
+  {'id': 'astro_bow', 'emoji': '👨‍🚀🙇', 'character': 'Astro'},
 ];
 
 const lunoReactions = ['❤️', '👍', '😂', '😮', '😢', '🔥'];

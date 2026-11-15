@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -142,17 +143,17 @@ class _GatePanel extends StatelessWidget {
                       letterSpacing: 0.8,
                       color: dark ? HarborDark.onHarbor : HarborLight.harbor)),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Text('Connect Beyond Borders',
                 style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: dark ? HarborDark.ink : Colors.white.withValues(alpha: 0.85))),
-            const SizedBox(height: 28),
-            for (final row in const [
-              ('01', '빠르고 가벼운 대화', '실시간 동기화'),
-              ('02', '그룹 채팅과 모임', '투표·일정·앨범'),
-              ('03', 'LUNO Pay 송금', '대화방에서 바로'),
+            SizedBox(height: 28),
+            for (final row in [
+              ('01', context.l10n.authFastChat, context.l10n.authRealtimeSync),
+              ('02', context.l10n.authGroups, context.l10n.authPollsEtc),
+              ('03', context.l10n.authPaySend, context.l10n.authRightInRoom),
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -188,7 +189,7 @@ class _GatePanel extends StatelessWidget {
                 ),
               ),
             const Spacer(),
-            Text('하버 게이트 v3',
+            Text(context.l10n.authHarborGate,
                 style: TextStyle(
                     fontSize: HarborType.micro,
                     color: dark ? HarborDark.drift : Colors.white.withValues(alpha: 0.6))),
@@ -228,25 +229,25 @@ class _VerifyCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('이메일 인증', style: text.headlineSmall),
+            Text(context.l10n.verifyTitle, style: text.headlineSmall),
             const SizedBox(height: 4),
-            Text('${session.verifyEmail} 주소로 보내드린 6자리 인증번호를 입력하세요.',
+            Text(context.l10n.verifyCodeHint(session.verifyEmail),
                 style: text.bodySmall),
             const SizedBox(height: 12),
             TextField(
               controller: code,
-              decoration: const InputDecoration(labelText: '인증번호'),
+              decoration: InputDecoration(labelText: context.l10n.verifyCodeLabel),
               keyboardType: TextInputType.number,
               maxLength: 6,
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: session.busy ? null : onVerify,
-              child: const Text('인증하기'),
+              child: Text(context.l10n.verifySubmit),
             ),
             TextButton(
               onPressed: session.busy ? null : onResend,
-              child: const Text('인증번호 다시 받기'),
+              child: Text(context.l10n.verifyResend),
             ),
           ],
         ),
@@ -293,7 +294,7 @@ class _GateForm extends StatelessWidget {
               errorBuilder: (_, __, ___) => const HarborWordmark(compact: false),
             ),
             const SizedBox(height: 10),
-            Text(register ? '회원가입' : '로그인', style: text.headlineSmall),
+            Text(register ? context.l10n.createAccount : context.l10n.signInBtn, style: text.headlineSmall),
             const SizedBox(height: 4),
             Text('Connect Beyond Borders', style: text.bodySmall),
             Container(
@@ -303,30 +304,30 @@ class _GateForm extends StatelessWidget {
                 color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
                 borderRadius: BorderRadius.circular(HarborRadius.control),
               ),
-              child: Text('💡 데모 계정: user@luno.local / LunoUser#2026!',
+              child: Text(context.l10n.authDemoHint,
                   style: TextStyle(
                       fontSize: HarborType.small,
                       fontWeight: FontWeight.w700,
                       color: dark ? HarborDark.ink : HarborLight.harbor)),
             ),
-            TextField(controller: email, decoration: const InputDecoration(labelText: '이메일')),
+            TextField(controller: email, decoration: InputDecoration(labelText: context.l10n.verifyEmailLabel)),
             if (register)
-              TextField(controller: name, decoration: const InputDecoration(labelText: '표시 이름')),
+              TextField(controller: name, decoration: InputDecoration(labelText: context.l10n.authDisplayName)),
             TextField(
               controller: password,
               obscureText: true,
-              decoration: const InputDecoration(labelText: '비밀번호 (12자 이상 권장)'),
+              decoration: InputDecoration(labelText: context.l10n.authPasswordHint),
               onSubmitted: (_) => onSubmit(),
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: session.busy ? null : onSubmit,
-              child: Text(register ? '가입' : '로그인'),
+              child: Text(register ? context.l10n.authSignUp : context.l10n.signInBtn),
             ),
             TextButton(
               onPressed: () => SessionScope.of(context, listen: false)
                   .setRegisterMode(!register),
-              child: Text(register ? '기존 계정으로 로그인' : '새 LUNO 계정 만들기'),
+              child: Text(register ? context.l10n.authLoginExisting : context.l10n.authCreateNew),
             ),
           ],
         ),

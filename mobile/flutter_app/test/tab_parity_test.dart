@@ -6,6 +6,7 @@ import 'package:luno_messenger/pages/apps.dart';
 import 'package:luno_messenger/pages/shop.dart';
 import 'package:luno_messenger/router.dart';
 import 'package:luno_messenger/state/session.dart';
+import 'package:luno_messenger/util/app_l10n.dart';
 import 'package:luno_messenger/util/store_packs.dart';
 
 // UX4 web tab parity: bottom bar follows the web five-tab order
@@ -17,7 +18,7 @@ void main() {
   test('bottom bar follows the web five-tab order', () {
     expect(LunoNav.primary.map((d) => d.route),
         ['/home', '/chats', '/news', '/calls', '/wallet']);
-    expect(LunoNav.primary.map((d) => d.label),
+    expect(LunoNav.primary.map((d) => d.labelIn(stringsFor('ko'))),
         ['홈', '토크', '뉴스', '통화', '지갑']);
     expect(LunoNav.parentOf('/shop'), '/shop');
     expect(LunoNav.parentOf('/apps'), '/apps');
@@ -78,7 +79,7 @@ void main() {
     // lists the other six, never a tile to itself.
     for (final d in LunoNav.secondary) {
       if (d.route == '/apps') continue;
-      expect(find.text(d.label), findsOneWidget);
+      expect(find.text(d.labelIn(stringsFor('ko'))), findsOneWidget);
     }
   });
 

@@ -10,32 +10,34 @@ import '../state/session.dart';
 import '../theme/luno_theme.dart';
 import '../util/chat_time.dart';
 import '../util/channel_slot.dart';
+import '../util/app_l10n.dart';
 
 /// Renders the list preview for a conversation's last message.
 /// The server sends an object ({id, kind, body, ...}); only the human
 /// readable part is shown, never the raw map.
-String previewOfLastMessage(dynamic last) {
+String previewOfLastMessage(dynamic last, [String locale = 'ko']) {
+  final s = stringsFor(locale);
   if (last is Map) {
     final body = '${last['body'] ?? ''}';
     if (body.isNotEmpty && body != 'null') return body;
     switch ('${last['kind'] ?? ''}') {
       case 'call_status':
-        return '통화';
+        return s.mvCall;
       case 'sticker':
-        return '스티커';
+        return s.mvSticker;
       case 'image':
-        return '사진';
+        return s.camPhoto;
       case 'video':
-        return '동영상';
+        return s.camVideo;
       case 'file':
-        return '파일';
+        return s.fileWord;
       case 'security_notice':
-        return '알림';
+        return s.notifWord;
     }
-    return '메시지를 입력해보세요';
+    return s.chatsTypeHint;
   }
   final text = '$last';
-  return (text.isEmpty || text == 'null') ? '메시지를 입력해보세요' : text;
+  return (text.isEmpty || text == 'null') ? s.chatsTypeHint : text;
 }
 
 class ChatsPage extends StatefulWidget {
@@ -67,14 +69,14 @@ class _ChatsPageState extends State<ChatsPage> {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '토크'),
+              Masthead(title: context.l10n.navTalks),
               Row(
                 children: [
                   Expanded(child: _SearchEntry(dark: dark)),
                   Material(
                     color: Colors.transparent,
                     child: IconButton(
-                      tooltip: '안 읽은 방 먼저',
+                      tooltip: context.l10n.chatsUnreadFirst,
                       icon: Icon(
                         unreadFirst
                             ? Icons.sort
@@ -102,13 +104,13 @@ class _ChatsPageState extends State<ChatsPage> {
                     OutlinedButton.icon(
                       onPressed: () => _joinDialog(context),
                       icon: const Icon(Icons.link, size: 18),
-                      label: const Text('링크로 참여'),
+                      label: Text(context.l10n.gsJoinByLink),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.tonalIcon(
                       onPressed: () => _groupDialog(context),
                       icon: const Icon(Icons.group_add_outlined, size: 18),
-                      label: const Text('그룹 만들기'),
+                      label: Text(context.l10n.chatsMakeGroup),
                     ),
                   ],
                 ),
@@ -124,7 +126,7 @@ class _ChatsPageState extends State<ChatsPage> {
                       session.dismissChannelSlot(session.channelSlot!.id),
                 ),
               if (ordered.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(32),
                   child: Center(
                     child: Column(
@@ -133,7 +135,7 @@ class _ChatsPageState extends State<ChatsPage> {
                         CrewBadge.mascot(),
                         SizedBox(height: 12),
                         Text(
-                          '대화방이 없습니다.\n홈에서 친구를 찾아 대화를 시작해보세요.',
+                          context.l10n.chatsEmpty,
                           textAlign: TextAlign.center,
                           style: TextStyle(height: 1.5),
                         ),
@@ -167,18 +169,18 @@ class _ChatsPageState extends State<ChatsPage> {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (dialog, setDialog) => AlertDialog(
-          title: const Text('링크로 참여'),
+          title: Text(context.l10n.gsJoinByLink),
           content: TextField(
             controller: input,
             autofocus: true,
             onChanged: (_) => setDialog(() {}),
-            decoration: const InputDecoration(
-                labelText: '초대 링크 또는 토큰', isDense: true),
+            decoration: InputDecoration(
+                labelText: context.l10n.chatsInviteLinkOrToken, isDense: true),
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(dialog).pop(),
-                child: const Text('취소')),
+                child: Text(context.l10n.mvCancel)),
             FilledButton(
               onPressed: tokenOf(input.text).isEmpty
                   ? null
@@ -191,7 +193,7 @@ class _ChatsPageState extends State<ChatsPage> {
                         context.go('/chats/$id');
                       }
                     },
-              child: const Text('참여하기'),
+              child: Text(context.l10n.gsJoin),
             ),
           ],
         ),
@@ -207,7 +209,7 @@ class _ChatsPageState extends State<ChatsPage> {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (dialog, setDialog) => AlertDialog(
-          title: const Text('그룹 만들기'),
+          title: Text(context.l10n.chatsMakeGroup),
           content: SizedBox(
             width: 320,
             child: Column(
@@ -215,12 +217,12 @@ class _ChatsPageState extends State<ChatsPage> {
               children: [
                 TextField(
                     controller: title,
-                    decoration: const InputDecoration(
-                        labelText: '그룹 이름', isDense: true),
+                    decoration: InputDecoration(
+                        labelText: context.l10n.mvGroupName, isDense: true),
                     onChanged: (_) => setDialog(() {})),
                 const SizedBox(height: 8),
                 if (session.friends.isEmpty)
-                  const Text('초대할 친구가 없습니다. 홈에서 친구를 먼저 추가하세요.'),
+                  Text(context.l10n.chatsNoFriends),
                 if (session.friends.isNotEmpty)
                   Flexible(
                     child: ListView(
@@ -251,7 +253,7 @@ class _ChatsPageState extends State<ChatsPage> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(dialog).pop(),
-                child: const Text('취소')),
+                child: Text(context.l10n.mvCancel)),
             FilledButton(
               onPressed: title.text.trim().isEmpty || picked.isEmpty
                   ? null
@@ -264,7 +266,7 @@ class _ChatsPageState extends State<ChatsPage> {
                         context.go('/chats/$id');
                       }
                     },
-              child: const Text('만들기'),
+              child: Text(context.l10n.createWord),
             ),
           ],
         ),
@@ -297,7 +299,7 @@ class _SearchEntry extends StatelessWidget {
                   color:
                       dark ? HarborDark.drift : HarborLight.drift),
               const SizedBox(width: 8),
-              Text('대화·친구 검색',
+              Text(context.l10n.chatsSearchHint,
                   style: TextStyle(
                       fontSize: 14,
                       color: dark
@@ -321,14 +323,13 @@ class _TalkRow extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final unread = (c['unread_count'] as num?)?.toInt() ?? 0;
     final raw = '${c['title'] ?? ''}';
-    final title = raw.isEmpty ? '대화방' : raw;
+    final title = raw.isEmpty ? context.l10n.mvChatFallback : raw;
     final memberCount = (c['member_count'] as num?)?.toInt();
     final countSuffix =
         (c['kind'] == 'group' && memberCount != null) ? ' ($memberCount)' : '';
     final last = c['last_message'];
-    final rowTime =
-        listTime(c['updated_at'] ?? (last is Map ? last['created_at'] : null));
     final session = SessionScope.of(context, listen: false);
+    final rowTime = listTime(c['updated_at'] ?? (last is Map ? last['created_at'] : null), locale: session.locale);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -356,7 +357,7 @@ class _TalkRow extends StatelessWidget {
                             fontSize: LunoType.listNameSize,
                             height: LunoType.listNameHeight)),
                     const SizedBox(height: 2),
-                    Text(previewOfLastMessage(c['last_message']),
+                    Text(previewOfLastMessage(c['last_message'], session.locale),
                         maxLines: LunoType.subMaxLines,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

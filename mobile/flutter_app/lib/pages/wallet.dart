@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
@@ -40,7 +41,7 @@ class _WalletPageState extends State<WalletPage> {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '지갑', subtitle: 'LUNO Pay 출납부'),
+              Masthead(title: context.l10n.mvWallet, subtitle: context.l10n.walletLedger),
               Card(
                 color: dark ? HarborDark.surface : HarborLight.harbor,
                 shape: RoundedRectangleBorder(
@@ -53,7 +54,7 @@ class _WalletPageState extends State<WalletPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('LUNO Pay 머니 잔액',
+                          Text(context.l10n.walletBalance,
                               style: TextStyle(
                                   color: Colors.white.withValues(alpha: 0.8),
                                   fontSize: 13,
@@ -96,7 +97,7 @@ class _WalletPageState extends State<WalletPage> {
                       ),
                       const SizedBox(height: 16),
                       if (!session.paymentsEnabled)
-                        const Text('결제 기능은 준비 중입니다.',
+                        Text(context.l10n.mvPaymentsPreparing,
                             style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700)),
@@ -109,11 +110,11 @@ class _WalletPageState extends State<WalletPage> {
                                 keyboardType: TextInputType.number,
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700),
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   filled: true,
                                   fillColor: Colors.white,
                                   isDense: true,
-                                  hintText: '충전 금액',
+                                  hintText: context.l10n.walletTopup,
                                   border: InputBorder.none,
                                   enabledBorder: InputBorder.none,
                                   focusedBorder: InputBorder.none,
@@ -133,14 +134,14 @@ class _WalletPageState extends State<WalletPage> {
                                     int.tryParse(amount.text.trim());
                                 if (parsed == null || parsed <= 0) {
                                   setState(() => localError =
-                                      '충전 금액을 숫자로 입력해 주세요.');
+                                      context.l10n.walletTopupNumber);
                                   return;
                                 }
                                 setState(() => localError = null);
                                 session.chargeWallet(parsed);
                                 amount.clear();
                               },
-                              child: const Text('+ 충전'),
+                              child: Text(context.l10n.walletTopupBtn),
                             ),
                           ],
                         ),
@@ -165,21 +166,21 @@ class _WalletPageState extends State<WalletPage> {
                 child: ListTile(
                   leading: Icon(Icons.security,
                       color: dark ? HarborDark.harbor : HarborLight.harbor),
-                  title: const Text('간편 송금 & 결제 보호',
+                  title: Text(context.l10n.walletProtect,
                       style:
                           TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: Text('24시간 이상거래 탐지 FDS 및 종단간 암호화 적용',
+                  subtitle: Text(context.l10n.walletFds,
                       style: Theme.of(context).textTheme.bodySmall),
                 ),
               ),
               if (session.walletHistory.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Text('최근 기록', style: Theme.of(context).textTheme.titleMedium),
+                Text(context.l10n.walletRecent, style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 for (final h in session.walletHistory)
                   ListTile(
                     dense: true,
-                    title: Text("${h['title'] ?? h['kind'] ?? '거래'}",
+                    title: Text("${h['title'] ?? h['kind'] ?? context.l10n.walletTxWord}",
                         style: const TextStyle(fontSize: 13)),
                     trailing: Text("${h['amount'] ?? ''}",
                         style: const TextStyle(

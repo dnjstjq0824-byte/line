@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 class ChannelsPage extends StatelessWidget {
   const ChannelsPage({super.key});
@@ -19,8 +20,8 @@ class ChannelsPage extends StatelessWidget {
           PageColumn(
             children: [
               Masthead(
-                title: '공식 채널',
-                subtitle: '인증된 항로 안내소 (${session.officialAccounts.length})',
+                title: context.l10n.officialChannels,
+                subtitle: context.l10n.oaDirectory(session.officialAccounts.length),
               ),
               for (final oa in session.officialAccounts)
                 Card(
@@ -44,7 +45,7 @@ class ChannelsPage extends StatelessWidget {
               if (session.officialAccounts.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 64),
-                  child: Text('등록된 공식 채널이 없습니다',
+                  child: Text(context.l10n.channelsEmpty,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleMedium),
                 ),

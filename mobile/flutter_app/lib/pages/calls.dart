@@ -12,6 +12,7 @@ import '../state/session.dart';
 import '../theme/luno_theme.dart';
 import '../util/app_permissions.dart';
 import '../util/call_groups.dart';
+import '../util/app_l10n.dart';
 
 class CallsPage extends StatelessWidget {
   const CallsPage({super.key});
@@ -27,7 +28,7 @@ class CallsPage extends StatelessWidget {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '통화'),
+              Masthead(title: context.l10n.mvCall),
               if (groups.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 64),
@@ -37,11 +38,11 @@ class CallsPage extends StatelessWidget {
                           size: 48,
                           color: dark ? HarborDark.channel : HarborLight.channel),
                       const SizedBox(height: 12),
-                      Text('통화 기록이 없습니다',
+                      Text(context.l10n.callsEmpty,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 4),
-                      Text('대화방에서 음성 또는 영상 통화를 시작해 보세요',
+                      Text(context.l10n.callsStartHint,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall),
                     ],
@@ -69,7 +70,7 @@ class _CallRow extends StatelessWidget {
     final call = group.latest;
     final session = SessionScope.of(context, listen: false);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final title = call['title']?.toString() ?? '알 수 없음';
+    final title = call['title']?.toString() ?? context.l10n.unknownWord;
     final outgoing = call['outgoing'] == true;
     final missed = group.missed;
     final kind = call['kind']?.toString() ?? 'voice';
@@ -107,7 +108,7 @@ class _CallRow extends StatelessWidget {
           const SizedBox(width: 4),
           Expanded(
             child: Text(
-              callRowDate(call['started_at']),
+              callRowDate(call['started_at'], locale: session.locale),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: HarborType.small, color: lineColor, fontFeatures: const [LunoType.tabular]),
@@ -116,15 +117,15 @@ class _CallRow extends StatelessWidget {
         ],
       ),
       trailing: IconButton(
-        tooltip: kind == 'video' ? '영상통화' : '음성통화',
+        tooltip: kind == 'video' ? context.l10n.callVideo : context.l10n.callVoice,
         icon: Icon(kind == 'video' ? Icons.videocam : Icons.phone,
             color: dark ? HarborDark.harbor : HarborLight.harbor),
         onPressed: () => withPermissions(
           context,
           permissions: [
-            const (Permission.microphone, '마이크 권한 필요', '통화에 사용합니다.'),
+            (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseCall),
             if (kind == 'video')
-              const (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
+              (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUseVideo),
           ],
           action: () async => session.startCallIn(
               call['conversation_id']?.toString() ?? '', kind),

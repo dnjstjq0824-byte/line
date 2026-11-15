@@ -13,6 +13,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_l10n.dart';
 
 // F5: avatar/cover arrive as an R2 serving path (/api/v1/users/...),
 // an absolute URL, or a legacy inline data: URL.
@@ -40,9 +41,9 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final name = session.selfName.isEmpty ? '내 프로필' : session.selfName;
+    final name = session.selfName.isEmpty ? context.l10n.myProfile : session.selfName;
     final status = session.selfStatusMessage.isEmpty
-        ? '설정 안 함'
+        ? context.l10n.profileUnset
         : session.selfStatusMessage;
     final cover =
         profilePhotoImage(session.api.baseUrl, session.selfCoverUrl);
@@ -64,17 +65,17 @@ class ProfilePage extends StatelessWidget {
                   children: [
                     _CircleButton(
                         icon: Icons.arrow_back,
-                        tooltip: '뒤로',
+                        tooltip: context.l10n.backWord,
                         onTap: () => context.go('/home')),
-                    const Expanded(
-                      child: Text('프로필',
+                    Expanded(
+                      child: Text(context.l10n.profileTitle,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               fontSize: HarborType.title, fontWeight: FontWeight.w700)),
                     ),
                     _CircleButton(
                         icon: Icons.close,
-                        tooltip: '닫기',
+                        tooltip: context.l10n.mvRecoverCancel,
                         onTap: () => context.go('/home')),
                   ],
                 ),
@@ -148,31 +149,31 @@ class ProfilePage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Row(
-                    label: '이름',
+                    label: context.l10n.profileName,
                     value: name,
                     ink: ink,
                     onTap: () => _textDialog(context,
-                        title: '이름',
+                        title: context.l10n.profileName,
                         initial: session.selfName,
                         required: true,
                         onSave: (v) =>
                             session.updateProfile(displayName: v)),
                   ),
                   _Row(
-                    label: '상태 메시지',
+                    label: context.l10n.profileStatus,
                     value: status,
                     dimmed: session.selfStatusMessage.isEmpty,
                     ink: ink,
                     sub: sub,
                     onTap: () => _textDialog(context,
-                        title: '상태 메시지',
+                        title: context.l10n.profileStatus,
                         initial: session.selfStatusMessage,
                         onSave: (v) =>
                             session.updateProfile(statusMessage: v)),
                   ),
                   if (session.selfHandle.isNotEmpty)
                     _Row(
-                      label: '내 QR 코드',
+                      label: context.l10n.profileMyQr,
                       value: '',
                       ink: ink,
                       onTap: () => _qrSheet(context),
@@ -181,7 +182,7 @@ class ProfilePage extends StatelessWidget {
                   _Row(
                     label: 'LUNO ID',
                     value: session.selfHandle.isEmpty
-                        ? '미설정'
+                        ? context.l10n.profileUnsetShort
                         : session.selfHandle,
                     ink: ink,
                     trailing: session.selfHandle.isEmpty
@@ -192,17 +193,17 @@ class ProfilePage extends StatelessWidget {
                                   text: session.selfHandle));
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('LUNO ID를 복사했습니다.')),
+                                  SnackBar(
+                                      content: Text(context.l10n.profileIdCopied)),
                                 );
                               }
                             },
-                            child: const Text('복사'),
+                            child: Text(context.l10n.gsLinkCopy),
                           ),
                   ),
                   _ToggleRow(
-                    label: 'ID로 친구 추가 허용',
-                    description: '다른 사람이 내 ID를 검색하여 친구로 추가할 수 있습니다.',
+                    label: context.l10n.privacyIdAdd,
+                    description: context.l10n.privacyIdAddDesc,
                     value: searchable,
                     enabled: session.prefsLoaded,
                     ink: ink,
@@ -211,22 +212,22 @@ class ProfilePage extends StatelessWidget {
                   ),
                   const Divider(height: 32),
                   _Row(
-                    label: '생일',
+                    label: context.l10n.profileBirthday,
                     value: session.selfBirthday.isEmpty
-                        ? '설정 안 함'
+                        ? context.l10n.profileUnset
                         : session.selfBirthday,
                     dimmed: session.selfBirthday.isEmpty,
                     ink: ink,
                     sub: sub,
                     onTap: () => _textDialog(context,
-                        title: '생일 (MM-DD, 비우면 지움)',
+                        title: context.l10n.profileBirthdayHint,
                         initial: session.selfBirthday,
                         onSave: (v) =>
                             session.updateProfile(birthday: v)),
                   ),
                   _Row(
-                    label: '프로필 사진 및 배경 설정',
-                    value: '프로필 사진과 배경을 설정할 수 있습니다.',
+                    label: context.l10n.profilePhotoSetup,
+                    value: context.l10n.profilePhotoSetupDesc,
                     small: true,
                     ink: ink,
                     sub: sub,
@@ -454,7 +455,7 @@ Future<void> _textDialog(
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dialog).pop(),
-              child: const Text('취소')),
+              child: Text(context.l10n.mvCancel)),
           FilledButton(
             onPressed: (required && controller.text.trim().isEmpty)
                 ? null
@@ -462,7 +463,7 @@ Future<void> _textDialog(
                     Navigator.of(dialog).pop();
                     onSave(controller.text);
                   },
-            child: const Text('저장'),
+            child: Text(context.l10n.mvSave),
           ),
         ],
       ),
@@ -480,7 +481,7 @@ Future<void> _qrSheet(BuildContext context) async {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('내 QR 코드',
+          Text(context.l10n.profileMyQr,
               style:
                   TextStyle(fontSize: HarborType.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
@@ -489,7 +490,7 @@ Future<void> _qrSheet(BuildContext context) async {
           const SizedBox(height: 16),
           QrImageView(data: payload, size: 200),
           const SizedBox(height: 8),
-          const Text('카메라로 스캔하면 친구로 추가할 수 있습니다.',
+          Text(context.l10n.profileQrHint,
               style: TextStyle(fontSize: HarborType.small, color: Colors.grey)),
         ],
       ),
@@ -525,24 +526,24 @@ Future<void> _photoSheet(BuildContext context, {required bool cover}) async {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(cover ? '커버 사진' : '프로필 사진',
+          Text(cover ? context.l10n.profileCover : context.l10n.profilePhoto,
               style: const TextStyle(
                   fontSize: 13, color: Colors.grey)),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('카메라'),
+            title: Text(context.l10n.cameraWord),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => pick(ImageSource.camera),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('사진 선택'),
+            title: Text(context.l10n.profilePickPhoto),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => pick(ImageSource.gallery),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(cover ? '커버 사진 삭제' : '프로필 사진 삭제',
+            title: Text(cover ? context.l10n.profileDeleteCover : context.l10n.profileDeletePhoto,
                 style: const TextStyle(color: LunoStatus.busy)),
             onTap: remove,
           ),

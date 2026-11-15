@@ -10,6 +10,7 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../util/qr_payload.dart';
+import '../util/app_l10n.dart';
 
 class QrScanPage extends StatefulWidget {
   final Widget? scannerOverride;
@@ -50,7 +51,7 @@ class _QrScanPageState extends State<QrScanPage> {
     if (raw.isEmpty) return;
     final payload = parseQrPayload(raw);
     if (payload.kind == QrPayloadKind.unknown) {
-      setState(() => _error = 'LUNO QR 코드가 아닙니다. 다시 비춰주세요.');
+      setState(() => _error = context.l10n.qrNotLunoRescan);
       return;
     }
     _handling = true;
@@ -95,7 +96,7 @@ class _QrScanPageState extends State<QrScanPage> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return PageColumn(
       children: [
-        const Masthead(title: 'QR 스캔', subtitle: 'PC 로그인 · 친구 추가'),
+        Masthead(title: context.l10n.qrScanTitle, subtitle: context.l10n.qrScanSubtitle),
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(HarborRadius.card),
@@ -110,11 +111,11 @@ class _QrScanPageState extends State<QrScanPage> {
                     onDetect: _onDetect,
                     placeholderBuilder: (_) =>
                         const Center(child: CircularProgressIndicator()),
-                    errorBuilder: (_, __) => const Center(
+                    errorBuilder: (_, __) => Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
                         child: Text(
-                          '카메라를 사용할 수 없습니다. 아래에서 직접 입력해 주세요.',
+                          context.l10n.qrNoCamera,
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -155,7 +156,7 @@ class _QrScanPageState extends State<QrScanPage> {
               const Spacer(),
               TextButton(
                 onPressed: () => setState(() => _manual = !_manual),
-                child: Text(_manual ? '직접 입력 닫기' : '직접 입력하기'),
+                child: Text(_manual ? context.l10n.qrManualClose : context.l10n.qrManualOpen),
               ),
             ],
           ),
@@ -184,7 +185,7 @@ class _QrScanPageState extends State<QrScanPage> {
                             _token.text.trim().isEmpty
                         ? null
                         : _manualApprove,
-                    child: const Text('승인'),
+                    child: Text(context.l10n.mvApprove),
                   ),
                 ],
               ),
@@ -210,13 +211,13 @@ class QrPayloadSheet extends StatelessWidget {
     final session = SessionScope.of(context);
     final kind = payload.kind;
     final title = switch (kind) {
-      QrPayloadKind.login => 'PC/웹 로그인 승인',
-      QrPayloadKind.friend => '친구 추가',
-      QrPayloadKind.unknown => 'QR 확인',
+      QrPayloadKind.login => context.l10n.homeQrLoginTitle,
+      QrPayloadKind.friend => context.l10n.qrAddFriend,
+      QrPayloadKind.unknown => context.l10n.qrVerifyTitle,
     };
     final confirmLabel = switch (kind) {
-      QrPayloadKind.login => '승인하기',
-      QrPayloadKind.friend => '추가하기',
+      QrPayloadKind.login => context.l10n.qrApprove,
+      QrPayloadKind.friend => context.l10n.qrAddNow,
       QrPayloadKind.unknown => '',
     };
     return Padding(
@@ -230,18 +231,18 @@ class QrPayloadSheet extends StatelessWidget {
                   const TextStyle(fontSize: HarborType.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           if (kind == QrPayloadKind.login)
-            Text('이 기기에서 PC/웹 로그인을 승인합니다.\n요청 ID: ${payload.challengeId}'),
+            Text(context.l10n.qrApproveDesc(payload.challengeId)),
           if (kind == QrPayloadKind.friend)
-            Text('@${payload.handle}님을 친구로 추가합니다.'),
+            Text(context.l10n.qrAddFriendDesc(payload.handle)),
           if (kind == QrPayloadKind.unknown)
-            const Text('LUNO QR 코드가 아닙니다.'),
+            Text(context.l10n.qrNotLuno),
           const SizedBox(height: 16),
           Row(
             children: [
               const Spacer(),
               TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text(kind == QrPayloadKind.unknown ? '닫기' : '취소')),
+                  child: Text(kind == QrPayloadKind.unknown ? context.l10n.mvRecoverCancel : context.l10n.mvCancel)),
               if (confirmLabel.isNotEmpty) const SizedBox(width: 8),
               if (confirmLabel.isNotEmpty)
                 FilledButton(

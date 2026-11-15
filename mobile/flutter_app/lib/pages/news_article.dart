@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../design/responsive.dart';
 import '../state/session.dart';
 import 'news.dart';
+import '../util/app_l10n.dart';
 
 class NewsArticlePage extends StatelessWidget {
   final String articleId;
@@ -18,10 +19,10 @@ class NewsArticlePage extends StatelessWidget {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '기사', subtitle: '전보를 찾을 수 없습니다'),
+              Masthead(title: context.l10n.newsArticleWord, subtitle: context.l10n.newsNotFound),
               FilledButton.tonal(
                 onPressed: session.reload,
-                child: const Text('뉴스 다시 불러오기'),
+                child: Text(context.l10n.newsReload),
               ),
             ],
           ),

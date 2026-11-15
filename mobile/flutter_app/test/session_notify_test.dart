@@ -38,7 +38,9 @@ class FakeNotifier implements AppNotifier {
   Future<void> Function(String? payload)? tap;
 
   @override
-  Future<void> init({Future<void> Function(String? payload)? onTap}) async {
+  Future<void> init(
+      {Future<void> Function(String? payload)? onTap,
+      String locale = 'ko'}) async {
     tap = onTap;
   }
 
@@ -46,7 +48,8 @@ class FakeNotifier implements AppNotifier {
   Future<void> showMessage(
       {required String roomId,
       required String title,
-      required String body}) async {
+      required String body,
+      String locale = 'ko'}) async {
     messages.add({'roomId': roomId, 'title': title, 'body': body});
   }
 
@@ -54,7 +57,8 @@ class FakeNotifier implements AppNotifier {
   Future<void> showIncomingCall(
       {required String callId,
       required String title,
-      required String body}) async {
+      required String body,
+      String locale = 'ko'}) async {
     calls.add({'callId': callId, 'title': title, 'body': body});
   }
 

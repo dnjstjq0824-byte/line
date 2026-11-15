@@ -9,17 +9,19 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
 import '../design/v3.dart';
+import './app_l10n.dart';
 
 const photoEffectIds = ['none', 'gray', 'sepia'];
 
-String photoEffectLabel(String id) {
+String photoEffectLabel(String id, [String locale = 'ko']) {
+  final s = stringsFor(locale);
   switch (id) {
     case 'gray':
-      return '흑백';
+      return s.fxGray;
     case 'sepia':
-      return '세피아';
+      return s.fxSepia;
     default:
-      return '원본';
+      return s.fxOriginal;
   }
 }
 
@@ -86,7 +88,7 @@ class _PhotoEffectSheetState extends State<PhotoEffectSheet> {
               children: [
                 for (final id in photoEffectIds)
                   ChoiceChip(
-                    label: Text(photoEffectLabel(id)),
+                    label: Text(photoEffectLabel(id, appLocaleOf(context))),
                     selected: _effect == id,
                     onSelected: (_) => setState(() => _effect = id),
                   ),
@@ -98,12 +100,12 @@ class _PhotoEffectSheetState extends State<PhotoEffectSheet> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('취소'),
+                  child: Text(context.l10n.mvCancel),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(_effect),
-                  child: const Text('전송'),
+                  child: Text(context.l10n.sendBtn),
                 ),
               ],
             ),

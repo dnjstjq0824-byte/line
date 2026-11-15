@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 
 import '../design/v3.dart';
 import 'attachments.dart';
+import './app_l10n.dart';
 
 class VideoBubble extends StatefulWidget {
   final String url;
@@ -66,7 +67,7 @@ class _VideoBubbleState extends State<VideoBubble> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = '재생 실패';
+          _error = context.l10n.mediaPlayFail;
         });
       }
     }
@@ -119,7 +120,7 @@ class _VideoBubbleState extends State<VideoBubble> {
             Text(
               ready
                   ? voiceDurationLabel(ctrl.value.duration.inSeconds)
-                  : '동영상',
+                  : context.l10n.camVideo,
               style: const TextStyle(fontSize: HarborType.micro),
             ),
           ],

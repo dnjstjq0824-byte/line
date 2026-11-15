@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({super.key});
@@ -32,7 +33,7 @@ class _FeedPageState extends State<FeedPage> {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '피드', subtitle: 'LUNO 항해 일지'),
+              Masthead(title: context.l10n.navFeed, subtitle: context.l10n.feedLogTitle),
               Card(
                 color: dark ? HarborDark.surface : Colors.white,
                 shape: RoundedRectangleBorder(
@@ -47,8 +48,8 @@ class _FeedPageState extends State<FeedPage> {
                         controller: composer,
                         maxLines: 3,
                         minLines: 1,
-                        decoration: const InputDecoration(
-                          hintText: 'LUNO 피드에 새로운 소식을 공유하세요...',
+                        decoration: InputDecoration(
+                          hintText: context.l10n.feedComposerHint,
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
@@ -63,7 +64,7 @@ class _FeedPageState extends State<FeedPage> {
                             composer.clear();
                           },
                           icon: const Icon(Icons.send, size: 16),
-                          label: const Text('피드 게시'),
+                          label: Text(context.l10n.feedPublish),
                         ),
                       ),
                     ],
@@ -72,7 +73,7 @@ class _FeedPageState extends State<FeedPage> {
               ),
               const SizedBox(height: 10),
               if (session.feedPosts.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 48),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -80,7 +81,7 @@ class _FeedPageState extends State<FeedPage> {
                       CrewBadge.mascot(),
                       SizedBox(height: 12),
                       Text(
-                        '아직 피드 글이 없습니다.\n첫 소식을 공유해보세요.',
+                        context.l10n.feedEmpty,
                         textAlign: TextAlign.center,
                         style: TextStyle(height: 1.5),
                       ),
@@ -134,7 +135,7 @@ class _FeedPageState extends State<FeedPage> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                '댓글 ${(p['comments'] as List?)?.length ?? 0}개',
+                                context.l10n.feedCommentCount((p['comments'] as List?)?.length ?? 0),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],

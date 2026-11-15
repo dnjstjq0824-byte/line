@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import 'attachments.dart';
+import './app_l10n.dart';
 
 /// Two-minute cap: at 32kbps mono this stays near the 512KiB attachment
 /// ceiling (120s x 4KB/s), and sendVoice still enforces the cap server-side.
@@ -63,7 +64,7 @@ class _VoiceRecordDialogState extends State<VoiceRecordDialog> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = '마이크 권한이 필요합니다. 설정에서 허용해 주세요.';
+          _error = context.l10n.recMicNeed;
         });
       }
       return;
@@ -85,7 +86,7 @@ class _VoiceRecordDialogState extends State<VoiceRecordDialog> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = '녹음을 시작할 수 없습니다.';
+          _error = context.l10n.recStartFail;
         });
       }
       return;
@@ -124,7 +125,7 @@ class _VoiceRecordDialogState extends State<VoiceRecordDialog> {
       setState(() {
         _busy = false;
         _recording = false;
-        _error = '녹음된 내용이 없습니다.';
+        _error = context.l10n.recEmpty;
       });
       return;
     }
@@ -133,7 +134,7 @@ class _VoiceRecordDialogState extends State<VoiceRecordDialog> {
         _busy = false;
         _recording = false;
         _bytes = null;
-        _error = '녹음이 너무 깁니다. 더 짧게 녹음해 주세요.';
+        _error = context.l10n.recTooLong;
       });
       return;
     }
@@ -166,7 +167,7 @@ class _VoiceRecordDialogState extends State<VoiceRecordDialog> {
       if (mounted) {
         setState(() {
           _playing = false;
-          _error = '미리듣기에 실패했습니다.';
+          _error = context.l10n.recPreviewFail;
         });
       }
     }
@@ -192,7 +193,7 @@ class _VoiceRecordDialogState extends State<VoiceRecordDialog> {
   Widget build(BuildContext context) {
     final done = _bytes != null;
     return AlertDialog(
-      title: const Text('음성 메시지 녹음'),
+      title: Text(context.l10n.recTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -204,42 +205,42 @@ class _VoiceRecordDialogState extends State<VoiceRecordDialog> {
           if (_error != null)
             Text(_error!, style: const TextStyle(color: Colors.red))
           else if (_recording)
-            const Text('녹음 중... 중지를 눌러 완료하세요.')
+            Text(context.l10n.recWhile)
           else if (done)
-            const Text('미리듣기로 확인 후 전송하세요.')
+            Text(context.l10n.recPreviewHint)
           else
-            const Text('시작을 누르면 최대 2분까지 녹음됩니다.'),
+            Text(context.l10n.recMaxHint),
         ],
       ),
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('취소'),
+          child: Text(context.l10n.mvCancel),
         ),
         if (_recording)
           ElevatedButton(
             onPressed: _busy ? null : _stop,
-            child: const Text('중지'),
+            child: Text(context.l10n.recStop),
           )
         else if (done) ...[
           TextButton(
             onPressed: _busy ? null : _start,
-            child: const Text('다시 녹음'),
+            child: Text(context.l10n.recRedo),
           ),
           TextButton(
             onPressed: _togglePreview,
-            child: Text(_playing ? '미리듣기 중지' : '미리듣기'),
+            child: Text(_playing ? context.l10n.recPreviewStop : context.l10n.recPreview),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(
               VoiceRecording(_bytes!, _seconds < 1 ? 1 : _seconds),
             ),
-            child: const Text('전송'),
+            child: Text(context.l10n.sendBtn),
           ),
         ] else
           ElevatedButton(
             onPressed: _busy ? null : _start,
-            child: const Text('녹음 시작'),
+            child: Text(context.l10n.recStart),
           ),
       ],
     );
@@ -313,7 +314,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = '재생 실패';
+          _error = context.l10n.mediaPlayFail;
         });
       }
     }
@@ -342,7 +343,7 @@ class _VoiceBubbleState extends State<VoiceBubble> {
           )
         else
           IconButton(
-            tooltip: _playing ? '중지' : '재생',
+            tooltip: _playing ? context.l10n.recStop : context.l10n.recPlay,
             icon: Icon(_playing ? Icons.stop_circle : Icons.play_circle,
                 color: widget.foreground),
             onPressed: _toggle,

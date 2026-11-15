@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../nav.dart';
+import '../util/app_l10n.dart';
 
 class MorePage extends StatelessWidget {
   const MorePage({super.key});
@@ -18,7 +19,7 @@ class MorePage extends StatelessWidget {
       children: [
         PageColumn(
           children: [
-            const Masthead(title: '더보기', subtitle: '하버 데스크 전체 목록'),
+            Masthead(title: context.l10n.mvMoreActions, subtitle: context.l10n.moreAllDesks),
             Card(
               color: dark ? HarborDark.surface : Colors.white,
               shape: RoundedRectangleBorder(
@@ -32,7 +33,7 @@ class MorePage extends StatelessWidget {
                     if (i > 0) const Divider(height: 1),
                     ListTile(
                       leading: Icon(LunoNav.secondary[i].icon),
-                      title: Text(LunoNav.secondary[i].label,
+                      title: Text(LunoNav.secondary[i].labelIn(context.l10n),
                           style: const TextStyle(fontWeight: FontWeight.w600)),
                       trailing: const Icon(Icons.chevron_right, size: 20),
                       onTap: () => context.go(LunoNav.secondary[i].route),

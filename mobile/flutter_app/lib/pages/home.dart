@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,9 +23,9 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final name = session.selfName.isEmpty ? '내 프로필' : session.selfName;
+    final name = session.selfName.isEmpty ? context.l10n.myProfile : session.selfName;
     final status = session.selfStatusMessage.isEmpty
-        ? '상태 메시지 입력'
+        ? context.l10n.homeStatusHint
         : session.selfStatusMessage;
     return RefreshIndicator(
       onRefresh: session.reload,
@@ -53,7 +54,7 @@ class _HomePageState extends State<HomePage> {
                     onPressed: () => context.go('/keep'),
                   ),
                   IconButton(
-                    tooltip: '설정',
+                    tooltip: context.l10n.settingsTitle,
                     icon: const Icon(Icons.settings_outlined),
                     onPressed: () => context.go('/settings'),
                   ),
@@ -89,7 +90,7 @@ class _HomePageState extends State<HomePage> {
                     size: 56,
                   ),
                   IconButton(
-                    tooltip: 'PC/웹 QR 승인',
+                    tooltip: context.l10n.homeQrApprove,
                     icon: const Icon(Icons.qr_code_scanner),
                     onPressed: () => showDialog(
                       context: context,
@@ -122,7 +123,7 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     const Icon(Icons.search, size: 20),
                     const SizedBox(width: 8),
-                    Text('검색',
+                    Text(context.l10n.mvSearch,
                         style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
@@ -130,18 +131,18 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 16),
-          Text('서비스', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.l10n.serviceWord, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _ServiceButton(
                   icon: Icons.auto_stories_outlined,
-                  label: '스토리',
+                  label: context.l10n.storyWord,
                   route: '/stories'),
               _ServiceButton(
                   icon: Icons.verified_outlined,
-                  label: '공식 채널',
+                  label: context.l10n.officialChannels,
                   route: '/channels'),
               _ServiceButton(
                   icon: Icons.bookmark_border,
@@ -149,7 +150,7 @@ class _HomePageState extends State<HomePage> {
                   route: '/keep'),
               _ServiceButton(
                   icon: Icons.account_balance_wallet_outlined,
-                  label: '지갑',
+                  label: context.l10n.mvWallet,
                   route: '/wallet'),
             ],
           ),
@@ -164,7 +165,7 @@ class _HomePageState extends State<HomePage> {
               child:
                   const Icon(Icons.verified_outlined, color: Colors.white),
             ),
-            title: const Text('공식 계정',
+            title: Text(context.l10n.mvOfficialAccount,
                 style: TextStyle(fontWeight: FontWeight.w600)),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -189,11 +190,11 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Icon(Icons.cake_outlined, size: 20),
                         SizedBox(width: 8),
-                        Text('오늘 생일인 친구',
+                        Text(context.l10n.birthdayFriends,
                             style: TextStyle(
                                 fontSize: 14, fontWeight: FontWeight.w700)),
                       ],
@@ -217,7 +218,7 @@ class _HomePageState extends State<HomePage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text('친구 (${session.friends.length})',
+                    child: Text(context.l10n.homeFriendsCount(session.friends.length),
                         style: Theme.of(context).textTheme.titleMedium),
                   ),
                   Icon(friendsOpen
@@ -246,7 +247,7 @@ class _HomePageState extends State<HomePage> {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall),
                 trailing: PopupMenuButton<String>(
-                  tooltip: '친구 관리',
+                  tooltip: context.l10n.homeFriendsManage,
                   onSelected: (v) {
                     if (v == 'fav') {
                       session.toggleFavoriteFriend(
@@ -263,15 +264,15 @@ class _HomePageState extends State<HomePage> {
                     PopupMenuItem(
                         value: 'fav',
                         child: Text(u['is_favorite'] == true
-                            ? '즐겨찾기 해제'
-                            : '즐겨찾기')),
+                            ? context.l10n.homeUnfavorite
+                            : context.l10n.mvFavTitle)),
                     PopupMenuItem(
                         value: 'block',
                         child: Text(u['is_blocked'] == true
-                            ? '차단 해제'
-                            : '차단하기')),
-                    const PopupMenuItem(
-                        value: 'report', child: Text('신고하기')),
+                            ? context.l10n.mvUnblock
+                            : context.l10n.homeBlock)),
+                    PopupMenuItem(
+                        value: 'report', child: Text(context.l10n.mvReportUser)),
                   ],
                 ),
                 onTap: () async {
@@ -337,11 +338,11 @@ class _QrApproveDialogState extends State<_QrApproveDialog> {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context, listen: false);
     return AlertDialog(
-      title: const Text('PC/웹 로그인 승인'),
+      title: Text(context.l10n.homeQrLoginTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('PC 화면의 QR 아래 표시된 값을 입력하세요.',
+          Text(context.l10n.homeQrManualHint,
               style: TextStyle(fontSize: HarborType.small)),
           const SizedBox(height: 8),
           TextField(
@@ -359,10 +360,10 @@ class _QrApproveDialogState extends State<_QrApproveDialog> {
         if (widget.onScan != null)
           TextButton(
               onPressed: widget.onScan,
-              child: const Text('카메라로 스캔')),
+              child: Text(context.l10n.homeScanCamera)),
         TextButton(
             onPressed: session.busy ? null : () => session.reload(),
-            child: const Text('새로고침')),
+            child: Text(context.l10n.reloadBtn)),
         FilledButton(
           onPressed: session.busy
               ? null
@@ -370,7 +371,7 @@ class _QrApproveDialogState extends State<_QrApproveDialog> {
                   Navigator.of(context).pop();
                   session.approveDesktopQR(challenge.text, token.text);
                 },
-          child: const Text('승인'),
+          child: Text(context.l10n.mvApprove),
         ),
       ],
     );
@@ -382,11 +383,11 @@ Future<void> reportUserSheet(BuildContext context, SessionController session,
     String userId, String displayName) async {
   final details = TextEditingController();
   String category = 'spam';
-  const labels = {
-    'spam': '스팸',
-    'abuse': '욕설·비방',
-    'harassment': '괴롭힘',
-    'other': '기타',
+  final labels = {
+    'spam': context.l10n.reportCatSpam,
+    'abuse': context.l10n.reportCatAbuse,
+    'harassment': context.l10n.reportCatHarassment,
+    'other': context.l10n.mvDeleteReasonOther,
   };
   await showModalBottomSheet<void>(
     context: context,
@@ -399,12 +400,15 @@ Future<void> reportUserSheet(BuildContext context, SessionController session,
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('사용자 신고${displayName.isEmpty ? '' : ' · $displayName'}',
+            Text(
+                displayName.isEmpty
+                    ? sheet.l10n.reportUserBare
+                    : sheet.l10n.reportUserTitle(displayName),
                 style: Theme.of(sheet).textTheme.titleLarge),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: category,
-              decoration: const InputDecoration(labelText: '사유'),
+              decoration: InputDecoration(labelText: context.l10n.reportCategory),
               items: [
                 for (final e in labels.entries)
                   DropdownMenuItem(value: e.key, child: Text(e.value)),
@@ -415,7 +419,7 @@ Future<void> reportUserSheet(BuildContext context, SessionController session,
             TextField(
               controller: details,
               decoration:
-                  const InputDecoration(labelText: '상세 내용 (선택)'),
+                  InputDecoration(labelText: context.l10n.homeDetailOptional),
               maxLines: 3,
               maxLength: 2000,
             ),
@@ -425,7 +429,7 @@ Future<void> reportUserSheet(BuildContext context, SessionController session,
                 Navigator.of(sheet).pop();
                 session.reportUser(userId, category, details.text);
               },
-              child: const Text('신고 접수'),
+              child: Text(context.l10n.reportSubmit),
             ),
           ],
         ),

@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../legacy_tokens.dart';
+import '../util/app_l10n.dart';
 
 /// Non-2xx responses. Display text is identical to the previous
 /// `Exception(message)`, and it is still caught by `on Exception` sites.
@@ -29,6 +30,8 @@ class Api {
   String baseUrl = apiBase;
   String? token;
   String? refreshToken;
+  // F20: UI locale for thrown messages (session mirrors its own here).
+  String locale = 'ko';
   Future<void> Function(String access, String? refresh)? onTokensRefreshed;
   Future<void> Function()? onRefreshFailed;
   Future<String?>? _refreshing;
@@ -117,14 +120,14 @@ class Api {
               .timeout(const Duration(seconds: 15));
       }
     } catch (e) {
-      throw Exception('네트워크 연결 오류: $e');
+      throw Exception(stringsFor(locale).apiNetworkError(e.toString()));
     }
 
     final parsed = jsonDecode(utf8.decode(res.bodyBytes));
-    if (parsed is! Map<String, dynamic>) throw Exception('유효하지 않은 응답 형식');
+    if (parsed is! Map<String, dynamic>) throw Exception(stringsFor(locale).apiBadResponse);
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ApiException(res.statusCode,
-          parsed['error']?.toString() ?? 'HTTP 오류: ${res.statusCode}',
+          parsed['error']?.toString() ?? stringsFor(locale).apiHttpError(res.statusCode),
           parsed['code']?.toString());
     }
     return parsed;

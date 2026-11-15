@@ -2,6 +2,9 @@
 // date dividers. Pure functions over the server ISO-8601 timestamps
 // (created_at / updated_at). Unparseable input renders as '' so the
 // caller can omit the time rather than show a misleading value.
+// F20: locale-aware via stringsFor (ko default keeps every existing test).
+import 'app_l10n.dart';
+
 DateTime? _parse(dynamic iso) {
   final raw = iso?.toString() ?? '';
   if (raw.isEmpty || raw == 'null') return null;
@@ -15,45 +18,48 @@ String dayKey(dynamic iso) {
   return '${at.year}-${at.month}-${at.day}';
 }
 
-String _ampm(DateTime at) {
-  final period = at.hour < 12 ? '오전' : '오후';
+String _ampm(DateTime at, String locale) {
+  final s = stringsFor(locale);
+  final period = at.hour < 12 ? s.ampmAm : s.ampmPm;
   var h12 = at.hour % 12;
   if (h12 == 0) h12 = 12;
-  return '$period $h12:${at.minute.toString().padLeft(2, '0')}';
+  return s.timeHm(period, h12, at.minute.toString().padLeft(2, '0'));
 }
 
 /// Time shown beside a message bubble (matches the web ko-KR shape).
-String bubbleTime(dynamic iso) {
+String bubbleTime(dynamic iso, [String locale = 'ko']) {
   final at = _parse(iso);
-  return at == null ? '' : _ampm(at);
+  return at == null ? '' : _ampm(at, locale);
 }
 
 bool _sameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
 /// Date divider label for the message list.
-String dividerLabel(dynamic iso, {DateTime? now}) {
+String dividerLabel(dynamic iso, {DateTime? now, String locale = 'ko'}) {
   final at = _parse(iso);
   if (at == null) return '';
+  final s = stringsFor(locale);
   final n = now ?? DateTime.now();
   final today = DateTime(n.year, n.month, n.day);
   final day = DateTime(at.year, at.month, at.day);
-  if (_sameDay(day, today)) return '오늘';
-  if (_sameDay(day, today.subtract(const Duration(days: 1)))) return '어제';
-  return '${at.year}년 ${at.month}월 ${at.day}일';
+  if (_sameDay(day, today)) return s.mvToday;
+  if (_sameDay(day, today.subtract(const Duration(days: 1)))) return s.mvYesterday;
+  return s.dateYmd(at.year, at.month, at.day);
 }
 
 /// Conversation-row time: clock time today, relative date afterwards.
-String listTime(dynamic iso, {DateTime? now}) {
+String listTime(dynamic iso, {DateTime? now, String locale = 'ko'}) {
   final at = _parse(iso);
   if (at == null) return '';
+  final s = stringsFor(locale);
   final n = now ?? DateTime.now();
   final today = DateTime(n.year, n.month, n.day);
   final day = DateTime(at.year, at.month, at.day);
-  if (_sameDay(day, today)) return _ampm(at);
-  if (_sameDay(day, today.subtract(const Duration(days: 1)))) return '어제';
-  if (at.year == n.year) return '${at.month}월 ${at.day}일';
-  return '${at.year}년 ${at.month}월 ${at.day}일';
+  if (_sameDay(day, today)) return _ampm(at, locale);
+  if (_sameDay(day, today.subtract(const Duration(days: 1)))) return s.mvYesterday;
+  if (at.year == n.year) return s.dateMd(at.month, at.day);
+  return s.dateYmd(at.year, at.month, at.day);
 }
 
 /// True when [iso] starts a new divider group after [prevIso].

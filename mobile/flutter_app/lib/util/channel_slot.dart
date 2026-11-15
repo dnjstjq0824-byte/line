@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 
 import '../design/v3.dart';
+import './app_l10n.dart';
 
 class ChannelSlot {
   final String id;
@@ -63,7 +64,7 @@ class ChannelSlotCard extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: '닫기',
+              tooltip: context.l10n.mvRecoverCancel,
               icon: const Icon(Icons.close, size: 18),
               onPressed: onDismiss,
             ),

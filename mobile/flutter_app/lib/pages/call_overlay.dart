@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../util/app_permissions.dart';
+import '../util/app_l10n.dart';
 
 String callDurationLabel(int seconds) {
   final m = seconds ~/ 60;
@@ -28,7 +29,7 @@ class CallOverlay extends StatelessWidget {
     final state = '${call['state'] ?? 'ringing'}';
     final incoming =
         '${call['direction'] ?? ''}' == 'incoming' && state == 'ringing';
-    final title = '${call['title'] ?? '통화'}';
+    final title = '${call['title'] ?? context.l10n.mvCall}';
     return Material(
       color: Colors.black87,
       child: SafeArea(
@@ -61,7 +62,7 @@ class CallOverlay extends StatelessWidget {
                         Text(
                           state == 'connected'
                               ? callDurationLabel(session.callSeconds)
-                              : (incoming ? '수신 중...' : '발신 중...'),
+                              : (incoming ? context.l10n.callIncoming : context.l10n.mvCalling),
                           style: const TextStyle(
                               fontSize: 14, color: Colors.white70),
                         ),
@@ -103,12 +104,12 @@ class CallOverlay extends StatelessWidget {
                     Text(
                       state == 'connected'
                           ? callDurationLabel(session.callSeconds)
-                          : '발신 중...',
+                          : context.l10n.mvCalling,
                       style: const TextStyle(
                           fontSize: 13, color: Colors.white70),
                     ),
                     if (session.callMediaIssue)
-                      const Text('미디어를 사용할 수 없습니다',
+                      Text(context.l10n.callNoMedia,
                           style: TextStyle(
                               fontSize: HarborType.small, color: Colors.amber)),
                   ],
@@ -152,21 +153,21 @@ class CallOverlay extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         _roundButton(
-          tooltip: '거절',
+          tooltip: context.l10n.apprReject,
           color: Colors.red,
           icon: Icons.call_end,
           onPressed: () => session.declineCall(),
         ),
         _roundButton(
-          tooltip: '수락',
+          tooltip: context.l10n.callAccept,
           color: Colors.green,
           icon: Icons.call,
           onPressed: () => withPermissions(
             context,
             permissions: [
-              const (Permission.microphone, '마이크 권한 필요', '통화에 사용합니다.'),
+              (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseCall),
               if (kind == 'video')
-                const (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
+                (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUseVideo),
             ],
             action: () => session.acceptCall(),
           ),
@@ -181,7 +182,7 @@ class CallOverlay extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _roundButton(
-          tooltip: session.callMuted ? '음소거 해제' : '음소거',
+          tooltip: session.callMuted ? context.l10n.callUnmute : context.l10n.callMute,
           color: session.callMuted ? Colors.white24 : Colors.white24,
           icon: session.callMuted ? Icons.mic_off : Icons.mic,
           onPressed: () => session.setCallMuted(!session.callMuted),
@@ -189,14 +190,14 @@ class CallOverlay extends StatelessWidget {
         if (kind == 'video') ...[
           const SizedBox(width: 12),
           _roundButton(
-            tooltip: '카메라 켜기/끄기',
+            tooltip: context.l10n.mvCameraToggle,
             color: Colors.white24,
             icon: session.callVideoOff ? Icons.videocam_off : Icons.videocam,
             onPressed: () => session.setCallVideoOff(!session.callVideoOff),
           ),
           const SizedBox(width: 12),
           _roundButton(
-            tooltip: '카메라 전환',
+            tooltip: context.l10n.mvCameraSwitch,
             color: Colors.white24,
             icon: Icons.switch_camera,
             onPressed: () => session.switchCallCamera(),
@@ -204,14 +205,14 @@ class CallOverlay extends StatelessWidget {
         ],
         const SizedBox(width: 12),
         _roundButton(
-          tooltip: '스피커',
+          tooltip: context.l10n.callSpeaker,
           color: Colors.white24,
           icon: session.callSpeaker ? Icons.volume_up : Icons.volume_down,
           onPressed: () => session.setCallSpeaker(!session.callSpeaker),
         ),
         const SizedBox(width: 12),
         _roundButton(
-          tooltip: '통화 종료',
+          tooltip: context.l10n.callEnd,
           color: Colors.red,
           icon: Icons.call_end,
           onPressed: () => session.endCall(),

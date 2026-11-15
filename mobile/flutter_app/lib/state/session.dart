@@ -24,6 +24,7 @@ import '../util/app_notify.dart';
 import '../util/app_update.dart';
 import '../util/call_media.dart';
 import '../util/album_photos.dart';
+import '../util/app_l10n.dart';
 import '../util/attachments.dart';
 import '../util/channel_slot.dart';
 import '../util/feed_posts.dart';
@@ -97,6 +98,19 @@ class SessionController extends ChangeNotifier {
   // M1: true when startup restore hit a network (or other non-401) error.
   // Tokens are kept and the StatusStrip offers a retry.
   bool offline = false;
+  // F20: UI locale (ko/en/th/ja). Korean default preserves every existing
+  // notice string; the settings picker persists changes below.
+  String locale = 'ko';
+  AppLocalizations get strings => stringsFor(locale);
+  Future<void> setLocale(String code) async {
+    if (!appLocaleCodes.contains(code) || code == locale) return;
+    locale = code;
+    api.locale = code;
+    try {
+      await storage.write(key: 'locale', value: code);
+    } catch (_) {}
+    notifyListeners();
+  }
   String selfId = '';
   String deviceId = '';
   // C3: app-update advisory from /api/v1/app/latest (none until checked).
@@ -231,6 +245,13 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> restore() async {
+    try {
+      final savedLocale = await storage.read(key: 'locale');
+      if (savedLocale != null && appLocaleCodes.contains(savedLocale)) {
+        locale = savedLocale;
+        api.locale = savedLocale;
+      }
+    } catch (_) {}
     final saved = await storage.read(key: 'access_token');
     if (saved == null) return;
     api.token = saved;
@@ -262,14 +283,14 @@ class SessionController extends ChangeNotifier {
         await logout();
       } else {
         offline = true;
-        error = '일시적인 오류입니다. 다시 시도해주세요.';
+        error = strings.errTransient;
         notifyListeners();
       }
     } catch (_) {
       // M1: network and unexpected errors keep the stored tokens; the user
       // retries from the offline banner instead of being logged out.
       offline = true;
-      error = '네트워크 연결 오류. 다시 시도해주세요.';
+      error = strings.errNetwork;
       notifyListeners();
     }
   }
@@ -289,7 +310,7 @@ class SessionController extends ChangeNotifier {
       await api.call('/api/v1/auth/verify-email',
           method: 'POST', data: {'email': verifyEmail, 'code': code.trim()});
       needsEmailVerify = false;
-      notice = '이메일 인증이 완료되었습니다. 로그인해주세요.';
+      notice = strings.msgEmailVerified;
       notifyListeners();
     });
   }
@@ -298,7 +319,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/auth/verify-email/resend',
           method: 'POST', data: {'email': verifyEmail});
-      notice = '인증번호를 다시 보냈습니다.';
+      notice = strings.verifyResentNote;
       notifyListeners();
     });
   }
@@ -319,11 +340,11 @@ class SessionController extends ChangeNotifier {
         if (reg['email_verified'] == false) {
           needsEmailVerify = true;
           verifyEmail = email.trim();
-          notice = '이메일 인증이 필요합니다.';
+          notice = strings.verifyNeededNote;
           notifyListeners();
           return;
         }
-        notice = 'LUNO 계정이 생성되었습니다. 로그인해주세요.';
+        notice = strings.msgAccountCreated;
         notifyListeners();
         return;
       }
@@ -339,7 +360,7 @@ class SessionController extends ChangeNotifier {
         if (e.code == 'EMAIL_NOT_VERIFIED') {
           needsEmailVerify = true;
           verifyEmail = email.trim();
-          notice = '이메일 인증이 필요합니다.';
+          notice = strings.verifyNeededNote;
           notifyListeners();
           return;
         }
@@ -362,7 +383,7 @@ class SessionController extends ChangeNotifier {
       selfCoverUrl = me['cover_url'] ?? '';
       selfBirthday = me['birthday'] ?? '';
       selfRole = me['role'] ?? 'user';
-      if (result['recovered'] == true) notice = '계정이 복구되었습니다.';
+      if (result['recovered'] == true) notice = strings.accountRecoveredNote;
       notifyListeners();
       await loadPrefs();
       await reload();
@@ -378,7 +399,7 @@ class SessionController extends ChangeNotifier {
         'challenge_id': challengeId.trim(),
         'qr_token': qrToken.trim(),
       });
-      notice = 'PC/웹 데스크톱 로그인을 승인했습니다.';
+      notice = strings.msgQrApproved;
     });
   }
 
@@ -401,7 +422,7 @@ class SessionController extends ChangeNotifier {
     friends = resultsList[1]['friends'] ?? [];
     officialAccounts = officialAccountsOf(resultsList[2]);
     feedPosts = feedPostsOf(resultsList[3]);
-    stories = storyCardsOf(resultsList[4]);
+    stories = storyCardsOf(resultsList[4], locale);
     openRooms = resultsList[5]['rooms'] ?? [];
     walletBalance = (resultsList[6]['balance'] as num?)?.toInt();
     walletPoints = (resultsList[6]['points'] as num?)?.toInt();
@@ -479,7 +500,7 @@ class SessionController extends ChangeNotifier {
         scheduleReconnect();
       }, onDone: scheduleReconnect);
       reconnectAttempt = 0;
-      if (notice.startsWith('연결이 끊어')) notice = '';
+      if (notice == strings.msgReconnecting) notice = '';
     } catch (_) {
       scheduleReconnect();
     }
@@ -492,7 +513,7 @@ class SessionController extends ChangeNotifier {
     reconnectTimer?.cancel();
     reconnectAttempt++;
     final delay = reconnectDelaySeconds(reconnectAttempt);
-    notice = '연결이 끊어졌습니다. 재연결 중...';
+    notice = strings.msgReconnecting;
     notifyListeners();
     reconnectTimer = Timer(Duration(milliseconds: (delay * 1000).round()), () async {
       await connect();
@@ -547,7 +568,9 @@ class SessionController extends ChangeNotifier {
   // room, where the overlay is already live).
   Future<void> initNotifier() async {
     try {
-      await notifier.init(onTap: (payload) async {
+      await notifier.init(
+          locale: locale,
+          onTap: (payload) async {
         if (payload == null) return;
         if (payload.startsWith('room:')) {
           await notifyTap?.call('/chats/${payload.substring(5)}');
@@ -582,28 +605,29 @@ class SessionController extends ChangeNotifier {
     final chat = chats
         .whereType<Map>()
         .firstWhere((c) => '${c['id']}' == cid, orElse: () => {});
-    final title = '${chat['title'] ?? '새 메시지'}';
+    final title = '${chat['title'] ?? strings.msgNewMessage}';
     final kind = '${item['kind'] ?? 'text'}';
     final rawBody = kind == 'text' ? '${item['body'] ?? ''}' : _notifyKindLabel(kind);
     unawaited(notifier
         .showMessage(
             roomId: cid,
             title: title,
-            body: rawBody.isEmpty ? '새 메시지' : rawBody)
+            body: rawBody.isEmpty ? strings.msgNewMessage : rawBody,
+            locale: locale)
         .catchError((_) {}));
   }
 
   String _notifyKindLabel(String kind) {
-    return const {
-      'image': '[사진]',
-      'video': '[동영상]',
-      'file': '[파일]',
-      'voice': '[음성 메시지]',
-      'sticker': '[스티커]',
-      'location': '[위치]',
-      'contact': '[연락처]',
+    return {
+      'image': strings.kindPhoto,
+      'video': strings.kindVideo,
+      'file': strings.kindFile,
+      'voice': strings.kindVoice,
+      'sticker': strings.kindSticker,
+      'location': strings.kindLocation,
+      'contact': strings.kindContact,
     }[kind] ??
-        '[새 메시지]';
+        strings.kindNewMessage;
   }
 
   /// A-23: apply a conversation.read event in place — zero one row's unread.
@@ -646,7 +670,7 @@ class SessionController extends ChangeNotifier {
   Future<void> addFriend(String id) {
     return run(() async {
       await api.call('/api/v1/friends', method: 'POST', data: {'friend_id': id});
-      notice = '친구를 추가했습니다.';
+      notice = strings.msgFriendAdded;
       await reload();
     });
   }
@@ -659,18 +683,18 @@ class SessionController extends ChangeNotifier {
         final friend = res['friend'];
         final name = friend is Map ? '${friend['display_name'] ?? ''}' : '';
         if (res['status'] == 'already_friends') {
-          notice = name.isEmpty ? '이미 친구입니다.' : '이미 친구입니다 ($name).';
+          notice = name.isEmpty ? strings.msgAlreadyFriend : strings.msgAlreadyFriendName(name);
         } else {
-          notice = name.isEmpty ? '친구로 추가했습니다.' : '$name님을 친구로 추가했습니다.';
+          notice = name.isEmpty ? strings.msgAddedAsFriend : strings.msgAddedNameAsFriend(name);
         }
         await reload();
       } on ApiException catch (e) {
         if (e.statusCode == 404) {
-          notice = 'QR 속 사용자를 찾을 수 없습니다.';
+          notice = strings.msgQrUserMissing;
           return;
         }
         if (e.statusCode == 403) {
-          notice = '친구 추가할 수 없는 사용자입니다.';
+          notice = strings.msgQrNotAddable;
           return;
         }
         rethrow;
@@ -681,10 +705,10 @@ class SessionController extends ChangeNotifier {
     for (final c in chats) {
       if (c['id'] == conversationId) {
         final title = '${c['title'] ?? ''}';
-        return title.isEmpty ? '대화방' : title;
+        return title.isEmpty ? strings.mvChatFallback : title;
       }
     }
-    return '대화방';
+    return strings.mvChatFallback;
   }
 
   // F6: room kind for entry gating (group settings only exist for groups).
@@ -764,7 +788,7 @@ class SessionController extends ChangeNotifier {
       for (final m in list) {
         if (!messages.any((old) => old['id'] == m['id'])) messages.add(m);
       }
-      notice = '오프라인 메시지 ${list.length}건 동기화 완료';
+      notice = strings.msgOfflineSynced(list.length);
       await reload();
     });
   }
@@ -897,7 +921,7 @@ class SessionController extends ChangeNotifier {
   Future<void> joinGroupCall(String conversationId, String kind) {
     if (conversationId.isEmpty) return Future.value();
     if (groupCall != null || activeCall != null) {
-      notice = '다른 통화 중입니다 (자동 거절)';
+      notice = strings.mvCallBusy;
       notifyListeners();
       return Future.value();
     }
@@ -921,13 +945,13 @@ class SessionController extends ChangeNotifier {
       } on ApiException catch (e) {
         _clearGroupCallLocal();
         notice = e.statusCode == 409
-            ? '통화 인원이 가득 찼습니다 (최대 8명)'
-            : '그룹 통화에 참가하지 못했습니다';
+            ? strings.mvGroupCallFull
+            : strings.mvGroupCallFailed;
         notifyListeners();
         return;
       } catch (_) {
         _clearGroupCallLocal();
-        notice = '그룹 통화에 참가하지 못했습니다';
+        notice = strings.mvGroupCallFailed;
         notifyListeners();
         return;
       }
@@ -1204,13 +1228,13 @@ class SessionController extends ChangeNotifier {
       unawaited(api.call('/api/v1/calls/$incomingId/state',
           method: 'POST',
           data: {'state': 'declined'}).then((_) {
-        notice = '다른 통화 중입니다 (자동 거절)';
+        notice = strings.mvCallBusy;
         notifyListeners();
       }).catchError((_) {}));
       return;
     }
     final callerTitle =
-        '${data['caller_name'] ?? data['caller_handle'] ?? '수신된 통화'}';
+        '${data['caller_name'] ?? data['caller_handle'] ?? strings.callIncomingTitle}';
     final callKind = '${data['kind'] ?? 'voice'}';
     activeCall = {
       'id': incomingId,
@@ -1226,7 +1250,8 @@ class SessionController extends ChangeNotifier {
           .showIncomingCall(
               callId: incomingId,
               title: callerTitle,
-              body: callKind == 'video' ? '영상 전화가 왔습니다' : '음성 전화가 왔습니다')
+              body: callKind == 'video' ? strings.mvIncomingVideo : strings.mvIncomingVoice,
+              locale: locale)
           .catchError((_) {}));
     }
     _armNoAnswerTimer(incomingId, false);
@@ -1395,10 +1420,10 @@ class SessionController extends ChangeNotifier {
     }
     await _saveOutbox();
     if (sent > 0) {
-      notice = '대기 중이던 메시지 $sent건을 보냈습니다.';
+      notice = strings.msgOutboxSent(sent);
       await refreshChatList();
     } else if (dropped > 0) {
-      error = '거부된 대기 메시지 $dropped건을 버렸습니다.';
+      error = strings.errOutboxDropped(dropped);
     }
     notifyListeners();
   }
@@ -1421,7 +1446,7 @@ class SessionController extends ChangeNotifier {
         for (final m in messages) {
           if (m['id'] == targetId) m['body'] = body;
         }
-        notice = '메시지를 수정했습니다.';
+        notice = strings.msgEdited;
       });
       return error.isEmpty;
     }
@@ -1459,7 +1484,7 @@ class SessionController extends ChangeNotifier {
           if (reply.isNotEmpty) 'reply_to': reply,
         });
         await _saveOutbox();
-        notice = '오프라인 — 메시지를 대기열에 저장했습니다.';
+        notice = strings.msgQueuedOffline;
         kept = true;
       }
     });
@@ -1472,7 +1497,7 @@ class SessionController extends ChangeNotifier {
     if (picked == null) return null;
     final bytes = await picked.readAsBytes();
     if (bytes.length > maxAttachmentBytes) {
-      throw Exception('파일이 너무 큽니다 (최대 512KB)');
+      throw Exception(strings.errFileTooBig);
     }
     return PickedImage(
         bytes: bytes, name: picked.name, mime: picked.mimeType ?? 'image/jpeg');
@@ -1483,7 +1508,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       final bytes = applyPhotoEffect(pic.bytes, effect);
       if (bytes.length > maxAttachmentBytes) {
-        throw Exception('파일이 너무 큽니다 (최대 512KB)');
+        throw Exception(strings.errFileTooBig);
       }
       // applyPhotoEffect returns the identical bytes when nothing applied.
       final effected = !identical(bytes, pic.bytes);
@@ -1518,7 +1543,7 @@ class SessionController extends ChangeNotifier {
     if (selectedId.isEmpty) return Future.value();
     return run(() async {
       if (bytes.length > maxAttachmentBytes) {
-        throw Exception('파일이 너무 큽니다 (최대 512KB)');
+        throw Exception(strings.errFileTooBig);
       }
       final att = await api.call('/api/v1/attachments', method: 'POST', data: {
         'conversation_id': selectedId,
@@ -1558,7 +1583,7 @@ class SessionController extends ChangeNotifier {
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
         messages.add(x['message']);
       }
-      notice = '위치를 공유했습니다.';
+      notice = strings.msgLocationShared;
       await refreshChatList();
     });
   }
@@ -1580,7 +1605,7 @@ class SessionController extends ChangeNotifier {
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
         messages.add(x['message']);
       }
-      notice = '연락처를 공유했습니다.';
+      notice = strings.msgContactShared;
       await refreshChatList();
     });
   }
@@ -1616,7 +1641,7 @@ class SessionController extends ChangeNotifier {
     }
     await ensureTranslateLanguages();
     if (!translateConfigured) {
-      translations[msgId] = {'loading': false, 'error': '번역 준비 중'};
+      translations[msgId] = {'loading': false, 'error': strings.translatePreparing};
       notifyListeners();
       return;
     }
@@ -1636,10 +1661,10 @@ class SessionController extends ChangeNotifier {
     } on ApiException catch (e) {
       translations[msgId] = {
         'loading': false,
-        'error': e.statusCode == 503 ? '번역 준비 중' : '번역 실패'
+        'error': e.statusCode == 503 ? strings.translatePreparing : strings.errTranslateFailed
       };
     } catch (_) {
-      translations[msgId] = {'loading': false, 'error': '번역 실패'};
+      translations[msgId] = {'loading': false, 'error': strings.errTranslateFailed};
     }
     notifyListeners();
   }
@@ -1648,7 +1673,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$selectedId/messages/$msgId', method: 'DELETE');
       messages.removeWhere((m) => m['id'] == msgId);
-      notice = '메시지 전송을 취소했습니다.';
+      notice = strings.msgSendCancelled;
     });
   }
 
@@ -1656,7 +1681,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$selectedId/messages/$msgId/reactions',
           method: 'POST', data: {'reaction': emoji});
-      notice = '$emoji 리액션을 남겼습니다.';
+      notice = strings.msgReactionLeft(emoji);
     });
   }
 
@@ -1706,7 +1731,7 @@ class SessionController extends ChangeNotifier {
             'category': category,
             'details': details
           });
-      notice = '신고가 접수되었습니다.';
+      notice = strings.reportDoneNote;
       await loadMyReports();
     });
   }
@@ -1728,7 +1753,7 @@ class SessionController extends ChangeNotifier {
           '/api/v1/conversations/$roomId/messages/$messageId/decide',
           method: 'POST',
           data: {'decision': decision});
-      notice = decision == 'approved' ? '승인했습니다.' : '거절했습니다.';
+      notice = decision == 'approved' ? strings.msgApproved : strings.msgDeclined;
       await loadProposals(roomId);
       await openChat(roomId);
     });
@@ -1740,7 +1765,7 @@ class SessionController extends ChangeNotifier {
           method: 'POST', data: {'message_id': msgId});
       final p = await api.call('/api/v1/conversations/$selectedId/pins');
       pins = p['pins'] ?? [];
-      notice = '공지로 등록했습니다.';
+      notice = strings.msgPinned;
     });
   }
 
@@ -1748,7 +1773,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/saved-messages', method: 'POST', data: {'message_id': msgId});
       await reload();
-      notice = 'LUNO Keep에 보관했습니다.';
+      notice = strings.msgKept;
     });
   }
 
@@ -1758,7 +1783,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/voom', method: 'POST', data: {'title': title});
       await reload();
-      notice = 'LUNO 피드 포스트를 게시했습니다.';
+      notice = strings.msgFeedPosted;
     });
   }
 
@@ -1767,7 +1792,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/stories', method: 'POST', data: {'body': body.trim()});
       await reload();
-      notice = '스토리를 게시했습니다.';
+      notice = strings.msgStoryPosted;
     });
   }
 
@@ -1802,7 +1827,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$id',
           method: 'PATCH', data: {'title': title.trim()});
-      notice = '방 이름을 바꿨습니다.';
+      notice = strings.msgRoomRenamed;
       await _refreshRoom(id);
       await reload();
     });
@@ -1812,7 +1837,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$id',
           method: 'PATCH', data: {'notice': text.trim()});
-      notice = '공지를 저장했습니다.';
+      notice = strings.msgNoticeSaved;
       await _refreshRoom(id);
       await reload();
     });
@@ -1829,16 +1854,16 @@ class SessionController extends ChangeNotifier {
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       if (bytes.length > 262144) {
-        throw Exception('방 사진이 너무 큽니다 (최대 256KB)');
+        throw Exception(strings.errRoomPhotoBig);
       }
       final kind = _avatarKindOf(bytes);
       if (kind == null) {
-        throw Exception('지원하지 않는 사진 형식입니다 (JPEG/PNG/WebP).');
+        throw Exception(strings.errPhotoType);
       }
       await api.call('/api/v1/conversations/$id',
           method: 'PATCH',
           data: {'avatar': 'data:image/$kind;base64,${base64Encode(bytes)}'});
-      notice = '방 사진을 바꿨습니다.';
+      notice = strings.msgRoomPhotoSet;
       await _refreshRoom(id);
       await reload();
     });
@@ -1848,7 +1873,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$id',
           method: 'PATCH', data: {'avatar': ''});
-      notice = '방 사진을 지웠습니다.';
+      notice = strings.msgRoomPhotoCleared;
       await _refreshRoom(id);
       await reload();
     });
@@ -1859,7 +1884,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$id/members',
           method: 'POST', data: {'member_ids': memberIds});
-      notice = '초대했습니다.';
+      notice = strings.gsInviteDone;
       await _refreshRoom(id);
       await reload();
     });
@@ -1869,7 +1894,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$id/members/$userId',
           method: 'DELETE');
-      notice = '내보냈습니다.';
+      notice = strings.msgExported;
       await _refreshRoom(id);
       await reload();
     });
@@ -1879,7 +1904,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$id/members/$userId/role',
           method: 'PATCH', data: {'role': role});
-      notice = role == 'admin' ? '관리자로 지정했습니다.' : '일반 멤버로 바꿨습니다.';
+      notice = role == 'admin' ? strings.msgMadeAdmin : strings.msgMadeMember;
       await _refreshRoom(id);
       await reload();
     });
@@ -1889,7 +1914,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$id',
           method: 'PATCH', data: {'owner_id': userId});
-      notice = '방장을 넘겼습니다.';
+      notice = strings.msgOwnerPassed;
       await _refreshRoom(id);
       await reload();
     });
@@ -1904,7 +1929,7 @@ class SessionController extends ChangeNotifier {
         selectedRoom = {};
         messages = [];
       }
-      notice = '그룹에서 나갔습니다.';
+      notice = strings.msgLeftGroup;
       await reload();
     });
   }
@@ -1923,7 +1948,7 @@ class SessionController extends ChangeNotifier {
           method: 'POST', data: {'expires_in_hours': hours});
       final res = await api.call('/api/v1/conversations/$id/invites');
       roomInvites = res['invites'] ?? [];
-      notice = '초대 링크를 만들었습니다.';
+      notice = strings.msgInviteMade;
       notifyListeners();
     });
   }
@@ -1934,7 +1959,7 @@ class SessionController extends ChangeNotifier {
           method: 'DELETE');
       final res = await api.call('/api/v1/conversations/$id/invites');
       roomInvites = res['invites'] ?? [];
-      notice = '초대 링크를 폐기했습니다.';
+      notice = strings.msgInviteRevoked;
       notifyListeners();
     });
   }
@@ -1946,7 +1971,7 @@ class SessionController extends ChangeNotifier {
       final c = await api.call('/api/v1/conversations/join',
           method: 'POST', data: {'token': token.trim()});
       conversationId = c['id'] as String?;
-      notice = '그룹에 참여했습니다.';
+      notice = strings.msgJoinedGroup;
       await reload();
     });
     return conversationId;
@@ -1973,7 +1998,7 @@ class SessionController extends ChangeNotifier {
       await api.call('/api/v1/conversations/$selectedId/notes',
           method: 'POST',
           data: {'title': title.trim(), 'body': body.trim()});
-      notice = '노트를 저장했습니다.';
+      notice = strings.msgNoteSaved;
       await _refreshArchives();
     });
   }
@@ -1987,7 +2012,7 @@ class SessionController extends ChangeNotifier {
       if (location.trim().isNotEmpty) data['location'] = location.trim();
       await api.call('/api/v1/conversations/$selectedId/events',
           method: 'POST', data: data);
-      notice = '일정을 등록했습니다.';
+      notice = strings.msgEventMade;
       await _refreshArchives();
     });
   }
@@ -1997,7 +2022,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       final options = pollOptionsOf(optionsText);
       if (!pollFormValid(question, options)) {
-        throw Exception('질문과 선택지 2개 이상이 필요합니다.');
+        throw Exception(strings.errPollNeedsOptions);
       }
       await api.call('/api/v1/conversations/$selectedId/polls',
           method: 'POST',
@@ -2005,7 +2030,7 @@ class SessionController extends ChangeNotifier {
             'question': question.trim(),
             'options': options,
           });
-      notice = '투표를 만들었습니다.';
+      notice = strings.msgPollMade;
       await _refreshArchives();
     });
   }
@@ -2014,7 +2039,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/polls/$pollId/vote',
           method: 'POST', data: {'option_id': optionId});
-      notice = '투표했습니다.';
+      notice = strings.msgVoted;
       await _refreshArchives();
     });
   }
@@ -2024,7 +2049,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$selectedId/events/$eventId/rsvp',
           method: 'POST', data: {'status': status});
-      notice = '참석 여부를 보냈습니다.';
+      notice = strings.msgRsvpSent;
       await _refreshArchives();
     });
   }
@@ -2040,7 +2065,7 @@ class SessionController extends ChangeNotifier {
             'title': title.trim(),
             'attachment_ids': ids,
           });
-      notice = '앨범을 만들었습니다.';
+      notice = strings.msgAlbumMade;
       await _refreshArchives();
     });
   }
@@ -2084,18 +2109,18 @@ class SessionController extends ChangeNotifier {
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       if (bytes.length > 262144) {
-        throw Exception('프로필 사진이 너무 큽니다 (최대 256KB)');
+        throw Exception(strings.errProfilePhotoBig);
       }
       final kind = _avatarKindOf(bytes);
       if (kind == null) {
-        throw Exception('지원하지 않는 사진 형식입니다 (JPEG/PNG/WebP).');
+        throw Exception(strings.errPhotoType);
       }
       await api.call('/api/v1/me', method: 'PATCH', data: {
         'avatar_url': 'data:image/$kind;base64,${base64Encode(bytes)}',
       });
       final me = await api.call('/api/v1/me');
       selfAvatarUrl = me['avatar_url'] ?? selfAvatarUrl;
-      notice = '프로필 사진을 바꿨습니다.';
+      notice = strings.msgProfilePhotoSet;
       await reload();
     });
   }
@@ -2122,7 +2147,7 @@ class SessionController extends ChangeNotifier {
       selfAvatarUrl = me['avatar_url'] ?? selfAvatarUrl;
       selfCoverUrl = me['cover_url'] ?? selfCoverUrl;
       selfBirthday = me['birthday'] ?? selfBirthday;
-      notice = '프로필을 저장했습니다.';
+      notice = strings.msgProfileSaved;
       await reload();
     });
   }
@@ -2138,18 +2163,18 @@ class SessionController extends ChangeNotifier {
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       if (bytes.length > 262144) {
-        throw Exception('커버 사진이 너무 큽니다 (최대 256KB)');
+        throw Exception(strings.errCoverBig);
       }
       final kind = _avatarKindOf(bytes);
       if (kind == null) {
-        throw Exception('지원하지 않는 사진 형식입니다 (JPEG/PNG/WebP).');
+        throw Exception(strings.errPhotoType);
       }
       await api.call('/api/v1/me', method: 'PATCH', data: {
         'cover_url': 'data:image/$kind;base64,${base64Encode(bytes)}',
       });
       final me = await api.call('/api/v1/me');
       selfCoverUrl = me['cover_url'] ?? selfCoverUrl;
-      notice = '커버 사진을 바꿨습니다.';
+      notice = strings.msgCoverSet;
       await reload();
     });
   }
@@ -2168,14 +2193,14 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       if (!prefsLoaded) {
         await loadPrefs();
-        if (!prefsLoaded) throw Exception('설정을 불러오지 못했습니다.');
+        if (!prefsLoaded) throw Exception(strings.errPrefsLoad);
       }
       final data = Map<String, dynamic>.from(myPrefs)
         ..['searchable_by_id'] = value;
       final res = await api.call('/api/v1/me/settings', method: 'PUT', data: data);
       myPrefs = Map<String, dynamic>.from(res);
       myPrefs['searchable_by_id'] = value;
-      notice = value ? 'ID 검색을 허용했습니다.' : 'ID 검색을 차단했습니다.';
+      notice = value ? strings.msgIdSearchOn : strings.msgIdSearchOff;
     });
   }
 
@@ -2187,14 +2212,14 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       if (!prefsLoaded) {
         await loadPrefs();
-        if (!prefsLoaded) throw Exception('설정을 불러오지 못했습니다.');
+        if (!prefsLoaded) throw Exception(strings.errPrefsLoad);
       }
       final data = Map<String, dynamic>.from(myPrefs)
         ..['link_previews'] = value;
       final res = await api.call('/api/v1/me/settings', method: 'PUT', data: data);
       myPrefs = Map<String, dynamic>.from(res);
       myPrefs['link_previews'] = value;
-      notice = value ? '링크 미리보기를 켰습니다.' : '링크 미리보기를 껐습니다.';
+      notice = value ? strings.msgPreviewOn : strings.msgPreviewOff;
     });
   }
 
@@ -2267,7 +2292,7 @@ class SessionController extends ChangeNotifier {
         roomJoined = false;
         roomPosts = [];
       }
-      notice = '라운지에서 나갔습니다.';
+      notice = strings.msgLeftLounge;
       await reload();
     });
   }
@@ -2298,7 +2323,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/community/rooms/$roomId/posts',
           method: 'POST', data: {'body': body.trim()});
-      notice = '라운지에 올렸습니다.';
+      notice = strings.msgPostedLounge;
       await _loadRoom(roomId);
       await reload();
     });
@@ -2319,16 +2344,16 @@ class SessionController extends ChangeNotifier {
           await FilePicker.platform.pickFiles(withData: true);
       final files = picked?.files ?? [];
       if (files.isEmpty) {
-        notice = '파일을 선택하지 않았습니다.';
+        notice = strings.errNoFilePicked;
         return;
       }
       final f = files.first;
       final bytes = f.bytes;
       if (bytes == null || bytes.isEmpty) {
-        throw Exception('파일을 읽을 수 없습니다.');
+        throw Exception(strings.errFileUnreadable);
       }
       if (bytes.length > maxFileBytes) {
-        throw Exception('파일이 너무 큽니다 (최대 약 1.4MB)');
+        throw Exception(strings.errFileTooBig14);
       }
       final name = f.name.isNotEmpty
           ? f.name
@@ -2368,7 +2393,7 @@ class SessionController extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 30));
       if (res.statusCode != 200) {
-        throw Exception('파일을 받을 수 없습니다 (${res.statusCode})');
+        throw Exception(strings.errFileReceive(res.statusCode));
       }
       Directory? dir;
       if (Platform.isAndroid) {
@@ -2379,7 +2404,7 @@ class SessionController extends ChangeNotifier {
       final file = File('${dir.path}/$safe');
       await file.writeAsBytes(res.bodyBytes);
       saved = file.path;
-      notice = '저장됨: $safe';
+      notice = strings.msgSavedAs(safe);
     });
     return saved;
   }
@@ -2408,7 +2433,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/wallet/charge', method: 'POST', data: {'amount': amount});
       await reload();
-      notice = 'LUNO Pay ₩${money(amount)} 충전 완료!';
+      notice = strings.msgTopupDone(money(amount));
     });
   }
 
@@ -2420,12 +2445,12 @@ class SessionController extends ChangeNotifier {
     }
     final peerId = sendPeerIdOf(conversation: conversation, selfId: selfId);
     if (peerId == null) {
-      notice = '1:1 대화방에서만 송금할 수 있습니다.';
+      notice = strings.errPayDmOnly;
       notifyListeners();
       return Future.value();
     }
     if (!paymentsEnabled) {
-      notice = '결제 기능은 준비 중입니다.';
+      notice = strings.mvPaymentsPreparing;
       notifyListeners();
       return Future.value();
     }
@@ -2433,11 +2458,11 @@ class SessionController extends ChangeNotifier {
       await api.call('/api/v1/wallet/send', method: 'POST', data: {
         'to_user_id': peerId,
         'amount': 10000,
-        'note': '$selectedTitle 송금',
+        'note': strings.payNoteRoom(selectedTitle),
       });
       await openChat(selectedId, selectedTitle);
       await refreshChatList();
-      notice = 'LUNO Pay ₩10,000 송금을 완료했습니다.';
+      notice = strings.msgPayDone10k;
     });
   }
 
@@ -2445,7 +2470,7 @@ class SessionController extends ChangeNotifier {
     // Served by GET /api/v1/me/export-data (parity gap closure).
     return run(() async {
       final res = await api.call('/api/v1/me/export-data');
-      notice = 'GDPR 데이터 백업 파일 생성 완료 (${res['stats']?['conversations_count'] ?? 0}개 대화)';
+      notice = strings.msgGdprBackup(res['stats']?['conversations_count'] ?? 0);
     });
   }
 
@@ -2476,7 +2501,7 @@ class SessionController extends ChangeNotifier {
         if (reason.isNotEmpty) 'reason': reason,
         'confirm_text': confirmText,
       });
-      notice = '계정 삭제가 예약되었습니다. 30일 안에 로그인하면 복구됩니다.';
+      notice = strings.msgDeleteScheduled;
       await logout();
     });
   }
@@ -2489,10 +2514,10 @@ class SessionController extends ChangeNotifier {
       final res = await api.call('/api/v1/auth/sessions/revoke',
           method: 'POST', data: {'session_id': sessionId});
       if (res['self'] == true) {
-        notice = '현재 기기에서 로그아웃했습니다.';
+        notice = strings.msgLoggedOutHere;
         await logout();
       } else {
-        notice = '해당 기기에서 로그아웃했습니다.';
+        notice = strings.msgLoggedOutTarget;
       }
     });
   }
@@ -2506,7 +2531,7 @@ class SessionController extends ChangeNotifier {
             'current_password': currentPassword,
             'new_password': newPassword
           });
-      notice = '비밀번호를 변경했습니다.';
+      notice = strings.msgPwChanged;
     });
   }
 
@@ -2528,10 +2553,10 @@ class SessionController extends ChangeNotifier {
       final res = await api.call('/api/v1/devices/$sessionId',
           method: 'DELETE');
       if (res['self'] == true) {
-        notice = '현재 기기에서 로그아웃했습니다.';
+        notice = strings.msgLoggedOutHere;
         await logout();
       } else {
-        notice = '기기에서 로그아웃했습니다.';
+        notice = strings.msgDeviceLoggedOut;
         await loadDevices();
       }
     });
@@ -2610,7 +2635,7 @@ class SessionController extends ChangeNotifier {
       });
       final res = await api.call('/api/v1/admin/reports');
       adminReports = res['reports'] ?? [];
-      notice = '모더레이션 조치를 기록했습니다.';
+      notice = strings.msgModLogged;
     });
   }
 
@@ -2622,7 +2647,7 @@ class SessionController extends ChangeNotifier {
       });
       final res = await api.call('/api/v1/admin/feature-flags');
       featureFlags = res['flags'] ?? res['feature_flags'] ?? [];
-      notice = '플래그를 저장했습니다.';
+      notice = strings.msgFlagSaved2;
     });
   }
 
@@ -2660,7 +2685,7 @@ class SessionController extends ChangeNotifier {
           m['edited_at'] = DateTime.now().toUtc().toIso8601String();
         }
       }
-      notice = '메시지를 수정했습니다.';
+      notice = strings.msgEdited;
     });
   }
 
@@ -2669,7 +2694,7 @@ class SessionController extends ChangeNotifier {
       await api.call('/api/v1/conversations/$selectedId/messages/$msgId/hide',
           method: 'POST');
       messages.removeWhere((m) => m['id'] == msgId);
-      notice = '나에게서 삭제했습니다.';
+      notice = strings.mvHideDone;
     });
   }
 
@@ -2677,7 +2702,7 @@ class SessionController extends ChangeNotifier {
     return run(() async {
       await api.call('/api/v1/conversations/$selectedId/messages/$msgId/forward',
           method: 'POST', data: {'to_conversation_id': targetCid});
-      notice = '전달했습니다.';
+      notice = strings.mvForwarded;
       await refreshChatList();
     });
   }
@@ -2717,10 +2742,10 @@ class SessionController extends ChangeNotifier {
     final at = DateTime.tryParse(raw);
     if (at == null) return raw;
     final min = DateTime.now().difference(at).inMinutes;
-    if (min < 1) return '방금 전';
-    if (min < 60) return '$min분 전';
-    if (min < 60 * 24) return '${(min / 60).round()}시간 전';
-    return '${(min / 1440).round()}일 전';
+    if (min < 1) return strings.mvJustNow;
+    if (min < 60) return strings.relMinutesAgo(min);
+    if (min < 60 * 24) return strings.relHoursAgo((min / 60).round());
+    return strings.relDaysAgo((min / 1440).round());
   }
 
   // Server colours arrive as #RRGGBB. Anything else falls back.

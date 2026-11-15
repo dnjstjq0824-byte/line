@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -25,11 +26,11 @@ class _ReportsPageState extends State<ReportsPage> {
   String _stateLabel(String state) {
     switch (state) {
       case 'resolved':
-        return '처리 완료';
+        return context.l10n.reportStateResolved;
       case 'dismissed':
-        return '각하됨';
+        return context.l10n.reportStateDismissed;
       default:
-        return '처리 중';
+        return context.l10n.reportStateOpen;
     }
   }
 
@@ -43,13 +44,13 @@ class _ReportsPageState extends State<ReportsPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        title: const Text('내 신고 내역'),
+        title: Text(context.l10n.reportHistoryTitle),
       ),
       body: PageColumn(
         children: [
           Expanded(
             child: session.myReports.isEmpty
-                ? const Center(child: Text('접수한 신고가 없습니다.'))
+                ? Center(child: Text(context.l10n.reportHistoryEmpty))
                 : ListView(
                     children: [
                       for (final r in session.myReports)

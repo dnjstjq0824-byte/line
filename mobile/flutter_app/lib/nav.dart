@@ -1,31 +1,66 @@
 // Single source of truth for Harbor navigation destinations.
 import 'package:flutter/material.dart';
 
+import 'util/app_l10n.dart';
+
 class LunoDestination {
   final String route;
-  final String label;
+
+  /// F20: localization key for the label (const-safe); resolve with labelIn.
+  final String labelKey;
   final IconData icon;
   final IconData activeIcon;
-  const LunoDestination(this.route, this.label, this.icon, this.activeIcon);
+  const LunoDestination(this.route, this.labelKey, this.icon, this.activeIcon);
+
+  String labelIn(AppLocalizations s) {
+    switch (labelKey) {
+      case 'mvHome':
+        return s.mvHome;
+      case 'navTalks':
+        return s.navTalks;
+      case 'mvNews':
+        return s.mvNews;
+      case 'mvCall':
+        return s.mvCall;
+      case 'mvWallet':
+        return s.mvWallet;
+      case 'mvRailShop':
+        return s.mvRailShop;
+      case 'appWord':
+        return s.appWord;
+      case 'navFeed':
+        return s.navFeed;
+      case 'navLounge':
+        return s.navLounge;
+      case 'navKeep':
+        return 'Keep';
+      case 'settingsTitle':
+        return s.settingsTitle;
+      case 'consoleTitle':
+        return s.consoleTitle;
+      default:
+        return labelKey;
+    }
+  }
 }
 
 abstract final class LunoNav {
   // UX4: bottom tabs match the web order (home/chats/news/calls/wallet).
   static const primary = <LunoDestination>[
-    LunoDestination('/home', '홈', Icons.home_outlined, Icons.home),
-    LunoDestination('/chats', '토크', Icons.chat_bubble_outline, Icons.chat_bubble),
-    LunoDestination('/news', '뉴스', Icons.newspaper_outlined, Icons.newspaper),
-    LunoDestination('/calls', '통화', Icons.phone_outlined, Icons.phone),
-    LunoDestination('/wallet', '지갑', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
+    LunoDestination('/home', 'mvHome', Icons.home_outlined, Icons.home),
+    LunoDestination('/chats', 'navTalks', Icons.chat_bubble_outline, Icons.chat_bubble),
+    LunoDestination('/news', 'mvNews', Icons.newspaper_outlined, Icons.newspaper),
+    LunoDestination('/calls', 'mvCall', Icons.phone_outlined, Icons.phone),
+    LunoDestination('/wallet', 'mvWallet', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
   ];
   static const secondary = <LunoDestination>[
-    LunoDestination('/shop', '쇼핑', Icons.shopping_bag_outlined, Icons.shopping_bag),
-    LunoDestination('/apps', '앱', Icons.apps_outlined, Icons.apps),
-    LunoDestination('/feed', '피드', Icons.play_circle_outline, Icons.play_circle),
-    LunoDestination('/lounge', '라운지', Icons.forum_outlined, Icons.forum),
-    LunoDestination('/keep', 'Keep', Icons.bookmark_outline, Icons.bookmark),
-    LunoDestination('/settings', '설정', Icons.settings_outlined, Icons.settings),
-    LunoDestination('/console', '콘솔', Icons.radar_outlined, Icons.radar),
+    LunoDestination('/shop', 'mvRailShop', Icons.shopping_bag_outlined, Icons.shopping_bag),
+    LunoDestination('/apps', 'appWord', Icons.apps_outlined, Icons.apps),
+    LunoDestination('/feed', 'navFeed', Icons.play_circle_outline, Icons.play_circle),
+    LunoDestination('/lounge', 'navLounge', Icons.forum_outlined, Icons.forum),
+    LunoDestination('/keep', 'navKeep', Icons.bookmark_outline, Icons.bookmark),
+    LunoDestination('/settings', 'settingsTitle', Icons.settings_outlined, Icons.settings),
+    LunoDestination('/console', 'consoleTitle', Icons.radar_outlined, Icons.radar),
   ];
   static const all = <LunoDestination>[...primary, ...secondary];
 

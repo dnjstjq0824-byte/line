@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../nav.dart';
+import '../util/app_l10n.dart';
 
 class AppsPage extends StatelessWidget {
   const AppsPage({super.key});
@@ -17,7 +18,7 @@ class AppsPage extends StatelessWidget {
       children: [
         PageColumn(
           children: [
-            const Masthead(title: '앱', subtitle: 'LUNO 서비스 전체 목록'),
+            Masthead(title: context.l10n.appWord, subtitle: context.l10n.appsAllServices),
             GridView.count(
               crossAxisCount: 3,
               shrinkWrap: true,
@@ -45,7 +46,7 @@ class AppsPage extends StatelessWidget {
                           children: [
                             Icon(d.icon, size: 26),
                             const SizedBox(height: 6),
-                            Text(d.label,
+                            Text(d.labelIn(context.l10n),
                                 style: const TextStyle(
                                     fontSize: HarborType.small,
                                     fontWeight: FontWeight.w600)),

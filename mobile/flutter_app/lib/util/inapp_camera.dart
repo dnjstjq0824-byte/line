@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../design/v3.dart';
 import 'photo_effects.dart';
+import './app_l10n.dart';
 
 /// Recording cap: low-preset clips past this rarely fit 512KiB.
 const maxVideoSeconds = 8;
@@ -45,11 +46,11 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
     try {
       cams = await availableCameras();
     } catch (_) {
-      if (mounted) setState(() => _error = '카메라를 사용할 수 없습니다.');
+      if (mounted) setState(() => _error = context.l10n.camUnavailable);
       return;
     }
     if (cams.isEmpty) {
-      if (mounted) setState(() => _error = '사용 가능한 카메라가 없습니다.');
+      if (mounted) setState(() => _error = context.l10n.camNoneFound);
       return;
     }
     _cams = cams;
@@ -70,7 +71,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
     try {
       await ctrl.initialize();
     } catch (_) {
-      if (mounted) setState(() => _error = '카메라를 시작할 수 없습니다.');
+      if (mounted) setState(() => _error = context.l10n.camStartFail);
       return;
     }
     if (mounted) setState(() => _ctrl = ctrl);
@@ -116,7 +117,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = '촬영에 실패했습니다.';
+          _error = context.l10n.camSnapFail;
         });
       }
     }
@@ -132,7 +133,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
     try {
       await ctrl.startVideoRecording();
     } catch (_) {
-      if (mounted) setState(() => _error = '녹화를 시작할 수 없습니다.');
+      if (mounted) setState(() => _error = context.l10n.camRecStartFail);
       return;
     }
     _elapsed = 0;
@@ -168,7 +169,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = '녹화에 실패했습니다.';
+          _error = context.l10n.camRecFail;
         });
       }
     }
@@ -190,11 +191,11 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('카메라'),
+        title: Text(context.l10n.cameraWord),
         actions: [
           if (_cams.length > 1)
             IconButton(
-              tooltip: '전환',
+              tooltip: context.l10n.camSwitch,
               icon: const Icon(Icons.flip_camera_ios_outlined),
               onPressed: (_busy || _recording) ? null : _flip,
             ),
@@ -209,7 +210,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
               children: [
                 TextButton(
                   onPressed: (_busy || _recording) ? null : () => _setMode(false),
-                  child: Text('사진',
+                  child: Text(context.l10n.camPhoto,
                       style: TextStyle(
                           color: !_video ? Colors.white : Colors.grey,
                           fontWeight:
@@ -217,7 +218,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
                 ),
                 TextButton(
                   onPressed: (_busy || _recording) ? null : () => _setMode(true),
-                  child: Text('동영상',
+                  child: Text(context.l10n.camVideo,
                       style: TextStyle(
                           color: _video ? Colors.white : Colors.grey,
                           fontWeight:
@@ -243,7 +244,7 @@ class _InAppCameraSheetState extends State<InAppCameraSheet> {
           if (_recording)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text('🔴 $_elapsed초 / 최대 $maxVideoSeconds초',
+              child: Text(context.l10n.camRecTimer(_elapsed, maxVideoSeconds),
                   style: const TextStyle(color: Colors.red, fontSize: 13)),
             ),
         ],

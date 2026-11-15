@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 
 import '../design/v3.dart';
+import './app_l10n.dart';
 
 class StorePack {
   final String id;
@@ -53,8 +54,10 @@ List<StorePack> storePacksOf(dynamic json) {
   return out;
 }
 
-String storePriceLabel(StorePack pack) =>
-    pack.priceMinor <= 0 ? '무료' : '${pack.priceMinor} ${pack.currency}';
+String storePriceLabel(StorePack pack, [String locale = 'ko']) =>
+    pack.priceMinor <= 0
+        ? stringsFor(locale).shopFree
+        : '${pack.priceMinor} ${pack.currency}';
 
 /// One shelf card: title, sticker strip, price or owned badge.
 /// No purchase button: checkout is 503 fail-closed on both backends until a
@@ -81,13 +84,14 @@ class StorePackCard extends StatelessWidget {
                           fontSize: 14, fontWeight: FontWeight.w700)),
                 ),
                 if (pack.owned == true)
-                  const Text('보유 중',
+                  Text(context.l10n.shopOwned,
                       style: TextStyle(
                           fontSize: HarborType.small,
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF22C55E)))
                 else
-                  Text(storePriceLabel(pack),
+                  Text(
+                      storePriceLabel(pack, appLocaleOf(context)),
                       style: const TextStyle(
                           fontSize: HarborType.small, fontWeight: FontWeight.w700)),
               ],

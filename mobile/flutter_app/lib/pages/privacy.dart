@@ -9,6 +9,7 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_l10n.dart';
 
 class PrivacyPage extends StatefulWidget {
   const PrivacyPage({super.key});
@@ -42,11 +43,11 @@ class _PrivacyPageState extends State<PrivacyPage> {
             Row(
               children: [
                 IconButton(
-                  tooltip: '뒤로',
+                  tooltip: context.l10n.backWord,
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => context.go('/settings'),
                 ),
-                Text('개인 정보 보호',
+                Text(context.l10n.privacyTitle,
                     style: TextStyle(
                         fontSize: HarborType.title,
                         fontWeight: FontWeight.w700,
@@ -54,9 +55,9 @@ class _PrivacyPageState extends State<PrivacyPage> {
               ],
             ),
             _ToggleRow(
-              title: 'ID로 친구 추가 허용',
+              title: context.l10n.privacyIdAdd,
               description:
-                  '다른 사람이 내 ID를 검색하여 친구로 추가할 수 있습니다.',
+                  context.l10n.privacyIdAddDesc,
               value: searchable,
               enabled: session.prefsLoaded,
               ink: ink,
@@ -66,8 +67,8 @@ class _PrivacyPageState extends State<PrivacyPage> {
             const Divider(height: 1),
             _StatusRow(
               icon: Icons.lock_outline,
-              title: '종단간 암호화 (E2EE)',
-              subtitle: '준비 중 — 현재 전송 구간 암호화(TLS)만 적용됩니다',
+              title: context.l10n.privacyE2ee,
+              subtitle: context.l10n.privacyE2eePreparing,
               ink: ink,
               sub: sub,
               dark: dark,
@@ -77,14 +78,14 @@ class _PrivacyPageState extends State<PrivacyPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text('로그인된 기기',
+                    child: Text(context.l10n.privacyDevices,
                         style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: sub)),
                   ),
                   IconButton(
-                    tooltip: '기기 목록 새로고침',
+                    tooltip: context.l10n.privacyDevicesRefresh,
                     icon: const Icon(Icons.refresh, size: 20),
                     onPressed: session.loadDevices,
                   ),
@@ -94,7 +95,7 @@ class _PrivacyPageState extends State<PrivacyPage> {
             if (devices.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text('표시할 기기가 없습니다',
+                child: Text(context.l10n.privacyNoDevices,
                     style: TextStyle(fontSize: 13, color: sub)),
               ),
             for (var i = 0; i < devices.length; i++) ...[
@@ -225,7 +226,7 @@ class _DeviceRow extends StatelessWidget {
     final bits = [
       if (platform.isNotEmpty) platform,
       if (ip.isNotEmpty) ip,
-      if (seen.isNotEmpty) '최근 활동 $seen',
+      if (seen.isNotEmpty) context.l10n.privacyLastSeen(seen),
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -239,7 +240,7 @@ class _DeviceRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(device['name']?.toString() ?? '알 수 없는 기기',
+                Text(device['name']?.toString() ?? context.l10n.privacyUnknownDevice,
                     style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -253,7 +254,7 @@ class _DeviceRow extends StatelessWidget {
             ),
           ),
           if (current)
-            Text('현재 기기',
+            Text(context.l10n.privacyThisDevice,
                 style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -264,7 +265,7 @@ class _DeviceRow extends StatelessWidget {
                   device['device_id']?.toString() ??
                       device['id']?.toString() ??
                       ''),
-              child: const Text('종료'),
+              child: Text(context.l10n.closeWord),
             ),
         ],
       ),

@@ -4,6 +4,7 @@
 // Gallery/file pickers and QR manual-entry need no permission (see report).
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import './app_l10n.dart';
 
 enum PermissionFlow { granted, denied, permanentlyDenied }
 
@@ -90,11 +91,11 @@ Future<void> showPermissionRationale(
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialog).pop(),
-          child: const Text('취소'),
+          child: Text(context.l10n.mvCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(dialog).pop(),
-          child: const Text('계속'),
+          child: Text(context.l10n.permContinue),
         ),
       ],
     ),
@@ -110,11 +111,11 @@ void showPermissionDenied(
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(permanentlyDenied
-          ? '권한이 영구적으로 거부되었습니다. 설정에서 직접 허용해주세요.'
-          : '권한이 거부되었습니다.'),
+          ? context.l10n.permDeniedForever
+          : context.l10n.permDenied),
       action: permanentlyDenied
           ? SnackBarAction(
-              label: '설정으로 이동',
+              label: context.l10n.permOpenSettings,
               onPressed: resolved.openSettings,
             )
           : null,

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 String newsField(Map<String, dynamic> article, String key) =>
     article[key]?.toString() ?? '';
@@ -64,7 +65,7 @@ class NewsSampleBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        'LUNO 에디토리얼 샘플 콘텐츠입니다. 실제 언론 기사가 아닙니다.',
+        context.l10n.mvNewsSampleBanner,
         style: TextStyle(
             fontSize: HarborType.small, color: dark ? HarborDark.buoyInk : HarborLight.buoyInk),
       ),
@@ -96,11 +97,11 @@ class _NewsPageState extends State<NewsPage> {
             Icon(Icons.newspaper_outlined,
                 size: 48, color: dark ? HarborDark.channel : HarborLight.channel),
             const SizedBox(height: 12),
-            Text('표시할 뉴스가 없습니다',
+            Text(context.l10n.newsEmpty,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            Text('아래로 당겨 새로고침하세요',
+            Text(context.l10n.newsPullRefresh,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall),
           ],
@@ -115,7 +116,7 @@ class _NewsPageState extends State<NewsPage> {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '뉴스'),
+              Masthead(title: context.l10n.mvNews),
               if (session.newsIsSample) const NewsSampleBanner(),
               if (heroes.isNotEmpty) ...[
                 SizedBox(
@@ -154,7 +155,7 @@ class _NewsPageState extends State<NewsPage> {
               ],
               if (session.newsPopular.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Text('오늘의 인기 기사',
+                Text(context.l10n.mvTodayPopular,
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 for (var i = 0; i < session.newsPopular.length; i++) ...[

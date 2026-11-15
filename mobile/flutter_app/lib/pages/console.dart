@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import '../util/app_l10n.dart';
 
 void _loadOnce(BuildContext context, Future<void> Function() load) {
   WidgetsBinding.instance.addPostFrameCallback((_) => load());
@@ -21,21 +22,21 @@ class ConsolePage extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final kind = DeviceScope.of(context);
     final metrics = (session.adminStats?['metrics'] as Map<String, dynamic>?) ?? {};
-    const desks = [
-      ('/console/users', '사용자', '계정 명부', Icons.people_outline),
-      ('/console/reports', '신고', '안전 신고함', Icons.shield_outlined),
-      ('/console/flags', '플래그', '기능 스위치', Icons.toggle_on_outlined),
-      ('/console/audit', '감사 로그', '불변 기록부', Icons.history),
+    final desks = [
+      ('/console/users', context.l10n.userWord, context.l10n.consoleUsers, Icons.people_outline),
+      ('/console/reports', context.l10n.reportWord, context.l10n.consoleSafetyBox, Icons.shield_outlined),
+      ('/console/flags', context.l10n.flagWord, context.l10n.consoleSwitches, Icons.toggle_on_outlined),
+      ('/console/audit', context.l10n.consoleAuditLog, context.l10n.consoleLedger, Icons.history),
     ];
     return ListView(
       children: [
         PageColumn(
           children: [
-            const Masthead(title: '콘솔', subtitle: '하버마스터 관제 데스크'),
+            Masthead(title: context.l10n.consoleTitle, subtitle: context.l10n.consoleHarborDesk),
             if (metrics.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Text('지표를 불러오는 중이거나 권한이 없습니다',
+                child: Text(context.l10n.consoleNoMetrics,
                     style: Theme.of(context).textTheme.bodySmall),
               )
             else
@@ -125,8 +126,8 @@ class ConsoleUsersPage extends StatelessWidget {
           PageColumn(
             children: [
               Masthead(
-                  title: '사용자',
-                  subtitle: '계정 명부 ${session.adminUsers.length}건'),
+                  title: context.l10n.userWord,
+                  subtitle: context.l10n.adminUsersCount(session.adminUsers.length)),
               for (final u in session.adminUsers)
                 Card(
                   color: dark ? HarborDark.surface : Colors.white,
@@ -169,8 +170,8 @@ class ConsoleReportsPage extends StatelessWidget {
           PageColumn(
             children: [
               Masthead(
-                  title: '신고',
-                  subtitle: '안전 신고함 ${session.adminReports.length}건'),
+                  title: context.l10n.reportWord,
+                  subtitle: context.l10n.adminReportsCount(session.adminReports.length)),
               for (final r in session.adminReports)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -200,7 +201,7 @@ class ConsoleReportsPage extends StatelessWidget {
                       trailing: FilledButton.tonal(
                         onPressed: () => _moderationDialog(
                             context, '${r['id'] ?? ''}'),
-                        child: const Text('조치'),
+                        child: Text(context.l10n.consoleAct),
                       ),
                     ),
                   ),
@@ -220,23 +221,23 @@ class ConsoleReportsPage extends StatelessWidget {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (dialog, setDialog) => AlertDialog(
-          title: const Text('모더레이션 조치'),
+          title: Text(context.l10n.consoleModAction),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                   controller: subject,
-                  decoration: const InputDecoration(
-                      labelText: '대상 사용자 UUID', isDense: true)),
-              const SizedBox(height: 8),
+                  decoration: InputDecoration(
+                      labelText: context.l10n.consoleTargetUuid, isDense: true)),
+              SizedBox(height: 8),
               DropdownButton<String>(
                 value: action,
                 isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'warn', child: Text('경고')),
-                  DropdownMenuItem(value: 'suspend', child: Text('정지')),
-                  DropdownMenuItem(value: 'activate', child: Text('복구')),
-                  DropdownMenuItem(value: 'dismiss', child: Text('기각')),
+                items: [
+                  DropdownMenuItem(value: 'warn', child: Text(context.l10n.modWarn)),
+                  DropdownMenuItem(value: 'suspend', child: Text(context.l10n.modSuspend)),
+                  DropdownMenuItem(value: 'activate', child: Text(context.l10n.modRestore)),
+                  DropdownMenuItem(value: 'dismiss', child: Text(context.l10n.modDismiss)),
                 ],
                 onChanged: (v) {
                   if (v != null) setDialog(() => action = v);
@@ -245,14 +246,14 @@ class ConsoleReportsPage extends StatelessWidget {
               const SizedBox(height: 8),
               TextField(
                   controller: reason,
-                  decoration: const InputDecoration(
-                      labelText: '사유 (선택)', isDense: true)),
+                  decoration: InputDecoration(
+                      labelText: context.l10n.reasonOptional, isDense: true)),
             ],
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(dialog).pop(),
-                child: const Text('취소')),
+                child: Text(context.l10n.mvCancel)),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialog).pop();
@@ -263,7 +264,7 @@ class ConsoleReportsPage extends StatelessWidget {
                   reason: reason.text.trim(),
                 );
               },
-              child: const Text('기록'),
+              child: Text(context.l10n.logWord),
             ),
           ],
         ),
@@ -286,7 +287,7 @@ class ConsoleFlagsPage extends StatelessWidget {
         children: [
           PageColumn(
             children: [
-              const Masthead(title: '플래그', subtitle: '기능 스위치 제어반'),
+              Masthead(title: context.l10n.flagWord, subtitle: context.l10n.consoleFlagPanel),
               Card(
                 color: dark ? HarborDark.surface : Colors.white,
                 shape: RoundedRectangleBorder(
@@ -305,7 +306,7 @@ class ConsoleFlagsPage extends StatelessWidget {
                             style: const TextStyle(
                                 fontWeight: FontWeight.w600, fontSize: 14)),
                         subtitle: Text(
-                            '업데이트: ${SessionScope.of(context, listen: false).relTime(session.featureFlags[i]['updated_at'])}',
+                            context.l10n.flagUpdatedAt(SessionScope.of(context, listen: false).relTime(session.featureFlags[i]['updated_at'])),
                             style: Theme.of(context).textTheme.bodySmall),
                         value:
                             session.featureFlags[i]['enabled'] == true,
@@ -316,9 +317,9 @@ class ConsoleFlagsPage extends StatelessWidget {
                       ),
                     ],
                     if (session.featureFlags.isEmpty)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.all(24),
-                        child: Text('등록된 플래그가 없습니다'),
+                        child: Text(context.l10n.consoleNoFlags),
                       ),
                   ],
                 ),
@@ -346,8 +347,8 @@ class ConsoleAuditPage extends StatelessWidget {
           PageColumn(
             children: [
               Masthead(
-                  title: '감사 로그',
-                  subtitle: '불변 기록부 ${session.adminAuditLogs.length}건'),
+                  title: context.l10n.consoleAuditLog,
+                  subtitle: context.l10n.adminAuditCount(session.adminAuditLogs.length)),
               for (var i = 0; i < session.adminAuditLogs.length; i++) ...[
                 if (i > 0) const Divider(height: 1),
                 ListTile(

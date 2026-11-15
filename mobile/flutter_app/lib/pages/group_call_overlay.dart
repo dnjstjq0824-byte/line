@@ -11,6 +11,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import 'call_overlay.dart' show callDurationLabel;
+import '../util/app_l10n.dart';
 
 int groupTileColumns(double width) {
   if (width < 700) return 2;
@@ -27,7 +28,7 @@ class GroupCallOverlay extends StatelessWidget {
     final call = session.groupCall;
     if (call == null) return const SizedBox.shrink();
     final kind = '${call['kind'] ?? 'voice'}';
-    final title = '${call['title'] ?? '그룹 통화'}';
+    final title = '${call['title'] ?? context.l10n.groupCallWord}';
     final peers =
         List<Map<String, dynamic>>.from(call['participants'] ?? []);
     final width = MediaQuery.sizeOf(context).width;
@@ -44,12 +45,12 @@ class GroupCallOverlay extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: HarborType.title, color: Colors.white)),
                   Text(
-                    '${kind == 'video' ? '영상' : '음성'} · ${callDurationLabel(session.groupCallSeconds)} · ${peers.length + 1}명 참가 중',
+                    context.l10n.groupCallStatus(kind == 'video' ? context.l10n.videoWord : context.l10n.voiceWord, callDurationLabel(session.groupCallSeconds), peers.length + 1),
                     style: const TextStyle(
                         fontSize: 13, color: Colors.white70),
                   ),
                   if (session.groupMediaIssue)
-                    const Text('미디어를 사용할 수 없습니다',
+                    Text(context.l10n.callNoMedia,
                         style: TextStyle(
                             fontSize: HarborType.small, color: Colors.amber)),
                 ],
@@ -63,21 +64,21 @@ class GroupCallOverlay extends StatelessWidget {
                 crossAxisSpacing: 8,
                 childAspectRatio: 3 / 4,
                 children: [
-                  _selfTile(session, kind),
-                  for (final peer in peers) _peerTile(session, peer),
+                  _selfTile(context, session, kind),
+                  for (final peer in peers) _peerTile(context, session, peer),
                 ],
               ),
             ),
             if (peers.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(bottom: 4),
-                child: Text('다른 참가자를 기다리는 중...',
+                child: Text(context.l10n.mvGroupCallWaiting,
                     style:
                         TextStyle(fontSize: 13, color: Colors.white70)),
               ),
             Padding(
               padding: const EdgeInsets.only(bottom: 20, top: 4),
-              child: _controlBar(session, kind),
+              child: _controlBar(context, session, kind),
             ),
           ],
         ),
@@ -85,14 +86,15 @@ class GroupCallOverlay extends StatelessWidget {
     );
   }
 
-  Widget _selfTile(SessionController session, String kind) {
+  Widget _selfTile(
+      BuildContext context, SessionController session, String kind) {
     final showVideo = kind == 'video' &&
         !session.groupVideoOff &&
         session.groupLocalMedia?.localRenderer != null;
     final name =
-        session.selfName.isEmpty ? '나' : session.selfName;
+        session.selfName.isEmpty ? context.l10n.mvMe : session.selfName;
     return _tile(
-      name: '$name (나)',
+      name: context.l10n.groupSelfName(name),
       color: HarborLight.harbor,
       video: showVideo
           ? RTCVideoView(session.groupLocalMedia!.localRenderer!,
@@ -104,7 +106,8 @@ class GroupCallOverlay extends StatelessWidget {
     );
   }
 
-  Widget _peerTile(SessionController session, Map<String, dynamic> peer) {
+  Widget _peerTile(BuildContext context, SessionController session,
+      Map<String, dynamic> peer) {
     final id = '${peer['id']}';
     final media = session.groupPeerMedia[id];
     final name = '${peer['display_name'] ?? peer['name'] ?? id}';
@@ -157,12 +160,13 @@ class GroupCallOverlay extends StatelessWidget {
     );
   }
 
-  Widget _controlBar(SessionController session, String kind) {
+  Widget _controlBar(
+      BuildContext context, SessionController session, String kind) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _roundButton(
-          tooltip: session.groupMuted ? '음소거 해제' : '음소거',
+          tooltip: session.groupMuted ? context.l10n.callUnmute : context.l10n.callMute,
           color: Colors.white24,
           icon: session.groupMuted ? Icons.mic_off : Icons.mic,
           onPressed: () => session.setGroupMuted(!session.groupMuted),
@@ -170,7 +174,7 @@ class GroupCallOverlay extends StatelessWidget {
         if (kind == 'video') ...[
           const SizedBox(width: 12),
           _roundButton(
-            tooltip: '카메라 켜기/끄기',
+            tooltip: context.l10n.mvCameraToggle,
             color: Colors.white24,
             icon:
                 session.groupVideoOff ? Icons.videocam_off : Icons.videocam,
@@ -179,7 +183,7 @@ class GroupCallOverlay extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           _roundButton(
-            tooltip: '카메라 전환',
+            tooltip: context.l10n.mvCameraSwitch,
             color: Colors.white24,
             icon: Icons.switch_camera,
             onPressed: () => session.switchGroupCamera(),
@@ -187,14 +191,14 @@ class GroupCallOverlay extends StatelessWidget {
         ],
         const SizedBox(width: 12),
         _roundButton(
-          tooltip: '스피커',
+          tooltip: context.l10n.callSpeaker,
           color: Colors.white24,
           icon: session.callSpeaker ? Icons.volume_up : Icons.volume_down,
           onPressed: () => session.setGroupSpeaker(!session.callSpeaker),
         ),
         const SizedBox(width: 12),
         _roundButton(
-          tooltip: '통화 종료',
+          tooltip: context.l10n.callEnd,
           color: Colors.red,
           icon: Icons.call_end,
           onPressed: () => session.leaveGroupCall(),

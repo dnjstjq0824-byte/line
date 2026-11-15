@@ -6,12 +6,14 @@
 // room (the call overlay is already in the tree when the call is live).
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'app_l10n.dart';
+
 abstract class AppNotifier {
-  Future<void> init({Future<void> Function(String? payload)? onTap});
+  Future<void> init({Future<void> Function(String? payload)? onTap, String locale = 'ko'});
   Future<void> showMessage(
-      {required String roomId, required String title, required String body});
+      {required String roomId, required String title, required String body, String locale = 'ko'});
   Future<void> showIncomingCall(
-      {required String callId, required String title, required String body});
+      {required String callId, required String title, required String body, String locale = 'ko'});
   Future<void> cancelCall();
 }
 
@@ -21,22 +23,12 @@ class ProdAppNotifier implements AppNotifier {
 
   final FlutterLocalNotificationsPlugin _plugin;
 
-  static const _msgChannel = AndroidNotificationChannel(
-    'luno_messages',
-    '메시지',
-    description: '새 메시지 알림',
-    importance: Importance.high,
-  );
-  static const _callChannel = AndroidNotificationChannel(
-    'luno_calls',
-    '전화',
-    description: '수신 전화 알림',
-    importance: Importance.max,
-  );
   static const _callId = 9001;
 
   @override
-  Future<void> init({Future<void> Function(String? payload)? onTap}) async {
+  Future<void> init(
+      {Future<void> Function(String? payload)? onTap,
+      String locale = 'ko'}) async {
     const settings =
         InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher'));
     await _plugin.initialize(
@@ -47,22 +39,34 @@ class ProdAppNotifier implements AppNotifier {
     final android =
         _plugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
-    await android?.createNotificationChannel(_msgChannel);
-    await android?.createNotificationChannel(_callChannel);
+    final s = stringsFor(locale);
+    await android?.createNotificationChannel(AndroidNotificationChannel(
+      'luno_messages',
+      s.messageWord,
+      description: s.notifMsgChannel,
+      importance: Importance.high,
+    ));
+    await android?.createNotificationChannel(AndroidNotificationChannel(
+      'luno_calls',
+      s.notifCallChannel,
+      description: s.notifCallDesc,
+      importance: Importance.max,
+    ));
   }
 
   @override
   Future<void> showMessage(
       {required String roomId,
       required String title,
-      required String body}) {
+      required String body,
+      String locale = 'ko'}) {
     return _plugin.show(
       id: roomId.hashCode,
       title: title,
       body: body,
-      notificationDetails: const NotificationDetails(
+      notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
-              'luno_messages', '메시지',
+              'luno_messages', stringsFor(locale).messageWord,
               importance: Importance.high, priority: Priority.high)),
       payload: 'room:$roomId',
     );
@@ -72,14 +76,15 @@ class ProdAppNotifier implements AppNotifier {
   Future<void> showIncomingCall(
       {required String callId,
       required String title,
-      required String body}) {
+      required String body,
+      String locale = 'ko'}) {
     return _plugin.show(
       id: _callId,
       title: title,
       body: body,
-      notificationDetails: const NotificationDetails(
+      notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
-              'luno_calls', '전화',
+              'luno_calls', stringsFor(locale).notifCallChannel,
               importance: Importance.max,
               priority: Priority.max,
               ongoing: true,

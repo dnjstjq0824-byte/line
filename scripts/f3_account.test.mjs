@@ -140,5 +140,6 @@ test('F3: clients send reason and confirm, show recovery', async () => {
   const session = await readFile(new URL('../mobile/flutter_app/lib/state/session.dart', import.meta.url), 'utf8');
   assert.ok(view.includes('confirm_text') && view.includes('deletion_scheduled'), 'web confirm flow');
   assert.ok(auth.includes('recovered'), 'web recovery note');
-  assert.ok(session.includes('confirm_text') && session.includes('삭제가 예약'), 'app confirm flow');
+  // F20: the app notice rides the ARB key, not a hardcoded string.
+  assert.ok(session.includes('confirm_text') && session.includes('msgDeleteScheduled'), 'app confirm flow');
 });

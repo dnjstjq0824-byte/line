@@ -7,6 +7,7 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../util/poll_options.dart';
+import '../util/app_l10n.dart';
 
 enum ChatArchiveKind { pins, notes, events, polls, albums }
 
@@ -67,11 +68,11 @@ class _ChatArchivePageState extends State<ChatArchivePage> {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final (title, subtitle, items, createLabel) = switch (widget.kind) {
-      ChatArchiveKind.pins => ('공지', '고정된 항로 지시', session.pins, ''),
-      ChatArchiveKind.notes => ('노트', '대화방에 남긴 기록', session.notes, '새 노트'),
-      ChatArchiveKind.events => ('일정', '예정된 집합 신호', session.events, '새 일정'),
-      ChatArchiveKind.polls => ('투표', '진행 중인 표결', session.polls, '새 투표'),
-      ChatArchiveKind.albums => ('앨범', '대화방 사진 묶음', session.albums, '새 앨범'),
+      ChatArchiveKind.pins => (context.l10n.gsNotice, context.l10n.archivePinnedTitle, session.pins, ''),
+      ChatArchiveKind.notes => (context.l10n.noteWord, context.l10n.archiveNotesDesc, session.notes, context.l10n.archiveNewNote),
+      ChatArchiveKind.events => (context.l10n.scheduleWord, context.l10n.archiveEventsDesc, session.events, context.l10n.archiveNewEvent),
+      ChatArchiveKind.polls => (context.l10n.pollWord, context.l10n.archivePollsDesc, session.polls, context.l10n.archiveNewPoll),
+      ChatArchiveKind.albums => (context.l10n.albumWord, context.l10n.archiveAlbumsDesc, session.albums, context.l10n.archiveNewAlbum),
     };
     return ListView(
       children: [
@@ -95,7 +96,7 @@ class _ChatArchivePageState extends State<ChatArchivePage> {
             if (items.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 64),
-                child: Text('등록된 $title이(가) 없습니다',
+                child: Text(context.l10n.archiveEmptyTitle(title),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium),
               ),
@@ -173,8 +174,8 @@ class _PollBody extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
             item['closed'] == true
-                ? '종료됨 · ${item['total_voters'] ?? 0}명 참여'
-                : '진행 중 · ${item['total_voters'] ?? 0}명 참여',
+                ? context.l10n.pollClosedVoters(item['total_voters'] ?? 0)
+                : context.l10n.pollOpenVoters(item['total_voters'] ?? 0),
             style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         for (final o in options)
@@ -200,11 +201,11 @@ class _EventBody extends StatelessWidget {
   final dynamic item;
   const _EventBody({required this.item});
 
-  static const _rsvpLabels = {
-    'going': '참석',
-    'maybe': '미정',
-    'no': '불참',
-  };
+  static Map<String, String> _rsvpLabels(AppLocalizations s) => {
+        'going': s.rsvpAttend,
+        'maybe': s.rsvpTbd,
+        'no': s.rsvpDecline,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -221,13 +222,13 @@ class _EventBody extends StatelessWidget {
             '${item['starts_at'] ?? ''}${'${item['location'] ?? ''}'.isNotEmpty ? ' · ${item['location']}' : ''}',
             style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 4),
-        Text(my.isEmpty ? '아직 응답하지 않았습니다' : '내 응답: ${_rsvpLabels[my] ?? my}',
+        Text(my.isEmpty ? context.l10n.archiveNoRsvp : context.l10n.archiveMyStatus(_rsvpLabels(context.l10n)[my] ?? my),
             style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           children: [
-            for (final e in _rsvpLabels.entries)
+            for (final e in _rsvpLabels(context.l10n).entries)
               ChoiceChip(
                 label: Text(e.value),
                 selected: my == e.key,
@@ -259,7 +260,7 @@ class _AlbumBody extends StatelessWidget {
             style:
                 const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
         const SizedBox(height: 4),
-        Text('사진 $count장 · ${item['created_at'] ?? ''}',
+        Text(context.l10n.photoCountMeta(count, item['created_at'] ?? ''),
             style: Theme.of(context).textTheme.bodySmall),
       ],
     );
@@ -288,27 +289,27 @@ class _NoteDialogState extends State<_NoteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('새 노트'),
+      title: Text(context.l10n.archiveNewNote),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
               controller: title,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                  labelText: '제목 (필수)', isDense: true)),
+              decoration: InputDecoration(
+                  labelText: context.l10n.titleRequired, isDense: true)),
           const SizedBox(height: 8),
           TextField(
               controller: body,
               maxLines: 4,
-              decoration: const InputDecoration(
-                  labelText: '내용', isDense: true)),
+              decoration: InputDecoration(
+                  labelText: context.l10n.contentWord, isDense: true)),
         ],
       ),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소')),
+            child: Text(context.l10n.mvCancel)),
         FilledButton(
           onPressed: title.text.trim().isEmpty
               ? null
@@ -316,7 +317,7 @@ class _NoteDialogState extends State<_NoteDialog> {
                   Navigator.of(context).pop();
                   widget.onSave(title: title.text, body: body.text);
                 },
-          child: const Text('저장'),
+          child: Text(context.l10n.mvSave),
         ),
       ],
     );
@@ -368,39 +369,39 @@ class _EventDialogState extends State<_EventDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('새 일정'),
+      title: Text(context.l10n.archiveNewEvent),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
               controller: title,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                  labelText: '제목 (필수)', isDense: true)),
+              decoration: InputDecoration(
+                  labelText: context.l10n.titleRequired, isDense: true)),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: Text(
                     startsAt == null
-                        ? '시작 시각을 고르세요 (필수)'
+                        ? context.l10n.archivePickStart
                         : '${startsAt!.year}-${startsAt!.month.toString().padLeft(2, '0')}-${startsAt!.day.toString().padLeft(2, '0')} ${startsAt!.hour.toString().padLeft(2, '0')}:${startsAt!.minute.toString().padLeft(2, '0')}',
                     style: Theme.of(context).textTheme.bodySmall),
               ),
               TextButton(
-                  onPressed: _pick, child: const Text('날짜·시간')),
+                  onPressed: _pick, child: Text(context.l10n.dateTimeWord)),
             ],
           ),
           TextField(
               controller: location,
-              decoration: const InputDecoration(
-                  labelText: '장소 (선택)', isDense: true)),
+              decoration: InputDecoration(
+                  labelText: context.l10n.placeOptional, isDense: true)),
         ],
       ),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소')),
+            child: Text(context.l10n.mvCancel)),
         FilledButton(
           onPressed: title.text.trim().isEmpty || startsAt == null
               ? null
@@ -409,7 +410,7 @@ class _EventDialogState extends State<_EventDialog> {
                   widget.onSave(title.text, startsAt!.toIso8601String(),
                       location.text);
                 },
-          child: const Text('등록'),
+          child: Text(context.l10n.mvSubmit),
         ),
       ],
     );
@@ -440,29 +441,29 @@ class _PollDialogState extends State<_PollDialog> {
     final parsed = pollOptionsOf(options.text);
     final valid = pollFormValid(question.text, parsed);
     return AlertDialog(
-      title: const Text('새 투표'),
+      title: Text(context.l10n.archiveNewPoll),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
               controller: question,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                  labelText: '질문 (필수)', isDense: true)),
+              decoration: InputDecoration(
+                  labelText: context.l10n.pollQuestionReq, isDense: true)),
           const SizedBox(height: 8),
           TextField(
               controller: options,
               onChanged: (_) => setState(() {}),
               maxLines: 5,
-              decoration: const InputDecoration(
-                  labelText: '선택지 (줄마다 하나씩, 2~10개)',
+              decoration: InputDecoration(
+                  labelText: context.l10n.pollOptionsHint,
                   isDense: true)),
         ],
       ),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소')),
+            child: Text(context.l10n.mvCancel)),
         FilledButton(
           onPressed: valid
               ? () {
@@ -470,7 +471,7 @@ class _PollDialogState extends State<_PollDialog> {
                   widget.onSave(question.text, options.text);
                 }
               : null,
-          child: const Text('만들기'),
+          child: Text(context.l10n.createWord),
         ),
       ],
     );
@@ -498,20 +499,20 @@ class _AlbumDialogState extends State<_AlbumDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('새 앨범'),
+      title: Text(context.l10n.archiveNewAlbum),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
               controller: title,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                  labelText: '앨범 제목 (필수)', isDense: true)),
+              decoration: InputDecoration(
+                  labelText: context.l10n.albumTitleReq, isDense: true)),
           const SizedBox(height: 8),
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
-            title: const Text('대화방 사진 한 번에 담기',
+            title: Text(context.l10n.archiveAlbumDesc,
                 style: TextStyle(fontSize: 13)),
             value: includePhotos,
             onChanged: (v) => setState(() => includePhotos = v ?? true),
@@ -521,7 +522,7 @@ class _AlbumDialogState extends State<_AlbumDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소')),
+            child: Text(context.l10n.mvCancel)),
         FilledButton(
           onPressed: title.text.trim().isEmpty
               ? null
@@ -529,7 +530,7 @@ class _AlbumDialogState extends State<_AlbumDialog> {
                   Navigator.of(context).pop();
                   widget.onSave(title.text, includePhotos);
                 },
-          child: const Text('만들기'),
+          child: Text(context.l10n.createWord),
         ),
       ],
     );

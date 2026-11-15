@@ -10,6 +10,7 @@ import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
 import 'profile.dart';
+import '../util/app_l10n.dart';
 
 class GroupSettingsPage extends StatefulWidget {
   final String conversationId;
@@ -33,9 +34,9 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
   }
 
   String _roleLabel(String role) {
-    if (role == 'owner') return '방장';
-    if (role == 'admin') return '관리자';
-    return '멤버';
+    if (role == 'owner') return context.l10n.gsOwner;
+    if (role == 'admin') return context.l10n.demoAdmin;
+    return context.l10n.gsMembers;
   }
 
   @override
@@ -58,7 +59,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     final sub = dark ? LunoDark.textSecondary : LunoLight.textSecondary;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('그룹 설정')),
+      appBar: AppBar(title: Text(context.l10n.gsTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -81,7 +82,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title, style: TextStyle(color: ink, fontSize: 18)),
-                    Text('멤버 ${members.length}명 · ${_roleLabel(myRole)}',
+                    Text(context.l10n.groupMembersRole(members.length, _roleLabel(myRole)),
                         style: TextStyle(color: sub, fontSize: 13)),
                   ],
                 ),
@@ -95,62 +96,62 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                 OutlinedButton(
                   onPressed: () => session.updateRoomPhotoFromPicker(
                       widget.conversationId),
-                  child: const Text('사진 변경'),
+                  child: Text(context.l10n.gsPhotoChange),
                 ),
                 const SizedBox(width: 8),
                 if ('${room['avatar_url'] ?? ''}'.isNotEmpty)
                   TextButton(
                     onPressed: () =>
                         session.clearRoomPhoto(widget.conversationId),
-                    child: const Text('사진 삭제'),
+                    child: Text(context.l10n.gsPhotoRemove),
                   ),
               ],
             ),
           ],
           const SizedBox(height: 16),
-          _SectionTitle('방 이름'),
+          _SectionTitle(context.l10n.gsName),
           Row(
             children: [
               Expanded(child: Text(title, style: TextStyle(color: ink))),
               if (privileged)
                 TextButton(
-                  onPressed: () => _textDialog(context, '방 이름', title,
+                  onPressed: () => _textDialog(context, context.l10n.gsName, title,
                       (v) => session.renameRoom(widget.conversationId, v)),
-                  child: const Text('변경'),
+                  child: Text(context.l10n.changeWord),
                 ),
             ],
           ),
           const SizedBox(height: 8),
-          _SectionTitle('공지'),
+          _SectionTitle(context.l10n.gsNotice),
           Row(
             children: [
               Expanded(
                 child: Text(
                   '${room['notice'] ?? ''}'.isEmpty
-                      ? '공지 없음'
+                      ? context.l10n.groupNoNotice
                       : '${room['notice']}',
                   style: TextStyle(color: sub),
                 ),
               ),
               if (privileged)
                 TextButton(
-                  onPressed: () => _textDialog(context, '공지',
+                  onPressed: () => _textDialog(context, context.l10n.gsNotice,
                       '${room['notice'] ?? ''}',
                       (v) =>
                           session.setRoomNotice(widget.conversationId, v),
-                      required: false),
-                  child: const Text('변경'),
+                      required: false, multiline: true),
+                  child: Text(context.l10n.changeWord),
                 ),
             ],
           ),
           const SizedBox(height: 16),
-          _SectionTitle('멤버 (${members.length})'),
+          _SectionTitle(context.l10n.groupMembersParen(members.length)),
           for (final m in members) _memberTile(context, session,
               m as Map<String, dynamic>, myRole, privileged, isOwner, dark),
           const SizedBox(height: 16),
-          _SectionTitle('친구 초대'),
+          _SectionTitle(context.l10n.gsInvite),
           if (invitable.isEmpty)
-            Text('초대할 친구가 없습니다.', style: TextStyle(color: sub))
+            Text(context.l10n.gsInviteNone, style: TextStyle(color: sub))
           else ...[
             for (final f in invitable)
               CheckboxListTile(
@@ -176,23 +177,23 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                             widget.conversationId, _picked.toList());
                         if (mounted) setState(_picked.clear);
                       },
-                child: const Text('초대하기'),
+                child: Text(context.l10n.groupInvite),
               ),
             ),
           ],
           if (privileged) ...[
             const SizedBox(height: 16),
-            _SectionTitle('초대 링크'),
+            _SectionTitle(context.l10n.gsLinks),
             Row(
               children: [
                 Expanded(
-                  child: Text('${session.roomInvites.length}개 활성',
+                  child: Text(context.l10n.roomInvitesActive(session.roomInvites.length),
                       style: TextStyle(color: sub)),
                 ),
                 TextButton(
                   onPressed: () =>
                       session.createRoomInvite(widget.conversationId, 168),
-                  child: const Text('새 링크 (7일)'),
+                  child: Text(context.l10n.groupNewLink),
                 ),
               ],
             ),
@@ -203,11 +204,11 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
           const SizedBox(height: 24),
           OutlinedButton(
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () => _confirm(context, '그룹에서 나갈까요?', () async {
+            onPressed: () => _confirm(context, context.l10n.gsLeaveConfirm, () async {
               await session.leaveChat(widget.conversationId);
               if (context.mounted) context.go('/chats');
             }),
-            child: const Text('그룹 나가기'),
+            child: Text(context.l10n.groupLeave),
           ),
         ],
       ),
@@ -253,10 +254,10 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                   session.setMemberRole(cid, id,
                       role == 'admin' ? 'member' : 'admin');
                 } else if (v == 'transfer') {
-                  _confirm(context, '방장을 넘기면 설정 권한을 잃습니다. 계속할까요?',
+                  _confirm(context, context.l10n.gsTransferConfirm,
                       () => session.transferRoom(cid, id));
                 } else if (v == 'kick') {
-                  _confirm(context, '정말 내보낼까요?',
+                  _confirm(context, context.l10n.gsKickConfirm,
                       () => session.kickMember(cid, id));
                 }
               },
@@ -265,12 +266,12 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                   PopupMenuItem(
                     value: 'admin',
                     child:
-                        Text(role == 'admin' ? '관리자 해제' : '관리자로 지정'),
+                        Text(role == 'admin' ? context.l10n.gsRemoveAdmin : context.l10n.gsMakeAdmin),
                   ),
                 if (isOwner)
-                  const PopupMenuItem(
-                      value: 'transfer', child: Text('방장 넘기기')),
-                const PopupMenuItem(value: 'kick', child: Text('내보내기')),
+                  PopupMenuItem(
+                      value: 'transfer', child: Text(context.l10n.gsTransfer)),
+                PopupMenuItem(value: 'kick', child: Text(context.l10n.gsKick)),
               ],
             )
           : null,
@@ -299,7 +300,7 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('초대 링크 QR',
+                    Text(context.l10n.groupInviteQr,
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 16),
@@ -310,18 +311,18 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
             ),
           ),
           IconButton(
-            tooltip: '복사',
+            tooltip: context.l10n.gsLinkCopy,
             icon: const Icon(Icons.copy),
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: url));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('복사했습니다.')));
+                    SnackBar(content: Text(context.l10n.gsLinkCopied)));
               }
             },
           ),
           IconButton(
-            tooltip: '폐기',
+            tooltip: context.l10n.gsLinkRevoke,
             icon: const Icon(Icons.delete_outline),
             onPressed: () =>
                 session.revokeRoomInvite(cid, '${inv['token']}'),
@@ -349,7 +350,7 @@ class _SectionTitle extends StatelessWidget {
 
 Future<void> _textDialog(BuildContext context, String title, String initial,
     Future<void> Function(String) onSave,
-    {bool required = true}) async {
+    {bool required = true, bool multiline = false}) async {
   final controller = TextEditingController(text: initial);
   await showDialog<void>(
     context: context,
@@ -359,7 +360,7 @@ Future<void> _textDialog(BuildContext context, String title, String initial,
         content: TextField(
           controller: controller,
           autofocus: true,
-          maxLines: title == '공지' ? 3 : 1,
+          maxLines: multiline ? 3 : 1,
           onChanged: (_) => setDialog(() {}),
           decoration:
               InputDecoration(labelText: title, isDense: true),
@@ -367,14 +368,14 @@ Future<void> _textDialog(BuildContext context, String title, String initial,
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dialog).pop(),
-              child: const Text('취소')),
+              child: Text(context.l10n.mvCancel)),
           FilledButton(
             onPressed:
                 (required && controller.text.trim().isEmpty) ? null : () {
               Navigator.of(dialog).pop();
               onSave(controller.text);
             },
-            child: const Text('저장'),
+            child: Text(context.l10n.mvSave),
           ),
         ],
       ),
@@ -391,13 +392,13 @@ Future<void> _confirm(
       actions: [
         TextButton(
             onPressed: () => Navigator.of(dialog).pop(),
-            child: const Text('취소')),
+            child: Text(context.l10n.mvCancel)),
         FilledButton(
           onPressed: () {
             Navigator.of(dialog).pop();
             action();
           },
-          child: const Text('확인'),
+          child: Text(context.l10n.confirmWord),
         ),
       ],
     ),

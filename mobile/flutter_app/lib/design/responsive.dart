@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../nav.dart';
+import '../util/app_l10n.dart';
 import '../state/session.dart';
 import 'v3.dart';
 
@@ -171,7 +172,7 @@ class _ConsoleDesk extends StatelessWidget {
                           _RailItem(destination: d, active: active == d.route, unread: d.route == '/chats'),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
-                          child: Text('하버 데스크',
+                          child: Text(context.l10n.harborDesk,
                               style: Theme.of(context).textTheme.labelSmall),
                         ),
                         for (final d in LunoNav.secondary)
@@ -239,7 +240,7 @@ class _RailItem extends StatelessWidget {
                 Icon(active ? destination.activeIcon : destination.icon, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(destination.label,
+                  child: Text(destination.labelIn(context.l10n),
                       style: TextStyle(
                           fontWeight: active ? FontWeight.w800 : FontWeight.w500,
                           fontSize: 14)),
@@ -301,7 +302,7 @@ class _TabletDesk extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: '로그아웃',
+                    tooltip: context.l10n.mvLogout,
                     onPressed: () => SessionScope.of(context, listen: false).logout(),
                     icon: const Icon(Icons.logout, size: 20),
                   ),
@@ -346,14 +347,14 @@ class _IconRailItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(HarborRadius.control),
           onTap: () => context.go(destination.route),
           child: Tooltip(
-            message: destination.label,
+            message: destination.labelIn(context.l10n),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Column(
                 children: [
                   Icon(active ? destination.activeIcon : destination.icon, size: 21),
                   const SizedBox(height: 2),
-                  Text(destination.label,
+                  Text(destination.labelIn(context.l10n),
                       style: TextStyle(
                           fontSize: 10,
                           fontWeight: active ? FontWeight.w800 : FontWeight.w500)),
@@ -386,12 +387,12 @@ class _MobileDesk extends StatelessWidget {
         title: const HarborWordmark(compact: false),
         actions: [
           IconButton(
-            tooltip: '앱',
+            tooltip: context.l10n.appWord,
             onPressed: () => context.go('/apps'),
             icon: const Icon(Icons.apps_outlined),
           ),
           IconButton(
-            tooltip: '로그아웃',
+            tooltip: context.l10n.mvLogout,
             onPressed: () => SessionScope.of(context, listen: false).logout(),
             icon: const Icon(Icons.logout),
           ),
@@ -411,7 +412,7 @@ class _MobileDesk extends StatelessWidget {
             NavigationDestination(
               icon: Icon(d.icon),
               selectedIcon: Icon(d.activeIcon),
-              label: d.label,
+              label: d.labelIn(context.l10n),
             ),
         ],
       ),
@@ -439,7 +440,7 @@ class _CompactDesk extends StatelessWidget {
         title: const HarborWordmark(compact: true),
         actions: [
           IconButton(
-            tooltip: '앱',
+            tooltip: context.l10n.appWord,
             onPressed: () => context.go('/apps'),
             icon: const Icon(Icons.apps_outlined),
           ),
@@ -461,7 +462,7 @@ class _CompactDesk extends StatelessWidget {
             NavigationDestination(
               icon: Icon(d.icon, size: 20),
               selectedIcon: Icon(d.activeIcon, size: 20),
-              label: d.label,
+              label: d.labelIn(context.l10n),
             ),
         ],
       ),
@@ -547,7 +548,7 @@ class StatusStrip extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text('오프라인 상태입니다. 연결 후 다시 시도해주세요.',
+              child: Text(context.l10n.offlineRetryNotice,
                   style: TextStyle(
                       fontSize: HarborType.small,
                       fontWeight: FontWeight.w600,
@@ -558,7 +559,7 @@ class StatusStrip extends StatelessWidget {
                 minimumSize: const Size(64, 34),
               ),
               onPressed: session.restore,
-              child: const Text('재시도'),
+              child: Text(context.l10n.retryWord),
             ),
           ],
         ),
@@ -573,7 +574,7 @@ class StatusStrip extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text('전송 대기 중 ${session.outbox.length}건',
+              child: Text(context.l10n.stripOutboxPending(session.outbox.length),
                   style: TextStyle(
                       fontSize: HarborType.small,
                       fontWeight: FontWeight.w600,
@@ -584,7 +585,7 @@ class StatusStrip extends StatelessWidget {
                 minimumSize: const Size(64, 34),
               ),
               onPressed: session.busy ? null : session.flushOutbox,
-              child: const Text('재전송'),
+              child: Text(context.l10n.resendWord),
             ),
           ],
         ),
@@ -601,7 +602,7 @@ class StatusStrip extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                "LUNO ${call['kind'] == 'video' ? '영상' : '음성'}통화 연결 중",
+                context.l10n.appCallConnecting(call['kind'] == 'video' ? context.l10n.callVideo : context.l10n.callVoice),
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
               ),
             ),
@@ -612,7 +613,7 @@ class StatusStrip extends StatelessWidget {
                 minimumSize: const Size(64, 34),
               ),
               onPressed: session.endCall,
-              child: const Text('종료'),
+              child: Text(context.l10n.closeWord),
             ),
           ],
         ),
@@ -641,7 +642,7 @@ class _SessionFoot extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: '로그아웃',
+            tooltip: context.l10n.mvLogout,
             onPressed: () => SessionScope.of(context, listen: false).logout(),
             icon: const Icon(Icons.logout, size: 20),
           ),

@@ -9,6 +9,7 @@ import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
+import '../util/app_l10n.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -63,7 +64,7 @@ class _SearchPageState extends State<SearchPage> {
             Row(
               children: [
                 IconButton(
-                  tooltip: '뒤로',
+                  tooltip: context.l10n.backWord,
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => context.go('/home'),
                 ),
@@ -73,12 +74,12 @@ class _SearchPageState extends State<SearchPage> {
                     autofocus: true,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      hintText: '검색',
+                      hintText: context.l10n.mvSearch,
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: query.isEmpty
                           ? null
                           : IconButton(
-                              tooltip: '지우기',
+                              tooltip: context.l10n.searchClear,
                               icon: const Icon(Icons.close),
                               onPressed: () {
                                 field.clear();
@@ -115,20 +116,20 @@ class _SearchPageState extends State<SearchPage> {
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerLeft,
-                child: Text('최근 검색어',
+                child: Text(context.l10n.mvRecentSearch,
                     style: Theme.of(context).textTheme.titleMedium),
               ),
               if (session.recentSearches.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('최근 검색어가 없습니다',
+                  child: Text(context.l10n.searchNoRecent,
                       style: TextStyle(fontSize: 13, color: sub)),
                 ),
               for (final e in session.recentSearches)
                 _RecentRow(entry: e),
             ] else ...[
               if (friends.isNotEmpty) ...[
-                _SectionTitle(text: '친구'),
+                _SectionTitle(text: context.l10n.navFriends),
                 for (final u in friends)
                   _ResultRow(
                     icon: Icons.person,
@@ -147,7 +148,7 @@ class _SearchPageState extends State<SearchPage> {
                   ),
               ],
               if (chats.isNotEmpty) ...[
-                _SectionTitle(text: '대화'),
+                _SectionTitle(text: context.l10n.navChats),
                 for (final c in chats)
                   _ResultRow(
                     icon: Icons.chat_bubble,
@@ -160,13 +161,13 @@ class _SearchPageState extends State<SearchPage> {
                   ),
               ],
               if (users.isNotEmpty) ...[
-                _SectionTitle(text: '사용자'),
+                _SectionTitle(text: context.l10n.userWord),
                 for (final u in users)
                   _ResultRow(
                     icon: Icons.person_add_alt,
                     title: '${u['display_name']}',
                     subtitle: '@${u['handle'] ?? ''}',
-                    trailingLabel: '추가',
+                    trailingLabel: context.l10n.mvAdd,
                     onTap: () {
                       session.rememberSearch(
                           'user', '${u['id']}', '${u['display_name']}');
@@ -177,7 +178,7 @@ class _SearchPageState extends State<SearchPage> {
               if (friends.isEmpty && chats.isEmpty && users.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('검색 결과가 없습니다',
+                  child: Text(context.l10n.searchNoResult,
                       style: TextStyle(fontSize: 13, color: sub)),
                 ),
             ],
@@ -228,7 +229,7 @@ class _RecentRow extends StatelessWidget {
         title: Text('${entry['title']}',
             style: const TextStyle(fontWeight: FontWeight.w600)),
         trailing: IconButton(
-          tooltip: '최근 검색 삭제',
+          tooltip: context.l10n.searchDeleteRecent,
           icon: const Icon(Icons.close, size: 18),
           onPressed: () => session.forgetSearch(
               kind, '${entry['id']}'),

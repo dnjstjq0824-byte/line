@@ -8,12 +8,13 @@ import 'package:luno_messenger/design/v3.dart';
 import 'package:luno_messenger/nav.dart';
 import 'package:luno_messenger/router.dart';
 import 'package:luno_messenger/state/session.dart';
+import 'package:luno_messenger/util/app_l10n.dart';
 
 void main() {
   test('bottom tabs match the web order', () {
     expect(LunoNav.primary.map((d) => d.route),
         ['/home', '/chats', '/news', '/calls', '/wallet']);
-    expect(LunoNav.primary.map((d) => d.label),
+    expect(LunoNav.primary.map((d) => d.labelIn(stringsFor('ko'))),
         ['홈', '토크', '뉴스', '통화', '지갑']);
   });
 
