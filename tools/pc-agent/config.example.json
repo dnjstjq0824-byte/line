@@ -1,0 +1,32 @@
+{
+  "baseUrl": "https://luno-messenger.dnjstjqppk.workers.dev/api/v1",
+  "ownerUserId": "<LUNO user id allowed to give commands>",
+  "model": "muse-spark-1.3",
+  "worktreeRoot": "C:\\luno-wt",
+  "staleMinutes": 30,
+  "maxQueued": 10,
+  "maxPerDay": 30,
+  "usageHoldPercent": 90,
+  "projects": [
+    {
+      "id": "line",
+      "name": "LUNO",
+      "prefix": "T",
+      "tokenRef": "line",
+      "roomIds": ["<work room id>"],
+      "repoPath": "<absolute path to the repository>",
+      "mainBranch": "main",
+      "testCommands": [["node", "--test", "scripts/*.test.mjs"]],
+      "checkCommands": [
+        { "label": "서버 테스트", "cwd": ".", "cmd": ["node", "--test", "scripts/*.test.mjs"] },
+        { "label": "flutter analyze", "cwd": "mobile/flutter_app", "cmd": ["flutter", "analyze"] }
+      ],
+      "continuePrompt": "docs/work_20261113.md 의 기능 카드 중 아직 끝나지 않은 다음 카드 하나를 이어서 구현하라. 카드의 완료 기준과 테스트를 지켜라.",
+      "forbiddenPaths": ["wrangler.jsonc", ".github/**", "**/*.jks", "**/key.properties", ".env*", "**/.env*", "scripts/migrations/**"],
+      "mktAllowedPaths": ["marketing/**", "apps/user-web/public/download.html", "apps/user-web/src/luno-i18n.ts"],
+      "timeoutsMin": { "dev": 40, "mkt": 20, "ask": 8, "check": 20 },
+      "allowPush": false,
+      "allowDeploy": false
+    }
+  ]
+}

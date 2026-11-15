@@ -1,0 +1,11 @@
+{
+  "name": "luno-pc-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Home-PC runner: LUNO chat commands -> Muse Code CLI (muse exec) -> reports and approvals in LUNO.",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}
