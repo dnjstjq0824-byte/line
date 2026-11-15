@@ -28,6 +28,10 @@ export interface ChatSocketDeps {
   endCallLocally: () => void
   startCallTimer: () => void
   clearNoAnswerTimer: () => void
+  // F15: group call mesh events (ignored until a group call is live).
+  handleGroupUserJoined?: (data: any) => void
+  handleGroupUserLeft?: (data: any) => void
+  handleGroupSignal?: (data: any) => Promise<void>
 }
 
 export function useChatSocket(deps: ChatSocketDeps) {
@@ -36,6 +40,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
     autoTranslateEnabled, handleTranslateMessage, loadChats, loadPolls,
     loadKeep, chatTitleOf, onAuthExpired, activeCall, handleIncomingCallSignal,
     handleIncomingRing, endCallLocally, startCallTimer, clearNoAnswerTimer,
+    handleGroupUserJoined, handleGroupUserLeft, handleGroupSignal,
   } = deps
 
   // --- Realtime WebSocket ---
@@ -155,6 +160,12 @@ export function useChatSocket(deps: ChatSocketDeps) {
               clearNoAnswerTimer()
               startCallTimer()
             }
+          } else if (data.type === 'call.group.user_joined') {
+            handleGroupUserJoined?.(data)
+          } else if (data.type === 'call.group.user_left') {
+            handleGroupUserLeft?.(data)
+          } else if (data.type === 'call.group.signal') {
+            void handleGroupSignal?.(data)
           } else if (data.type === 'poll.updated' || data.type === 'poll.created' || data.type === 'poll.closed') {
             if (data.conversation_id === selectedChatId.value) void loadPolls(selectedChatId.value)
           } else if (data.type === 'saved-messages.updated') {

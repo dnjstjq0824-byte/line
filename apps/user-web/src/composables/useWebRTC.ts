@@ -37,6 +37,8 @@ export interface WebRTCDeps {
   callHistoryList: Ref<CallRecord[]>
   loadChats: () => Promise<void>
   formatDuration: (sec: number) => string
+  // F15: a live group call counts as busy for 1:1 rings and dials.
+  isGroupCallActive?: () => boolean
 }
 
 export function useWebRTC(deps: WebRTCDeps) {
@@ -95,6 +97,11 @@ export function useWebRTC(deps: WebRTCDeps) {
   }
 
   async function startCall(kind: 'voice' | 'video', overrideTitle?: string) {
+    // F15: one call at a time — a live group call blocks 1:1 dials.
+    if (deps.isGroupCallActive?.()) {
+      note.value = t('mvCallBusy')
+      return
+    }
     // A-14: no hardcoded room fallback. Without a real conversation the call
     // buttons are disabled and this guards the programmatic paths too.
     const targetConvId = selectedChatId.value || chats.value[0]?.id
@@ -165,7 +172,8 @@ export function useWebRTC(deps: WebRTCDeps) {
 
   async function handleIncomingRing(data: any) {
     const decision = decideIncomingRing({
-      activeCallId: activeCall.value?.id ?? null,
+      // F15: a live group call is a busy line for incoming 1:1 rings.
+      activeCallId: activeCall.value?.id ?? (deps.isGroupCallActive?.() ? 'group-call' : null),
       incomingCallId: data.call_id,
       selfId: currentUser.value?.id,
       initiatedBy: data.initiated_by,

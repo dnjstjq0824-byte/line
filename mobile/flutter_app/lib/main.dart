@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import 'design/v3.dart';
 import 'pages/call_overlay.dart';
+import 'pages/group_call_overlay.dart';
 import 'router.dart';
 import 'state/session.dart';
 
@@ -73,7 +74,7 @@ class _MessengerAppState extends State<MessengerApp>
         themeMode: ThemeMode.system,
         routerConfig: _router,
         builder: (context, child) => Stack(
-          children: [child!, const CallOverlay()],
+          children: [child!, const CallOverlay(), const GroupCallOverlay()],
         ),
       ),
     );

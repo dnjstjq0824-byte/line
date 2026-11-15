@@ -4,6 +4,7 @@ import LunoIcon from '../components/LunoIcon.vue'
 import MessageAttachment from '../components/MessageAttachment.vue'
 import LunoContextMenu, { type ContextMenuItem } from '../components/LunoContextMenu.vue'
 import CallModal from '../components/CallModal.vue'
+import GroupCallModal from '../components/GroupCallModal.vue'
 import ChatList from '../components/ChatList.vue'
 import FriendPanel from '../components/FriendPanel.vue'
 import MessagePane from '../components/MessagePane.vue'
@@ -60,7 +61,8 @@ import {
 } from '../messenger-utils'
 import { useChatSocket } from '../composables/useChatSocket'
 import { useAuth } from '../composables/useAuth'
-import { useWebRTC, type CallRecord } from '../composables/useWebRTC'
+import { useWebRTC, type CallRecord, type WebRTCDeps } from '../composables/useWebRTC'
+import { useGroupCall } from '../composables/useGroupCall'
 
 // --- LUNO Multilingual & Accessibility & Theme State ---
 
@@ -1124,6 +1126,9 @@ async function loadChats() {
 }
 
 // I-4: calling state machine (names unchanged; template and socket untouched).
+// F15: the deps object is hoisted so the group-call busy line can be attached
+// after both machines exist (useWebRTC reads it lazily at ring/dial time).
+const webRTCDeps: WebRTCDeps = { selectedChatId, chats, selectedChat, callHistoryList, loadChats, formatDuration }
 const {
   activeCall,
   callMediaIssue,
@@ -1149,10 +1154,38 @@ const {
   stopCallTimer,
   toggleCallRecording,
   endCallLocally,
-} = useWebRTC({ selectedChatId, chats, selectedChat, callHistoryList, loadChats, formatDuration })
+} = useWebRTC(webRTCDeps)
 // Template expressions unwrap top-level refs, so the modal receives the stream
 // ref objects through this plain holder instead of the bare bindings.
 const callVideoRefs = { local: localVideoRef, remote: remoteVideoRef }
+
+// F15: group call mesh (one tile per participant, max 8 seats server-side).
+const {
+  groupCall,
+  groupPeers,
+  groupCallDuration,
+  isGroupMuted,
+  isGroupVideoOff,
+  localStream: groupLocalStream,
+  startGroupCall,
+  handleGroupUserJoined,
+  handleGroupUserLeft,
+  handleGroupSignal,
+  toggleGroupMute,
+  toggleGroupVideo,
+  cycleGroupCamera,
+  leaveGroupCall,
+} = useGroupCall({ activeCallId: computed(() => activeCall.value?.id ?? null) })
+webRTCDeps.isGroupCallActive = () => groupCall.value !== null
+
+async function handleRoomCall(kind: 'voice' | 'video') {
+  // F15: group rooms join the mesh call; every other room dials 1:1.
+  if (selectedChat.value?.kind === 'group' && selectedChatId.value) {
+    await startGroupCall(selectedChatId.value, selectedChat.value.title || t('mvGroupCall'), kind)
+  } else {
+    await startCall(kind)
+  }
+}
 
 async function loadFriends() {
   try {
@@ -2446,6 +2479,9 @@ const {
   endCallLocally,
   startCallTimer,
   clearNoAnswerTimer,
+  handleGroupUserJoined,
+  handleGroupUserLeft,
+  handleGroupSignal,
   chatTitleOf: (convId: string) => chats.value.find((c) => c.id === convId)?.title || 'LUNO',
 })
 
@@ -3416,7 +3452,7 @@ onBeforeUnmount(() => {
         v-model:editing-message-body="editingMessageBody"
         v-model:effect-choice="effectChoice"
         @back="selectedChatId = ''"
-        @call="startCall"
+        @call="handleRoomCall"
         @drawer="toggleDrawer"
         @cycle-wallpaper="cycleWallpaper"
         @unpin="unpinMessage"
@@ -3668,6 +3704,22 @@ onBeforeUnmount(() => {
       @answer="updateCallState('connected')"
       @decline="updateCallState('declined')"
       @hangup="updateCallState('ended')"
+    />
+
+    <GroupCallModal
+      v-if="groupCall"
+      :group-call="groupCall"
+      :peers="groupPeers"
+      :self-name="currentUser?.display_name || t('mvMe')"
+      :self-stream="groupLocalStream"
+      :group-call-duration="groupCallDuration"
+      :format-duration="formatDuration"
+      :is-group-muted="isGroupMuted"
+      :is-group-video-off="isGroupVideoOff"
+      @mute="toggleGroupMute"
+      @video="toggleGroupVideo"
+      @camera-switch="cycleGroupCamera"
+      @hangup="leaveGroupCall"
     />
 
     <!-- PROFILE MODAL (Full LUNO User Profile View) -->

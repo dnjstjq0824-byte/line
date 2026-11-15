@@ -50,6 +50,18 @@ class FakeCallMedia implements CallMedia {
   @override
   RTCVideoRenderer? get remoteRenderer => null;
 
+  // F15: mesh additions (unused by 1:1 tests, satisfy the interface).
+  @override
+  MediaStream? get localStream => null;
+  @override
+  bool get hasRemoteStream => false;
+  @override
+  Future<void> openPeer(
+          {required List<Map<String, dynamic>> iceServers}) async =>
+      opens++;
+  @override
+  Future<void> setLocalStream(MediaStream stream) async {}
+
   @override
   Future<void> open(
       {required bool video,

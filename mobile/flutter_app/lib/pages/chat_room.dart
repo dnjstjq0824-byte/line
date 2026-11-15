@@ -265,7 +265,7 @@ class _DeckHeader extends StatelessWidget {
                   permissions: const [
                     (Permission.microphone, '마이크 권한 필요', '음성통화에 사용합니다.'),
                   ],
-                  action: () async => session.startCall('voice'),
+                  action: () async => session.kindOf(conversationId) == 'group' ? session.joinGroupCall(conversationId, 'voice') : session.startCall('voice'),
                 ),
               ),
               IconButton(
@@ -277,7 +277,7 @@ class _DeckHeader extends StatelessWidget {
                     (Permission.microphone, '마이크 권한 필요', '영상통화에 사용합니다.'),
                     (Permission.camera, '카메라 권한 필요', '영상통화에 사용합니다.'),
                   ],
-                  action: () async => session.startCall('video'),
+                  action: () async => session.kindOf(conversationId) == 'group' ? session.joinGroupCall(conversationId, 'video') : session.startCall('video'),
                 ),
               ),
               PopupMenuButton<String>(

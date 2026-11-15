@@ -15,6 +15,15 @@ abstract class CallMedia {
   RTCVideoRenderer? get localRenderer;
   RTCVideoRenderer? get remoteRenderer;
 
+  // F15: mesh uplink. The group call opens one full media (local tile +
+  // mute/video/switch) and one peer media per remote seat; each peer PC
+  // carries the shared local stream so every seat receives our tracks.
+  MediaStream? get localStream;
+  Future<void> openPeer({required List<Map<String, dynamic>> iceServers});
+  Future<void> setLocalStream(MediaStream stream);
+  // F15: true once a remote track arrived (tiles show video, else avatar).
+  bool get hasRemoteStream;
+
   Future<void> open(
       {required bool video, required List<Map<String, dynamic>> iceServers});
   Future<String> createOffer();
@@ -43,23 +52,47 @@ class WebrtcCallMedia implements CallMedia {
   RTCVideoRenderer? get remoteRenderer => _remote;
 
   @override
-  Future<void> open(
-      {required bool video,
-      required List<Map<String, dynamic>> iceServers}) async {
+  MediaStream? get localStream => _stream;
+
+  @override
+  bool get hasRemoteStream => _remote?.srcObject != null;
+
+  Future<void> _openPeerConnection(
+      List<Map<String, dynamic>> iceServers) async {
     _local = RTCVideoRenderer();
     _remote = RTCVideoRenderer();
     await _local!.initialize();
     await _remote!.initialize();
     _pc = await createPeerConnection({'iceServers': iceServers});
+    _pc!.onTrack = (event) {
+      if (event.streams.isNotEmpty) _remote!.srcObject = event.streams[0];
+    };
+  }
+
+  @override
+  Future<void> openPeer(
+      {required List<Map<String, dynamic>> iceServers}) async {
+    await _openPeerConnection(iceServers);
+  }
+
+  @override
+  Future<void> setLocalStream(MediaStream stream) async {
+    for (final track in stream.getTracks()) {
+      await _pc!.addTrack(track, stream);
+    }
+  }
+
+  @override
+  Future<void> open(
+      {required bool video,
+      required List<Map<String, dynamic>> iceServers}) async {
+    await _openPeerConnection(iceServers);
     _stream = await navigator.mediaDevices
         .getUserMedia({'audio': true, 'video': video});
     for (final track in _stream!.getTracks()) {
       await _pc!.addTrack(track, _stream!);
     }
     _local!.srcObject = _stream;
-    _pc!.onTrack = (event) {
-      if (event.streams.isNotEmpty) _remote!.srcObject = event.streams[0];
-    };
   }
 
   @override

@@ -6396,6 +6396,14 @@ const workerCore = {
       });
       server.addEventListener('close', () => {
         activeSockets.delete(server);
+        // F15: a dropped socket leaves every group call room, so no ghost
+        // seat blocks the 8-participant cap.
+        for (const [rid, peers] of groupCallRooms) {
+          if (peers.has(grant.userId)) {
+            peers.delete(grant.userId);
+            sendTo(Array.from(peers), { type: 'call.group.user_left', room_id: rid, user_id: grant.userId });
+          }
+        }
       });
       return new Response(null, { status: 101, webSocket: client });
     }

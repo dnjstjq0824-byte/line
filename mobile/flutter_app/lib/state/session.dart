@@ -179,6 +179,17 @@ class SessionController extends ChangeNotifier {
   int callSeconds = 0;
   Timer? _noAnswerTimer;
   Timer? _callTimer;
+  // F15: group call mesh. groupCall holds room_id/title/kind/participants
+  // (userBrief maps); one peer CallMedia per remote seat shares the uplink
+  // opened on groupLocalMedia. Same joiner-offers rule as the web.
+  Map<String, dynamic>? groupCall;
+  CallMedia? groupLocalMedia;
+  final Map<String, CallMedia> groupPeerMedia = {};
+  bool groupMediaIssue = false;
+  bool groupMuted = false;
+  bool groupVideoOff = false;
+  int groupCallSeconds = 0;
+  Timer? _groupCallTimer;
   WebSocketChannel? socket;
   StreamSubscription? wsSubscription;
   Timer? reconnectTimer;
@@ -456,6 +467,12 @@ class SessionController extends ChangeNotifier {
             unawaited(_handleCallSignal(data));
           } else if (data['type'] == 'call.state') {
             _handleCallState(data);
+          } else if (data['type'] == 'call.group.user_joined') {
+            _handleGroupUserJoined(data);
+          } else if (data['type'] == 'call.group.user_left') {
+            _handleGroupUserLeft(data);
+          } else if (data['type'] == 'call.group.signal') {
+            unawaited(_handleGroupSignal(data));
           }
         } catch (_) {}
       }, onError: (_) {
@@ -858,6 +875,8 @@ class SessionController extends ChangeNotifier {
   /// N2-L: backgrounding ends the call and tells the peer (no bg hold).
   void onAppBackgrounded() {
     if (activeCall != null) unawaited(endCall());
+    // F15: same rule for the group mesh (server WS-close cleanup is the backstop).
+    if (groupCall != null) unawaited(leaveGroupCall());
   }
 
   Future<void> postCallSignal(String callId, String type,
@@ -871,6 +890,231 @@ class SessionController extends ChangeNotifier {
     } catch (_) {
       // Signaling is best-effort; the state machine survives a dropped trickle.
     }
+  }
+
+  // F15: group call mesh. One live call at a time: joining while a 1:1 call
+  // runs (or twice) surfaces the busy notice instead of mixing audio.
+  Future<void> joinGroupCall(String conversationId, String kind) {
+    if (conversationId.isEmpty) return Future.value();
+    if (groupCall != null || activeCall != null) {
+      notice = '다른 통화 중입니다 (자동 거절)';
+      notifyListeners();
+      return Future.value();
+    }
+    return run(() async {
+      CallMedia? local;
+      try {
+        local = mediaFactory();
+        await local.open(
+            video: kind == 'video', iceServers: await _loadIceServers());
+        await local.setMuted(groupMuted);
+        await local.setVideoOff(groupVideoOff);
+      } catch (_) {
+        local = null;
+        groupMediaIssue = true;
+      }
+      groupLocalMedia = local;
+      late final Map<String, dynamic> res;
+      try {
+        res = await api.call('/api/v1/calls/group/join',
+            method: 'POST', data: {'room_id': conversationId});
+      } on ApiException catch (e) {
+        _clearGroupCallLocal();
+        notice = e.statusCode == 409
+            ? '통화 인원이 가득 찼습니다 (최대 8명)'
+            : '그룹 통화에 참가하지 못했습니다';
+        notifyListeners();
+        return;
+      } catch (_) {
+        _clearGroupCallLocal();
+        notice = '그룹 통화에 참가하지 못했습니다';
+        notifyListeners();
+        return;
+      }
+      final peers = <Map<String, dynamic>>[];
+      for (final p in (res['participants'] as List?) ?? []) {
+        if (p is Map && '${p['id']}' != selfId) {
+          peers.add(Map<String, dynamic>.from(p));
+        }
+      }
+      groupCall = {
+        'room_id': conversationId,
+        'title': titleOf(conversationId),
+        'kind': kind,
+        'participants': peers,
+      };
+      // Joiner offers to every existing participant (mesh rule, mirrors web).
+      for (final peer in peers) {
+        await _offerGroupPeer(conversationId, '${peer['id']}');
+      }
+      _groupCallTimer?.cancel();
+      groupCallSeconds = 0;
+      _groupCallTimer =
+          Timer.periodic(const Duration(seconds: 1), (_) => groupCallSeconds++);
+      notifyListeners();
+    });
+  }
+
+  Future<void> _offerGroupPeer(String roomId, String peerId) async {
+    final call = groupCall;
+    if (call == null || '${call['room_id']}' != roomId) return;
+    try {
+      var media = groupPeerMedia[peerId];
+      if (media == null) {
+        media = mediaFactory();
+        await media.openPeer(iceServers: await _loadIceServers());
+        final uplink = groupLocalMedia?.localStream;
+        if (uplink != null) await media.setLocalStream(uplink);
+        media.onIceCandidate((cand) =>
+            unawaited(postGroupSignal(roomId, peerId, {'type': 'ice-candidate', 'candidate': cand})));
+        media.onRemoteStream(() => notifyListeners());
+        groupPeerMedia[peerId] = media;
+      }
+      final offer = await media.createOffer();
+      await postGroupSignal(roomId, peerId, {'type': 'offer', 'sdp': offer});
+    } catch (_) {}
+  }
+
+  Future<void> postGroupSignal(
+      String roomId, String peerId, Map<String, dynamic> signal) async {
+    try {
+      await api.call('/api/v1/calls/group/signal', method: 'POST', data: {
+        'room_id': roomId,
+        'target_user_id': peerId,
+        'signal': signal,
+      });
+    } catch (_) {
+      // Signaling is best-effort; the state machine survives a dropped trickle.
+    }
+  }
+
+  Future<void> leaveGroupCall() {
+    if (groupCall == null) return Future.value();
+    return run(() async {
+      final roomId = '${groupCall!['room_id']}';
+      _clearGroupCallLocal();
+      try {
+        await api.call('/api/v1/calls/group/leave',
+            method: 'POST', data: {'room_id': roomId});
+      } catch (_) {}
+    });
+  }
+
+  void _clearGroupCallLocal() {
+    _groupCallTimer?.cancel();
+    _groupCallTimer = null;
+    for (final media in groupPeerMedia.values) {
+      unawaited(media.dispose().catchError((_) {}));
+    }
+    groupPeerMedia.clear();
+    final local = groupLocalMedia;
+    groupLocalMedia = null;
+    if (local != null) unawaited(local.dispose().catchError((_) {}));
+    groupCall = null;
+    groupMediaIssue = false;
+    groupCallSeconds = 0;
+    notifyListeners();
+  }
+
+  Future<void> setGroupMuted(bool muted) async {
+    groupMuted = muted;
+    try {
+      await groupLocalMedia?.setMuted(muted);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> setGroupVideoOff(bool off) async {
+    groupVideoOff = off;
+    try {
+      await groupLocalMedia?.setVideoOff(off);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> switchGroupCamera() async {
+    try {
+      await groupLocalMedia?.switchCamera();
+    } catch (_) {}
+  }
+
+  Future<void> setGroupSpeaker(bool on) async {
+    callSpeaker = on;
+    try {
+      await groupLocalMedia?.setSpeaker(on);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void debugGroupJoined(Map<String, dynamic> data) =>
+      _handleGroupUserJoined(data);
+
+  @visibleForTesting
+  void debugGroupLeft(Map<String, dynamic> data) => _handleGroupUserLeft(data);
+
+  @visibleForTesting
+  Future<void> debugGroupSignal(Map<String, dynamic> data) =>
+      _handleGroupSignal(data);
+
+  void _handleGroupUserJoined(Map<String, dynamic> data) {
+    final call = groupCall;
+    if (call == null || '${data['room_id']}' != '${call['room_id']}') return;
+    final peerId = '${data['user_id']}';
+    if (peerId.isEmpty || peerId == selfId) return;
+    final peers = List<Map<String, dynamic>>.from(call['participants'] ?? []);
+    if (peers.any((p) => '${p['id']}' == peerId)) return;
+    // Existing seats only add the tile; the joiner sends us the offer.
+    peers.add({'id': peerId, 'display_name': data['user_name'] ?? peerId});
+    groupCall = {...call, 'participants': peers};
+    notifyListeners();
+  }
+
+  void _handleGroupUserLeft(Map<String, dynamic> data) {
+    final call = groupCall;
+    if (call == null || '${data['room_id']}' != '${call['room_id']}') return;
+    final peerId = '${data['user_id']}';
+    final media = groupPeerMedia.remove(peerId);
+    if (media != null) unawaited(media.dispose().catchError((_) {}));
+    final peers = List<Map<String, dynamic>>.from(call['participants'] ?? [])
+        .where((p) => '${p['id']}' != peerId)
+        .toList();
+    groupCall = {...call, 'participants': peers};
+    notifyListeners();
+  }
+
+  Future<void> _handleGroupSignal(Map<String, dynamic> data) async {
+    final call = groupCall;
+    if (call == null || '${data['room_id']}' != '${call['room_id']}') return;
+    final fromId = '${data['from_user_id']}';
+    if (fromId.isEmpty || fromId == selfId) return;
+    final signal =
+        data['signal'] is Map ? Map<String, dynamic>.from(data['signal']) : {};
+    try {
+      var media = groupPeerMedia[fromId];
+      if (media == null) {
+        // Answer-side PC, built lazily to survive event reordering.
+        media = mediaFactory();
+        await media.openPeer(iceServers: await _loadIceServers());
+        final uplink = groupLocalMedia?.localStream;
+        if (uplink != null) await media.setLocalStream(uplink);
+        final roomId = '${call['room_id']}';
+        media.onIceCandidate((cand) =>
+            unawaited(postGroupSignal(roomId, fromId, {'type': 'ice-candidate', 'candidate': cand})));
+        media.onRemoteStream(() => notifyListeners());
+        groupPeerMedia[fromId] = media;
+      }
+      final roomId = '${call['room_id']}';
+      if (signal['type'] == 'offer' && signal['sdp'] is String) {
+        final answer = await media.answerTo(signal['sdp'] as String);
+        await postGroupSignal(roomId, fromId, {'type': 'answer', 'sdp': answer});
+      } else if (signal['type'] == 'answer' && signal['sdp'] is String) {
+        await media.applyAnswer(signal['sdp'] as String);
+      } else if (signal['type'] == 'ice-candidate' && signal['candidate'] is Map) {
+        await media
+            .addIceCandidate(Map<String, dynamic>.from(signal['candidate']));
+      }
+    } catch (_) {}
   }
 
   Future<void> setCallMuted(bool muted) async {
@@ -954,7 +1198,8 @@ class SessionController extends ChangeNotifier {
         activeCall == null ? null : '${activeCall!['id'] ?? activeCall!['call_id']}';
     // Own echo (broadcast reaches the caller too) or a duplicate ring.
     if (data['initiated_by'] == selfId || currentId == incomingId) return;
-    if (currentId != null) {
+    // F15: a live group call is a busy line for incoming 1:1 rings.
+    if (currentId != null || groupCall != null) {
       // Busy on another call: auto-decline, keep the current one.
       unawaited(api.call('/api/v1/calls/$incomingId/state',
           method: 'POST',
@@ -2310,6 +2555,7 @@ class SessionController extends ChangeNotifier {
     messages = [];
     selectedId = '';
     activeCall = null;
+    _clearGroupCallLocal();
     notifyListeners();
   }
 
@@ -2489,6 +2735,7 @@ class SessionController extends ChangeNotifier {
     reconnectTimer?.cancel();
     _noAnswerTimer?.cancel();
     _callTimer?.cancel();
+    _groupCallTimer?.cancel();
     wsSubscription?.cancel();
     socket?.sink.close();
     final media = callMedia;
