@@ -23,7 +23,6 @@ const emit = defineEmits<{
   drawer: [tab: DrawerTab]
   'new-chat': []
   qr: []
-  ecosystem: [serviceId: string]
   select: [chatId: string]
   'chat-menu': [event: MouseEvent, chat: Chat]
 }>()
@@ -31,61 +30,49 @@ const emit = defineEmits<{
 const chatFilter = defineModel<ChatFilter>('chatFilter', { required: true })
 const searchKeyword = defineModel<string>('searchKeyword', { required: true })
 const chatSortAsc = defineModel<boolean>('chatSortAsc', { required: true })
-const isPanelCollapsed = defineModel<boolean>('isPanelCollapsed', { required: true })
 
 const channelSlotDismissed = ref(false)
+const showListMenu = ref(false)
 </script>
 
 <template>
-  <div class="pc-pane-body">
-    <!-- Top Chat Header Bar with Category Dropdown & Action Icons (Screenshot 4) -->
-    <div class="pc-chat-main-header">
-      <div class="chat-header-title-dropdown">
-        <span class="chat-main-heading">{{ t('mvChats') }}</span>
-        <span class="dropdown-caret">▾</span>
+  <div class="lx-pane">
+    <header class="lx-pane-head">
+      <h2 class="lx-pane-title">{{ t('mvChats') }}</h2>
+      <div class="lx-pane-actions">
+        <button type="button" class="lx-icon-btn" :title="t('mvNewChat')" :aria-label="t('mvNewChat')" @click="emit('new-chat')">
+          <LunoIcon name="edit" :size="20" />
+        </button>
+        <div class="lx-menu-wrap">
+          <button type="button" class="lx-icon-btn" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" :aria-expanded="showListMenu" @click="showListMenu = !showListMenu">
+            <LunoIcon name="more" :size="20" />
+          </button>
+          <div v-if="showListMenu" class="lx-menu-layer" @click="showListMenu = false"></div>
+          <div v-if="showListMenu" class="lx-menu" role="menu" @click="showListMenu = false">
+            <button type="button" class="lx-menu-item" role="menuitem" @click="emit('mark-all-read')"><LunoIcon name="check-all" :size="18" /><span>{{ t('mvMarkAllRead') }}</span></button>
+            <button type="button" class="lx-menu-item" role="menuitem" @click="chatSortAsc = !chatSortAsc"><LunoIcon name="sort" :size="18" /><span>{{ chatSortAsc ? t('lxSortByRecent') : t('lxSortByName') }}</span></button>
+            <button type="button" class="lx-menu-item" role="menuitem" @click="emit('drawer', 'media')"><LunoIcon name="photo" :size="18" /><span>{{ t('mvMediaView') }}</span></button>
+            <button type="button" class="lx-menu-item" role="menuitem" @click="emit('drawer', 'events')"><LunoIcon name="calendar" :size="18" /><span>{{ t('mvCalendar') }}</span></button>
+            <button type="button" class="lx-menu-item" role="menuitem" @click="emit('qr')"><LunoIcon name="scan" :size="18" /><span>{{ t('mvQrScan') }}</span></button>
+          </div>
+        </div>
       </div>
-      <div class="chat-header-action-group">
-        <button class="btn-chat-head-tool" :title="t('mvMarkAllRead')" @click="emit('mark-all-read')">
-          ✓✓
-        </button>
-        <button class="btn-chat-head-tool" :title="chatSortAsc ? t('mvSortName') : t('mvSortRecent')" @click="chatSortAsc = !chatSortAsc">
-          ⇅
-        </button>
-        <button class="btn-chat-head-tool" :title="t('mvMediaView')" @click="emit('drawer', 'media')">
-          <LunoIcon name="photo" :size="16" />
-        </button>
-        <button class="btn-chat-head-tool" :title="t('mvCalendar')" @click="emit('drawer', 'events')">
-          <LunoIcon name="calendar" :size="16" />
-        </button>
-        <button class="btn-chat-head-tool" :title="t('mvNewChat')" @click="emit('new-chat')">
-          <LunoIcon name="chats" :size="16" />
-          <span class="tiny-plus">+</span>
-        </button>
-      </div>
+    </header>
+
+    <label class="lx-search">
+      <LunoIcon name="search" :size="16" />
+      <input v-model="searchKeyword" :placeholder="t('lxSearchChats')" :aria-label="t('lxSearchChats')" class="pc-pane-search-input" />
+      <button v-if="searchKeyword" type="button" class="lx-search-clear" :title="t('mvClose')" :aria-label="t('mvClose')" @click="searchKeyword = ''"><LunoIcon name="close" :size="14" /></button>
+    </label>
+
+    <div class="lx-chips" role="tablist">
+      <button type="button" class="lx-chip" role="tab" :aria-selected="chatFilter === 'all'" :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">{{ t('tabAll') }}</button>
+      <button type="button" class="lx-chip" role="tab" :aria-selected="chatFilter === 'direct'" :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">{{ t('tabDirect') }}</button>
+      <button type="button" class="lx-chip" role="tab" :aria-selected="chatFilter === 'group'" :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">{{ t('tabGroup') }}</button>
+      <button type="button" class="lx-chip" role="tab" :aria-selected="chatFilter === 'unread'" :class="{ active: chatFilter === 'unread' }" @click="chatFilter = 'unread'">{{ t('lxUnread') }}</button>
     </div>
 
-    <!-- Top Sub-Tabs: 전체 | 친구 | 그룹 | ⇄ (Screenshot 1) -->
-    <div class="pc-chat-subtabs-row">
-      <button class="btn-subtab" :class="{ active: chatFilter === 'all' }" @click="chatFilter = 'all'">{{ t('tabAll') }}</button>
-      <button class="btn-subtab" :class="{ active: chatFilter === 'direct' }" @click="chatFilter = 'direct'">{{ t('tabDirect') }}</button>
-      <button class="btn-subtab" :class="{ active: chatFilter === 'group' }" @click="chatFilter = 'group'">{{ t('tabGroup') }}</button>
-      <button class="btn-subtab filter-btn" :class="{ active: chatFilter === 'unread' }" @click="chatFilter = chatFilter === 'unread' ? 'all' : 'unread'" :title="t('mvSortFilter')">⇄</button>
-    </div>
-
-    <!-- Search Bar with Scan QR icon and Collapse (<) (Screenshot 4) -->
-    <div class="pc-search-bar-header">
-      <div class="pc-search-box-wrap">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input v-model="searchKeyword" :placeholder="t('mvSearch')" class="pc-pane-search-input" />
-        <button v-if="searchKeyword" class="btn-clear-search" @click="searchKeyword = ''">✕</button>
-        <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="emit('qr')">
-          <LunoIcon name="scan" :size="15" />
-        </button>
-      </div>
-      <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
-    </div>
-
-    <!-- Smart-channel slot: server-driven notice card (LINE parity) -->
+    <!-- Smart-channel slot: server-driven notice card -->
     <div v-if="channelSlot && !channelSlotDismissed" class="channel-slot-card">
       <div class="channel-slot-text">
         <strong>{{ channelSlot.title }}</strong>
@@ -94,46 +81,41 @@ const channelSlotDismissed = ref(false)
       <button class="channel-slot-close" :title="t('mvClose')" @click="channelSlotDismissed = true">✕</button>
     </div>
 
-    <!-- Chats Scroll List (Screenshots 1 & 4) -->
-    <div class="pc-pane-scroll">
+    <div class="lx-scroll">
+      <p v-if="!filteredChats.length" class="lx-list-empty">{{ searchKeyword ? t('lxNoSearchResult') : t('lxNoChats') }}</p>
       <div
         v-for="c in filteredChats"
         :key="c.id"
-        class="pc-chat-item-row"
+        class="lx-row pc-chat-item-row"
         :class="{ selected: selectedChatId === c.id }"
+        role="button"
+        tabindex="0"
         @click="emit('select', c.id)"
+        @keydown.enter="emit('select', c.id)"
         @contextmenu.prevent="emit('chat-menu', $event, c)"
       >
-        <div class="pc-avatar circle-44" :class="{ 'group-avatar': c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--ln-info)' : c.official ? '#4F7CFF' : 'var(--ln-accent)' }">
-          <span v-if="c.official">🛡️</span>
+        <span class="lx-avatar s48" :class="{ group: c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--ln-info)' : c.official ? '#4F7CFF' : 'var(--ln-accent)' }">
+          <LunoIcon v-if="c.official" name="shield" :size="22" />
           <span v-else>{{ initialOf(c.title, 'L') }}</span>
           <img v-if="c.kind === 'group' && c.avatar_url" :src="c.avatar_url" alt="" class="ln-profile-photo" />
-        </div>
-        <div class="pc-chat-item-meta">
-          <div class="chat-row-top">
-            <div class="chat-row-title">
-              <span v-if="(c as any).pinned" class="chat-pin-mark" :title="t('mvPinnedBadge')">📌</span>
-              {{ c.title || t('mvChatFallback') }}
-              <span v-if="c.kind === 'group'" class="member-count-badge">({{ c.member_count || 2 }})</span>
-              <span v-if="(c as any).muted" class="chat-mute-mark" :title="t('mvMutedBadge')">🔕</span>
-            </div>
-            <span class="chat-row-time">{{ formatTime(c.updated_at || '') }}</span>
-          </div>
-          <div class="chat-row-bottom">
-            <span class="chat-row-preview">{{ c.last_message?.unsent ? t('mvMsgUnsent') : (c.last_message?.body || t('mvNoMessages')) }}</span>
-            <div class="chat-row-badges">
-              <span v-if="c.badge_n" class="badge-luno-n">N</span>
-              <span v-else-if="c.unread_count && c.unread_count > 0" class="chat-unread-pill">{{ c.unread_count }}</span>
-            </div>
-          </div>
-        </div>
+        </span>
+        <span class="lx-row-main">
+          <span class="lx-row-line">
+            <span class="lx-row-title">
+              <span class="lx-row-name">{{ c.title || t('mvChatFallback') }}</span>
+              <span v-if="c.kind === 'group'" class="lx-row-count">{{ c.member_count || 2 }}</span>
+              <LunoIcon v-if="(c as any).pinned" name="pin" :size="13" class="lx-row-mark" :title="t('mvPinnedBadge')" />
+              <LunoIcon v-if="(c as any).muted" name="bell-off" :size="13" class="lx-row-mark" :title="t('mvMutedBadge')" />
+            </span>
+            <span class="lx-row-time">{{ formatTime(c.updated_at || '') }}</span>
+          </span>
+          <span class="lx-row-line">
+            <span class="lx-row-preview">{{ c.last_message?.unsent ? t('mvMsgUnsent') : (c.last_message?.body || t('mvNoMessages')) }}</span>
+            <span v-if="c.badge_n" class="lx-badge inline">N</span>
+            <span v-else-if="c.unread_count && c.unread_count > 0" class="lx-badge inline">{{ c.unread_count > 999 ? '999+' : c.unread_count }}</span>
+          </span>
+        </span>
       </div>
     </div>
-
-    <!-- Floating Action Button (FAB) New Chat (Screenshot 1) -->
-    <button class="pc-floating-add-btn" :title="t('mvStartNewChat')" @click="emit('new-chat')">
-      <LunoIcon name="chats" :size="20" />
-      <span class="fab-plus-mark">+</span>
-    </button>
   </div>
 </template>

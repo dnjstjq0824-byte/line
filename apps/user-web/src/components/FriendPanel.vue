@@ -8,7 +8,6 @@ import type { Chat, User } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
 import { currentUser, t } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
-import type { DrawerTab } from './ChatList.vue'
 
 export interface OfficialAccount {
   id: string
@@ -30,13 +29,9 @@ defineProps<{
 
 const emit = defineEmits<{
   qr: []
-  sticker: []
-  settings: []
-  official: []
-  services: []
+  'add-friend': []
   profile: []
   'keep-memo': []
-  drawer: [tab: DrawerTab]
   'select-friend': [friend: User]
   'direct-chat': [friend: User]
   'friend-menu': [event: MouseEvent, friend: User]
@@ -45,7 +40,6 @@ const emit = defineEmits<{
 }>()
 
 const friendSearchQuery = defineModel<string>('friendSearchQuery', { required: true })
-const isPanelCollapsed = defineModel<boolean>('isPanelCollapsed', { required: true })
 
 const friendsSectionOpen = ref(true)
 const groupsSectionOpen = ref(true)
@@ -70,6 +64,13 @@ function clearAllSearchKeywords() {
   recentSearchKeywords.value = []
 }
 
+// A status line worth showing: the person's own status message, or a bio they
+// wrote. The placeholder bio that older signups carry is not one.
+function taglineOf(u: User): string {
+  const bio = u.bio && u.bio !== 'New Messenger User' ? u.bio : ''
+  return u.status_message || bio
+}
+
 // FX-10: a broken avatar photo hides itself; the initial layered
 // underneath shows instead of the browser's broken-image glyph.
 function hideBrokenAvatar(ev: Event) {
@@ -79,21 +80,26 @@ function hideBrokenAvatar(ev: Event) {
 </script>
 
 <template>
-  <div class="pc-pane-body">
-    <!-- Top Search Header with Collapse Toggle -->
-    <div class="pc-search-bar-header">
-      <div class="pc-search-box-wrap">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94A3B8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" class="pc-pane-search-input" @keydown.enter="addSearchKeyword(friendSearchQuery)" />
-        <button v-if="friendSearchQuery" class="btn-clear-search" @click="friendSearchQuery = ''">✕</button>
-        <button class="btn-scan-qr-search" :title="t('mvQrScan')" @click="emit('qr')">
-          <LunoIcon name="scan" :size="15" />
+  <div class="lx-pane">
+    <header class="lx-pane-head">
+      <h2 class="lx-pane-title">{{ t('navFriends') }}</h2>
+      <div class="lx-pane-actions">
+        <button type="button" class="lx-icon-btn" data-shot="add-friend" :title="t('mvAddFriend')" :aria-label="t('mvAddFriend')" @click="emit('add-friend')">
+          <LunoIcon name="add-friends" :size="20" />
+        </button>
+        <button type="button" class="lx-icon-btn" :title="t('mvQrScan')" :aria-label="t('mvQrScan')" @click="emit('qr')">
+          <LunoIcon name="scan" :size="20" />
         </button>
       </div>
-      <button class="btn-pane-collapse" :title="t('mvCollapse')" @click="isPanelCollapsed = !isPanelCollapsed">&lt;</button>
-    </div>
+    </header>
 
-    <!-- Recent Search Keywords (Section 3.2) -->
+    <label class="lx-search">
+      <LunoIcon name="search" :size="16" />
+      <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" :aria-label="t('searchFriends')" class="pc-pane-search-input" @keydown.enter="addSearchKeyword(friendSearchQuery)" />
+      <button v-if="friendSearchQuery" type="button" class="lx-search-clear" :title="t('mvClose')" :aria-label="t('mvClose')" @click="friendSearchQuery = ''"><LunoIcon name="close" :size="14" /></button>
+    </label>
+
+    <!-- Recent search keywords: only real searches are recorded -->
     <div v-if="recentSearchKeywords.length > 0" class="home-recent-searches">
       <div class="recent-searches-header">
         <small>{{ t('mvRecentSearch') }}</small>
@@ -107,163 +113,143 @@ function hideBrokenAvatar(ev: Event) {
       </div>
     </div>
 
-    <!-- Quick Service Shortcuts (Section 3.3) -->
-    <div class="home-services-bar">
-      <div class="home-service-item" @click="emit('sticker')">
-        <span class="srv-icon">🐻</span>
-        <span class="srv-label">{{ t('mvSticker') }}</span>
-      </div>
-      <div class="home-service-item" @click="emit('settings')">
-        <span class="srv-icon">🎨</span>
-        <span class="srv-label">{{ t('mvTheme') }}</span>
-      </div>
-      <div class="home-service-item" @click="emit('official')">
-        <span class="srv-icon">🛡️</span>
-        <span class="srv-label">{{ t('mvOfficialAccount') }}</span>
-      </div>
-      <div class="home-service-item" @click="emit('services')">
-        <span class="srv-icon">📱</span>
-        <span class="srv-label">{{ t('mvLunoServices') }}</span>
-      </div>
-    </div>
-
-    <!-- Friends List Scroll Area -->
-    <div class="pc-pane-scroll">
-      <!-- My Profile Card with Keep & Album Buttons (Screenshot 4 & 5) -->
-      <div class="pc-my-profile-card">
-        <div class="my-profile-top-row" @click="emit('profile')">
-          <div class="pc-avatar circle-46" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
-          </div>
-          <div class="my-profile-meta">
-            <div class="my-name-text">{{ currentUser?.display_name }}</div>
-            <div class="my-status-text">{{ currentUser?.status_message || t('myProfileStatus') }}</div>
-          </div>
-        </div>
-        <!-- Action Chips: Keep 메모 & 앨범 모아보기 (Matching Screenshot 4) -->
-        <div class="my-profile-action-chips">
-          <button type="button" class="btn-profile-chip" @click="emit('keep-memo')">
-            <LunoIcon name="keep" :size="13" />
-            <span>{{ t('keepMemo') }}</span>
-          </button>
-          <button type="button" class="btn-profile-chip" @click="emit('drawer', 'albums')">
-            <LunoIcon name="camera" :size="13" />
-            <span>{{ t('albumView') }}</span>
-          </button>
-        </div>
+    <div class="lx-scroll">
+      <!-- Me -->
+      <div class="lx-row lx-row-me" role="button" tabindex="0" @click="emit('profile')" @keydown.enter="emit('profile')">
+        <span class="lx-avatar s56" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
+        <span class="lx-row-main">
+          <span class="lx-row-name lx-me-name">{{ currentUser?.display_name }}</span>
+          <span class="lx-row-preview">{{ currentUser?.status_message || t('myProfileStatus') }}</span>
+        </span>
+        <button type="button" class="lx-pill-btn" @click.stop="emit('keep-memo')">
+          <LunoIcon name="keep" :size="14" />
+          <span>{{ t('keepMemo') }}</span>
+        </button>
       </div>
 
-      <!-- Accordion 0: Favorites (즐겨찾기 - 항상 노출) -->
-      <div class="pc-accordion-section">
-        <div class="pc-accordion-header" @click="favoritesSectionOpen = !favoritesSectionOpen">
-          <span class="accordion-title">{{ t('mvFavorites').replace('{n}', String(favoriteFriends.length)) }}</span>
-          <span class="accordion-caret">{{ favoritesSectionOpen ? '⌵' : '›' }}</span>
-        </div>
-        <div v-show="favoritesSectionOpen" class="pc-accordion-content">
-          <div v-if="favoriteFriends.length === 0" class="accordion-empty-hint" style="padding: 10px 14px; font-size: 12px; color: #94a3b8;">{{ t('mvNoFavorites') }}</div>
+      <!-- Favorites -->
+      <section v-if="favoriteFriends.length" class="lx-section">
+        <button type="button" class="lx-section-head" :aria-expanded="favoritesSectionOpen" @click="favoritesSectionOpen = !favoritesSectionOpen">
+          <span>{{ t('mvFavorites').replace('{n}', String(favoriteFriends.length)) }}</span>
+          <LunoIcon :name="favoritesSectionOpen ? 'chevron-down' : 'chevron-right'" :size="16" />
+        </button>
+        <div v-show="favoritesSectionOpen">
           <div
-            v-else
             v-for="fav in favoriteFriends"
             :key="'fav-' + fav.id"
-            class="pc-friend-item-row"
+            class="lx-row pc-friend-item-row"
             :class="{ selected: selectedFriendProfile?.id === fav.id }"
+            role="button"
+            tabindex="0"
             @click="emit('select-friend', fav)"
+            @keydown.enter="emit('select-friend', fav)"
             @dblclick="emit('direct-chat', fav)"
             @contextmenu.prevent="emit('friend-menu', $event, fav)"
           >
-            <div class="pc-avatar circle-38" :style="{ background: fav.avatar_color || 'var(--ln-accent)' }">
-              {{ initialOf(fav.display_name) }}
-            </div>
-            <div class="friend-item-meta">
-              <div class="friend-item-name">★ {{ fav.display_name }} <span v-if="(fav as any).kind === 'bot'" class="badge-bot">BOT</span></div>
-              <div class="friend-item-sub">{{ fav.status_message || fav.bio || t('mvFavFallback') }}</div>
-            </div>
+            <span class="lx-avatar s44" :style="{ background: fav.avatar_color || 'var(--ln-accent)' }">{{ initialOf(fav.display_name) }}</span>
+            <span class="lx-row-main">
+              <span class="lx-row-title">
+                <span class="lx-row-name">{{ fav.display_name }}</span>
+                <span v-if="(fav as any).kind === 'bot'" class="badge-bot">BOT</span>
+              </span>
+              <span v-if="taglineOf(fav)" class="lx-row-preview">{{ taglineOf(fav) }}</span>
+            </span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Accordion 1: Groups (그룹 - Screenshots 4 & 5) -->
-      <div class="pc-accordion-section">
-        <div class="pc-accordion-header" @click="groupsSectionOpen = !groupsSectionOpen">
-          <span class="accordion-title">{{ t('groupSection') }} {{ groupChats.length }}</span>
-          <span class="accordion-caret">{{ groupsSectionOpen ? '⌵' : '›' }}</span>
-        </div>
-        <div v-show="groupsSectionOpen" class="pc-accordion-content">
+      <!-- Groups -->
+      <section v-if="groupChats.length" class="lx-section">
+        <button type="button" class="lx-section-head" :aria-expanded="groupsSectionOpen" @click="groupsSectionOpen = !groupsSectionOpen">
+          <span>{{ t('groupSection') }} {{ groupChats.length }}</span>
+          <LunoIcon :name="groupsSectionOpen ? 'chevron-down' : 'chevron-right'" :size="16" />
+        </button>
+        <div v-show="groupsSectionOpen">
           <div
             v-for="grp in groupChats"
             :key="grp.id"
-            class="pc-friend-item-row"
+            class="lx-row pc-friend-item-row"
             :class="{ selected: selectedChatId === grp.id }"
+            role="button"
+            tabindex="0"
             @click="emit('select-chat', grp.id)"
+            @keydown.enter="emit('select-chat', grp.id)"
           >
-            <div class="pc-avatar circle-38 group-avatar" style="background: var(--ln-info);">
-              {{ initialOf(grp.title, 'G') }}
-            </div>
-            <div class="friend-item-meta">
-              <div class="friend-item-name">
-                {{ grp.title }}
-                <span class="group-count">({{ grp.member_count || 2 }})</span>
-              </div>
-              <div class="friend-item-sub">{{ grp.last_message?.body || t('mvGroupFallback') }}</div>
-            </div>
+            <span class="lx-avatar s44 group" style="background: var(--ln-info);">{{ initialOf(grp.title, 'G') }}<img v-if="grp.avatar_url" :src="grp.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
+            <span class="lx-row-main">
+              <span class="lx-row-title">
+                <span class="lx-row-name">{{ grp.title }}</span>
+                <span class="lx-row-count">{{ grp.member_count || 2 }}</span>
+              </span>
+            </span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Accordion 1.5: Official Accounts (공식 계정) -->
-      <div v-if="officialAccounts.length > 0" class="pc-accordion-section">
-        <div class="pc-accordion-header" @click="officialSectionOpen = !officialSectionOpen">
-          <span class="accordion-title">{{ t('mvOfficialAccounts').replace('{n}', String(officialAccounts.length)) }}</span>
-          <span class="accordion-caret">{{ officialSectionOpen ? '⌵' : '›' }}</span>
-        </div>
-        <div v-show="officialSectionOpen" class="pc-accordion-content">
+      <!-- Official accounts -->
+      <section v-if="officialAccounts.length > 0" class="lx-section">
+        <button type="button" class="lx-section-head" :aria-expanded="officialSectionOpen" @click="officialSectionOpen = !officialSectionOpen">
+          <span>{{ t('mvOfficialAccounts').replace('{n}', String(officialAccounts.length)) }}</span>
+          <LunoIcon :name="officialSectionOpen ? 'chevron-down' : 'chevron-right'" :size="16" />
+        </button>
+        <div v-show="officialSectionOpen">
           <div
             v-for="oa in officialAccounts"
             :key="oa.id"
-            class="pc-friend-item-row"
+            class="lx-row pc-friend-item-row"
+            role="button"
+            tabindex="0"
             @click="emit('follow-oa', oa)"
+            @keydown.enter="emit('follow-oa', oa)"
           >
-            <div class="pc-avatar circle-38" :style="{ background: oa.color || '#4F7CFF' }">
-              🛡️
-            </div>
-            <div class="friend-item-meta">
-              <div class="friend-item-name">{{ oa.name }} <span class="badge-verified">{{ t('mvOfficial') }}</span></div>
-              <div class="friend-item-sub">{{ oa.description }}</div>
-            </div>
+            <span class="lx-avatar s44" :style="{ background: oa.color || '#4F7CFF' }"><LunoIcon name="shield" :size="20" /></span>
+            <span class="lx-row-main">
+              <span class="lx-row-title">
+                <span class="lx-row-name">{{ oa.name }}</span>
+                <span class="badge-verified">{{ t('mvOfficial') }}</span>
+              </span>
+              <span class="lx-row-preview">{{ oa.description }}</span>
+            </span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Accordion 2: Friends (친구 - Screenshots 4 & 5) -->
-      <div class="pc-accordion-section">
-        <div class="pc-accordion-header" @click="friendsSectionOpen = !friendsSectionOpen">
-          <span class="accordion-title">{{ t('friendSection') }} {{ filteredFriends.length }}</span>
-          <span class="accordion-caret">{{ friendsSectionOpen ? '⌵' : '›' }}</span>
-        </div>
-        <div v-show="friendsSectionOpen" class="pc-accordion-content">
+      <!-- Friends -->
+      <section class="lx-section">
+        <button type="button" class="lx-section-head" :aria-expanded="friendsSectionOpen" @click="friendsSectionOpen = !friendsSectionOpen">
+          <span>{{ t('friendSection') }} {{ filteredFriends.length }}</span>
+          <LunoIcon :name="friendsSectionOpen ? 'chevron-down' : 'chevron-right'" :size="16" />
+        </button>
+        <div v-show="friendsSectionOpen">
+          <div v-if="!filteredFriends.length" class="lx-list-empty">
+            <p>{{ friendSearchQuery ? t('lxNoSearchResult') : t('lxNoFriends') }}</p>
+            <button v-if="!friendSearchQuery" type="button" class="lx-text-btn" @click="emit('add-friend')">{{ t('mvAddFriend') }}</button>
+          </div>
           <div
             v-for="f in filteredFriends"
             :key="f.id"
-            class="pc-friend-item-row"
+            class="lx-row pc-friend-item-row"
             :class="{ selected: selectedFriendProfile?.id === f.id }"
+            role="button"
+            tabindex="0"
             @click="emit('select-friend', f)"
+            @keydown.enter="emit('select-friend', f)"
             @dblclick="emit('direct-chat', f)"
             @contextmenu.prevent="emit('friend-menu', $event, f)"
           >
-            <div class="pc-avatar circle-38" :style="{ background: f.avatar_color || 'var(--ln-accent)' }">
-              {{ initialOf(f.display_name) }}
-            </div>
-            <div class="friend-item-meta">
-              <div class="friend-item-name">
-                <span v-if="(f as any).is_favorite" class="fav-star-inline">★</span>
-                {{ f.display_name }}
+            <span class="lx-avatar s44" :style="{ background: f.avatar_color || 'var(--ln-accent)' }">{{ initialOf(f.display_name) }}</span>
+            <span class="lx-row-main">
+              <span class="lx-row-title">
+                <span class="lx-row-name">{{ f.display_name }}</span>
+                <LunoIcon v-if="(f as any).is_favorite" name="star" :size="12" class="lx-row-star" />
                 <span v-if="(f as any).kind === 'bot'" class="badge-bot">BOT</span>
                 <span v-if="(f as any).birthday_today" class="bday-badge" :title="t('mvBirthdayToday')">🎂</span>
-              </div>
-              <div class="friend-item-sub">{{ f.status_message || f.bio || t('mvFriendFallback') }}</div>
-            </div>
+              </span>
+              <span v-if="taglineOf(f)" class="lx-row-preview">{{ taglineOf(f) }}</span>
+            </span>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 </template>

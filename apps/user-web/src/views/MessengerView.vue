@@ -153,8 +153,6 @@ async function handleTranslateMessage(msg: Message) {
 
 // --- Auth & Session State ---
 const basePath = import.meta.env.BASE_URL
-const showUserMenu = ref(false)
-const showConsolesMenu = ref(false)
 
 // --- Navigation Tabs (Open Messenger 14 Global Nav Rail) ---
 export type NavItem =
@@ -184,7 +182,54 @@ const chatWallpaper = ref<'skyblue' | 'slate' | 'mint' | 'dark'>('skyblue')
 const messagesCanvasRef = ref<HTMLElement | null>(null)
 const callFilter = ref<'all' | 'missed'>('all')
 const activeHeroSlideIndex = ref(0)
-const isPanelCollapsed = ref(false)
+// --- Shell navigation: four primary destinations + a named "More" panel ---
+const showMorePanel = ref(false)
+const PRIMARY_NAV: { nav: NavItem; icon: string; label: string }[] = [
+  { nav: 'home', icon: 'friends', label: 'navFriends' },
+  { nav: 'chats', icon: 'chats', label: 'navChats' },
+  { nav: 'calls', icon: 'calls', label: 'lxCalls' },
+  { nav: 'news', icon: 'news', label: 'lxNews' },
+]
+const MORE_NAVS: NavItem[] = ['wallet', 'shop', 'voom', 'openchat']
+const MORE_ITEMS: { id: string; icon: string; label: string; nav?: NavItem }[] = [
+  { id: 'wallet', icon: 'wallet', label: 'mvWallet', nav: 'wallet' },
+  { id: 'shop', icon: 'shop', label: 'lxStickerShop', nav: 'shop' },
+  { id: 'voom', icon: 'voom', label: 'lxVoom', nav: 'voom' },
+  { id: 'openchat', icon: 'openchat', label: 'navOpenChat', nav: 'openchat' },
+  { id: 'keep', icon: 'keep', label: 'navKeep' },
+  { id: 'add-friend', icon: 'add-friends', label: 'mvAddFriend' },
+  { id: 'qr', icon: 'scan', label: 'lxMyQr' },
+  { id: 'capture', icon: 'camera', label: 'lxCapture' },
+  { id: 'services', icon: 'open-services', label: 'lxServices' },
+  { id: 'download', icon: 'download', label: 'lxGetApp' },
+  { id: 'settings', icon: 'settings', label: 'navSettings' },
+]
+function runMoreItem(id: string) {
+  showMorePanel.value = false
+  const item = MORE_ITEMS.find(entry => entry.id === id)
+  if (item?.nav) return switchNav(item.nav)
+  if (id === 'keep') showKeepModal.value = true
+  else if (id === 'add-friend') showAddFriendModal.value = true
+  else if (id === 'qr') showQrModal.value = true
+  else if (id === 'capture') void captureScreenToChat()
+  else if (id === 'services') showEcosystemHub.value = true
+  else if (id === 'download') window.open('./download.html', '_blank', 'noopener')
+  else if (id === 'settings') showSettingsModal.value = true
+}
+// Operator consoles are tools for staff, not part of the messenger: only an
+// admin account sees the links.
+const consoleLinks = computed(() => currentUser.value?.role === 'admin'
+  ? [
+      { href: './admin/', label: 'mvConsoleAdmin' },
+      { href: './partner/', label: 'mvConsolePartner' },
+      { href: './developer/', label: 'mvConsoleDev' },
+      { href: './creator/', label: 'mvConsoleCreator' },
+      { href: './ads/', label: 'mvConsoleAds' },
+    ]
+  : [])
+// Phone widths show one pane at a time: the list, or whatever was opened.
+const mobileDetailOpen = computed(() => !!selectedChat.value || !!selectedFriendProfile.value
+  || (activeNav.value === 'openchat' && !!selectedOpenChatRoom.value))
 const chatSortAsc = ref(false)
 const showNewChatModal = ref(false)
 const showNewCallModal = ref(false)
@@ -2775,229 +2820,101 @@ onBeforeUnmount(() => {
 <template>
 
 
-    <!-- 2. AUTHENTIC LUNO PC DESKTOP MESSENGER (3-Pane Workspace) -->
-    <main class="pc-workspace">
-      <!-- (Column 1) Sleek Midnight Navy Dock Rail (62px) -->
-      <nav class="pc-rail">
-        <div class="pc-rail-top">
-          <!-- 1. My Profile Avatar with Online Dot -->
-          <button type="button" class="pc-user-avatar-trigger" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
-            <div class="pc-avatar circle-36" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
-            </div>
-            <span v-if="realtimeState === 'connected'" class="pc-dot-online" :title="t('connection_connected')"></span>
-          </button>
+    <!-- Messenger shell: rail (PC/tablet) · list pane · main pane · tab bar (phone) -->
+    <main class="lx-shell" :class="{ 'is-detail': mobileDetailOpen }">
+      <nav class="lx-rail" :aria-label="t('lxMainNav')">
+        <button type="button" class="lx-rail-me" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
+          <span class="lx-avatar s40" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
+          <span v-if="realtimeState === 'connected'" class="lx-online-dot" :title="t('connection_connected')"></span>
+        </button>
 
-          <!-- User Menu Dropdown -->
-          <div v-if="showUserMenu" class="pc-dropdown-menu user-menu" @click="showUserMenu = false">
-            <div class="dropdown-header">
-              <strong>{{ currentUser?.display_name }}</strong>
-              <small>{{ currentUser?.email }}</small>
-            </div>
-            <div class="dropdown-sep"></div>
-            <button class="dropdown-item" @click="activeProfileUser = currentUser">{{ t('mvProfileSettings') }}</button>
-            <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
-            <button class="dropdown-item" @click="showKeepModal = true">💾 {{ t('navKeep') }}</button>
-            <div class="dropdown-sep"></div>
-            <button class="dropdown-item logout" @click="logout">{{ t('mvLogout') }}</button>
-          </div>
-
-          <!-- 2. Chats (대화) -->
+        <div class="lx-rail-nav">
           <button
-            class="pc-rail-btn"
-            :class="{ active: activeNav === 'chats' }"
-            :title="t('navChats')"
-            @click="switchNav('chats')"
+            v-for="item in PRIMARY_NAV"
+            :key="item.nav"
+            type="button"
+            class="lx-rail-btn"
+            :class="{ active: activeNav === item.nav }"
+            :aria-current="activeNav === item.nav ? 'page' : undefined"
+            @click="switchNav(item.nav)"
           >
-            <span class="pc-rail-indicator"></span>
-            <LunoIcon name="chats" :size="22" />
-            <span v-if="totalUnreadCount > 0" class="pc-unread-pill">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
+            <span class="lx-rail-icon">
+              <LunoIcon :name="item.icon" :size="22" />
+              <span v-if="item.nav === 'chats' && totalUnreadCount > 0" class="lx-badge">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
+            </span>
+            <span class="lx-rail-label">{{ t(item.label) }}</span>
           </button>
-
-          <!-- 3. Friends (친구 / 홈) -->
           <button
-            class="pc-rail-btn"
-            :class="{ active: activeNav === 'home' }"
-            :title="t('navFriends')"
-            @click="switchNav('home')"
+            type="button"
+            class="lx-rail-btn"
+            data-shot="more"
+            :class="{ active: showMorePanel || MORE_NAVS.includes(activeNav) }"
+            :aria-expanded="showMorePanel"
+            @click="showMorePanel = !showMorePanel"
           >
-            <span class="pc-rail-indicator"></span>
-            <LunoIcon name="friends" :size="22" />
-          </button>
-
-          <!-- 4. News (뉴스) -->
-          <button
-            class="pc-rail-btn"
-            :class="{ active: activeNav === 'news' }"
-            :title="t('mvRailNews')"
-            @click="switchNav('news')"
-          >
-            <span class="pc-rail-indicator"></span>
-            <LunoIcon name="news" :size="21" />
-          </button>
-
-          <!-- 5. Calls (통화) -->
-          <button
-            class="pc-rail-btn"
-            :class="{ active: activeNav === 'calls' }"
-            :title="t('mvRailCalls')"
-            @click="switchNav('calls')"
-          >
-            <span class="pc-rail-indicator"></span>
-            <LunoIcon name="calls" :size="20" />
-          </button>
-
-          <!-- 5b. Wallet (지갑) -->
-          <button
-            class="pc-rail-btn"
-            :class="{ active: activeNav === 'wallet' }"
-            :title="t('mvRailWallet')"
-            @click="switchNav('wallet')"
-          >
-            <span class="pc-rail-indicator"></span>
-            <LunoIcon name="money" :size="20" />
-          </button>
-
-          <!-- 5c. Shop (쇼핑) -->
-          <button
-            class="pc-rail-btn"
-            :class="{ active: activeNav === 'shop' }"
-            :title="t('mvRailShop')"
-            @click="switchNav('shop')"
-          >
-            <span class="pc-rail-indicator"></span>
-            <LunoIcon name="shop" :size="20" />
-          </button>
-
-          <!-- 6. Add Friends (친구 추가) -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvAddFriend')"
-            @click="showAddFriendModal = true"
-          >
-            <LunoIcon name="add-friends" :size="20" />
-          </button>
-
-          <!-- 5. Open Scanner Search -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvRailSearch')"
-            @click="openEcosystemService('open-search')"
-          >
-            <LunoIcon name="open-search" :size="20" />
-          </button>
-
-          <!-- 6. Open Mail -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvRailMail')"
-            @click="openEcosystemService('open-mail')"
-          >
-            <LunoIcon name="open-mail" :size="20" />
-          </button>
-
-          <!-- 7. Open Apps (앱 허브) -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvRailApps')"
-            @click="openEcosystemService('open-apps')"
-          >
-            <LunoIcon name="open-apps" :size="20" />
-          </button>
-
-          <!-- 8. Open Video (화상 회의) -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvRailVideo')"
-            @click="openEcosystemService('open-video')"
-          >
-            <LunoIcon name="open-video" :size="20" />
-          </button>
-
-          <!-- 9. Open Stream (라이브 방송) -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvRailStream')"
-            @click="openEcosystemService('open-stream')"
-          >
-            <LunoIcon name="open-stream" :size="20" />
-          </button>
-
-          <!-- 10. Open AI (지능형 AI 비서) -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvRailAi')"
-            @click="openEcosystemService('open-ai')"
-          >
-            <LunoIcon name="open-ai" :size="20" />
-          </button>
-
-          <!-- 11. Open Services (전체 생태계) -->
-          <button
-            class="pc-rail-btn"
-            :title="t('mvRailServices')"
-            @click="openEcosystemService('open-services')"
-          >
-            <LunoIcon name="open-services" :size="20" />
+            <span class="lx-rail-icon"><LunoIcon name="open-apps" :size="22" /></span>
+            <span class="lx-rail-label">{{ t('lxMore') }}</span>
           </button>
         </div>
 
-        <div class="pc-rail-bottom">
-          <!-- Mobile APK Download Button -->
-          <a href="./download.html" target="_blank" class="pc-rail-btn small" :title="t('mvRailMobileApp')" style="text-decoration: none;">
-            <span style="font-size: 16px;">📱</span>
-          </a>
-
-          <!-- Screen Capture Button (Screenshot 1 & 4) -->
-          <button class="pc-rail-btn small" :title="t('mvRailCapture')" @click="captureScreenToChat">
-            <span style="font-size: 15px;">✂️</span>
+        <div class="lx-rail-foot">
+          <button type="button" class="lx-rail-tool" :title="t('navKeep')" :aria-label="t('navKeep')" @click="showKeepModal = true">
+            <LunoIcon name="keep" :size="20" />
           </button>
-
-          <!-- Keep Button -->
-          <button class="pc-rail-btn small" :title="t('navKeep')" @click="showKeepModal = true">
-            <LunoIcon name="keep" :size="19" />
-          </button>
-
-          <!-- 12. Notifications Toggle -->
           <button
-            class="pc-rail-btn small"
+            type="button"
+            class="lx-rail-tool"
             :title="notificationsEnabled ? t('mvNotifOnTitle') : t('mvDndTitle')"
+            :aria-label="notificationsEnabled ? t('mvNotifOnTitle') : t('mvDndTitle')"
+            :aria-pressed="!notificationsEnabled"
             @click="toggleNotifications"
           >
-            <LunoIcon :name="notificationsEnabled ? 'bell' : 'bell-off'" :size="19" />
+            <LunoIcon :name="notificationsEnabled ? 'bell' : 'bell-off'" :size="20" />
           </button>
-
-          <!-- 13. Settings Button -->
-          <button class="pc-rail-btn small" :title="t('navSettings')" @click="showSettingsModal = true">
-            <LunoIcon name="settings" :size="19" />
+          <button type="button" class="lx-rail-tool" data-shot="settings" :title="t('navSettings')" :aria-label="t('navSettings')" @click="showSettingsModal = true">
+            <LunoIcon name="settings" :size="20" />
           </button>
-
-          <!-- 14. More / Consoles Menu Button -->
-          <div class="rail-more-wrapper">
-            <button class="pc-rail-btn small" :title="t('mvRailMore')" @click="showConsolesMenu = !showConsolesMenu">
-              <LunoIcon name="more" :size="19" />
-            </button>
-
-            <!-- Consoles Dropdown Popover -->
-            <div v-if="showConsolesMenu" class="pc-dropdown-menu consoles-menu" @click="showConsolesMenu = false">
-              <div class="dropdown-heading">{{ t('mvConsolesTitle') }}</div>
-              <a href="./admin/" target="_blank" class="dropdown-item">{{ t('mvConsoleAdmin') }}</a>
-              <a href="./partner/" target="_blank" class="dropdown-item">{{ t('mvConsolePartner') }}</a>
-              <a href="./developer/" target="_blank" class="dropdown-item">{{ t('mvConsoleDev') }}</a>
-              <a href="./creator/" target="_blank" class="dropdown-item">{{ t('mvConsoleCreator') }}</a>
-              <a href="./ads/" target="_blank" class="dropdown-item">{{ t('mvConsoleAds') }}</a>
-              <div class="dropdown-sep"></div>
-              <button class="dropdown-item" @click="showEcosystemHub = true">{{ t('mvEcosystemHub') }}</button>
-              <a href="./download.html" target="_blank" class="dropdown-item" style="color: var(--ln-accent); font-weight: 700;">{{ t('mvDownloadApp') }}</a>
-              <button class="dropdown-item" @click="showSettingsModal = true">⚙️ {{ t('navSettings') }}</button>
-              <button class="dropdown-item logout" @click="logout">{{ t('mvLogout') }}</button>
-            </div>
-          </div>
         </div>
       </nav>
 
-      <!-- (Column 2) Second Sidebar List Pane (~305px) -->
-      <aside class="pc-side-pane" :class="{ 'is-collapsed': isPanelCollapsed }">
-        <button v-if="isPanelCollapsed" class="btn-pane-expand" :title="t('mvCollapse')" @click="isPanelCollapsed = false">&gt;</button>
+      <!-- More: every secondary destination, each with a name -->
+      <div v-if="showMorePanel" class="lx-more-layer" @click.self="showMorePanel = false">
+        <section class="lx-more" role="dialog" :aria-label="t('lxMore')">
+          <header class="lx-more-head">
+            <h2>{{ t('lxMore') }}</h2>
+            <button type="button" class="lx-icon-btn" :title="t('mvClose')" :aria-label="t('mvClose')" @click="showMorePanel = false"><LunoIcon name="close" :size="18" /></button>
+          </header>
+          <button type="button" class="lx-more-me" @click="activeProfileUser = currentUser; showMorePanel = false">
+            <span class="lx-avatar s44" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
+            <span class="lx-more-me-text">
+              <strong>{{ currentUser?.display_name }}</strong>
+              <small>{{ currentUser?.handle ? '@' + currentUser.handle : currentUser?.email }}</small>
+            </span>
+            <span class="lx-more-me-go" aria-hidden="true">›</span>
+          </button>
+          <div class="lx-more-grid">
+            <button
+              v-for="item in MORE_ITEMS"
+              :key="item.id"
+              type="button"
+              class="lx-more-item"
+              :class="{ active: item.nav && activeNav === item.nav }"
+              @click="runMoreItem(item.id)"
+            >
+              <span class="lx-more-icon"><LunoIcon :name="item.icon" :size="22" /></span>
+              <span>{{ t(item.label) }}</span>
+            </button>
+          </div>
+          <div v-if="consoleLinks.length" class="lx-more-links">
+            <h3>{{ t('lxConsoles') }}</h3>
+            <a v-for="link in consoleLinks" :key="link.href" :href="link.href" target="_blank" rel="noopener" class="lx-more-link" @click="showMorePanel = false">{{ t(link.label) }}</a>
+          </div>
+          <button type="button" class="lx-more-logout" @click="showMorePanel = false; logout()">{{ t('mvLogout') }}</button>
+        </section>
+      </div>
+
+      <!-- List pane -->
+      <aside class="lx-list">
 
         <!-- VIEW 1: FRIENDS / HOME (홈 및 친구 관리 - Section 3 & Screenshot 1) -->
         <FriendPanel
@@ -3009,15 +2926,10 @@ onBeforeUnmount(() => {
           :official-accounts="officialAccounts"
           :filtered-friends="filteredFriends"
           v-model:friend-search-query="friendSearchQuery"
-          v-model:is-panel-collapsed="isPanelCollapsed"
           @qr="showQrModal = true"
-          @sticker="showStickerPicker = true"
-          @settings="showSettingsModal = true"
-          @official="activeNav = 'chats'"
-          @services="showEcosystemHub = true"
+          @add-friend="showAddFriendModal = true"
           @profile="activeProfileUser = currentUser"
           @keep-memo="openKeepMemoChat"
-          @drawer="toggleDrawer"
           @select-friend="selectFriend"
           @direct-chat="startDirectChat"
           @friend-menu="openFriendContextMenu"
@@ -3035,33 +2947,29 @@ onBeforeUnmount(() => {
           v-model:chat-filter="chatFilter"
           v-model:search-keyword="searchKeyword"
           v-model:chat-sort-asc="chatSortAsc"
-          v-model:is-panel-collapsed="isPanelCollapsed"
           @mark-all-read="markAllChatsRead"
           @drawer="toggleDrawer"
           @new-chat="showNewChatModal = true"
           @qr="showQrModal = true"
-          @ecosystem="openEcosystemService"
           @select="selectChat"
           @chat-menu="openChatContextMenu"
         />
 
         <!-- VIEW: NEWS (뉴스 & 콘텐츠 - Screenshot 5 & Section 10) -->
-        <div v-else-if="activeNav === 'news'" class="pc-pane-body pc-news-pane">
+        <div v-else-if="activeNav === 'news'" class="lx-pane lx-news-pane">
           <!-- News Header -->
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('mvNews') }}</h2>
+          <div class="lx-pane-head">
+            <h2 class="lx-pane-title">{{ t('mvNews') }}</h2>
             <div class="news-header-tools">
-              <button class="btn-pc-header-tool" :title="t('mvNewsSettings')" @click="showSettingsModal = true">
-                <LunoIcon name="settings" :size="17" />
-              </button>
+
             </div>
           </div>
           <!-- News Category Filter Tabs -->
-          <div class="pc-chat-subtabs-row">
+          <div class="lx-chips">
             <button
               v-for="cat in NEWS_CATEGORY_IDS"
               :key="cat"
-              class="btn-subtab"
+              class="lx-chip"
               :class="{ active: selectedNewsCategory === cat }"
               @click="selectedNewsCategory = cat"
             >
@@ -3070,7 +2978,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- News Scroll List -->
-          <div class="pc-pane-scroll news-scroll">
+          <div class="lx-scroll news-scroll">
             <div v-if="newsIsSample" class="news-sample-banner" style="margin:8px 12px;padding:8px 12px;border-radius:8px;background:#fff7e0;color:#7a5b00;font-size:12px;">{{ t('mvNewsSampleBanner') }}</div>
             <!-- Hero Featured News Card (Screenshot 5 & 9) -->
             <div
@@ -3149,12 +3057,12 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- VIEW: CALLS (통화 이력 - Screenshot 3 & Section 9) -->
-        <div v-else-if="activeNav === 'calls'" class="pc-pane-body pc-calls-pane">
+        <div v-else-if="activeNav === 'calls'" class="lx-pane lx-calls-pane">
           <!-- Calls Header -->
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('mvCall') }}</h2>
+          <div class="lx-pane-head">
+            <h2 class="lx-pane-title">{{ t('mvCall') }}</h2>
             <div class="calls-header-tools">
-              <button class="btn-pc-header-tool btn-new-call-labeled" :title="t('mvNewCall')" @click="showNewCallModal = true">
+              <button class="lx-text-btn" :title="t('mvNewCall')" @click="showNewCallModal = true">
                 <LunoIcon name="call-voice" :size="17" />
                 <span>{{ t('mvNewCall') }}</span>
               </button>
@@ -3162,13 +3070,13 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Calls Filter Subtabs -->
-          <div class="pc-chat-subtabs-row">
-            <button class="btn-subtab" :class="{ active: callFilter === 'all' }" @click="callFilter = 'all'">{{ t('tabAll') }} ({{ callHistoryList.length }})</button>
-            <button class="btn-subtab" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">{{ t('mvMissed') }}</button>
+          <div class="lx-chips">
+            <button class="lx-chip" :class="{ active: callFilter === 'all' }" @click="callFilter = 'all'">{{ t('tabAll') }} ({{ callHistoryList.length }})</button>
+            <button class="lx-chip" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">{{ t('mvMissed') }}</button>
           </div>
 
           <!-- Calls Scroll List -->
-          <div class="pc-pane-scroll calls-scroll">
+          <div class="lx-scroll calls-scroll">
             <div
               v-for="log in filteredCallHistory"
               :key="log.id"
@@ -3208,10 +3116,10 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- VIEW 3: VOOM -->
-        <div v-else-if="activeNav === 'voom'" class="pc-pane-body">
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">LUNO VOOM</h2>
-            <button class="btn-pc-header-tool" :title="t('mvNewStory')" @click="showNewStoryModal = true">➕</button>
+        <div v-else-if="activeNav === 'voom'" class="lx-pane">
+          <div class="lx-pane-head">
+            <h2 class="lx-pane-title">LUNO VOOM</h2>
+            <button class="lx-icon-btn" :title="t('mvNewStory')" :aria-label="t('mvNewStory')" @click="showNewStoryModal = true"><LunoIcon name="plus" :size="20" /></button>
           </div>
           <div class="stories-row">
             <div class="story-item" @click="showNewStoryModal = true">
@@ -3242,10 +3150,10 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- VIEW 4: OPENCHAT -->
-        <div v-else-if="activeNav === 'openchat'" class="pc-pane-body">
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('navOpenChat') }}</h2>
-            <button class="btn-pc-header-tool" :title="t('mvCreateOpenChat')" @click="showCreateOpenChatModal = true">➕</button>
+        <div v-else-if="activeNav === 'openchat'" class="lx-pane">
+          <div class="lx-pane-head">
+            <h2 class="lx-pane-title">{{ t('navOpenChat') }}</h2>
+            <button class="lx-icon-btn" :title="t('mvCreateOpenChat')" :aria-label="t('mvCreateOpenChat')" @click="showCreateOpenChatModal = true"><LunoIcon name="plus" :size="20" /></button>
           </div>
           <div class="openchat-list">
             <div v-for="room in openChatRooms" :key="room.id" class="openchat-card" @click="selectOpenChatRoom(room)">
@@ -3259,9 +3167,9 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- VIEW 5: WALLET / SERVICES -->
-        <div v-else-if="activeNav === 'wallet'" class="pc-pane-body">
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('mvLunoPayServices') }}</h2>
+        <div v-else-if="activeNav === 'wallet'" class="lx-pane">
+          <div class="lx-pane-head">
+            <h2 class="lx-pane-title">{{ t('mvLunoPayServices') }}</h2>
           </div>
           <div class="luno-pay-card">
             <div class="pay-top">
@@ -3292,9 +3200,9 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
-        <div v-else-if="activeNav === 'shop'" class="pc-pane-body">
-          <div class="pc-pane-header">
-            <h2 class="pc-pane-title">{{ t('shopTitle') }}</h2>
+        <div v-else-if="activeNav === 'shop'" class="lx-pane">
+          <div class="lx-pane-head">
+            <h2 class="lx-pane-title">{{ t('shopTitle') }}</h2>
           </div>
           <div v-if="storeLoading" class="shop-empty">{{ t('attachment_loading') }}</div>
           <div v-else-if="!storePacks.length" class="shop-empty">{{ t('shopEmpty') }}</div>
@@ -3311,8 +3219,9 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <!-- (Column 3) Right Main Viewport: Chat / Calls / OpenChat / Friend Profile / Empty Canvas -->
-      <section v-if="activeNav === 'calls'" class="pc-calls-viewport">
+      <!-- Main pane: room / profile / call detail / empty state -->
+      <section class="lx-main">
+      <section v-if="activeNav === 'calls'" class="lx-detail">
         <div v-if="selectedCallRecord" class="pc-call-detail-card">
           <div class="profile-preview-avatar" :style="{ background: selectedCallRecord.peer_avatar_color || '#315BCD' }">
             {{ initialOf(selectedCallRecord.peer_name) }}
@@ -3351,7 +3260,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section v-else-if="activeNav === 'openchat' && selectedOpenChatRoom" class="pc-openchat-viewport">
+      <section v-else-if="activeNav === 'openchat' && selectedOpenChatRoom" class="lx-room">
         <header class="pc-chat-topbar">
           <div class="chat-topbar-left">
             <div class="pc-avatar circle-36" style="background: #2563EB;">💬</div>
@@ -3503,7 +3412,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- Case B: Friend Profile Selected Preview (Screenshot 5) -->
-      <section v-else-if="selectedFriendProfile" class="pc-friend-profile-viewport">
+      <section v-else-if="selectedFriendProfile" class="lx-detail">
         <div class="pc-profile-preview-card">
           <div class="profile-preview-avatar" :style="{ background: selectedFriendProfile.avatar_color || 'var(--ln-accent)' }">
             {{ initialOf(selectedFriendProfile.display_name) }}
@@ -3539,7 +3448,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- Case C: Clean Neutral Desktop Empty State (Screenshots 1 & 4) -->
-      <section v-else class="pc-empty-canvas">
+      <section v-else class="lx-empty">
         <div class="pc-empty-dialog">
           <div class="pc-watermark-wrap">
             <img :src="lunoMark" alt="LUNO" width="72" height="72" />
@@ -3549,68 +3458,35 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <!-- MOBILE FLOATING NAVIGATION CAPSULE (Screenshots 3, 4, 5) -->
-      <nav v-if="!selectedChat" class="luno-mobile-floating-nav" :aria-label="t('mvBottomNav')">
-        <!-- Tab 1: 홈 (Home) -->
-        <button
-          class="mobile-nav-item"
-          :class="{ active: activeNav === 'home' }"
-          @click="switchNav('home')"
-        >
-          <div class="nav-icon-wrap">
-            <LunoIcon name="home" :size="24" />
-          </div>
-          <span class="nav-label">{{ t('mvHome') }}</span>
-        </button>
+      </section>
 
-        <!-- Tab 2: 대화 (Chats) -->
+      <!-- Phone: bottom tab bar (hidden while a room or profile is open) -->
+      <nav class="lx-tabbar" :aria-label="t('mvBottomNav')">
         <button
-          class="mobile-nav-item"
-          :class="{ active: activeNav === 'chats' }"
-          @click="switchNav('chats')"
+          v-for="item in PRIMARY_NAV"
+          :key="item.nav"
+          type="button"
+          class="lx-tab"
+          :class="{ active: activeNav === item.nav && !showMorePanel }"
+          :aria-current="activeNav === item.nav && !showMorePanel ? 'page' : undefined"
+          @click="showMorePanel = false; switchNav(item.nav)"
         >
-          <div class="nav-icon-wrap">
-            <LunoIcon name="chats" :size="24" />
-            <span v-if="totalUnreadCount > 0" class="mobile-nav-badge">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
-          </div>
-          <span class="nav-label">{{ t('mvChats') }}</span>
+          <span class="lx-tab-icon">
+            <LunoIcon :name="item.icon" :size="24" />
+            <span v-if="item.nav === 'chats' && totalUnreadCount > 0" class="lx-badge">{{ totalUnreadCount > 99 ? '99+' : totalUnreadCount }}</span>
+          </span>
+          <span class="lx-tab-label">{{ t(item.label) }}</span>
         </button>
-
-        <!-- Tab 3: 뉴스 (News) -->
         <button
-          class="mobile-nav-item"
-          :class="{ active: activeNav === 'news' }"
-          @click="switchNav('news')"
+          type="button"
+          class="lx-tab"
+          data-shot="more"
+          :class="{ active: showMorePanel || MORE_NAVS.includes(activeNav) }"
+          :aria-expanded="showMorePanel"
+          @click="showMorePanel = !showMorePanel"
         >
-          <div class="nav-icon-wrap">
-            <LunoIcon name="news" :size="24" />
-            <span class="mobile-nav-dot"></span>
-          </div>
-          <span class="nav-label">{{ t('mvNews') }}</span>
-        </button>
-
-        <!-- Tab 4: 통화 (Calls) -->
-        <button
-          class="mobile-nav-item"
-          :class="{ active: activeNav === 'calls' }"
-          @click="switchNav('calls')"
-        >
-          <div class="nav-icon-wrap">
-            <LunoIcon name="calls" :size="24" />
-          </div>
-          <span class="nav-label">{{ t('mvCall') }}</span>
-        </button>
-        <!-- Tab 5: 지갑 (Wallet). C1: 5 tabs only — the profile entry lives
-             at the top of Home (FriendPanel profile card). -->
-        <button
-          class="mobile-nav-item"
-          :class="{ active: activeNav === 'wallet' }"
-          @click="switchNav('wallet')"
-        >
-          <div class="nav-icon-wrap">
-            <LunoIcon name="money" :size="24" />
-          </div>
-          <span class="nav-label">{{ t('mvWallet') }}</span>
+          <span class="lx-tab-icon"><LunoIcon name="open-apps" :size="24" /></span>
+          <span class="lx-tab-label">{{ t('lxMore') }}</span>
         </button>
       </nav>
     </main>

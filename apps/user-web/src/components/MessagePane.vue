@@ -3,7 +3,7 @@
 // from MessengerView.vue. Presentational: data and loaders stay in the view,
 // the pane owns only the pin-banner expand flag. Element refs arrive through
 // a holder (template expressions would unwrap the bare bindings).
-import { computed, ref, type Ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch, type Ref } from 'vue'
 
 import type { Chat, Message, User } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
@@ -145,6 +145,43 @@ const pinnedExpanded = ref(false)
 const showTopbarMenu = ref(false)
 const showAttachPanel = ref(false)
 
+// The composer grows with its text up to a cap, then scrolls.
+const composerInput = ref<HTMLTextAreaElement | null>(null)
+function fitComposer() {
+  const el = composerInput.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 168)}px`
+}
+watch(draftMessage, () => { void nextTick(fitComposer) })
+onMounted(fitComposer)
+
+// The search field lives in the room drawer: open it and put the cursor there.
+function openRoomSearch() {
+  if (activeDrawer.value === 'none') emit('drawer', 'notes')
+  void nextTick(() => {
+    const field = document.querySelector<HTMLInputElement>('.drawer-search-bar input')
+    field?.focus()
+  })
+}
+
+// Touch screens have no hover: a long press on a bubble opens the same menu
+// a right click does.
+let pressTimer: ReturnType<typeof setTimeout> | null = null
+function pressStart(ev: TouchEvent, msg: Message) {
+  pressCancel()
+  const touch = ev.touches[0]
+  if (!touch) return
+  const { clientX, clientY } = touch
+  pressTimer = setTimeout(() => {
+    pressTimer = null
+    emit('message-menu', new MouseEvent('contextmenu', { clientX, clientY, bubbles: false, cancelable: true }), msg)
+  }, 480)
+}
+function pressCancel() {
+  if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
+}
+
 // FX-21: the jump button only earns its pixels while scrolled up.
 const showJumpBottom = ref(false)
 function trackCanvasScroll(ev: Event) {
@@ -187,35 +224,35 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
 </script>
 
 <template>
-  <section class="pc-chat-viewport">
-    <!-- Chat Header -->
-    <header class="pc-chat-topbar">
-      <div class="chat-topbar-left">
-        <button class="btn-mobile-back" @click="emit('back')" :title="t('mvGoBack')">
-          <LunoIcon name="back" :size="18" />
-        </button>
-        <div class="pc-avatar circle-36" :style="{ background: selectedChat.kind === 'group' ? '#0ea5e9' : selectedChat.official ? '#4F7CFF' : '#315BCD' }">
-          {{ selectedChat.official ? 'L' : initialOf(selectedChat.title, 'L') }}
+  <section class="lx-room">
+    <!-- Room header -->
+    <header class="lx-room-head">
+      <button type="button" class="lx-icon-btn lx-back" :title="t('mvGoBack')" :aria-label="t('mvGoBack')" @click="emit('back')">
+        <LunoIcon name="back" :size="20" />
+      </button>
+      <span class="lx-avatar s36" :style="{ background: selectedChat.kind === 'group' ? 'var(--ln-info)' : selectedChat.official ? '#4F7CFF' : 'var(--ln-accent)' }">
+        {{ selectedChat.official ? 'L' : initialOf(selectedChat.title, 'L') }}
+      </span>
+      <div class="lx-room-title">
+        <div class="lx-room-name">
+          <span class="lx-room-name-text chat-header-title">{{ selectedChat.title }}</span>
+          <span v-if="selectedChat.kind === 'group'" class="lx-row-count" :title="t('lxMembers')">{{ selectedChat.member_count || 2 }}</span>
+          <span v-if="selectedChat.official" class="badge-verified">{{ t('mvOfficialChannel') }}</span>
         </div>
-        <div class="chat-topbar-info">
-          <div class="title-row">
-            <span class="chat-header-title">{{ selectedChat.title }}</span>
-            <span v-if="selectedChat.kind === 'group'" class="member-tag">👥 {{ selectedChat.member_count || 2 }}</span>
-            <span v-if="selectedChat.official" class="badge-verified">{{ t('mvOfficialChannel') }}</span>
-          </div>
-          <small class="e2ee-tag ln-connection-state" :data-state="realtimeState" role="status">
-            {{ t('connection_' + realtimeState) }}
-          </small>
-        </div>
+        <!-- Shown only while the live connection is not up; a healthy room needs no status line. -->
+        <small v-if="realtimeState !== 'connected'" class="lx-room-state ln-connection-state" :data-state="realtimeState" role="status">
+          {{ t('connection_' + realtimeState) }}
+        </small>
       </div>
 
-      <div class="chat-topbar-actions">
-        <button v-if="!selectedChat?.official" class="btn-chat-action" :title="t('callVoice')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'voice')"><LunoIcon name="call-voice" :size="18" /></button>
-        <button v-if="!selectedChat?.official" class="btn-chat-action" :title="t('callVideo')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'video')"><LunoIcon name="call-video" :size="18" /></button>
-        <button class="btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" @click="emit('drawer', 'notes')"><LunoIcon name="drawer" :size="18" /></button>
+      <div class="lx-room-actions">
+        <button type="button" class="lx-icon-btn lx-wide-only" :title="t('mvSearchInChatPh')" :aria-label="t('mvSearchInChatPh')" @click="openRoomSearch"><LunoIcon name="search" :size="19" /></button>
+        <button v-if="!selectedChat?.official" type="button" class="lx-icon-btn btn-chat-action" :title="t('callVoice')" :aria-label="t('callVoice')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'voice')"><LunoIcon name="call-voice" :size="19" /></button>
+        <button v-if="!selectedChat?.official" type="button" class="lx-icon-btn btn-chat-action" :title="t('callVideo')" :aria-label="t('callVideo')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'video')"><LunoIcon name="call-video" :size="19" /></button>
+        <button type="button" class="lx-icon-btn btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" :aria-label="t('mvDrawerTitle')" @click="emit('drawer', 'notes')"><LunoIcon name="drawer" :size="19" /></button>
         <!-- C1: translate/theme/calendar live in the ⋯ menu so the bar stays one line -->
         <div class="chat-topbar-menu-wrap">
-          <button class="btn-chat-action" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" @click="showTopbarMenu = !showTopbarMenu">⋯</button>
+          <button type="button" class="lx-icon-btn btn-chat-action" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" :aria-expanded="showTopbarMenu" @click="showTopbarMenu = !showTopbarMenu"><LunoIcon name="more" :size="19" /></button>
           <div v-if="showTopbarMenu" class="chat-topbar-menu-layer" @click="showTopbarMenu = false"></div>
           <div v-if="showTopbarMenu" class="chat-topbar-menu" role="menu">
             <!-- AI Translation Bar Controls (Article 10) -->
@@ -234,10 +271,11 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <option v-for="lang in translateLanguages" :key="lang" :value="lang">{{ lang.toUpperCase() }}</option>
               </select>
             </div>
-            <button class="chat-topbar-menu-item" @click="emit('cycle-wallpaper'); showTopbarMenu = false"><span aria-hidden="true">🎨</span><span>{{ t('mvWallpaperTitle') }}</span></button>
+            <button class="chat-topbar-menu-item" @click="openRoomSearch(); showTopbarMenu = false"><LunoIcon name="search" :size="18" /><span>{{ t('mvSearchInChatPh') }}</span></button>
+            <button class="chat-topbar-menu-item" @click="emit('cycle-wallpaper'); showTopbarMenu = false"><LunoIcon name="photo" :size="18" /><span>{{ t('mvWallpaperTitle') }}</span></button>
             <button class="chat-topbar-menu-item" @click="emit('drawer', 'events'); showTopbarMenu = false"><LunoIcon name="calendar" :size="18" /><span>{{ t('mvEventsCalendar') }}</span></button>
             <button class="chat-topbar-menu-item" @click="emit('approvals'); showTopbarMenu = false"><LunoIcon name="check" :size="18" /><span>{{ t('apprTitle') }}</span></button>
-            <button v-if="selectedChat?.kind === 'group'" class="chat-topbar-menu-item" @click="emit('group-settings'); showTopbarMenu = false"><span aria-hidden="true">👥</span><span>{{ t('gsMenuSettings') }}</span></button>
+            <button v-if="selectedChat?.kind === 'group'" class="chat-topbar-menu-item" @click="emit('group-settings'); showTopbarMenu = false"><LunoIcon name="friends" :size="18" /><span>{{ t('gsMenuSettings') }}</span></button>
           </div>
         </div>
       </div>
@@ -246,7 +284,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
     <!-- Pinned Announcement (공지사항) -->
     <div v-if="pinnedList.length" class="pinned-banner" :class="{ expanded: pinnedExpanded }">
       <div class="pinned-summary" @click="pinnedExpanded = !pinnedExpanded">
-        <span class="pin-icon">📢</span>
+        <span class="pin-icon"><LunoIcon name="megaphone" :size="16" /></span>
         <span class="pin-text">{{ pinnedList[0].body || t('mvPinnedFallback') }}</span>
         <button class="btn-unpin-inline" :title="t('mvUnpinNotice')" @click.stop="emit('unpin', pinnedList[0].message_id)">✕</button>
         <span class="pin-toggle">{{ pinnedExpanded ? '▲' : '▼' }}</span>
@@ -372,9 +410,12 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             {{ formatDateDivider(msg.created_at) }}
           </div>
 
+          <!-- Case 0: system line (member joined, group created, …) -->
+          <div v-if="msg.kind === 'system'" class="lx-system-line" :data-message-id="msg.id">{{ msg.body }}</div>
+
           <!-- Case 1: Official Security Notice Card (Screenshot 6) -->
           <div
-            v-if="msg.kind === 'security_notice'"
+            v-else-if="msg.kind === 'security_notice'"
             class="pc-msg-row security-notice-row"
             :data-message-id="msg.id"
             :class="{ 'searched-flash': flashedMessageId === msg.id }"
@@ -479,6 +520,10 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 class="pc-speech-bubble"
                 :class="{ 'is-sticker': msg.kind === 'sticker' && !msg.unsent }"
                 @contextmenu.prevent="emit('message-menu', $event, msg)"
+                @touchstart.passive="pressStart($event, msg)"
+                @touchmove.passive="pressCancel"
+                @touchend="pressCancel"
+                @touchcancel="pressCancel"
               >
                 <div v-if="msg.reply_to" class="bubble-reply-preview">
                   <LunoIcon name="reply" :size="12" /> {{ (msg.reply_preview as any)?.body || msg.reply_preview || t('mvRepliedMsg') }}
@@ -557,12 +602,12 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
               <button :title="t('mvReactHeart')" @click="emit('react', msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
               <button :title="t('mvReactLike')" @click="emit('react', msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
               <button :title="t('mvReply')" @click="emit('reply', msg)"><LunoIcon name="reply" :size="14" /></button>
-              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvEdit')" @click="emit('edit-start', msg)">✎</button>
+              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvEdit')" @click="emit('edit-start', msg)"><LunoIcon name="edit" :size="14" /></button>
               <button :title="t('mvCtxKeep')" @click="emit('keep', msg)"><LunoIcon name="keep" :size="14" /></button>
               <button :title="t('mvNoticeRegister')" @click="emit('pin', msg.id)"><LunoIcon name="pin" :size="14" /></button>
               <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvCtxUnsend')" @click="emit('unsend', msg.id)"><LunoIcon name="close" :size="14" /></button>
-              <button v-if="!msg.unsent" :title="t('mvForward')" @click="emit('forward', msg)">➦</button>
-              <button v-if="!msg.unsent" :title="t('mvHideMine')" @click="emit('hide', msg.id)">🗑</button>
+              <button v-if="!msg.unsent" :title="t('mvForward')" @click="emit('forward', msg)"><LunoIcon name="forward" :size="14" /></button>
+              <button v-if="!msg.unsent" :title="t('mvHideMine')" @click="emit('hide', msg.id)"><LunoIcon name="trash" :size="14" /></button>
             </div>
           </div>
         </template>
@@ -576,7 +621,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
 
     <!-- Chat Input Composer -->
     <!-- C2: official rooms are read-only (no composer, no calls) -->
-    <footer v-if="!selectedChat?.official" class="pc-chat-input-dock">
+    <footer v-if="!selectedChat?.official" class="lx-composer-dock">
       <!-- Reply Preview Banner -->
       <div v-if="replyToMessage" class="reply-composer-bar">
         <span>{{ t('mvReplyTo') }}<strong>{{ replyToMessage.body }}</strong></span>
@@ -606,75 +651,82 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
         </div>
       </div>
 
-      <!-- Attachment Bar Icons -->
-      <div class="pc-input-toolbar">
-        <input :ref="attachmentInput" type="file" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="emit('file-change', $event)" />
-        <div v-if="effectFile" class="fx-modal-backdrop" @click.self="emit('effect-close')">
-          <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
-            <h3>{{ t('fxTitle') }}</h3>
-            <img :src="effectPreviewUrl" class="fx-preview" :style="{ filter: PHOTO_EFFECT_FILTER[effectChoice] }" alt="" />
-            <div class="fx-options">
-              <button :class="{ active: effectChoice === 'none' }" @click="effectChoice = 'none'">{{ t('fxOriginal') }}</button>
-              <button :class="{ active: effectChoice === 'gray' }" @click="effectChoice = 'gray'">{{ t('fxGray') }}</button>
-              <button :class="{ active: effectChoice === 'sepia' }" @click="effectChoice = 'sepia'">{{ t('fxSepia') }}</button>
-            </div>
-            <div class="fx-actions">
-              <button class="btn-secondary" @click="emit('effect-close')">{{ t('mvCancel') }}</button>
-              <button class="btn-primary" :disabled="uploading" @click="emit('effect-send')">{{ t('fxSend') }}</button>
-            </div>
+      <input :ref="attachmentInput" type="file" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="emit('file-change', $event)" />
+      <div v-if="effectFile" class="fx-modal-backdrop" @click.self="emit('effect-close')">
+        <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
+          <h3>{{ t('fxTitle') }}</h3>
+          <img :src="effectPreviewUrl" class="fx-preview" :style="{ filter: PHOTO_EFFECT_FILTER[effectChoice] }" alt="" />
+          <div class="fx-options">
+            <button :class="{ active: effectChoice === 'none' }" @click="effectChoice = 'none'">{{ t('fxOriginal') }}</button>
+            <button :class="{ active: effectChoice === 'gray' }" @click="effectChoice = 'gray'">{{ t('fxGray') }}</button>
+            <button :class="{ active: effectChoice === 'sepia' }" @click="effectChoice = 'sepia'">{{ t('fxSepia') }}</button>
+          </div>
+          <div class="fx-actions">
+            <button class="btn-secondary" @click="emit('effect-close')">{{ t('mvCancel') }}</button>
+            <button class="btn-primary" :disabled="uploading" @click="emit('effect-send')">{{ t('fxSend') }}</button>
           </div>
         </div>
-        <!-- C1: attachments collapse into the + panel; voice stays out so a
-             recording can always be stopped without reopening anything. -->
-        <button class="btn-tool-icon btn-attach-plus" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" @click="showAttachPanel = !showAttachPanel">＋</button>
-        <button class="btn-tool-icon" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="emit('voice-toggle')">
-          {{ isRecordingVoice ? '⏹️' : '🎙️' }}
-        </button>
-        <div v-if="showAttachPanel" class="attach-panel-popover" role="menu">
-          <button class="attach-panel-item" @click="showStickerPicker = !showStickerPicker; showAttachPanel = false"><span aria-hidden="true">😊</span><small>{{ t('mvAttachSticker') }}</small></button>
-          <button class="attach-panel-item" :disabled="uploading" @click="emit('camera-open'); showAttachPanel = false"><span aria-hidden="true">📷</span><small>{{ t('mvAttachPhoto') }}</small></button>
-          <button class="attach-panel-item" :disabled="uploading" @click="emit('attach', 'file'); showAttachPanel = false"><span aria-hidden="true">📎</span><small>{{ t('mvAttachFile') }}</small></button>
-          <button class="attach-panel-item" @click="emit('poll-create'); showAttachPanel = false"><span aria-hidden="true">📊</span><small>{{ t('mvMakePoll') }}</small></button>
-          <button class="attach-panel-item" @click="emit('new-event'); showAttachPanel = false"><span aria-hidden="true">📅</span><small>{{ t('mvAddEvent') }}</small></button>
-          <button class="attach-panel-item" @click="emit('location'); showAttachPanel = false"><span aria-hidden="true">📍</span><small>{{ t('mvLocationShare') }}</small></button>
-          <button class="attach-panel-item" @click="emit('contact'); showAttachPanel = false"><span aria-hidden="true">👤</span><small>{{ t('mvShareContact') }}</small></button>
-          <button class="attach-panel-item" @click="emit('capture'); showAttachPanel = false"><span aria-hidden="true">✂️</span><small>{{ t('mvCapture') }}</small></button>
-          <button class="attach-panel-item" @click="emit('send-money'); showAttachPanel = false"><span aria-hidden="true">₩</span><small>{{ t('mvSend') }}</small></button>
-        </div>
-        <div v-if="showCameraModal" class="fx-modal-backdrop" @click.self="emit('camera-close')">
-          <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
-            <h3>{{ t('camTitle') }}</h3>
-            <div class="cam-tabs">
-              <button :class="{ active: cameraMode === 'photo' }" :disabled="videoRecording" @click="emit('camera-mode', 'photo')">{{ t('camPhoto') }}</button>
-              <button :class="{ active: cameraMode === 'video' }" :disabled="videoRecording" @click="emit('camera-mode', 'video')">{{ t('camVideo') }}</button>
-            </div>
-            <video v-show="!cameraError" :ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
-            <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
-            <p v-if="videoRecording" class="rec-indicator">🔴 {{ videoElapsed }}s / 8s</p>
-            <div class="fx-actions">
-              <button class="btn-secondary" @click="emit('camera-close')">{{ t('mvCancel') }}</button>
-              <button v-if="cameraMode === 'photo'" class="btn-secondary" @click="emit('camera-close'); emit('attach', 'image')">{{ t('camChooseFile') }}</button>
-              <button v-if="!cameraError && cameraMode === 'photo'" class="btn-primary" @click="emit('photo')">{{ t('camCapture') }}</button>
-              <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="emit('video-start')">⏺️</button>
-              <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="emit('video-stop')">⏹️</button>
-            </div>
+      </div>
+      <div v-if="showCameraModal" class="fx-modal-backdrop" @click.self="emit('camera-close')">
+        <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
+          <h3>{{ t('camTitle') }}</h3>
+          <div class="cam-tabs">
+            <button :class="{ active: cameraMode === 'photo' }" :disabled="videoRecording" @click="emit('camera-mode', 'photo')">{{ t('camPhoto') }}</button>
+            <button :class="{ active: cameraMode === 'video' }" :disabled="videoRecording" @click="emit('camera-mode', 'video')">{{ t('camVideo') }}</button>
+          </div>
+          <video v-show="!cameraError" :ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
+          <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
+          <p v-if="videoRecording" class="rec-indicator">🔴 {{ videoElapsed }}s / 8s</p>
+          <div class="fx-actions">
+            <button class="btn-secondary" @click="emit('camera-close')">{{ t('mvCancel') }}</button>
+            <button v-if="cameraMode === 'photo'" class="btn-secondary" @click="emit('camera-close'); emit('attach', 'image')">{{ t('camChooseFile') }}</button>
+            <button v-if="!cameraError && cameraMode === 'photo'" class="btn-primary" @click="emit('photo')">{{ t('camCapture') }}</button>
+            <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="emit('video-start')">⏺️</button>
+            <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="emit('video-stop')">⏹️</button>
           </div>
         </div>
       </div>
 
-      <!-- Textarea Form Area -->
-      <form class="pc-textarea-form" :aria-busy="sendingConversations.has(selectedChatId)" @submit.prevent="emit('send')">
+      <!-- C1: attachments collapse into the + panel; voice stays out so a
+           recording can always be stopped without reopening anything. -->
+      <div v-if="showAttachPanel" class="lx-attach-layer" @click="showAttachPanel = false"></div>
+      <div v-if="showAttachPanel" class="attach-panel-popover lx-attach" role="menu">
+        <button class="attach-panel-item" @click="showStickerPicker = !showStickerPicker; showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="smile" :size="22" /></span><small>{{ t('mvAttachSticker') }}</small></button>
+        <button class="attach-panel-item" :disabled="uploading" @click="emit('camera-open'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="camera" :size="22" /></span><small>{{ t('mvAttachPhoto') }}</small></button>
+        <button class="attach-panel-item" :disabled="uploading" @click="emit('attach', 'file'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="attach" :size="22" /></span><small>{{ t('mvAttachFile') }}</small></button>
+        <button class="attach-panel-item" @click="emit('poll-create'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="check-all" :size="22" /></span><small>{{ t('mvMakePoll') }}</small></button>
+        <button class="attach-panel-item" @click="emit('new-event'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="calendar" :size="22" /></span><small>{{ t('mvAddEvent') }}</small></button>
+        <button class="attach-panel-item" @click="emit('location'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="globe" :size="22" /></span><small>{{ t('mvLocationShare') }}</small></button>
+        <button class="attach-panel-item" @click="emit('contact'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="friends" :size="22" /></span><small>{{ t('mvShareContact') }}</small></button>
+        <button class="attach-panel-item" @click="emit('capture'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="scan" :size="22" /></span><small>{{ t('mvCapture') }}</small></button>
+        <button class="attach-panel-item" @click="emit('send-money'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="money" :size="22" /></span><small>{{ t('mvSend') }}</small></button>
+      </div>
+
+      <!-- Composer: one box. Wide screens put the tools under the text; phones put them beside it. -->
+      <form class="lx-composer" :aria-busy="sendingConversations.has(selectedChatId)" @submit.prevent="emit('send')">
+        <div class="lx-composer-tools pc-input-toolbar">
+          <button type="button" class="lx-icon-btn btn-tool-icon btn-attach-plus" :class="{ active: showAttachPanel }" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" :aria-expanded="showAttachPanel" @click="showAttachPanel = !showAttachPanel"><LunoIcon name="plus" :size="20" /></button>
+          <button type="button" class="lx-icon-btn btn-tool-icon lx-wide-only" :class="{ active: showStickerPicker }" :title="t('mvAttachSticker')" :aria-label="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker"><LunoIcon name="smile" :size="20" /></button>
+          <button type="button" class="lx-icon-btn btn-tool-icon lx-wide-only" :title="t('mvAttachFile')" :aria-label="t('mvAttachFile')" :disabled="uploading" @click="emit('attach', 'file')"><LunoIcon name="attach" :size="20" /></button>
+          <button type="button" class="lx-icon-btn btn-tool-icon" :class="{ recording: isRecordingVoice }" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" :aria-label="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="emit('voice-toggle')">
+            <LunoIcon :name="isRecordingVoice ? 'stop' : 'mic'" :size="20" />
+          </button>
+        </div>
         <textarea
+          ref="composerInput"
           v-model="draftMessage"
+          class="lx-composer-input"
           :disabled="sendingConversations.has(selectedChatId)"
-          :placeholder="t('inputPlaceholder')"
-          rows="3"
+          :placeholder="t('lxMessagePh')"
+          :aria-label="t('lxMessagePh')"
+          :title="t('inputPlaceholder')"
+          rows="1"
           @keydown.enter.exact="emit('composer-enter', $event)"
         ></textarea>
-        <div class="pc-textarea-bottom">
-          <span class="char-count">{{ draftMessage.length }}</span>
-          <button class="btn-green-send" :disabled="!draftMessage.trim() || sendingConversations.has(selectedChatId)">{{ sendingConversations.has(selectedChatId) ? t('message_sending') : t('sendBtn') }}</button>
-        </div>
+        <button class="lx-send btn-green-send" :title="t('sendBtn')" :aria-label="t('sendBtn')" :disabled="!draftMessage.trim() || sendingConversations.has(selectedChatId)">
+          <LunoIcon name="send" :size="18" />
+          <span class="lx-send-label">{{ sendingConversations.has(selectedChatId) ? t('message_sending') : t('sendBtn') }}</span>
+        </button>
       </form>
     </footer>
   </section>
