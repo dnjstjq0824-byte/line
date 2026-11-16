@@ -67,6 +67,18 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 
   @override
+  void didUpdateWidget(covariant ChatRoomPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // /chats/A -> /chats/B reuses this State; open the room that is now shown.
+    if (oldWidget.conversationId != widget.conversationId) {
+      final session = SessionScope.of(context, listen: false);
+      if (session.selectedId != widget.conversationId) {
+        session.openChat(widget.conversationId);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _scroll.dispose();
     message.dispose();
@@ -221,6 +233,108 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 }
 
+/// Long-press menu for one message: reactions on top, then every action
+/// with a readable label (the bubble itself stays clean on small phones).
+void _messageActions(BuildContext context, Map m, bool mine, String msgId) {
+  final session = SessionScope.of(context, listen: false);
+  final l = context.l10n;
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheet) {
+      void run(VoidCallback action) {
+        Navigator.of(sheet).pop();
+        action();
+      }
+
+      return SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    for (final emo in lunoReactions)
+                      InkResponse(
+                        radius: 26,
+                        onTap: () => run(() => session.react(m['id'], emo)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(emo, style: const TextStyle(fontSize: 26)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.reply),
+                title: Text(l.roomReplyWord),
+                onTap: () => run(() => session.setReply(msgId)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.translate),
+                title: Text(l.actTranslate),
+                onTap: () => run(() => session.translateMessage(msgId, '${m['body']}')),
+              ),
+              ListTile(
+                leading: const Icon(Icons.forward_outlined),
+                title: Text(l.actForward),
+                onTap: () => run(() => _forwardRoomSheet(context, session, msgId)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.bookmark_border),
+                title: Text(l.actKeep),
+                onTap: () => run(() => session.saveToKeep(m['id'], '${m['body']}')),
+              ),
+              ListTile(
+                leading: const Icon(Icons.push_pin_outlined),
+                title: Text(l.actPin),
+                onTap: () => run(() => session.pin(m['id'])),
+              ),
+              if (mine && m['kind'] == 'text')
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: Text(l.roomEditTitle),
+                  onTap: () => run(() => _editMessageDialog(context, session, msgId, '${m['body']}')),
+                ),
+              if (mine)
+                ListTile(
+                  leading: const Icon(Icons.undo),
+                  title: Text(l.actUnsend),
+                  onTap: () => run(() => session.unsend(m['id'])),
+                ),
+              ListTile(
+                leading: const Icon(Icons.visibility_off_outlined),
+                title: Text(l.actHide),
+                onTap: () => run(() => session.hideMessage(msgId)),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _MenuRow(this.icon, this.label);
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 12),
+          Flexible(child: Text(label)),
+        ],
+      );
+}
+
 class _DeckHeader extends StatelessWidget {
   final String conversationId;
   const _DeckHeader({required this.conversationId});
@@ -285,44 +399,38 @@ class _DeckHeader extends StatelessWidget {
                   action: () async => session.kindOf(conversationId) == 'group' ? session.joinGroupCall(conversationId, 'video') : session.startCall('video'),
                 ),
               ),
+              // Everything past calls lives in one menu so the room name
+              // keeps its width on a 360px phone.
               PopupMenuButton<String>(
-                tooltip: context.l10n.roomKeepBox,
-                icon: Icon(Icons.inventory_2_outlined,
+                tooltip: context.l10n.mvMoreActions,
+                icon: Icon(Icons.more_vert,
                     color: dark ? HarborDark.ink : Colors.white),
-                onSelected: (value) => context.go('/chats/$conversationId/$value'),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'pay':
+                      session.sendPayInChat();
+                    case 'approvals':
+                      approvalsSheet(context, conversationId);
+                    case 'sync':
+                      session.syncOffline();
+                    default:
+                      context.go('/chats/$conversationId/$value');
+                  }
+                },
                 itemBuilder: (_) => [
-                  PopupMenuItem(value: 'pins', child: Text(context.l10n.gsNotice)),
-                  PopupMenuItem(value: 'notes', child: Text(context.l10n.noteWord)),
-                  PopupMenuItem(value: 'events', child: Text(context.l10n.scheduleWord)),
-                  PopupMenuItem(value: 'polls', child: Text(context.l10n.pollWord)),
-                  PopupMenuItem(value: 'albums', child: Text(context.l10n.albumWord)),
+                  PopupMenuItem(value: 'pins', child: _MenuRow(Icons.campaign_outlined, context.l10n.gsNotice)),
+                  PopupMenuItem(value: 'notes', child: _MenuRow(Icons.sticky_note_2_outlined, context.l10n.noteWord)),
+                  PopupMenuItem(value: 'events', child: _MenuRow(Icons.event_outlined, context.l10n.scheduleWord)),
+                  PopupMenuItem(value: 'polls', child: _MenuRow(Icons.how_to_vote_outlined, context.l10n.pollWord)),
+                  PopupMenuItem(value: 'albums', child: _MenuRow(Icons.photo_library_outlined, context.l10n.albumWord)),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(value: 'pay', child: _MenuRow(Icons.payments_outlined, context.l10n.mvSend)),
+                  PopupMenuItem(value: 'approvals', child: _MenuRow(Icons.fact_check_outlined, context.l10n.apprTitle)),
+                  PopupMenuItem(value: 'sync', child: _MenuRow(Icons.sync, context.l10n.roomOfflineSync)),
+                  if (session.kindOf(conversationId) == 'group')
+                    PopupMenuItem(value: 'settings', child: _MenuRow(Icons.settings_outlined, context.l10n.gsTitle)),
                 ],
               ),
-              IconButton(
-                tooltip: context.l10n.mvSend,
-                icon: Icon(Icons.payments_outlined,
-                    color: dark ? HarborDark.ink : Colors.white),
-                onPressed: session.sendPayInChat,
-              ),
-              IconButton(
-                tooltip: context.l10n.apprTitle,
-                icon: Icon(Icons.fact_check_outlined,
-                    color: dark ? HarborDark.ink : Colors.white),
-                onPressed: () => approvalsSheet(context, conversationId),
-              ),
-              IconButton(
-                tooltip: context.l10n.roomOfflineSync,
-                icon: Icon(Icons.sync, color: dark ? HarborDark.ink : Colors.white),
-                onPressed: session.syncOffline,
-              ),
-              if (session.kindOf(conversationId) == 'group')
-                IconButton(
-                  tooltip: context.l10n.gsTitle,
-                  icon: Icon(Icons.settings_outlined,
-                      color: dark ? HarborDark.ink : Colors.white),
-                  onPressed: () =>
-                      context.go('/chats/$conversationId/settings'),
-                ),
             ],
           ),
         ),
@@ -647,8 +755,7 @@ class _SignalBubble extends StatelessWidget {
           borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
         ),
         child: InkWell(
-          onLongPress: () =>
-              SessionScope.of(context, listen: false).setReply(msgId),
+          onLongPress: () => _messageActions(context, m, mine, msgId),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Column(
@@ -798,45 +905,6 @@ class _SignalBubble extends StatelessWidget {
                               color: faint)),
                     if (m['edited_at'] != null && '${m['edited_at']}'.isNotEmpty)
                       Text(context.l10n.roomEdited, style: TextStyle(fontSize: 9, color: faint)),
-                    for (final emo in lunoReactions.take(3))
-                      InkWell(
-                        onTap: () => session.react(m['id'], emo),
-                        child: Text(emo, style: const TextStyle(fontSize: HarborType.small)),
-                      ),
-                    InkWell(
-                      onTap: () => session.translateMessage(msgId, '${m['body']}'),
-                      child: Icon(Icons.translate, size: 14, color: faint),
-                    ),
-                    InkWell(
-                      onTap: () => session.pin(m['id']),
-                      child: Icon(Icons.push_pin, size: 13, color: faint),
-                    ),
-                    InkWell(
-                      onTap: () => session.saveToKeep(m['id'], '${m['body']}'),
-                      child: Icon(Icons.bookmark_border, size: 13, color: faint),
-                    ),
-                    if (mine)
-                      InkWell(
-                        onTap: () => session.unsend(m['id']),
-                        child: Icon(Icons.delete_outline, size: 13, color: faint),
-                      ),
-                    if (mine && m['kind'] == 'text')
-                      InkWell(
-                        onTap: () => _editMessageDialog(
-                            context, session, msgId, '${m['body']}'),
-                        child: Icon(Icons.edit_outlined, size: 13, color: faint),
-                      ),
-                    InkWell(
-                      onTap: () =>
-                          _forwardRoomSheet(context, session, msgId),
-                      child:
-                          Icon(Icons.forward_outlined, size: 13, color: faint),
-                    ),
-                    InkWell(
-                      onTap: () => session.hideMessage(msgId),
-                      child: Icon(Icons.visibility_off_outlined,
-                          size: 13, color: faint),
-                    ),
                   ],
                 ),
               ],
@@ -1683,71 +1751,92 @@ class _Composer extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final kind = DeviceScope.of(context);
     final dense = kind == DeviceKind.compactApp;
+    final accent = dark ? HarborDark.harbor : HarborLight.harbor;
+    final idle = dark ? HarborDark.drift : HarborLight.drift;
+    // Two tools on the left, the text box takes the rest, one action on the
+    // right: mic while empty, send once there is text (LINE-style).
     return Container(
       color: dark ? HarborDark.surface : Colors.white,
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: dense ? 4 : 8),
+      padding: EdgeInsets.symmetric(horizontal: 4, vertical: dense ? 4 : 6),
       child: SafeArea(
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            IconButton(
-              tooltip: context.l10n.camPhoto,
-              icon: Icon(Icons.photo_outlined,
-                  color: dark ? HarborDark.harbor : HarborLight.harbor),
-              onPressed: () => _pickImageSource(context),
-            ),
-            IconButton(
-              tooltip: context.l10n.mvSticker,
-              icon: Icon(Icons.stars_rounded,
-                  color: dark ? HarborDark.harbor : HarborLight.harbor),
-              onPressed: () =>
-                  SessionScope.of(context, listen: false).toggleStickerPicker(),
-            ),
-            IconButton(
-              tooltip: context.l10n.voiceMsgWord,
-              icon: Icon(Icons.mic_outlined,
-                  color: dark ? HarborDark.harbor : HarborLight.harbor),
-              onPressed: () => _recordVoice(context),
-            ),
-            IconButton(
-              tooltip: context.l10n.fileWord,
-              icon: Icon(Icons.attach_file,
-                  color: dark ? HarborDark.harbor : HarborLight.harbor),
-              onPressed: session.busy ? null : () => session.sendFile(),
-            ),
             PopupMenuButton<String>(
               tooltip: context.l10n.mvMoreActions,
-              icon: Icon(Icons.add_circle_outline,
-                  color: dark ? HarborDark.harbor : HarborLight.harbor),
+              icon: Icon(Icons.add, color: idle),
               onSelected: (v) {
-                if (v == 'location') {
+                if (v == 'file') {
+                  if (!session.busy) session.sendFile();
+                } else if (v == 'location') {
                   _shareLocationDialog(context);
                 } else if (v == 'contact') {
                   _shareContactSheet(context);
                 }
               },
               itemBuilder: (_) => [
-                PopupMenuItem(value: 'location', child: Text(context.l10n.mvLocationShare)),
-                PopupMenuItem(value: 'contact', child: Text(context.l10n.mvShareContact)),
+                PopupMenuItem(value: 'file', child: _MenuRow(Icons.attach_file, context.l10n.fileWord)),
+                PopupMenuItem(value: 'location', child: _MenuRow(Icons.place_outlined, context.l10n.mvLocationShare)),
+                PopupMenuItem(value: 'contact', child: _MenuRow(Icons.person_outline, context.l10n.mvShareContact)),
               ],
             ),
+            IconButton(
+              tooltip: context.l10n.camPhoto,
+              icon: Icon(Icons.photo_outlined, color: idle),
+              onPressed: () => _pickImageSource(context),
+            ),
             Expanded(
-              child: TextField(
-                controller: controller,
-                style: const TextStyle(fontSize: LunoType.inputSize),
-                minLines: 1,
-                maxLines: dense ? 2 : 4,
-                decoration: InputDecoration(
-                  hintText: context.l10n.roomComposerHint,
-                  isDense: true,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: TextField(
+                  controller: controller,
+                  style: const TextStyle(fontSize: LunoType.inputSize),
+                  minLines: 1,
+                  maxLines: dense ? 3 : 5,
+                  textInputAction: TextInputAction.send,
+                  decoration: InputDecoration(
+                    hintText: context.l10n.roomComposerHint,
+                    hintMaxLines: 1,
+                    isDense: true,
+                    filled: true,
+                    fillColor: dark ? HarborDark.chart : const Color(0xFFF1F3F4),
+                    contentPadding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(HarborRadius.sheet),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(HarborRadius.sheet),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(HarborRadius.sheet),
+                      borderSide: BorderSide(color: accent),
+                    ),
+                    suffixIcon: IconButton(
+                      tooltip: context.l10n.mvSticker,
+                      icon: Icon(Icons.sentiment_satisfied_alt_outlined, color: idle),
+                      onPressed: () =>
+                          SessionScope.of(context, listen: false).toggleStickerPicker(),
+                    ),
+                  ),
+                  onSubmitted: (_) => onSend(),
                 ),
-                onSubmitted: (_) => onSend(),
               ),
             ),
-            IconButton(
-              tooltip: context.l10n.sendBtn,
-              onPressed: session.busy ? null : onSend,
-              icon: Icon(Icons.send_rounded,
-                  color: dark ? HarborDark.harbor : HarborLight.harbor),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (context, value, _) => value.text.trim().isEmpty
+                  ? IconButton(
+                      tooltip: context.l10n.voiceMsgWord,
+                      icon: Icon(Icons.mic_none, color: idle),
+                      onPressed: () => _recordVoice(context),
+                    )
+                  : IconButton(
+                      tooltip: context.l10n.sendBtn,
+                      onPressed: session.busy ? null : onSend,
+                      icon: Icon(Icons.send_rounded, color: accent),
+                    ),
             ),
           ],
         ),

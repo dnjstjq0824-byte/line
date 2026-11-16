@@ -412,6 +412,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get closeWord => '閉じる';
 
   @override
+  String get tabChats => 'トーク';
+
+  @override
+  String get actTranslate => '翻訳';
+
+  @override
+  String get actPin => 'アナウンスに登録';
+
+  @override
+  String get actKeep => 'Keepに保存';
+
+  @override
+  String get actUnsend => '送信取消';
+
+  @override
+  String get actForward => '転送';
+
+  @override
+  String get actHide => '自分のみ削除';
+
+  @override
   String get navTalks => 'トーク';
 
   @override
@@ -449,9 +470,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get authHarborGate => 'ハーバーゲートv3';
-
-  @override
-  String get authDemoHint => '💡 デモアカウント: user@luno.local / LunoUser#2026!';
 
   @override
   String get authDisplayName => '表示名';
@@ -693,9 +711,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get roomListTitle => 'トーク一覧';
-
-  @override
-  String get roomKeepBox => '保管庫';
 
   @override
   String get roomOfflineSync => 'オフライン同期';
@@ -1003,9 +1018,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get loungeOpen => '開設';
-
-  @override
-  String get moreAllDesks => 'ハーバーデスク全一覧';
 
   @override
   String get newsEmpty => '表示するニュースがありません';

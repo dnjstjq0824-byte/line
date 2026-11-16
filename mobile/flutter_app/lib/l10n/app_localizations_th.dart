@@ -414,6 +414,27 @@ class AppLocalizationsTh extends AppLocalizations {
   String get closeWord => 'ปิด';
 
   @override
+  String get tabChats => 'แชต';
+
+  @override
+  String get actTranslate => 'แปล';
+
+  @override
+  String get actPin => 'ปักเป็นประกาศ';
+
+  @override
+  String get actKeep => 'บันทึกใน Keep';
+
+  @override
+  String get actUnsend => 'ยกเลิกการส่ง';
+
+  @override
+  String get actForward => 'ส่งต่อ';
+
+  @override
+  String get actHide => 'ลบสำหรับฉัน';
+
+  @override
   String get navTalks => 'แชท';
 
   @override
@@ -451,9 +472,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get authHarborGate => 'ฮาร์เบอร์เกต v3';
-
-  @override
-  String get authDemoHint => '💡 บัญชีทดลอง: user@luno.local / LunoUser#2026!';
 
   @override
   String get authDisplayName => 'ชื่อที่แสดง';
@@ -697,9 +715,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get roomListTitle => 'รายการแชท';
-
-  @override
-  String get roomKeepBox => 'กล่องเก็บ';
 
   @override
   String get roomOfflineSync => 'ซิงก์ออฟไลน์';
@@ -1007,9 +1022,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get loungeOpen => 'เปิด';
-
-  @override
-  String get moreAllDesks => 'เดสก์ฮาร์เบอร์ทั้งหมด';
 
   @override
   String get newsEmpty => 'ไม่มีข่าวแสดง';

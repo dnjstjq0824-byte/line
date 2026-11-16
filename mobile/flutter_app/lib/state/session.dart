@@ -928,8 +928,32 @@ class SessionController extends ChangeNotifier {
     return senderNameOf(message, members);
   }
 
-  Future<void> openChat(String id, [String? title]) {
-    return run(() async {
+  Future<void> openChat(String id, [String? title]) async {
+    // Never show the previous room's messages under the new room's name.
+    if (selectedId != id) {
+      messages = [];
+      pins = [];
+      notes = [];
+      events = [];
+      polls = [];
+      albums = [];
+      proposals = [];
+    }
+    selectedId = id;
+    selectedTitle = title ?? titleOf(id);
+    notifyListeners();
+    // run() drops calls while another action is in flight; opening a room
+    // must not be dropped, so wait (bounded) for that action to finish.
+    for (var i = 0; i < 100 && busy; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (selectedId != id) return; // the user already moved on
+    return run(() => _loadRoomData(id, title));
+  }
+
+  /// Loads one room's messages and side data. Callers already inside run()
+  /// (approve, pay) use this directly; run() would drop a nested call.
+  Future<void> _loadRoomData(String id, [String? title]) async {
       selectedId = id;
       selectedTitle = title ?? titleOf(id);
       replyToId = '';
@@ -957,7 +981,6 @@ class SessionController extends ChangeNotifier {
             method: 'POST', data: {'sequence': messages.last['sequence']});
         await reload();
       }
-    });
   }
 
   void closeChat() {
@@ -1945,7 +1968,7 @@ class SessionController extends ChangeNotifier {
           data: {'decision': decision});
       notice = decision == 'approved' ? strings.msgApproved : strings.msgDeclined;
       await loadProposals(roomId);
-      await openChat(roomId);
+      await _loadRoomData(roomId);
     });
   }
 
@@ -2661,7 +2684,7 @@ class SessionController extends ChangeNotifier {
         'amount': 10000,
         'note': strings.payNoteRoom(selectedTitle),
       });
-      await openChat(selectedId, selectedTitle);
+      await _loadRoomData(selectedId, selectedTitle);
       await refreshChatList();
       notice = strings.msgPayDone10k;
     });

@@ -900,6 +900,48 @@ abstract class AppLocalizations {
   /// **'종료'**
   String get closeWord;
 
+  /// Bottom tab / rail label for the chat list
+  ///
+  /// In ko, this message translates to:
+  /// **'채팅'**
+  String get tabChats;
+
+  /// No description provided for @actTranslate.
+  ///
+  /// In ko, this message translates to:
+  /// **'번역'**
+  String get actTranslate;
+
+  /// No description provided for @actPin.
+  ///
+  /// In ko, this message translates to:
+  /// **'공지로 등록'**
+  String get actPin;
+
+  /// No description provided for @actKeep.
+  ///
+  /// In ko, this message translates to:
+  /// **'Keep에 저장'**
+  String get actKeep;
+
+  /// No description provided for @actUnsend.
+  ///
+  /// In ko, this message translates to:
+  /// **'보내기 취소'**
+  String get actUnsend;
+
+  /// No description provided for @actForward.
+  ///
+  /// In ko, this message translates to:
+  /// **'전달'**
+  String get actForward;
+
+  /// No description provided for @actHide.
+  ///
+  /// In ko, this message translates to:
+  /// **'나에게서 삭제'**
+  String get actHide;
+
   /// navTalks (F20)
   ///
   /// In ko, this message translates to:
@@ -977,12 +1019,6 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'하버 게이트 v3'**
   String get authHarborGate;
-
-  /// authDemoHint (F20)
-  ///
-  /// In ko, this message translates to:
-  /// **'💡 데모 계정: user@luno.local / LunoUser#2026!'**
-  String get authDemoHint;
 
   /// authDisplayName (F20)
   ///
@@ -1445,12 +1481,6 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'대화 목록'**
   String get roomListTitle;
-
-  /// roomKeepBox (F20)
-  ///
-  /// In ko, this message translates to:
-  /// **'보관함'**
-  String get roomKeepBox;
 
   /// roomOfflineSync (F20)
   ///
@@ -2027,12 +2057,6 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'개설'**
   String get loungeOpen;
-
-  /// moreAllDesks (F20)
-  ///
-  /// In ko, this message translates to:
-  /// **'하버 데스크 전체 목록'**
-  String get moreAllDesks;
 
   /// newsEmpty (F20)
   ///

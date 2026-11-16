@@ -13,9 +13,9 @@ import 'package:luno_messenger/util/app_l10n.dart';
 void main() {
   test('bottom tabs match the web order', () {
     expect(LunoNav.primary.map((d) => d.route),
-        ['/home', '/chats', '/news', '/calls', '/wallet']);
+        ['/home', '/chats', '/calls', '/news', '/more']);
     expect(LunoNav.primary.map((d) => d.labelIn(stringsFor('ko'))),
-        ['홈', '토크', '뉴스', '통화', '지갑']);
+        ['홈', '채팅', '통화', '뉴스', '더보기']);
   });
 
   test('tablet rail and list widths mirror the token file', () {
@@ -62,6 +62,9 @@ void main() {
     '/calls',
     '/wallet',
     '/settings',
+    '/more',
+    '/shop',
+    '/chats/c-long',
   ];
   for (final sizeEntry in sizes.entries) {
     for (final route in routes) {
@@ -72,7 +75,19 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         final session = SessionController()
           ..selfId = 'u-test'
-          ..selfName = 'Size Tester';
+          ..selfName = 'Size Tester'
+          // A room whose name and message are far wider than a phone.
+          ..selectedId = 'c-long'
+          ..selectedTitle = '아주아주 긴 이름의 프로젝트 협업 단체 대화방 2026 하반기 출시 준비'
+          ..messages = [
+            {
+              'id': 'm1',
+              'sender_id': 'u-other',
+              'kind': 'text',
+              'body': '긴 메시지 ' * 30,
+              'created_at': '2026-11-16T00:00:00Z'
+            }
+          ];
         addTearDown(session.disposeAll);
         final router = buildRouter(session);
         addTearDown(router.dispose);

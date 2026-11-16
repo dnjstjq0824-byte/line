@@ -69,52 +69,35 @@ class _ChatsPageState extends State<ChatsPage> {
         children: [
           PageColumn(
             children: [
-              Masthead(title: context.l10n.navTalks),
-              Row(
-                children: [
-                  Expanded(child: _SearchEntry(dark: dark)),
-                  Material(
-                    color: Colors.transparent,
-                    child: IconButton(
+              Masthead(
+                title: context.l10n.navChats,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
                       tooltip: context.l10n.chatsUnreadFirst,
-                      icon: Icon(
-                        unreadFirst
-                            ? Icons.sort
-                            : Icons.sort_outlined,
-                        color: unreadFirst
-                            ? (dark
-                                ? HarborDark.harbor
-                                : HarborLight.harbor)
-                            : (dark
-                                ? HarborDark.drift
-                                : HarborLight.drift),
-                      ),
+                      isSelected: unreadFirst,
+                      icon: Icon(Icons.sort,
+                          color: unreadFirst
+                              ? (dark ? HarborDark.harbor : HarborLight.harbor)
+                              : null),
                       onPressed: () =>
                           setState(() => unreadFirst = !unreadFirst),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OutlinedButton.icon(
+                    IconButton(
+                      tooltip: context.l10n.gsJoinByLink,
+                      icon: const Icon(Icons.link),
                       onPressed: () => _joinDialog(context),
-                      icon: const Icon(Icons.link, size: 18),
-                      label: Text(context.l10n.gsJoinByLink),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton.tonalIcon(
+                    IconButton(
+                      tooltip: context.l10n.chatsMakeGroup,
+                      icon: const Icon(Icons.add_comment_outlined),
                       onPressed: () => _groupDialog(context),
-                      icon: const Icon(Icons.group_add_outlined, size: 18),
-                      label: Text(context.l10n.chatsMakeGroup),
                     ),
                   ],
                 ),
               ),
+              _SearchEntry(dark: dark),
               const SizedBox(height: 8),
               if (session.pendingShareText != null &&
                   session.pendingShareText!.isNotEmpty)

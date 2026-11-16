@@ -412,6 +412,27 @@ class AppLocalizationsKo extends AppLocalizations {
   String get closeWord => '종료';
 
   @override
+  String get tabChats => '채팅';
+
+  @override
+  String get actTranslate => '번역';
+
+  @override
+  String get actPin => '공지로 등록';
+
+  @override
+  String get actKeep => 'Keep에 저장';
+
+  @override
+  String get actUnsend => '보내기 취소';
+
+  @override
+  String get actForward => '전달';
+
+  @override
+  String get actHide => '나에게서 삭제';
+
+  @override
   String get navTalks => '토크';
 
   @override
@@ -449,9 +470,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get authHarborGate => '하버 게이트 v3';
-
-  @override
-  String get authDemoHint => '💡 데모 계정: user@luno.local / LunoUser#2026!';
 
   @override
   String get authDisplayName => '표시 이름';
@@ -693,9 +711,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get roomListTitle => '대화 목록';
-
-  @override
-  String get roomKeepBox => '보관함';
 
   @override
   String get roomOfflineSync => '오프라인 동기화';
@@ -1003,9 +1018,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get loungeOpen => '개설';
-
-  @override
-  String get moreAllDesks => '하버 데스크 전체 목록';
 
   @override
   String get newsEmpty => '표시할 뉴스가 없습니다';

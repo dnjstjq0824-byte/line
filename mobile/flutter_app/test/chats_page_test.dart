@@ -53,7 +53,9 @@ void main() {
     expect(find.text('스터디 (5)'), findsOneWidget);
     expect(find.text('도천재'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
-    expect(find.text('그룹 만들기'), findsOneWidget);
+    // Header actions are icons with tooltips (LINE-style title row).
+    expect(find.byTooltip('그룹 만들기'), findsOneWidget);
+    expect(find.byTooltip('링크로 참여'), findsOneWidget);
   });
 
   testWidgets('sort toggle floats unread rooms first',

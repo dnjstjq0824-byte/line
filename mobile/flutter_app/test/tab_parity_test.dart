@@ -9,17 +9,17 @@ import 'package:luno_messenger/state/session.dart';
 import 'package:luno_messenger/util/app_l10n.dart';
 import 'package:luno_messenger/util/store_packs.dart';
 
-// UX4 web tab parity: bottom bar follows the web five-tab order
-// (홈/토크/뉴스/통화/지갑). P4b-6 replaced the "preparing" placeholder with
+// Web tab parity: bottom bar follows the web five-tab order
+// (홈/채팅/통화/뉴스/더보기). P4b-6 replaced the "preparing" placeholder with
 // the real catalog: 쇼핑 lists packs and honestly notes that checkout is
 // unavailable (503 fail-closed on both backends). 앱 is a directory over
 // real destinations.
 void main() {
   test('bottom bar follows the web five-tab order', () {
     expect(LunoNav.primary.map((d) => d.route),
-        ['/home', '/chats', '/news', '/calls', '/wallet']);
+        ['/home', '/chats', '/calls', '/news', '/more']);
     expect(LunoNav.primary.map((d) => d.labelIn(stringsFor('ko'))),
-        ['홈', '토크', '뉴스', '통화', '지갑']);
+        ['홈', '채팅', '통화', '뉴스', '더보기']);
     expect(LunoNav.parentOf('/shop'), '/shop');
     expect(LunoNav.parentOf('/apps'), '/apps');
   });

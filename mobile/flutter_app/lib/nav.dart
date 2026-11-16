@@ -18,6 +18,10 @@ class LunoDestination {
         return s.mvHome;
       case 'navTalks':
         return s.navTalks;
+      case 'tabChats':
+        return s.tabChats;
+      case 'mvMoreActions':
+        return s.mvMoreActions;
       case 'mvNews':
         return s.mvNews;
       case 'mvCall':
@@ -45,15 +49,17 @@ class LunoDestination {
 }
 
 abstract final class LunoNav {
-  // UX4: bottom tabs match the web order (home/chats/news/calls/wallet).
+  // Bottom tabs match the web shell: home, chats, calls, news, then More
+  // (every other destination, one tap away).
   static const primary = <LunoDestination>[
     LunoDestination('/home', 'mvHome', Icons.home_outlined, Icons.home),
-    LunoDestination('/chats', 'navTalks', Icons.chat_bubble_outline, Icons.chat_bubble),
-    LunoDestination('/news', 'mvNews', Icons.newspaper_outlined, Icons.newspaper),
+    LunoDestination('/chats', 'tabChats', Icons.chat_bubble_outline, Icons.chat_bubble),
     LunoDestination('/calls', 'mvCall', Icons.phone_outlined, Icons.phone),
-    LunoDestination('/wallet', 'mvWallet', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
+    LunoDestination('/news', 'mvNews', Icons.newspaper_outlined, Icons.newspaper),
+    LunoDestination('/more', 'mvMoreActions', Icons.more_horiz, Icons.more_horiz),
   ];
   static const secondary = <LunoDestination>[
+    LunoDestination('/wallet', 'mvWallet', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
     LunoDestination('/shop', 'mvRailShop', Icons.shopping_bag_outlined, Icons.shopping_bag),
     LunoDestination('/apps', 'appWord', Icons.apps_outlined, Icons.apps),
     LunoDestination('/feed', 'navFeed', Icons.play_circle_outline, Icons.play_circle),
@@ -63,6 +69,12 @@ abstract final class LunoNav {
     LunoDestination('/console', 'consoleTitle', Icons.radar_outlined, Icons.radar),
   ];
   static const all = <LunoDestination>[...primary, ...secondary];
+
+  /// Tablet/desktop rails list every destination directly, so the phone-only
+  /// "More" index is left out there.
+  static List<LunoDestination> get railPrimary =>
+      primary.where((d) => d.route != '/more').toList();
+  static List<LunoDestination> get rail => [...railPrimary, ...secondary];
 
   /// Deep routes highlight their parent destination (/chats/9 -> /chats).
   static String parentOf(String location) {

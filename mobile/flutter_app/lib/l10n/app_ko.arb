@@ -542,6 +542,16 @@
   "@closeWord": {
     "description": "closeWord (F20)"
   },
+  "tabChats": "채팅",
+  "@tabChats": {
+    "description": "Bottom tab / rail label for the chat list"
+  },
+  "actTranslate": "번역",
+  "actPin": "공지로 등록",
+  "actKeep": "Keep에 저장",
+  "actUnsend": "보내기 취소",
+  "actForward": "전달",
+  "actHide": "나에게서 삭제",
   "navTalks": "토크",
   "@navTalks": {
     "description": "navTalks (F20)"
@@ -593,10 +603,6 @@
   "authHarborGate": "하버 게이트 v3",
   "@authHarborGate": {
     "description": "authHarborGate (F20)"
-  },
-  "authDemoHint": "💡 데모 계정: user@luno.local / LunoUser#2026!",
-  "@authDemoHint": {
-    "description": "authDemoHint (F20)"
   },
   "authDisplayName": "표시 이름",
   "@authDisplayName": {
@@ -900,10 +906,6 @@
   "roomListTitle": "대화 목록",
   "@roomListTitle": {
     "description": "roomListTitle (F20)"
-  },
-  "roomKeepBox": "보관함",
-  "@roomKeepBox": {
-    "description": "roomKeepBox (F20)"
   },
   "roomOfflineSync": "오프라인 동기화",
   "@roomOfflineSync": {
@@ -1342,10 +1344,6 @@
   "loungeOpen": "개설",
   "@loungeOpen": {
     "description": "loungeOpen (F20)"
-  },
-  "moreAllDesks": "하버 데스크 전체 목록",
-  "@moreAllDesks": {
-    "description": "moreAllDesks (F20)"
   },
   "newsEmpty": "표시할 뉴스가 없습니다",
   "@newsEmpty": {

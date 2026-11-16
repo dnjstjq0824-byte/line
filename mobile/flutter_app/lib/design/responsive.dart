@@ -101,7 +101,7 @@ class PageColumn extends StatelessWidget {
   }
 }
 
-/// Harbor page masthead: lamp + title + optional trailing.
+/// Page header: bold title (one line) + optional actions on the right.
 /// Sentence-case titles only — no all-caps kickers.
 class Masthead extends StatelessWidget {
   final String title;
@@ -117,13 +117,15 @@ class Masthead extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const LampBar(height: 26),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: text.displaySmall?.copyWith(fontSize: HarborType.display)),
+                Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.displaySmall?.copyWith(
+                        fontSize: HarborType.display, fontWeight: FontWeight.w800)),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
                   Text(subtitle!, style: text.bodySmall),
@@ -168,7 +170,7 @@ class _ConsoleDesk extends StatelessWidget {
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       children: [
-                        for (final d in LunoNav.primary)
+                        for (final d in LunoNav.railPrimary)
                           _RailItem(destination: d, active: active == d.route, unread: d.route == '/chats'),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
@@ -296,7 +298,7 @@ class _TabletDesk extends StatelessWidget {
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       children: [
-                        for (final d in LunoNav.all)
+                        for (final d in LunoNav.rail)
                           _IconRailItem(destination: d, active: active == d.route),
                       ],
                     ),
@@ -368,103 +370,166 @@ class _IconRailItem extends StatelessWidget {
   }
 }
 
-// --- Mobile: masthead bar + bottom signal deck --------------------------------
+// --- Phone (mobile + compact): one header per screen, bottom tabs -------------
+//
+// Top-level tabs draw their own title row (Masthead), so the shell adds no
+// bar above them. Sub-pages get a plain back bar and no tab bar; a chat room
+// draws its own header, so it gets neither.
 
 class _MobileDesk extends StatelessWidget {
   final Widget child;
   const _MobileDesk({required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    final location = GoRouterState.of(context).uri.path;
-    final active = LunoNav.parentOf(location);
-    var index = LunoNav.primary.indexWhere((d) => d.route == active);
-    if (index < 0) index = 0;
-    final deep = !LunoNav.all.any((d) => d.route == location);
-    return Scaffold(
-      appBar: AppBar(
-        leading: deep ? const BackButton() : null,
-        title: const HarborWordmark(compact: false),
-        actions: [
-          IconButton(
-            tooltip: context.l10n.appWord,
-            onPressed: () => context.go('/apps'),
-            icon: const Icon(Icons.apps_outlined),
-          ),
-          IconButton(
-            tooltip: context.l10n.mvLogout,
-            onPressed: () => SessionScope.of(context, listen: false).logout(),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          const StatusStrip(),
-          Expanded(child: child),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (i) => context.go(LunoNav.primary[i].route),
-        destinations: [
-          for (final d in LunoNav.primary)
-            NavigationDestination(
-              icon: Icon(d.icon),
-              selectedIcon: Icon(d.activeIcon),
-              label: d.labelIn(context.l10n),
-            ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _PhoneDesk(compact: false, child: child);
 }
-
-// --- Compact app: dense single column, thumb-first ----------------------------
 
 class _CompactDesk extends StatelessWidget {
   final Widget child;
   const _CompactDesk({required this.child});
 
   @override
+  Widget build(BuildContext context) => _PhoneDesk(compact: true, child: child);
+}
+
+/// A route that renders its own header row (back button included).
+bool _drawsOwnHeader(String location) =>
+    RegExp(r'^/chats/[^/]+$').hasMatch(location);
+
+class _PhoneDesk extends StatelessWidget {
+  final Widget child;
+  final bool compact;
+  const _PhoneDesk({required this.child, required this.compact});
+
+  @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     final active = LunoNav.parentOf(location);
+    final topLevel = LunoNav.all.any((d) => d.route == location);
     var index = LunoNav.primary.indexWhere((d) => d.route == active);
-    if (index < 0) index = 0;
-    final deep = !LunoNav.all.any((d) => d.route == location);
+    // Secondary destinations (wallet, shop, ...) live under More.
+    if (index < 0) index = LunoNav.primary.length - 1;
+    final ownHeader = _drawsOwnHeader(location);
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 48,
-        leading: deep ? const BackButton() : null,
-        title: const HarborWordmark(compact: true),
-        actions: [
-          IconButton(
-            tooltip: context.l10n.appWord,
-            onPressed: () => context.go('/apps'),
-            icon: const Icon(Icons.apps_outlined),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          const StatusStrip(),
-          Expanded(child: child),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        height: 60,
-        selectedIndex: index,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: (i) => context.go(LunoNav.primary[i].route),
-        destinations: [
-          for (final d in LunoNav.primary)
-            NavigationDestination(
-              icon: Icon(d.icon, size: 20),
-              selectedIcon: Icon(d.activeIcon, size: 20),
-              label: d.labelIn(context.l10n),
+      appBar: topLevel || ownHeader
+          ? null
+          : AppBar(
+              toolbarHeight: compact ? 48 : 52,
+              leading: BackButton(
+                onPressed: () => context.canPop()
+                    ? context.pop()
+                    : context.go(LunoNav.parentOf(location) == location
+                        ? '/home'
+                        : LunoNav.parentOf(location)),
+              ),
             ),
-        ],
+      body: SafeArea(
+        top: topLevel,
+        bottom: false,
+        child: Column(
+          children: [
+            const StatusStrip(),
+            Expanded(child: child),
+          ],
+        ),
+      ),
+      bottomNavigationBar: topLevel ? _TabBar(index: index, compact: compact) : null,
+    );
+  }
+}
+
+class _TabBar extends StatelessWidget {
+  final int index;
+  final bool compact;
+  const _TabBar({required this.index, required this.compact});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final session = SessionScope.of(context);
+    var unread = 0;
+    for (final c in session.chats) {
+      if (c is Map) unread += (c['unread_count'] as num?)?.toInt() ?? 0;
+    }
+    final accent = dark ? HarborDark.harbor : HarborLight.harbor;
+    final idle = dark ? HarborDark.drift : HarborLight.drift;
+    return Container(
+      decoration: BoxDecoration(
+        color: dark ? HarborDark.surface : Colors.white,
+        border: Border(
+            top: BorderSide(color: dark ? HarborDark.channel : HarborLight.channel)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: compact ? 56 : 60,
+          child: Row(
+            children: [
+              for (var i = 0; i < LunoNav.primary.length; i++)
+                Expanded(
+                  child: _TabItem(
+                    destination: LunoNav.primary[i],
+                    selected: i == index,
+                    color: i == index ? accent : idle,
+                    badge: LunoNav.primary[i].route == '/chats' ? unread : 0,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TabItem extends StatelessWidget {
+  final LunoDestination destination;
+  final bool selected;
+  final Color color;
+  final int badge;
+  const _TabItem({
+    required this.destination,
+    required this.selected,
+    required this.color,
+    required this.badge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = destination.labelIn(context.l10n);
+    final icon = Icon(selected ? destination.activeIcon : destination.icon,
+        size: 24, color: color);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: InkResponse(
+        onTap: () => context.go(destination.route),
+        containedInkWell: true,
+        highlightShape: BoxShape.rectangle,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            badge > 0
+                ? Badge(
+                    label: Text(badge > 99 ? '99+' : '$badge'),
+                    backgroundColor: Theme.of(context).brightness == Brightness.dark
+                        ? HarborDark.beacon
+                        : HarborLight.beacon,
+                    child: icon,
+                  )
+                : icon,
+            const SizedBox(height: 3),
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: HarborType.micro,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    color: color)),
+          ],
+        ),
       ),
     );
   }

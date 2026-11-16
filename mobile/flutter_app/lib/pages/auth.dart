@@ -398,19 +398,7 @@ class _GateForm extends StatelessWidget {
             Text(register ? context.l10n.createAccount : context.l10n.signInBtn, style: text.headlineSmall),
             const SizedBox(height: 4),
             Text('Connect Beyond Borders', style: text.bodySmall),
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
-                borderRadius: BorderRadius.circular(HarborRadius.control),
-              ),
-              child: Text(context.l10n.authDemoHint,
-                  style: TextStyle(
-                      fontSize: HarborType.small,
-                      fontWeight: FontWeight.w700,
-                      color: dark ? HarborDark.ink : HarborLight.harbor)),
-            ),
+            const SizedBox(height: 16),
             TextField(controller: email, decoration: InputDecoration(labelText: context.l10n.verifyEmailLabel)),
             if (register)
               TextField(controller: name, decoration: InputDecoration(labelText: context.l10n.authDisplayName)),

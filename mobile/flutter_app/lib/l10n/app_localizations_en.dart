@@ -414,6 +414,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get closeWord => 'Close';
 
   @override
+  String get tabChats => 'Chats';
+
+  @override
+  String get actTranslate => 'Translate';
+
+  @override
+  String get actPin => 'Pin as notice';
+
+  @override
+  String get actKeep => 'Save to Keep';
+
+  @override
+  String get actUnsend => 'Unsend';
+
+  @override
+  String get actForward => 'Forward';
+
+  @override
+  String get actHide => 'Delete for me';
+
+  @override
   String get navTalks => 'Chats';
 
   @override
@@ -451,10 +472,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authHarborGate => 'Harbor Gate v3';
-
-  @override
-  String get authDemoHint =>
-      '💡 Demo account: user@luno.local / LunoUser#2026!';
 
   @override
   String get authDisplayName => 'Display name';
@@ -699,9 +716,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get roomListTitle => 'Chat list';
-
-  @override
-  String get roomKeepBox => 'Keep box';
 
   @override
   String get roomOfflineSync => 'Offline sync';
@@ -1010,9 +1024,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get loungeOpen => 'Open';
-
-  @override
-  String get moreAllDesks => 'All harbor desks';
 
   @override
   String get newsEmpty => 'No news to show';

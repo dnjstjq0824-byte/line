@@ -281,7 +281,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('자동 번역 켜짐 · EN'), findsOneWidget);
     expect(find.text('저장'), findsOneWidget);
-    expect(find.byTooltip('파일'), findsOneWidget);
+    // File attach lives in the composer's + menu.
+    await tester.tap(find.byTooltip('더보기').last);
+    await tester.pumpAndSettle();
+    expect(find.text('파일'), findsOneWidget);
   });
 
   testWidgets('chat room banner shows the preparing notice while unconfigured',

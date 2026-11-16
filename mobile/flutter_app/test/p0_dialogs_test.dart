@@ -107,7 +107,7 @@ void main() {
     addTearDown(session.disposeAll);
     await tester.pumpWidget(_wrap(session, const ChatsPage()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('그룹 만들기'));
+    await tester.tap(find.byTooltip('그룹 만들기'));
     await tester.pumpAndSettle();
     expect(find.text('앨리스'), findsOneWidget);
     FilledButton createBtn() => tester.widget<FilledButton>(

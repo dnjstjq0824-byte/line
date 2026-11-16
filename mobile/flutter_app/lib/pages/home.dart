@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
 import '../util/app_l10n.dart';
@@ -32,50 +33,61 @@ class _HomePageState extends State<HomePage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
-          // Shortcut capsule: Keep + settings only. The reference bell
-          // and plus have no backend on this phone, so they stay out.
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              decoration: BoxDecoration(
-                color: dark ? HarborDark.surface : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: dark
-                        ? HarborDark.channel
-                        : HarborLight.channel),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Keep',
-                    icon: const Icon(Icons.bookmark_border),
-                    onPressed: () => context.go('/keep'),
+          // One header row like the other tabs: title left, shortcuts right.
+          Masthead(
+            title: context.l10n.mvHome,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Keep',
+                  icon: const Icon(Icons.bookmark_border),
+                  onPressed: () => context.go('/keep'),
+                ),
+                IconButton(
+                  tooltip: context.l10n.homeQrApprove,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (dialog) => _QrApproveDialog(
+                      onScan: () {
+                        Navigator.of(dialog).pop();
+                        context.go('/qr/scan');
+                      },
+                    ),
                   ),
-                  IconButton(
-                    tooltip: context.l10n.settingsTitle,
-                    icon: const Icon(Icons.settings_outlined),
-                    onPressed: () => context.go('/settings'),
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  tooltip: context.l10n.settingsTitle,
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => context.go('/settings'),
+                ),
+              ],
             ),
           ),
+          // My profile: avatar first, like a friend row but larger.
           InkWell(
             onTap: () => context.go('/profile'),
-            borderRadius: BorderRadius.circular(HarborRadius.avatar),
+            borderRadius: BorderRadius.circular(HarborRadius.control),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
                 children: [
+                  LineAvatar(
+                    glyph: name,
+                    color: dark ? HarborDark.harbor : HarborLight.harbor,
+                    size: 56,
+                  ),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.w800)),
+                                fontSize: 18, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 2),
                         Text(status,
                             maxLines: 1,
@@ -84,24 +96,8 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                   ),
-                  LineAvatar(
-                    glyph: name,
-                    color: dark ? HarborDark.harbor : HarborLight.harbor,
-                    size: 56,
-                  ),
-                  IconButton(
-                    tooltip: context.l10n.homeQrApprove,
-                    icon: const Icon(Icons.qr_code_scanner),
-                    onPressed: () => showDialog(
-                      context: context,
-                      builder: (dialog) => _QrApproveDialog(
-                        onScan: () {
-                          Navigator.of(dialog).pop();
-                          context.go('/qr/scan');
-                        },
-                      ),
-                    ),
-                  ),
+                  Icon(Icons.chevron_right,
+                      color: dark ? HarborDark.drift : HarborLight.drift),
                 ],
               ),
             ),

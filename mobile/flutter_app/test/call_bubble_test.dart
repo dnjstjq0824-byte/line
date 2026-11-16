@@ -130,7 +130,7 @@ void main() {
       expect(find.byIcon(Icons.bookmark_border), findsNothing);
     });
 
-    testWidgets('text bubbles keep their action row',
+    testWidgets('text bubbles open their actions on long-press',
         (WidgetTester tester) async {
       final s = _fixture([
         _msg(id: 'm1', sender: 'u2', body: '바쁘십니까'),
@@ -138,7 +138,13 @@ void main() {
       await tester.pumpWidget(_wrap(s));
       await tester.pumpAndSettle();
       expect(find.text('바쁘십니까'), findsOneWidget);
+      // The bubble stays clean; actions come up in a sheet.
+      expect(find.byIcon(Icons.translate), findsNothing);
+      await tester.longPress(find.text('바쁘십니까'));
+      await tester.pumpAndSettle();
       expect(find.byIcon(Icons.translate), findsOneWidget);
+      expect(find.text('답장'), findsOneWidget);
+      expect(find.text('전달'), findsOneWidget);
     });
 
     testWidgets('jump-latest button appears off-bottom and returns',
