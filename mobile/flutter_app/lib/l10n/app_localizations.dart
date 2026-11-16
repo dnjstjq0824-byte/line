@@ -2580,12 +2580,6 @@ abstract class AppLocalizations {
   /// **'게시'**
   String get storyPost;
 
-  /// walletLedger (F20)
-  ///
-  /// In ko, this message translates to:
-  /// **'LUNO Pay 출납부'**
-  String get walletLedger;
-
   /// walletBalance (F20)
   ///
   /// In ko, this message translates to:
@@ -3737,6 +3731,18 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'Muse Spark 1.3 이어서 진행'**
   String get pcQuickContinue;
+
+  /// No description provided for @walletShortcuts.
+  ///
+  /// In ko, this message translates to:
+  /// **'바로가기'**
+  String get walletShortcuts;
+
+  /// No description provided for @walletNoTx.
+  ///
+  /// In ko, this message translates to:
+  /// **'거래 내역이 없습니다.'**
+  String get walletNoTx;
 }
 
 class _AppLocalizationsDelegate

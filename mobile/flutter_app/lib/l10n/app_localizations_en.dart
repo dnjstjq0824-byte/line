@@ -1298,9 +1298,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storyPost => 'Post';
 
   @override
-  String get walletLedger => 'LUNO Pay ledger';
-
-  @override
   String get walletBalance => 'LUNO Pay balance';
 
   @override
@@ -1962,4 +1959,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pcQuickContinue => 'Continue with Muse Spark 1.3';
+
+  @override
+  String get walletShortcuts => 'Shortcuts';
+
+  @override
+  String get walletNoTx => 'No transactions yet.';
 }

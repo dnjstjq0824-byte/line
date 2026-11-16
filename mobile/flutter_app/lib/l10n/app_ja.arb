@@ -413,7 +413,6 @@
   "storyEmpty": "表示するストーリーがありません",
   "storyHint": "気軽な日常の一言",
   "storyPost": "投稿",
-  "walletLedger": "LUNO Pay出納帳",
   "walletBalance": "LUNO Pay残高",
   "walletTopup": "チャージ金額",
   "walletTopupNumber": "チャージ金額を数字で入力してください。",
@@ -605,5 +604,7 @@
   "pcQuickStatus": "現在の作業状況を報告",
   "pcQuickGit": "git status・ブランチ確認",
   "pcQuickCheck": "静的解析・ビルド点検",
-  "pcQuickContinue": "Muse Spark 1.3 で続行"
+  "pcQuickContinue": "Muse Spark 1.3 で続行",
+  "walletShortcuts": "ショートカット",
+  "walletNoTx": "取引履歴はありません。"
 }

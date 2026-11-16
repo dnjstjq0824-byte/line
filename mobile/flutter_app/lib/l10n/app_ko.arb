@@ -1698,10 +1698,6 @@
   "@storyPost": {
     "description": "storyPost (F20)"
   },
-  "walletLedger": "LUNO Pay 출납부",
-  "@walletLedger": {
-    "description": "walletLedger (F20)"
-  },
   "walletBalance": "LUNO Pay 머니 잔액",
   "@walletBalance": {
     "description": "walletBalance (F20)"
@@ -2698,5 +2694,7 @@
   "pcQuickContinue": "Muse Spark 1.3 이어서 진행",
   "@pcQuickContinue": {
     "description": "pcQuickContinue (PC agent)"
-  }
+  },
+  "walletShortcuts": "바로가기",
+  "walletNoTx": "거래 내역이 없습니다."
 }

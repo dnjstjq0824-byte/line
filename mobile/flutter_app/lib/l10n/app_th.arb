@@ -413,7 +413,6 @@
   "storyEmpty": "ไม่มีสตอรี่แสดง",
   "storyHint": "เรื่องเบาๆ สักบรรทัด",
   "storyPost": "โพสต์",
-  "walletLedger": "บัญชี LUNO Pay",
   "walletBalance": "ยอดเงิน LUNO Pay",
   "walletTopup": "จำนวนเงินเติม",
   "walletTopupNumber": "ใส่จำนวนเงินเติมเป็นตัวเลข",
@@ -605,5 +604,7 @@
   "pcQuickStatus": "รายงานสถานะปัจจุบัน",
   "pcQuickGit": "ตรวจ git status และ branch",
   "pcQuickCheck": "ตรวจ static analysis และ build",
-  "pcQuickContinue": "ให้ Muse Spark 1.3 ทำต่อ"
+  "pcQuickContinue": "ให้ Muse Spark 1.3 ทำต่อ",
+  "walletShortcuts": "ทางลัด",
+  "walletNoTx": "ยังไม่มีรายการ"
 }

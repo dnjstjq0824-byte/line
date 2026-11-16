@@ -1284,9 +1284,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get storyPost => '投稿';
 
   @override
-  String get walletLedger => 'LUNO Pay出納帳';
-
-  @override
   String get walletBalance => 'LUNO Pay残高';
 
   @override
@@ -1943,4 +1940,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pcQuickContinue => 'Muse Spark 1.3 で続行';
+
+  @override
+  String get walletShortcuts => 'ショートカット';
+
+  @override
+  String get walletNoTx => '取引履歴はありません。';
 }

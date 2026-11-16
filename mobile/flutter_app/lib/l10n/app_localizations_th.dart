@@ -1293,9 +1293,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get storyPost => 'โพสต์';
 
   @override
-  String get walletLedger => 'บัญชี LUNO Pay';
-
-  @override
   String get walletBalance => 'ยอดเงิน LUNO Pay';
 
   @override
@@ -1953,4 +1950,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get pcQuickContinue => 'ให้ Muse Spark 1.3 ทำต่อ';
+
+  @override
+  String get walletShortcuts => 'ทางลัด';
+
+  @override
+  String get walletNoTx => 'ยังไม่มีรายการ';
 }

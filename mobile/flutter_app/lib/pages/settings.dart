@@ -302,8 +302,9 @@ class _ProfileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: () => context.go('/profile'),
+      borderRadius: BorderRadius.circular(HarborRadius.card),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         child: Row(
           children: [
             LineAvatar(
@@ -344,18 +345,34 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Grouped card per section (LINE/web settings style): the title sits
+    // above, the rows live inside one rounded surface.
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(top: 20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: sub)),
-          const SizedBox(height: 4),
-          ...children,
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 6),
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: HarborType.small,
+                    fontWeight: FontWeight.w700,
+                    color: sub)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: dark ? HarborDark.surface : Colors.white,
+              borderRadius: BorderRadius.circular(HarborRadius.card),
+              border: Border.all(color: dark ? HarborDark.channel : HarborLight.channel),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
         ],
       ),
     );

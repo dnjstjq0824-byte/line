@@ -1284,9 +1284,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get storyPost => '게시';
 
   @override
-  String get walletLedger => 'LUNO Pay 출납부';
-
-  @override
   String get walletBalance => 'LUNO Pay 머니 잔액';
 
   @override
@@ -1943,4 +1940,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pcQuickContinue => 'Muse Spark 1.3 이어서 진행';
+
+  @override
+  String get walletShortcuts => '바로가기';
+
+  @override
+  String get walletNoTx => '거래 내역이 없습니다.';
 }

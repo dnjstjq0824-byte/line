@@ -91,25 +91,30 @@ class _NewsPageState extends State<NewsPage> {
       return RefreshIndicator(
         onRefresh: session.reload,
         child: ListView(
-          padding: const EdgeInsets.all(24),
           children: [
-            const SizedBox(height: 80),
-            Icon(Icons.newspaper_outlined,
-                size: 48, color: dark ? HarborDark.channel : HarborLight.channel),
-            const SizedBox(height: 12),
-            Text(context.l10n.newsEmpty,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(context.l10n.newsPullRefresh,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall),
+            PageColumn(
+              children: [
+                Masthead(title: context.l10n.mvNews),
+                const SizedBox(height: 64),
+                Icon(Icons.newspaper_outlined,
+                    size: 48, color: dark ? HarborDark.drift : HarborLight.drift),
+                const SizedBox(height: 12),
+                Text(context.l10n.newsEmpty,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(context.l10n.newsPullRefresh,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ],
         ),
       );
     }
     final heroes =
         session.newsHero.whereType<Map<String, dynamic>>().toList();
+    final line = dark ? HarborDark.channel : HarborLight.channel;
     return RefreshIndicator(
       onRefresh: session.reload,
       child: ListView(
@@ -118,54 +123,69 @@ class _NewsPageState extends State<NewsPage> {
             children: [
               Masthead(title: context.l10n.mvNews),
               if (session.newsIsSample) const NewsSampleBanner(),
-              if (heroes.isNotEmpty) ...[
-                SizedBox(
-                  height: 220,
-                  child: PageView.builder(
-                    itemCount: heroes.length,
-                    onPageChanged: (i) => setState(() => _heroPage = i),
-                    itemBuilder: (context, i) =>
-                        _HeroCard(article: heroes[i], index: i),
-                  ),
-                ),
-                const SizedBox(height: 8),
+              if (heroes.isNotEmpty)
+                LayoutBuilder(builder: (context, box) {
+                  // 16:10 photo plus two title lines and the byline.
+                  final height = box.maxWidth * 10 / 16 + 84;
+                  return SizedBox(
+                    height: height,
+                    child: PageView.builder(
+                      itemCount: heroes.length,
+                      onPageChanged: (i) => setState(() => _heroPage = i),
+                      itemBuilder: (context, i) =>
+                          _HeroCard(article: heroes[i], index: i),
+                    ),
+                  );
+                }),
+              if (heroes.length > 1) ...[
+                const SizedBox(height: 10),
                 Row(
                   key: const ValueKey('hero-segments'),
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     for (var i = 0; i < heroes.length; i++)
-                      Expanded(
-                        child: Container(
-                          height: 3,
-                          margin: EdgeInsets.only(
-                              left: i == 0 ? 0 : 4),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(2),
-                            color: i == _heroPage
-                                ? (dark
-                                    ? Colors.white
-                                    : HarborLight.harbor)
-                                : (dark
-                                    ? Colors.white24
-                                    : HarborLight.channel),
-                          ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: i == _heroPage ? 20 : 7,
+                        height: 7,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(HarborRadius.lamp),
+                          color: i == _heroPage
+                              ? (dark ? HarborDark.harbor : HarborLight.harbor)
+                              : line,
                         ),
                       ),
                   ],
                 ),
               ],
               if (session.newsPopular.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text(context.l10n.mvTodayPopular,
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                for (var i = 0; i < session.newsPopular.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  _NewsRow(
-                    article:
-                        session.newsPopular[i] as Map<String, dynamic>,
-                    fallbackRank: i + 1,
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
+                  decoration: BoxDecoration(
+                    color: dark ? HarborDark.surface : Colors.white,
+                    borderRadius: BorderRadius.circular(HarborRadius.card),
+                    border: Border.all(color: line),
                   ),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(context.l10n.mvTodayPopular,
+                          style: const TextStyle(
+                              fontSize: HarborType.body, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      for (var i = 0; i < session.newsPopular.length; i++) ...[
+                        if (i > 0) Divider(height: 1, color: line),
+                        _NewsRow(
+                          article:
+                              session.newsPopular[i] as Map<String, dynamic>,
+                          fallbackRank: i + 1,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ],
           ),
@@ -185,63 +205,54 @@ class _HeroCard extends StatelessWidget {
     final session = SessionScope.of(context, listen: false);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final imageUrl = newsField(article, 'image_url');
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(HarborRadius.card)),
-      child: InkWell(
-        onTap: () => context.go('/news/hero-$index'),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (imageUrl.isNotEmpty)
-              Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, _, __) => Container(
-                    color: dark ? HarborDark.chart : HarborLight.harbor),
-              )
-            else
-              Container(
-                  color: dark ? HarborDark.chart : HarborLight.harbor),
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black87],
+    final placeholder =
+        Container(color: dark ? HarborDark.chart : HarborLight.seaGlass);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Material(
+        color: dark ? HarborDark.surface : Colors.white,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(HarborRadius.sheet),
+          side: BorderSide(color: dark ? HarborDark.channel : HarborLight.channel),
+        ),
+        child: InkWell(
+          onTap: () => context.go('/news/hero-$index'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 10,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, _, __) => placeholder)
+                    : placeholder,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      newsField(article, 'title'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: HarborType.title,
+                          fontWeight: FontWeight.w800,
+                          height: 1.3),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(newsByline(session, article),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
                 ),
               ),
-            ),
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 14,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    newsField(article, 'title'),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: HarborType.title,
-                        fontWeight: FontWeight.w800,
-                        height: 1.3),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    newsByline(session, article),
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.75),
-                        fontSize: HarborType.small),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -259,66 +270,60 @@ class _NewsRow extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final rank = article['rank'] is int ? article['rank'] as int : fallbackRank;
     final imageUrl = newsField(article, 'image_url');
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-      onTap: () =>
-          context.go('/news/${newsAddress(session, article)}'),
-      leading: SizedBox(
-        width: 72,
-        height: 72,
-        child: Stack(
+    final thumbBg = dark ? HarborDark.chart : HarborLight.seaGlass;
+    return InkWell(
+      onTap: () => context.go('/news/${newsAddress(session, article)}'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, _, __) => Container(
-                        width: 72,
-                        height: 72,
-                        color:
-                            dark ? HarborDark.chart : HarborLight.chart,
-                        child: Icon(Icons.newspaper_outlined,
-                            color: dark
-                                ? HarborDark.channel
-                                : HarborLight.channel),
-                      ),
-                    )
-                  : Container(
-                      width: 72,
-                      height: 72,
-                      color: dark ? HarborDark.chart : HarborLight.chart,
-                    ),
+            SizedBox(
+              width: 22,
+              child: Text('$rank',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: HarborType.body,
+                      fontWeight: FontWeight.w800,
+                      color: dark ? HarborDark.harbor : HarborLight.harbor)),
             ),
-            Positioned(
-              left: 4,
-              top: 4,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text('$rank',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: HarborType.small)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(newsField(article, 'title'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700, height: 1.35)),
+                  const SizedBox(height: 4),
+                  Text(newsByline(session, article),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(HarborRadius.control),
+              child: SizedBox(
+                width: 72,
+                height: 54,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, _, __) => Container(
+                              color: thumbBg,
+                              child: Icon(Icons.newspaper_outlined,
+                                  color: dark ? HarborDark.drift : HarborLight.drift),
+                            ))
+                    : Container(color: thumbBg),
               ),
             ),
           ],
         ),
       ),
-      title: Text(newsField(article, 'title'),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-      subtitle: Text(newsByline(session, article),
-          style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

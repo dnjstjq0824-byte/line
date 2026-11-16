@@ -413,7 +413,6 @@
   "storyEmpty": "No stories to show",
   "storyHint": "A light line from your day",
   "storyPost": "Post",
-  "walletLedger": "LUNO Pay ledger",
   "walletBalance": "LUNO Pay balance",
   "walletTopup": "Top-up amount",
   "walletTopupNumber": "Enter the top-up amount as a number.",
@@ -605,5 +604,7 @@
   "pcQuickStatus": "Report current status",
   "pcQuickGit": "Check git status & branch",
   "pcQuickCheck": "Run analysis & build checks",
-  "pcQuickContinue": "Continue with Muse Spark 1.3"
+  "pcQuickContinue": "Continue with Muse Spark 1.3",
+  "walletShortcuts": "Shortcuts",
+  "walletNoTx": "No transactions yet."
 }
