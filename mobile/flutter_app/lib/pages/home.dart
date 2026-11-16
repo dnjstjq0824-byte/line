@@ -129,8 +129,12 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 16),
           Text(context.l10n.serviceWord, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          // F25: wrap so 200% text moves to a second line instead
+          // of overflowing on a 360px phone.
+          Wrap(
+            alignment: WrapAlignment.spaceAround,
+            spacing: 4,
+            runSpacing: 8,
             children: [
               _ServiceButton(
                   icon: Icons.auto_stories_outlined,
@@ -297,14 +301,24 @@ class _ServiceButton extends StatelessWidget {
     return InkWell(
       onTap: () => context.go(route),
       borderRadius: BorderRadius.circular(HarborRadius.avatar),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Column(
-          children: [
-            Icon(icon, size: 30),
-            const SizedBox(height: 6),
-            Text(label, style: const TextStyle(fontSize: HarborType.small)),
-          ],
+      // F25: bound each cell so 200% labels wrap instead of pushing
+      // the row past 360px.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 64, maxWidth: 84),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 30),
+              const SizedBox(height: 6),
+              Text(label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: HarborType.small)),
+            ],
+          ),
         ),
       ),
     );

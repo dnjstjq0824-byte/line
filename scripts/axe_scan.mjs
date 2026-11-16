@@ -1,7 +1,7 @@
 // F25: axe accessibility scan over the built user-web (served by wrangler
-// dev, the prod-like target). Covers login, register mode, the messenger
-// shell after a real UI signup+login, and the settings modal. Any violation
-// fails the run. Used by pre_deploy_gate and directly:
+// dev, the prod-like target). Covers the five A1 screens — login, chat list,
+// room, friends, more — plus register mode and the settings modal. Any
+// violation fails the run. Used by pre_deploy_gate and directly:
 //   node scripts/axe_scan.mjs [--port 8792] [--keep-open]
 import { spawn, execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -106,7 +106,40 @@ async function main() {
       await page.locator('form.pc-login-form-inner button[type="submit"]').first().click();
       await page.waitForURL(/\/chats/, { timeout: 15000 }).catch(() => {});
       await page.waitForTimeout(2000);
-      await scan(page, 'messenger', failures);
+      // Screen 2: chat list (default landing view).
+      await scan(page, 'chats', failures);
+
+      // Screen 3: room — open the first conversation (new accounts keep
+      // the Keep memo room, so at least one row exists).
+      const firstRow = page.locator('.lx-list .lx-row').first();
+      if (await firstRow.count()) {
+        await firstRow.click().catch(() => {});
+        await page.waitForTimeout(1200);
+        await scan(page, 'room', failures);
+      }
+
+      // Screen 4: friends.
+      const friendsNav = page.getByRole('button', { name: /친구|Friends|เพื่อน|友だち/ }).first();
+      if (await friendsNav.count()) {
+        await friendsNav.click().catch(() => {});
+        await page.waitForTimeout(1000);
+        await scan(page, 'friends', failures);
+      }
+
+      // Screen 5: more panel.
+      const moreNav = page.getByRole('button', { name: /더보기|More/ }).first();
+      if (await moreNav.count()) {
+        await moreNav.click().catch(() => {});
+        await page.waitForTimeout(1000);
+        await scan(page, 'more', failures);
+        // Close the panel via its own close button so the settings lookup
+        // below hits the rail instead of the overlay.
+        const moreClose = page.locator('.lx-more-head .lx-icon-btn').first();
+        if (await moreClose.count()) {
+          await moreClose.click().catch(() => {});
+          await page.waitForTimeout(500);
+        }
+      }
 
       // Settings modal, if reachable.
       const settings = page.getByRole('button', { name: /설정|Settings/ }).first();

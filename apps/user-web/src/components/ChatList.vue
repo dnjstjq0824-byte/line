@@ -78,7 +78,7 @@ const showListMenu = ref(false)
         <strong>{{ channelSlot.title }}</strong>
         <span>{{ channelSlot.body }}</span>
       </div>
-      <button class="channel-slot-close" :title="t('mvClose')" @click="channelSlotDismissed = true">✕</button>
+      <button class="channel-slot-close" :title="t('mvClose')" :aria-label="t('mvClose')" @click="channelSlotDismissed = true">✕</button>
     </div>
 
     <div class="lx-scroll">
@@ -92,6 +92,7 @@ const showListMenu = ref(false)
         tabindex="0"
         @click="emit('select', c.id)"
         @keydown.enter="emit('select', c.id)"
+        @keydown.space.prevent="emit('select', c.id)"
         @contextmenu.prevent="emit('chat-menu', $event, c)"
       >
         <span class="lx-avatar s48" :class="{ group: c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--ln-info)' : c.official ? '#4F7CFF' : 'var(--ln-accent)' }">

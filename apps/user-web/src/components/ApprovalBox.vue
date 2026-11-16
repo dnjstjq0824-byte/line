@@ -36,7 +36,7 @@ function stateLabel(state: string): string {
     <div class="modal-card settings-modal" role="dialog" :aria-label="t('apprTitle')">
       <div class="modal-header">
         <h2>{{ t('apprTitle') }} · {{ props.roomTitle }}</h2>
-        <button class="btn-modal-close" @click="emit('close')">✕</button>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
       </div>
       <div class="modal-body-form">
         <p v-if="!props.proposals.length" class="muted">{{ t('apprEmpty') }}</p>

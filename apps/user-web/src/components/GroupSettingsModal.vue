@@ -199,7 +199,7 @@ onMounted(() => { void loadInvites() })
     <div class="standard-modal-box settings-modal">
       <div class="modal-header">
         <h3>{{ t('gsTitle') }} · {{ room.title }}</h3>
-        <button class="btn-modal-close" @click="emit('close')">✕</button>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
       </div>
       <div class="modal-body-form">
         <p v-if="formError" class="form-error">{{ formError }}</p>

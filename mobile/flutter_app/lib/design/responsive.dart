@@ -461,8 +461,11 @@ class _TabBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          height: compact ? 56 : 60,
+        // F25: minimum height only, so 200% tab labels grow the bar
+        // instead of overflowing it by a few pixels.
+        child: ConstrainedBox(
+          constraints:
+              BoxConstraints(minHeight: compact ? 56 : 60),
           child: Row(
             children: [
               for (var i = 0; i < LunoNav.primary.length; i++)
@@ -508,8 +511,10 @@ class _TabItem extends StatelessWidget {
         onTap: () => context.go(destination.route),
         containedInkWell: true,
         highlightShape: BoxShape.rectangle,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
           children: [
             badge > 0
                 ? Badge(
@@ -528,7 +533,8 @@ class _TabItem extends StatelessWidget {
                     fontSize: HarborType.micro,
                     fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                     color: color)),
-          ],
+            ],
+          ),
         ),
       ),
     );

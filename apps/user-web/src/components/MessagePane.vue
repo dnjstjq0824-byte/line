@@ -214,6 +214,13 @@ const canDecide = computed(() => {
 function proposalState(msg: Message): string {
   return props.proposalStates[msg.id] || 'pending'
 }
+// F25: screen-reader announcement of the newest visible message.
+const latestLiveText = computed(() => {
+  const list = props.messages || []
+  const m = list[list.length - 1]
+  if (!m || (m as any).unsent) return ''
+  return String(m.body || '').slice(0, 200)
+})
 // Group rooms show the sender; direct rooms keep the (nickname-aware) title.
 function headerName(msg: Message): string {
   if (props.selectedChat.kind === 'group') return senderDisplayName(msg, props.selectedChat.members || [])
@@ -267,7 +274,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <LunoIcon name="translate" :size="16" />
                 <span>{{ autoTranslateEnabled ? t('mvAiTranslateOn') : t('mvAiTranslate') }}</span>
               </button>
-              <select v-model="targetTranslateLang" class="translate-lang-select" aria-label="Target language" :disabled="!translateConfigured" :title="translateConfigured ? '' : t('mvTranslatePending')">
+              <select v-model="targetTranslateLang" class="translate-lang-select" :aria-label="t('targetLangLabel')" :disabled="!translateConfigured" :title="translateConfigured ? '' : t('mvTranslatePending')">
                 <option v-for="lang in translateLanguages" :key="lang" :value="lang">{{ lang.toUpperCase() }}</option>
               </select>
             </div>
@@ -280,13 +287,15 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
         </div>
       </div>
     </header>
+    <h2 class="sr-only">{{ selectedChat.title }}</h2>
+    <div class="sr-only" role="status" aria-live="polite">{{ latestLiveText }}</div>
 
     <!-- Pinned Announcement (공지사항) -->
     <div v-if="pinnedList.length" class="pinned-banner" :class="{ expanded: pinnedExpanded }">
       <div class="pinned-summary" @click="pinnedExpanded = !pinnedExpanded">
         <span class="pin-icon"><LunoIcon name="megaphone" :size="16" /></span>
         <span class="pin-text">{{ pinnedList[0].body || t('mvPinnedFallback') }}</span>
-        <button class="btn-unpin-inline" :title="t('mvUnpinNotice')" @click.stop="emit('unpin', pinnedList[0].message_id)">✕</button>
+        <button class="btn-unpin-inline" :title="t('mvUnpinNotice')" :aria-label="t('mvUnpinNotice')" @click.stop="emit('unpin', pinnedList[0].message_id)">✕</button>
         <span class="pin-toggle">{{ pinnedExpanded ? '▲' : '▼' }}</span>
       </div>
     </div>
@@ -320,10 +329,10 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
         <button :class="{ active: activeDrawer === 'albums' }" @click="emit('drawer', 'albums')">{{ t('mvDrawerAlbums') }}</button>
         <button :class="{ active: activeDrawer === 'events' }" @click="emit('drawer', 'events')">{{ t('mvDrawerEvents') }}</button>
         <button :class="{ active: activeDrawer === 'media' }" @click="emit('drawer', 'media')">{{ t('mvDrawerMedia') }}</button>
-        <button class="btn-drawer-close" @click="activeDrawer = 'none'">✕</button>
+        <button class="btn-drawer-close" @click="activeDrawer = 'none'" :aria-label="t('mvClose')">✕</button>
       </div>
       <div class="drawer-search-bar">
-        <input v-model="chatSearchQuery" :placeholder="t('mvSearchInChatPh')" @keydown.enter.prevent="emit('search')" />
+        <input v-model="chatSearchQuery" :placeholder="t('mvSearchInChatPh')" :aria-label="t('mvSearchInChatPh')" @keydown.enter.prevent="emit('search')" />
         <button class="btn-secondary" @click="emit('search')">{{ t('mvSearch') }}</button>
       </div>
       <div v-if="chatSearchResults.length" class="drawer-search-results">
@@ -575,7 +584,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <div v-if="messageTranslations[msg.id]" class="luno-ai-translation-box">
                   <div class="translation-meta">
                     <span class="badge-engine">🌐 {{ messageTranslations[msg.id].engine }} ({{ messageTranslations[msg.id].sourceLang }} → {{ targetTranslateLang.toUpperCase() }})</span>
-                    <button class="btn-retry-translate" :title="t('retranslateBtn')" @click="emit('translate', msg)">↻</button>
+                    <button class="btn-retry-translate" :title="t('retranslateBtn')" :aria-label="t('retranslateBtn')" @click="emit('translate', msg)">↻</button>
                   </div>
                   <div v-if="messageTranslations[msg.id].loading" class="translation-loading">
                     <span>✨ {{ t('translating') }}</span>
@@ -598,16 +607,16 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
 
             <!-- Bubble Hover Floating Action Bar -->
             <div class="pc-bubble-toolbar">
-              <button :title="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :disabled="!translateConfigured" @click="emit('translate', msg)"><LunoIcon name="translate" :size="14" /></button>
-              <button :title="t('mvReactHeart')" @click="emit('react', msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
-              <button :title="t('mvReactLike')" @click="emit('react', msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
-              <button :title="t('mvReply')" @click="emit('reply', msg)"><LunoIcon name="reply" :size="14" /></button>
-              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvEdit')" @click="emit('edit-start', msg)"><LunoIcon name="edit" :size="14" /></button>
-              <button :title="t('mvCtxKeep')" @click="emit('keep', msg)"><LunoIcon name="keep" :size="14" /></button>
-              <button :title="t('mvNoticeRegister')" @click="emit('pin', msg.id)"><LunoIcon name="pin" :size="14" /></button>
-              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvCtxUnsend')" @click="emit('unsend', msg.id)"><LunoIcon name="close" :size="14" /></button>
-              <button v-if="!msg.unsent" :title="t('mvForward')" @click="emit('forward', msg)"><LunoIcon name="forward" :size="14" /></button>
-              <button v-if="!msg.unsent" :title="t('mvHideMine')" @click="emit('hide', msg.id)"><LunoIcon name="trash" :size="14" /></button>
+              <button :title="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :aria-label="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :disabled="!translateConfigured" @click="emit('translate', msg)"><LunoIcon name="translate" :size="14" /></button>
+              <button :title="t('mvReactHeart')" :aria-label="t('mvReactHeart')" @click="emit('react', msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
+              <button :title="t('mvReactLike')" :aria-label="t('mvReactLike')" @click="emit('react', msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
+              <button :title="t('mvReply')" :aria-label="t('mvReply')" @click="emit('reply', msg)"><LunoIcon name="reply" :size="14" /></button>
+              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvEdit')" :aria-label="t('mvEdit')" @click="emit('edit-start', msg)"><LunoIcon name="edit" :size="14" /></button>
+              <button :title="t('mvCtxKeep')" :aria-label="t('mvCtxKeep')" @click="emit('keep', msg)"><LunoIcon name="keep" :size="14" /></button>
+              <button :title="t('mvNoticeRegister')" :aria-label="t('mvNoticeRegister')" @click="emit('pin', msg.id)"><LunoIcon name="pin" :size="14" /></button>
+              <button v-if="msg.sender_id === currentUser?.id && !msg.unsent" :title="t('mvCtxUnsend')" :aria-label="t('mvCtxUnsend')" @click="emit('unsend', msg.id)"><LunoIcon name="close" :size="14" /></button>
+              <button v-if="!msg.unsent" :title="t('mvForward')" :aria-label="t('mvForward')" @click="emit('forward', msg)"><LunoIcon name="forward" :size="14" /></button>
+              <button v-if="!msg.unsent" :title="t('mvHideMine')" :aria-label="t('mvHideMine')" @click="emit('hide', msg.id)"><LunoIcon name="trash" :size="14" /></button>
             </div>
           </div>
         </template>
@@ -615,7 +624,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
     </div>
 
     <!-- Floating Scroll-to-Bottom Button (Matching Screenshot 7) -->
-    <button class="btn-scroll-bottom" v-show="showJumpBottom" :title="t('mvJumpBottom')" @click="emit('scroll-bottom')">
+    <button class="btn-scroll-bottom" v-show="showJumpBottom" :title="t('mvJumpBottom')" :aria-label="t('mvJumpBottom')" @click="emit('scroll-bottom')">
       ↓
     </button>
 
@@ -625,7 +634,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
       <!-- Reply Preview Banner -->
       <div v-if="replyToMessage" class="reply-composer-bar">
         <span>{{ t('mvReplyTo') }}<strong>{{ replyToMessage.body }}</strong></span>
-        <button class="btn-clear-search" @click="replyToMessage = null">✕</button>
+        <button class="btn-clear-search" @click="replyToMessage = null" :aria-label="t('mvClose')">✕</button>
       </div>
 
       <!-- Sticker Picker Popover -->
@@ -635,7 +644,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           <button :class="{ active: activeStickerCategory === 'Lumi' }" @click="activeStickerCategory = 'Lumi'">{{ t('mvBotLumi') }}</button>
           <button :class="{ active: activeStickerCategory === 'Nori' }" @click="activeStickerCategory = 'Nori'">{{ t('mvBotNori') }}</button>
           <button :class="{ active: activeStickerCategory === 'Poko' }" @click="activeStickerCategory = 'Poko'">{{ t('mvBotPoko') }}</button>
-          <button class="btn-clear-search" style="margin-left:auto" @click="showStickerPicker = false">✕</button>
+          <button class="btn-clear-search" style="margin-left:auto" @click="showStickerPicker = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="sticker-grid-items">
           <button
@@ -681,8 +690,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <button class="btn-secondary" @click="emit('camera-close')">{{ t('mvCancel') }}</button>
             <button v-if="cameraMode === 'photo'" class="btn-secondary" @click="emit('camera-close'); emit('attach', 'image')">{{ t('camChooseFile') }}</button>
             <button v-if="!cameraError && cameraMode === 'photo'" class="btn-primary" @click="emit('photo')">{{ t('camCapture') }}</button>
-            <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="emit('video-start')">⏺️</button>
-            <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="emit('video-stop')">⏹️</button>
+            <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="emit('video-start')" :aria-label="t('camVideo')">⏺️</button>
+            <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="emit('video-stop')" :aria-label="t('mvRecStop')">⏹️</button>
           </div>
         </div>
       </div>

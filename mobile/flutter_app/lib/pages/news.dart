@@ -125,8 +125,12 @@ class _NewsPageState extends State<NewsPage> {
               if (session.newsIsSample) const NewsSampleBanner(),
               if (heroes.isNotEmpty)
                 LayoutBuilder(builder: (context, box) {
-                  // 16:10 photo plus two title lines and the byline.
-                  final height = box.maxWidth * 10 / 16 + 84;
+                  // 16:10 photo plus two title lines and the byline. The
+                  // text reserve grows with the user's text scale (F25) so
+                  // 200% text still fits; at 1.0x this is the old 84.
+                  final textReserve =
+                      84 * MediaQuery.textScalerOf(context).scale(1.0);
+                  final height = box.maxWidth * 10 / 16 + textReserve;
                   return SizedBox(
                     height: height,
                     child: PageView.builder(
