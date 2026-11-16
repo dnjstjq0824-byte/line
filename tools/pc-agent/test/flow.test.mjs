@@ -343,3 +343,45 @@ test('autopilot stops after two failures in a row and on /auto off', async () =>
   v.agent.startNext();
   assert.equal(v.agent.execution, null, 'nothing new starts once it is off');
 });
+
+test('autopilot hands the runner\'s failing test output to the next card', async () => {
+  const w = world({ project: { testCommands: [{ label: 'all tests', cwd: '.', cmd: [process.execPath, '--test'] }] } });
+  // The fake writes a broken test file, so the runner's own run goes red.
+  w.agent.autopilot.start({ projectId: 'line', roomId: ROOM, workOrder: 'docs/WO.md', maxCards: 10, instructions: 'WRITE:broken.test.mjs' });
+  w.agent.startNext();
+  for (let i = 0; i < 4 && (w.agent.execution || w.agent.autopilot.active()); i++) {
+    if (w.agent.execution) await w.agent.execution;
+    w.agent.startNext();
+  }
+  const [first, second] = w.agent.queue.all();
+  assert.equal(first.testsOk, false);
+  assert.match(first.testFailures, /\[all tests\]/);
+  assert.match(first.testFailures, /broken\.test\.mjs/);
+  const prompt = readFileSync(join(w.dir, 'prompts', `${second.id}.md`), 'utf8');
+  assert.match(prompt, /러너가 직접 돌린 테스트의 실패 내용/);
+  assert.match(prompt, /broken\.test\.mjs/);
+  assert.ok(w.luno.text().includes('all tests'), 'report labels the test by its name');
+});
+
+test('worktrees share each app\'s node_modules and removing them never touches the real ones', async () => {
+  const w = world();
+  mkdirSync(join(w.repo, 'apps', 'web'), { recursive: true });
+  writeFileSync(join(w.repo, '.gitignore'), 'node_modules/\n**/node_modules/\n');
+  writeFileSync(join(w.repo, 'apps', 'web', 'package.json'), '{}\n');
+  git(w.repo, 'add', '-A');
+  git(w.repo, 'commit', '-q', '-m', 'add app');
+  const marker = join(w.repo, 'apps', 'web', 'node_modules', 'pkg', 'marker.txt');
+  mkdirSync(dirname(marker), { recursive: true });
+  writeFileSync(marker, 'real package\n');
+
+  w.luno.command('/dev WRITE:x.txt');
+  await w.drain();
+  const task = w.agent.queue.get('T-0001');
+  assert.ok(existsSync(join(task.worktree, 'apps', 'web', 'node_modules', 'pkg', 'marker.txt')), 'app packages visible in the worktree');
+  assert.ok(!git(w.repo, 'show', '--name-only', '--format=', task.branch).includes('node_modules'), 'links never committed');
+  w.luno.decide(w.luno.last('proposal').id, 'approved');
+  await w.drain();
+  assert.equal(w.agent.queue.get('T-0001').state, 'merged');
+  assert.ok(!existsSync(task.worktree), 'worktree removed');
+  assert.equal(readFileSync(marker, 'utf8'), 'real package\n', 'the real node_modules is untouched');
+});

@@ -11,12 +11,16 @@ export const AUTOPILOT_FILE = 'AUTOPILOT.json';
 export const DONE_MARK = 'AUTOPILOT_DONE';
 const MAX_FAILURES = 2;
 
-export function autopilotPrompt({ workOrder, previousFailed, instructions }) {
+export function autopilotPrompt({ workOrder, previousFailed, failures, instructions }) {
   return [
     `작업지시서 ${workOrder} 를 처음부터 읽어라. 체크박스가 비어 있는("- [ ]") 카드 중 맨 위 카드 하나만 끝까지 구현하라.`,
     '카드에 적힌 완료 기준과 테스트를 지켜라. 서버·웹 변경이면 node --test "scripts/*.test.mjs", 앱 변경이면 mobile/flutter_app 에서 flutter analyze 와 flutter test 를 실행해 모두 통과시켜라.',
     '카드를 끝내면 작업지시서에서 그 카드를 "- [x]" 로 바꾸고 같은 줄 끝에 한 줄 결과를 덧붙여라. 다음 카드는 시작하지 마라(러너가 다음 차례에 맡긴다).',
     ...(previousFailed ? ['직전 카드에서 테스트가 실패했다. 새 카드보다 먼저 그 실패를 고쳐 테스트를 통과시켜라. 고쳤다면 그것만으로 이번 차례를 끝내도 된다.'] : []),
+    ...(previousFailed && failures ? [
+      '러너가 직접 돌린 테스트의 실패 내용이다(셸 도구가 안 되더라도 이 내용으로 원인을 찾아 고쳐라):',
+      '```', failures, '```',
+    ] : []),
     `남은 "- [ ]" 카드가 하나도 없으면 아무 파일도 바꾸지 말고, 마지막 답의 첫 줄에 ${DONE_MARK} 라고만 적어라.`,
     ...(instructions ? ['', '[추가 지시]', instructions] : []),
   ].join('\n');

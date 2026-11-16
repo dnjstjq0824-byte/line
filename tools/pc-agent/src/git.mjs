@@ -1,6 +1,6 @@
 // Git plumbing. Each task works in its own worktree on its own branch; main
 // only ever moves by a fast-forward merge after the owner approves.
-import { existsSync, mkdirSync, symlinkSync, lstatSync, rmdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, symlinkSync, lstatSync, rmdirSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from './proc.mjs';
 
@@ -15,20 +15,45 @@ export function branchName(task, when = new Date()) {
   return `luno-auto/${kind}-${day}-${task.id.toLowerCase()}`;
 }
 
+// node_modules folders to share with every worktree: the root one plus each
+// workspace app's own (apps/<name>/node_modules), relative to the repo root.
+export function sharedModuleDirs(repoPath) {
+  const dirs = ['node_modules'];
+  const apps = join(repoPath, 'apps');
+  if (existsSync(apps)) {
+    for (const name of readdirSync(apps)) {
+      if (existsSync(join(apps, name, 'node_modules'))) dirs.push(join('apps', name, 'node_modules'));
+    }
+  }
+  return dirs.filter((d) => existsSync(join(repoPath, d)));
+}
+
+function removeModuleLinks(repoPath, path) {
+  for (const d of sharedModuleDirs(repoPath)) removeJunction(join(path, d));
+}
+
+function anyModuleLinkLeft(repoPath, path) {
+  return sharedModuleDirs(repoPath).some((d) => {
+    try { lstatSync(join(path, d)); return true; } catch { return false; }
+  });
+}
+
 export async function createWorktree({ project, worktreeRoot, task }) {
   mkdirSync(worktreeRoot, { recursive: true });
   const path = join(worktreeRoot, task.id);
   const branch = branchName(task);
   if (existsSync(path)) {
-    removeJunction(join(path, 'node_modules'));
+    removeModuleLinks(project.repoPath, path);
     await git(project.repoPath, ['worktree', 'remove', '--force', path]);
   }
   const added = await git(project.repoPath, ['worktree', 'add', '-b', branch, path, project.mainBranch]);
   if (!added.ok) throw new Error(`worktree 생성 실패: ${added.err.slice(0, 300)}`);
-  // Share the root node_modules through a junction so tests run without a reinstall.
-  const rootModules = join(project.repoPath, 'node_modules');
-  if (existsSync(rootModules) && !existsSync(join(path, 'node_modules'))) {
-    try { symlinkSync(rootModules, join(path, 'node_modules'), 'junction'); } catch { /* tests that need it will say so */ }
+  // Share installed packages through junctions so tests and type checks run
+  // without a reinstall (root and each workspace app's own node_modules).
+  for (const d of sharedModuleDirs(project.repoPath)) {
+    const link = join(path, d);
+    if (existsSync(link) || !existsSync(join(link, '..'))) continue;
+    try { symlinkSync(join(project.repoPath, d), link, 'junction'); } catch { /* tests that need it will say so */ }
   }
   return { path, branch };
 }
@@ -42,9 +67,10 @@ export function removeJunction(link) {
 }
 
 export async function removeWorktree({ project, path }) {
-  removeJunction(join(path, 'node_modules'));
+  // Links first: deleting a folder through a junction would empty the real one.
+  removeModuleLinks(project.repoPath, path);
   const res = await git(project.repoPath, ['worktree', 'remove', '--force', path]);
-  if (!res.ok && existsSync(path) && !existsSync(join(path, 'node_modules'))) {
+  if (!res.ok && existsSync(path) && !anyModuleLinkLeft(project.repoPath, path)) {
     try { rmSync(path, { recursive: true, force: true }); } catch { /* left for the next prune */ }
   }
   await git(project.repoPath, ['worktree', 'prune']);

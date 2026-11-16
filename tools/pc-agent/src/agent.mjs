@@ -8,7 +8,7 @@ import { parseCommand, QUEUED, HELP } from './commands.mjs';
 import { museExec, museUsage } from './muse.mjs';
 import { createWorktree, removeWorktree, changedFiles, commitAll, diffSummary, mergeToMain, repoStatus } from './git.mjs';
 import { checkDiff, mask } from './guards.mjs';
-import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, minutes } from './report.mjs';
+import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, failureExcerpt, minutes } from './report.mjs';
 import { devPrompt, mktPrompt, askPrompt } from './prompts.mjs';
 import { runCommand, killTree } from './proc.mjs';
 import { Autopilot, autopilotPrompt } from './autopilot.mjs';
@@ -256,7 +256,10 @@ export class Agent {
     }
     const parent = ap.lastTaskId ? this.queue.get(ap.lastTaskId) : null;
     const chain = parent && parent.worktree && existsSync(parent.worktree) ? parent : null;
-    const text = autopilotPrompt({ workOrder: ap.workOrder, previousFailed: ap.previousFailed, instructions: ap.instructions });
+    const text = autopilotPrompt({
+      workOrder: ap.workOrder, previousFailed: ap.previousFailed, instructions: ap.instructions,
+      failures: ap.previousFailed && parent ? parent.testFailures || '' : '',
+    });
     const task = this.queue.create({ project, cmd: chain ? 'retry' : 'continue', text, roomId: ap.roomId, messageId: '', parentId: chain ? chain.id : '' });
     task.autopilot = true;
     this.queue.save(task);
@@ -407,12 +410,20 @@ export class Agent {
     const guard = checkDiff({ files: diff.files, addedText: diff.addedText, forbiddenPaths: project.forbiddenPaths, allowedPaths: task.mode === 'mkt' ? project.mktAllowedPaths : null });
     if (guard.violations.length) return fail(`안전 규칙 위반으로 병합 제안을 하지 않습니다:\n- ${guard.violations.slice(0, 10).join('\n- ')}\n브랜치 ${task.branch} 는 보존했습니다.`);
     const tests = [];
-    for (const cmd of project.testCommands) {
-      const t = await runCommand(cmd, { cwd: task.worktree, timeoutMs: 15 * 60000 });
-      tests.push({ label: cmd.join(' '), ok: t.code === 0 && !t.timedOut, detail: t.timedOut ? '시간 초과' : testDetail(`${t.stdout}\n${t.stderr}`) });
-      this.taskLog(task, `test ${cmd.join(' ')}: exit ${t.code}`);
+    const failures = [];
+    // Entries are a command array (run at the worktree root) or { label, cwd, cmd }.
+    for (const entry of project.testCommands) {
+      const spec = Array.isArray(entry) ? { label: entry.join(' '), cwd: '.', cmd: entry } : entry;
+      const t = await runCommand(spec.cmd, { cwd: join(task.worktree, spec.cwd || '.'), timeoutMs: 15 * 60000 });
+      const out = `${t.stdout}\n${t.stderr}`;
+      const ok = t.code === 0 && !t.timedOut;
+      tests.push({ label: spec.label || spec.cmd.join(' '), ok, detail: t.timedOut ? '시간 초과' : testDetail(out) });
+      if (!ok) failures.push(`[${spec.label || spec.cmd.join(' ')}]\n${t.timedOut ? '시간 초과' : failureExcerpt(out)}`);
+      this.taskLog(task, `test ${spec.label || spec.cmd.join(' ')}: exit ${t.code}`);
     }
     const testsOk = tests.every((t) => t.ok);
+    // Kept for the next autopilot turn: Muse may not be able to run tests itself.
+    task.testFailures = failures.join('\n\n').slice(0, 6000);
     const stats = { ...diff, added: guard.added, deleted: guard.deleted };
     task.state = 'reported';
     task.testsOk = testsOk;

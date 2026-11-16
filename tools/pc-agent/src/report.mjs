@@ -82,6 +82,16 @@ export function failureBody({ task, ms, reason }) {
 }
 
 // Pulls "N pass / M fail" out of node --test or flutter output for the report line.
+// The lines a person (or the next Muse turn) needs to fix a red run: failing
+// test names and the assertion / overflow messages under them. Capped.
+export function failureExcerpt(output, max = 3000) {
+  const keep = /^\s*(✖ |not ok |FAIL\b|AssertionError|Error:|error -|  error|Expected:|Actual:|Which:|.*overflowed by|.*\[E\]$|C:[\\/].*_test\.dart: )/;
+  const lines = String(output || '').split(/\r?\n/).filter((l) => keep.test(l) && !/failing tests:$/.test(l));
+  const unique = [...new Set(lines.map((l) => l.trimEnd()))];
+  const text = unique.join('\n');
+  return text.length > max ? `${text.slice(0, max)}\n…` : text;
+}
+
 export function testDetail(output) {
   const text = String(output || '');
   // node --test prints "ℹ pass N" on a terminal and "# pass N" (TAP) when piped.
