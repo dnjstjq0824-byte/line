@@ -7,9 +7,10 @@ import { F24_CONSENT } from './test_helpers.mjs';
 // clears body+metadata kind-agnostically; the web client must mirror that
 // locally (it kept metadata, so the art re-rendered) and the renderers must
 // honor msg.unsent instead of showing blank bubbles.
-const viewSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
-const paneSource = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
-const listSource = await readFile(new URL('../apps/user-web/src/components/ChatList.vue', import.meta.url), 'utf8');
+// Windows checkouts (core.autocrlf) give CRLF; the regexes below expect \n.
+const viewSource = (await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const paneSource = (await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const listSource = (await readFile(new URL('../apps/user-web/src/components/ChatList.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 
 test('unsend mirrors the server locally: flag set, body and metadata cleared', () => {
   const body = viewSource.match(/async function unsendMessage[\s\S]*?\n}\n/)?.[0] || '';

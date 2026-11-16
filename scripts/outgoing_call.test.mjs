@@ -7,11 +7,12 @@ import { F24_CONSENT } from './test_helpers.mjs';
 // unavailable. startCall raises the ringing UI first and treats media as
 // opportunistic (mediaFailed flag shown inside the call dialog); only a
 // server session failure aborts back to the toast.
-const wrtcSource = await readFile(new URL('../apps/user-web/src/composables/useWebRTC.ts', import.meta.url), 'utf8');
-const utilsSource = await readFile(new URL('../apps/user-web/src/messenger-utils.ts', import.meta.url), 'utf8');
-const modalSource = await readFile(new URL('../apps/user-web/src/components/CallModal.vue', import.meta.url), 'utf8');
-const viewSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
-const i18nSource = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
+// Windows checkouts (core.autocrlf) give CRLF; the regexes below expect \n.
+const wrtcSource = (await readFile(new URL('../apps/user-web/src/composables/useWebRTC.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const utilsSource = (await readFile(new URL('../apps/user-web/src/messenger-utils.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const modalSource = (await readFile(new URL('../apps/user-web/src/components/CallModal.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const viewSource = (await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const i18nSource = (await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 
 test('startCall raises the ringing UI before media acquisition', () => {
   const body = wrtcSource.match(/async function startCall[\s\S]*?\n  }\n/)?.[0] || '';

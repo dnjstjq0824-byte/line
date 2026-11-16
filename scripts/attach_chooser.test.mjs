@@ -7,10 +7,11 @@ import test from 'node:test';
 // same-named setup binding — never a prop. The parent's ref stayed null and
 // chooseAttachment silently no-oped (file button, album pick, and the voice
 // fallback all funnel through it). Forwarded refs must use :ref="theProp".
-const paneSource = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
-const modalSource = await readFile(new URL('../apps/user-web/src/components/CallModal.vue', import.meta.url), 'utf8');
-const viewSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
-const i18nSource = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
+// Windows checkouts (core.autocrlf) give CRLF; the regexes below expect \n.
+const paneSource = (await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const modalSource = (await readFile(new URL('../apps/user-web/src/components/CallModal.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const viewSource = (await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const i18nSource = (await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 
 test('MessagePane forwards element refs with dynamic :ref', () => {
   for (const name of ['attachmentInput', 'messagesCanvasRef', 'cameraVideoRef']) {
