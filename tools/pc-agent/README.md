@@ -19,6 +19,7 @@ Muse Code CLI(`muse exec`, 구독 로그인 · API 키 없음)로 작업하고 �
 | `/git` | git status, 브랜치, 최근 커밋 |
 | `/check` | 설정된 점검 명령 실행(테스트, `flutter analyze`) |
 | `/continue [지시]` | 작업지시서의 다음 카드를 이어서 진행 (`continuePrompt`) |
+| `/auto [작업지시서]` | 작업지시서의 카드를 하나씩 끝까지 **자동으로** 진행 (`/auto off` 로 멈춤) |
 | `/dev <지시>` | 개발 작업: 새 브랜치 → Muse → 커밋 → 테스트 → 보고 → 병합 제안 |
 | `/mkt <지시>` | 마케팅 작업 (허용 경로만 수정 가능) |
 | `/ask <질문>` | 코드를 읽고 답만 (쓰기·셸 꺼짐) |
@@ -29,6 +30,16 @@ Muse Code CLI(`muse exec`, 구독 로그인 · API 키 없음)로 작업하고 �
 
 앱의 PC 작업실 방에는 입력창 위에 러너 상태(준비됨 / 작업 중 / 오프라인)와
 한 번 누르면 보내지는 명령 칩 4개(`/status`, `/git`, `/check`, `/continue`)가 나온다.
+
+## 자동 진행 (`/auto`)
+
+사람이 자리를 비워도 작업지시서를 끝까지 진행한다. 작업지시서는 "- [ ]" 체크박스 카드 목록이다(예: `docs/MUSE_WORK_ORDER.md`).
+
+- 대기 작업이 없으면 러너가 다음 카드를 맡긴다. 첫 카드는 새 `luno-auto/…` 브랜치, 이후 카드는 **같은 브랜치에서 이어서** 한다(`/retry`와 같은 방식).
+- 카드마다 커밋 → 테스트 → 보고. 테스트가 실패하면 다음 차례에 그 실패부터 고치게 한다.
+- 멈추는 조건: 카드를 다 끝냄(`AUTOPILOT_DONE`), 연속 2번 실패, 카드 수 한도(`autopilotMaxCards`, 기본 20), 오늘 작업 한도(`maxPerDay`), Muse 주간 사용량 90%, 폰에서 `/auto off`·`/stop`, `STOP` 파일.
+- main 은 그대로다. 마지막 보고의 **[승인]** 을 누르면 그때까지의 카드가 한 번에 병합된다(대형 변경이면 집에서 직접 병합). 푸시·배포는 하지 않는다.
+- 상태는 `%USERPROFILE%.luno-agentAUTOPILOT.json`. `/status` 에도 나온다. 기본 작업지시서는 `config.json` 프로젝트의 `autopilotWorkOrder`.
 
 ## 안전장치
 

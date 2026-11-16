@@ -1,10 +1,10 @@
 // Chat text -> command. Only text that reached the runner through the
 // server's allowlist is ever parsed here.
 export const QUEUED = new Set(['dev', 'mkt', 'ask', 'check', 'continue', 'retry']);
-export const INSTANT = new Set(['status', 'stop', 'cancel', 'log', 'diff', 'usage', 'help', 'git', 'merge']);
+export const INSTANT = new Set(['status', 'stop', 'cancel', 'log', 'diff', 'usage', 'help', 'git', 'merge', 'auto']);
 const ALIASES = {
   상태: 'status', 중지: 'stop', 멈춰: 'stop', 취소: 'cancel', 로그: 'log', 사용량: 'usage', 도움말: 'help',
-  개발: 'dev', 마케팅: 'mkt', 질문: 'ask', 점검: 'check', 이어서: 'continue', 계속: 'continue', 재시도: 'retry', 깃: 'git',
+  개발: 'dev', 마케팅: 'mkt', 질문: 'ask', 점검: 'check', 이어서: 'continue', 계속: 'continue', 재시도: 'retry', 깃: 'git', 자동: 'auto',
 };
 const TASK_ID = /^[A-Z][A-Z0-9]{0,7}-\d{4}$/;
 
@@ -35,6 +35,7 @@ export const HELP = [
   '/git — git status·브랜치·최근 커밋',
   '/check — 정적 분석·테스트 점검',
   '/continue [지시] — 작업지시서의 다음 카드를 이어서 진행',
+  '/auto [작업지시서] — 카드를 끝까지 하나씩 자동으로 진행 (/auto off 로 멈춤)',
   '/dev <지시> — 개발 작업 (브랜치에서 작업 → 보고 → 승인하면 병합)',
   '/mkt <지시> — 마케팅 문구·랜딩 작업',
   '/ask <질문> — 코드를 읽고 답만 (수정 없음)',

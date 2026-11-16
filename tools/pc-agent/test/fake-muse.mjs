@@ -3,7 +3,7 @@
 //   WRITE:<relative path>   create/overwrite that file in the workspace
 //   SLEEP:<ms>              wait before finishing (timeout / stop tests)
 //   FAIL                    end with a failed terminal event
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -32,6 +32,14 @@ if (prompt.includes('FAIL')) {
   emit('run.terminal.failed', { kind: 'run_terminal', terminal: 'failed', text: '', reason: 'model refused' });
   process.exit(1);
 }
-const text = 'Fake change title\n- did the thing\n- tests: ok';
+// DONE_AFTER:<n>  autopilot stand-in: writes card-<k>.txt per call, then
+//                 answers AUTOPILOT_DONE once n cards exist in the workspace.
+let text = 'Fake change title\n- did the thing\n- tests: ok';
+const doneAfter = /DONE_AFTER:(\d+)/.exec(prompt);
+if (doneAfter) {
+  const have = readdirSync(workspace).filter((f) => /^card-\d+\.txt$/.test(f)).length;
+  if (have >= Number(doneAfter[1])) text = 'AUTOPILOT_DONE\n- no cards left';
+  else if (canWrite) writeFileSync(join(workspace, `card-${have + 1}.txt`), `card ${have + 1}\n`);
+}
 emit('run.output.delta', { kind: 'run_output_delta', text });
 emit('run.terminal.completed', { kind: 'run_terminal', terminal: 'completed', text, reason: null });

@@ -11,6 +11,7 @@ import { checkDiff, mask } from './guards.mjs';
 import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, minutes } from './report.mjs';
 import { devPrompt, mktPrompt, askPrompt } from './prompts.mjs';
 import { runCommand, killTree } from './proc.mjs';
+import { Autopilot, autopilotPrompt } from './autopilot.mjs';
 
 export const VERSION = '1.0.0';
 const WORK_CMDS = new Set(['dev', 'mkt', 'continue', 'retry']);
@@ -21,6 +22,7 @@ export class Agent {
     this.dir = dir;
     this.log = log;
     this.queue = new TaskQueue(dir);
+    this.autopilot = new Autopilot(dir);
     this.clients = new Map();
     for (const project of cfg.projects) {
       const token = secrets.tokens[project.tokenRef];
@@ -174,10 +176,24 @@ export class Agent {
         '최근 커밋', s.log].join('\n'));
     }
     if (cmd === 'stop') {
-      if (!this.current) return reply('실행 중인 작업이 없습니다.');
+      const paused = this.autopilot.stop('폰에서 /stop');
+      if (!this.current) return reply(paused ? '⏸️ 자동 진행을 멈췄습니다. 실행 중인 작업은 없습니다.' : '실행 중인 작업이 없습니다.');
       this.current.control.stopped = true;
       killTree(this.current.control.pid);
-      return reply(`🛑 #${this.current.task.id} 중단 요청을 보냈습니다.`);
+      return reply(`🛑 #${this.current.task.id} 중단 요청을 보냈습니다.${paused ? ' 자동 진행도 멈췄습니다.' : ''}`);
+    }
+    if (cmd === 'auto') {
+      const arg = (command.text || '').trim();
+      if (/^(off|stop|끄기|중지)$/i.test(arg)) {
+        const s = this.autopilot.stop('폰에서 /auto off');
+        return reply(s ? `⏸️ 자동 진행을 멈췄습니다 (카드 ${s.cards}개 진행).` : '자동 진행이 켜져 있지 않습니다.');
+      }
+      if (/^(status|상태)?$/i.test(arg) && this.autopilot.active()) return reply(this.autopilotText());
+      const workOrder = arg && !/^(on|켜기|status|상태)$/i.test(arg) ? arg : project.autopilotWorkOrder;
+      if (!workOrder) return reply('작업지시서 경로를 적어 주세요. 예: /auto docs/MUSE_WORK_ORDER.md');
+      this.autopilot.start({ projectId: project.id, roomId, workOrder, maxCards: project.autopilotMaxCards });
+      this.startNext();
+      return reply(`▶️ 자동 진행을 켰습니다: ${workOrder}\n카드를 하나씩 끝내며 보고합니다. 멈추려면 /auto off 또는 /stop.`);
     }
     const task = command.taskId ? this.queue.get(command.taskId) : null;
     if (cmd === 'cancel') {
@@ -214,15 +230,59 @@ export class Agent {
     if (usage) lines.push(`Muse 사용량: 주간 ${usage.weekly ?? '?'}% · 현재 창 ${usage.window ?? '?'}%`);
     lines.push(`러너 v${VERSION} · 가동 ${minutes(Date.now() - this.startedAt)}분 · 오늘 ${this.queue.countToday()}/${this.cfg.maxPerDay}건`);
     if (stopRequested(this.dir)) lines.push('⚠️ STOP 파일이 있어 새 작업을 시작하지 않습니다');
+    const ap = this.autopilot.read();
+    if (ap) lines.push(ap.active ? this.autopilotText() : `자동 진행 꺼짐${ap.stoppedReason ? ` (${ap.stoppedReason})` : ''}`);
     return lines.join('\n');
+  }
+
+  autopilotText() {
+    const s = this.autopilot.read();
+    if (!s) return '자동 진행 꺼짐';
+    return `🤖 자동 진행 ${s.active ? '켜짐' : '꺼짐'} · ${s.workOrder} · 카드 ${s.cards}/${s.maxCards} · 연속 실패 ${s.failures}`
+      + (s.lastTaskId ? ` · 마지막 #${s.lastTaskId}` : '');
+  }
+
+  // With nothing queued, autopilot hands Muse the next card, chained on the
+  // previous card's branch so the work builds up in one place.
+  autopilotTask() {
+    const ap = this.autopilot.active();
+    if (!ap) return null;
+    const project = this.project(ap.projectId);
+    if (!project) { this.autopilot.stop('프로젝트 설정을 찾을 수 없음'); return null; }
+    if (this.queue.countToday() >= this.cfg.maxPerDay) {
+      this.autopilot.stop(`오늘 작업 한도 ${this.cfg.maxPerDay}건에 도달했습니다`);
+      this.say(project.id, ap.roomId, { body: `⏸️ 자동 진행을 멈췄습니다: 오늘 작업 한도 ${this.cfg.maxPerDay}건에 도달했습니다.` });
+      return null;
+    }
+    const parent = ap.lastTaskId ? this.queue.get(ap.lastTaskId) : null;
+    const chain = parent && parent.worktree && existsSync(parent.worktree) ? parent : null;
+    const text = autopilotPrompt({ workOrder: ap.workOrder, previousFailed: ap.previousFailed, instructions: ap.instructions });
+    const task = this.queue.create({ project, cmd: chain ? 'retry' : 'continue', text, roomId: ap.roomId, messageId: '', parentId: chain ? chain.id : '' });
+    task.autopilot = true;
+    this.queue.save(task);
+    this.taskLog(task, `autopilot card ${ap.cards + 1}${chain ? ` on #${chain.id}` : ''}`);
+    return task;
+  }
+
+  async autopilotAfter(task) {
+    const { stop, state } = this.autopilot.record(task);
+    if (!state) return;
+    const project = this.project(task.projectId);
+    if (stop) {
+      await this.say(project.id, task.roomId, {
+        body: `⏸️ 자동 진행 종료: ${stop}\n카드 ${state.cards}개 · 브랜치 ${task.branch || '-'}\n마지막 보고의 [승인]을 누르면 지금까지의 작업이 main 에 들어갑니다(대형 변경이면 집에서 직접 병합).`,
+      });
+    }
   }
 
   startNext() {
     if (this.execution || stopRequested(this.dir)) return;
-    const task = this.queue.next(this.lastProjectId);
+    const task = this.queue.next(this.lastProjectId) || this.autopilotTask();
     if (!task) return;
     this.execution = this.execute(task)
       .catch((error) => this.log(`execute ${task.id} crashed: ${error.stack || error.message}`))
+      .then(() => (task.autopilot ? this.autopilotAfter(task) : null))
+      .catch((error) => this.log(`autopilot after ${task.id} failed: ${error.stack || error.message}`))
       .finally(() => { this.execution = null; this.current = null; this.lastProjectId = task.projectId; this.lastActivity = Date.now(); });
   }
 

@@ -287,3 +287,59 @@ test('/stop kills the running task; a restart marks interrupted work failed', as
   assert.deepEqual(reborn.queue.recover().map((t) => t.id), ['T-0001']);
   assert.equal(JSON.parse(readFileSync(join(w.dir, 'tasks', 'T-0001.json'), 'utf8')).state, 'failed');
 });
+
+// ---- autopilot: card after card on one branch, unattended ----
+test('autopilot chains cards on one branch, stops when the work order is done, main untouched until approval', async () => {
+  const w = world();
+  w.agent.autopilot.start({ projectId: 'line', roomId: ROOM, workOrder: 'docs/WO.md', maxCards: 10, instructions: 'DONE_AFTER:3' });
+  w.agent.startNext();
+  for (let i = 0; i < 10 && (w.agent.execution || w.agent.autopilot.active()); i++) {
+    if (w.agent.execution) await w.agent.execution;
+    w.agent.startNext();
+  }
+  const s = w.agent.autopilot.read();
+  assert.equal(s.active, false);
+  assert.match(s.stoppedReason, /모두 끝냈습니다/);
+  assert.equal(s.cards, 4, 'three cards plus the turn that found nothing left');
+  const tasks = w.agent.queue.all();
+  assert.deepEqual(tasks.map((t) => t.cmd), ['continue', 'retry', 'retry', 'retry']);
+  assert.ok(tasks.slice(1).every((t, i) => t.parentId === tasks[i].id), 'each card continues the previous one');
+  const branch = tasks[0].branch;
+  assert.ok(tasks.every((t) => t.branch === branch), 'one branch for the whole run');
+  for (const n of [1, 2, 3]) assert.match(git(w.repo, 'show', `${branch}:card-${n}.txt`), new RegExp(`card ${n}`));
+  assert.ok(!existsSync(join(w.repo, 'card-1.txt')), 'main untouched without approval');
+  assert.ok(w.luno.text().includes('자동 진행 종료'));
+  // Approving the last proposal merges every card at once.
+  const proposal = w.luno.last('proposal');
+  w.luno.decide(proposal.id, 'approved');
+  await w.drain();
+  for (const n of [1, 2, 3]) assert.ok(existsSync(join(w.repo, `card-${n}.txt`)), `card ${n} merged`);
+});
+
+test('autopilot stops after two failures in a row and on /auto off', async () => {
+  const w = world();
+  w.agent.autopilot.start({ projectId: 'line', roomId: ROOM, workOrder: 'docs/WO.md', maxCards: 10, instructions: 'FAIL' });
+  w.agent.startNext();
+  for (let i = 0; i < 6 && (w.agent.execution || w.agent.autopilot.active()); i++) {
+    if (w.agent.execution) await w.agent.execution;
+    w.agent.startNext();
+  }
+  const s = w.agent.autopilot.read();
+  assert.equal(s.active, false);
+  assert.match(s.stoppedReason, /연속 2번 실패/);
+  assert.equal(w.agent.queue.all().length, 2, 'no third attempt');
+
+  // From the phone: /auto <work order> turns it on, /auto off turns it off.
+  const v = world();
+  v.luno.command('/auto docs/WO.md');
+  await v.agent.pollOnce();
+  assert.ok(v.luno.text().includes('자동 진행을 켰습니다: docs/WO.md'));
+  assert.ok(v.agent.autopilot.active());
+  v.luno.command('/auto off');
+  await v.agent.pollOnce();
+  if (v.agent.execution) await v.agent.execution;
+  assert.equal(v.agent.autopilot.active(), null);
+  assert.ok(v.luno.text().includes('자동 진행을 멈췄습니다'));
+  v.agent.startNext();
+  assert.equal(v.agent.execution, null, 'nothing new starts once it is off');
+});

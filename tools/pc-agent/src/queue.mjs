@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 export const OPEN_STATES = new Set(['queued', 'running', 'reported']);
 
-function atomicWrite(path, text) {
+export function atomicWrite(path, text) {
   const tmp = `${path}.${process.pid}.tmp`;
   writeFileSync(tmp, text);
   renameSync(tmp, path);

@@ -10,7 +10,7 @@ export function stateDir() {
 }
 
 const PROJECT_DEFAULTS = {
-  prefix: 'T', mainBranch: 'main', testCommands: [], checkCommands: [], continuePrompt: '',
+  prefix: 'T', mainBranch: 'main', testCommands: [], checkCommands: [], continuePrompt: '', autopilotWorkOrder: '', autopilotMaxCards: 20,
   forbiddenPaths: ['wrangler.jsonc', '.github/**', '**/*.jks', '**/key.properties', '.env*', '**/.env*', 'scripts/migrations/**'],
   mktAllowedPaths: ['marketing/**'],
   timeoutsMin: { dev: 40, mkt: 20, ask: 8, check: 20 },
