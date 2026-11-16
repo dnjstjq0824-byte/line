@@ -410,15 +410,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <main class="pc-auth-viewport">
+    <main class="pc-auth-viewport" id="main-content">
+      <a class="lx-skip-link" href="#auth-form-col">{{ t('lxSkipToMain') }}</a>
       <div class="pc-auth-window-2col">
         <!-- Title bar with window controls & branding -->
         <div class="pc-window-bar">
           <div class="pc-win-left-controls">
-            <button class="btn-win-menu" :title="t('menu')">
+            <button class="btn-win-menu" :title="t('menu')" :aria-label="t('menu')">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <button class="btn-win-help" :title="t('winHelpTitle')">
+            <button class="btn-win-help" :title="t('winHelpTitle')" :aria-label="t('winHelpTitle')">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             </button>
           </div>
@@ -436,20 +437,20 @@ onBeforeUnmount(() => {
                 {{ loc.code.toUpperCase() }}
               </button>
             </div>
-            <button class="btn-win-dark" @click="toggleDarkMode" :title="isDarkMode ? t('lightModeTitle') : t('darkModeTitle')">
+            <button class="btn-win-dark" @click="toggleDarkMode" :title="isDarkMode ? t('lightModeTitle') : t('darkModeTitle')" :aria-label="isDarkMode ? t('lightModeTitle') : t('darkModeTitle')">
               <LunoIcon :name="isDarkMode ? 'sun' : 'moon'" :size="13" />
             </button>
             <div class="pc-win-sys-controls">
-              <button class="btn-sys-tool" :title="t('winMinTitle')">−</button>
-              <button class="btn-sys-tool" :title="t('winMaxTitle')">□</button>
-              <button class="btn-sys-tool close" :title="t('menu_close')">✕</button>
+              <button class="btn-sys-tool" :title="t('winMinTitle')" :aria-label="t('winMinTitle')">−</button>
+              <button class="btn-sys-tool" :title="t('winMaxTitle')" :aria-label="t('winMaxTitle')">□</button>
+              <button class="btn-sys-tool close" :title="t('menu_close')" :aria-label="t('menu_close')">✕</button>
             </div>
           </div>
         </div>
 
         <div class="pc-auth-body-2col">
           <!-- LEFT COLUMN: Credentials Login & Sign-up -->
-          <div class="pc-auth-col form-col">
+          <div id="auth-form-col" class="pc-auth-col form-col" tabindex="-1">
             <!-- Brand Logo Header -->
             <div class="pc-brand-header-left">
               <img class="pc-om-logo" :src="lunoLogo" alt="LUNO" height="42" />
@@ -464,6 +465,7 @@ onBeforeUnmount(() => {
                   v-model="email"
                   type="email"
                   :placeholder="t('emailPlaceholder')"
+                  :aria-label="t('emailPlaceholder')"
                   required
                   autocomplete="username"
                   class="pc-login-input"
@@ -474,6 +476,7 @@ onBeforeUnmount(() => {
                   v-model="displayName"
                   type="text"
                   :placeholder="t('namePlaceholder')"
+                  :aria-label="t('namePlaceholder')"
                   required
                   class="pc-login-input"
                 />
@@ -501,11 +504,12 @@ onBeforeUnmount(() => {
                   v-model="password"
                   :type="showPassword ? 'text' : 'password'"
                   :placeholder="t('passwordPlaceholder')"
+                  :aria-label="t('passwordPlaceholder')"
                   required
                   autocomplete="current-password"
                   class="pc-login-input"
                 />
-                <button type="button" class="btn-eye-toggle" @click="showPassword = !showPassword" tabindex="-1">
+                <button type="button" class="btn-eye-toggle" @click="showPassword = !showPassword" tabindex="-1" :aria-label="t('passwordPlaceholder')">
                   {{ showPassword ? '🙈' : '👁️' }}
                 </button>
               </div>
@@ -561,6 +565,7 @@ onBeforeUnmount(() => {
                   v-model="phoneInput"
                   type="tel"
                   placeholder="010-1234-5678"
+                  :aria-label="t('phoneLoginTitle')"
                   required
                   class="pc-login-input phone-input"
                 />
@@ -574,6 +579,7 @@ onBeforeUnmount(() => {
                   v-model="phoneCodeInput"
                   type="text"
                   :placeholder="t('codePlaceholder')"
+                  :aria-label="t('codePlaceholder')"
                   maxlength="6"
                   required
                   class="pc-login-input"
@@ -616,7 +622,7 @@ onBeforeUnmount(() => {
               <!-- Expiry & Reload Pill -->
               <div v-if="qrChallengeID" class="pc-qr-timer-pill">
                 <span>{{ t('validTimeLabel') }} <strong>{{ formattedQrCountdown }}</strong></span>
-                <button type="button" class="btn-qr-reload" @click="refreshQr" :title="t('reloadBtn')">
+                <button type="button" class="btn-qr-reload" @click="refreshQr" :title="t('reloadBtn')" :aria-label="t('reloadBtn')">
                   {{ t('reloadBtn') }} ↻
                 </button>
               </div>
@@ -634,7 +640,7 @@ onBeforeUnmount(() => {
         <div class="standard-modal-box" role="dialog" :aria-label="t('mvRecoverTitle')">
           <div class="modal-header">
             <h3>{{ t('mvRecoverTitle') }}</h3>
-            <button class="btn-modal-close" @click="showRecoverModal = false">✕</button>
+            <button class="btn-modal-close" @click="showRecoverModal = false" :aria-label="t('mvClose')">✕</button>
           </div>
           <div class="modal-body-form">
             <label class="pc-input-row">
@@ -668,7 +674,7 @@ onBeforeUnmount(() => {
         <div class="standard-modal-box" role="dialog" :aria-label="t('verifyTitle')">
           <div class="modal-header">
             <h3>{{ t('verifyTitle') }}</h3>
-            <button class="btn-modal-close" @click="showVerifyModal = false">✕</button>
+            <button class="btn-modal-close" @click="showVerifyModal = false" :aria-label="t('mvClose')">✕</button>
           </div>
           <div class="modal-body-form">
             <p class="ln-charge-notice" role="note">
@@ -693,7 +699,7 @@ onBeforeUnmount(() => {
         <div class="standard-modal-box" role="dialog" :aria-label="t('consentStaleTitle')">
           <div class="modal-header">
             <h3>{{ t('consentStaleTitle') }}</h3>
-            <button class="btn-modal-close" @click="showConsentModal = false">✕</button>
+            <button class="btn-modal-close" @click="showConsentModal = false" :aria-label="t('mvClose')">✕</button>
           </div>
           <div class="modal-body-form">
             <p class="ln-charge-notice" role="note">{{ t('consentStaleNote') }}</p>

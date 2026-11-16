@@ -2668,7 +2668,8 @@ onBeforeUnmount(() => {
 
 
     <!-- Messenger shell: rail (PC/tablet) · list pane · main pane · tab bar (phone) -->
-    <main class="lx-shell" :class="{ 'is-detail': mobileDetailOpen, 'is-page': PAGE_NAVS.includes(activeNav) }">
+    <main id="lx-main" class="lx-shell" :class="{ 'is-detail': mobileDetailOpen, 'is-page': PAGE_NAVS.includes(activeNav) }">
+      <a class="lx-skip-link" href="#lx-list">{{ t('lxSkipToMain') }}</a>
       <nav class="lx-rail" :aria-label="t('lxMainNav')">
         <button type="button" class="lx-rail-me" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
           <span class="lx-avatar s40" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
@@ -2761,7 +2762,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- List pane -->
-      <aside class="lx-list">
+      <aside id="lx-list" class="lx-list" tabindex="-1">
 
         <!-- VIEW 1: FRIENDS / HOME (홈 및 친구 관리 - Section 3 & Screenshot 1) -->
         <FriendPanel
@@ -2830,6 +2831,7 @@ onBeforeUnmount(() => {
                   tabindex="0"
                   @click="openNewsArticle(heroNews)"
                   @keydown.enter="openNewsArticle(heroNews)"
+                  @keydown.space.prevent="openNewsArticle(heroNews)"
                   @mouseenter="isHeroHovered = true"
                   @mouseleave="isHeroHovered = false"
                 >
@@ -3374,7 +3376,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvMyQr') }}</h3>
-          <button class="btn-modal-close" @click="showQrModal = false">✕</button>
+          <button class="btn-modal-close" @click="showQrModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form" style="align-items:center;text-align:center;">
           <p class="modal-subtext">{{ t('mvQrDesc') }}</p>
@@ -3393,10 +3395,10 @@ onBeforeUnmount(() => {
         <div class="news-reader-header">
           <span class="news-reader-press">{{ activeNewsArticle.press }}</span>
           <div class="news-reader-actions">
-            <button class="btn-news-action" :title="newsBookmarks.has(activeNewsArticle.id) ? t('mvBookmarkRemove') : t('mvBookmarkSave')" @click="toggleNewsBookmark(activeNewsArticle.id)">
+            <button class="btn-news-action" :title="newsBookmarks.has(activeNewsArticle.id) ? t('mvBookmarkRemove') : t('mvBookmarkSave')" :aria-label="newsBookmarks.has(activeNewsArticle.id) ? t('mvBookmarkRemove') : t('mvBookmarkSave')" @click="toggleNewsBookmark(activeNewsArticle.id)">
               {{ newsBookmarks.has(activeNewsArticle.id) ? '🔖' : '📑' }}
             </button>
-            <button class="btn-news-action" :title="t('mvClose')" @click="activeNewsArticle = null">✕</button>
+            <button class="btn-news-action" :title="t('mvClose')" :aria-label="t('mvClose')" @click="activeNewsArticle = null">✕</button>
           </div>
         </div>
         <div class="news-reader-body">
@@ -3479,7 +3481,7 @@ onBeforeUnmount(() => {
     <div v-if="activeProfileUser" class="modal-backdrop" @click.self="activeProfileUser = null">
       <div class="profile-modal-card" role="dialog" aria-modal="true" :aria-label="t('profileTitle')">
         <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || 'var(--ln-accent)' }">
-          <button class="btn-modal-close" @click="activeProfileUser = null">✕</button>
+          <button class="btn-modal-close" @click="activeProfileUser = null" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="profile-avatar-center">
           <div class="avatar-circle xl"><span>{{ initialOf(activeProfileUser.display_name) }}</span><img v-if="activeProfileUser.avatar_url" :src="activeProfileUser.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></div>
@@ -3522,7 +3524,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box keep-modal">
         <div class="modal-header">
           <h3>{{ t('mvKeepTitle').replace('{n}', String(keepItems.length)) }}</h3>
-          <button class="btn-modal-close" @click="showKeepModal = false">✕</button>
+          <button class="btn-modal-close" @click="showKeepModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="keep-filter-bar">
           <button :class="{ active: keepFilter === 'all' }" @click="keepFilter = 'all'">{{ t('tabAll') }}</button>
@@ -3550,7 +3552,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvSendMoneyTitle') }}</h3>
-          <button class="btn-modal-close" @click="showSendMoneyModal = false">✕</button>
+          <button class="btn-modal-close" @click="showSendMoneyModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <p class="muted" style="margin: 0; font-size: 11.5px; color: #64748b;">{{ t('mvSandboxNotice') }}</p>
@@ -3581,7 +3583,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvChargeTitle') }}</h3>
-          <button class="btn-modal-close" @click="showChargeModal = false">✕</button>
+          <button class="btn-modal-close" @click="showChargeModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <p>{{ t('mvChargePick') }}</p>
@@ -3602,7 +3604,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvPollTitle') }}</h3>
-          <button class="btn-modal-close" @click="showPollCreateModal = false">✕</button>
+          <button class="btn-modal-close" @click="showPollCreateModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <label>{{ t('mvPollQ') }}</label>
@@ -3626,7 +3628,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvEventTitle') }}</h3>
-          <button class="btn-modal-close" @click="showEventCreateModal = false">✕</button>
+          <button class="btn-modal-close" @click="showEventCreateModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <label>{{ t('mvEventName') }}</label>
@@ -3649,7 +3651,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box" role="dialog" :aria-label="t('reportTitle')">
         <div class="modal-header">
           <h3>{{ t('reportTitle') }}</h3>
-          <button class="btn-modal-close" @click="showReportModal = false">✕</button>
+          <button class="btn-modal-close" @click="showReportModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <label class="pc-input-row">
@@ -3718,7 +3720,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box password-modal" style="max-width: 420px; width: 92vw;">
         <div class="modal-header">
           <h3>{{ t('mvPwChangeTitle') }}</h3>
-          <button class="btn-modal-close" @click="showPasswordModal = false">✕</button>
+          <button class="btn-modal-close" @click="showPasswordModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <form class="modal-body-form" @submit.prevent="submitPasswordChange">
           <p v-if="passwordChangeError" class="error-text" style="color: #ef4444; font-size: 12px; margin: 0;">{{ passwordChangeError }}</p>
@@ -3741,7 +3743,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvStoryTitle') }}</h3>
-          <button class="btn-modal-close" @click="showNewStoryModal = false">✕</button>
+          <button class="btn-modal-close" @click="showNewStoryModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <label>{{ t('mvStoryText') }}</label>
@@ -3759,7 +3761,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvVoomTitle') }}</h3>
-          <button class="btn-modal-close" @click="showVoomCreateModal = false">✕</button>
+          <button class="btn-modal-close" @click="showVoomCreateModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <label>{{ t('mvVoomBody') }}</label>
@@ -3777,7 +3779,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvOpenChatTitle') }}</h3>
-          <button class="btn-modal-close" @click="showCreateOpenChatModal = false">✕</button>
+          <button class="btn-modal-close" @click="showCreateOpenChatModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <label>{{ t('mvOpenChatName') }}</label>
@@ -3797,7 +3799,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvGroupTitle') }}</h3>
-          <button class="btn-modal-close" @click="showCreateGroupModal = false">✕</button>
+          <button class="btn-modal-close" @click="showCreateGroupModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <label>{{ t('mvGroupName') }}</label>
@@ -3829,7 +3831,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box">
         <div class="modal-header">
           <h3>{{ t('mvForwardTo') }}</h3>
-          <button class="btn-modal-close" @click="showForwardModal = false">✕</button>
+          <button class="btn-modal-close" @click="showForwardModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <div class="select-friends-scroll">
@@ -3849,7 +3851,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box add-friend-modal">
         <div class="modal-header">
           <h3>➕ {{ t('mvAddFriend') }}</h3>
-          <button class="btn-modal-close" @click="showAddFriendModal = false">✕</button>
+          <button class="btn-modal-close" @click="showAddFriendModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <p class="modal-subtext">{{ t('mvAddFriendDesc') }}</p>
@@ -3901,7 +3903,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box new-call-modal" role="dialog" :aria-label="t('mvNewCall')">
         <div class="modal-header">
           <h3>{{ t('mvNewCall') }}</h3>
-          <button class="btn-modal-close" @click="showNewCallModal = false">✕</button>
+          <button class="btn-modal-close" @click="showNewCallModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form new-call-body">
           <p v-if="!friends.length" class="muted">{{ t('contact_empty') }}</p>
@@ -3920,7 +3922,7 @@ onBeforeUnmount(() => {
       <div class="standard-modal-box new-chat-modal">
         <div class="modal-header">
           <h3>{{ t('mvNewConvo') }}</h3>
-          <button class="btn-modal-close" @click="showNewChatModal = false">✕</button>
+          <button class="btn-modal-close" @click="showNewChatModal = false" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="modal-body-form">
           <div class="new-chat-options-grid">

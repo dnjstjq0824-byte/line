@@ -108,14 +108,14 @@ function hideBrokenAvatar(ev: Event) {
       <div class="recent-search-chips">
         <span v-for="kw in recentSearchKeywords" :key="kw" class="recent-keyword-chip">
           <span class="kw-text" @click="friendSearchQuery = kw">{{ kw }}</span>
-          <button class="btn-del-kw" @click="removeSearchKeyword(kw)">✕</button>
+          <button class="btn-del-kw" @click="removeSearchKeyword(kw)" :aria-label="t('mvClose')">✕</button>
         </span>
       </div>
     </div>
 
     <div class="lx-scroll">
       <!-- Me -->
-      <div class="lx-row lx-row-me" role="button" tabindex="0" @click="emit('profile')" @keydown.enter="emit('profile')">
+      <div class="lx-row lx-row-me" role="button" tabindex="0" @click="emit('profile')" @keydown.enter="emit('profile')" @keydown.space.prevent="emit('profile')">
         <span class="lx-avatar s56" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
         <span class="lx-row-main">
           <span class="lx-row-name lx-me-name">{{ currentUser?.display_name }}</span>
@@ -143,6 +143,7 @@ function hideBrokenAvatar(ev: Event) {
             tabindex="0"
             @click="emit('select-friend', fav)"
             @keydown.enter="emit('select-friend', fav)"
+            @keydown.space.prevent="emit('select-friend', fav)"
             @dblclick="emit('direct-chat', fav)"
             @contextmenu.prevent="emit('friend-menu', $event, fav)"
           >
@@ -174,6 +175,7 @@ function hideBrokenAvatar(ev: Event) {
             tabindex="0"
             @click="emit('select-chat', grp.id)"
             @keydown.enter="emit('select-chat', grp.id)"
+            @keydown.space.prevent="emit('select-chat', grp.id)"
           >
             <span class="lx-avatar s44 group" style="background: var(--ln-info);">{{ initialOf(grp.title, 'G') }}<img v-if="grp.avatar_url" :src="grp.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
             <span class="lx-row-main">
@@ -201,6 +203,7 @@ function hideBrokenAvatar(ev: Event) {
             tabindex="0"
             @click="emit('follow-oa', oa)"
             @keydown.enter="emit('follow-oa', oa)"
+            @keydown.space.prevent="emit('follow-oa', oa)"
           >
             <span class="lx-avatar s44" :style="{ background: oa.color || '#4F7CFF' }"><LunoIcon name="shield" :size="20" /></span>
             <span class="lx-row-main">
@@ -234,6 +237,7 @@ function hideBrokenAvatar(ev: Event) {
             tabindex="0"
             @click="emit('select-friend', f)"
             @keydown.enter="emit('select-friend', f)"
+            @keydown.space.prevent="emit('select-friend', f)"
             @dblclick="emit('direct-chat', f)"
             @contextmenu.prevent="emit('friend-menu', $event, f)"
           >

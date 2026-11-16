@@ -1266,3 +1266,9 @@ ul, ol {list-style:none;margin:0;padding:0}
   .luno-desktop-app .lx-detail .profile-preview-subactions { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; overflow: visible !important; }
   .luno-desktop-app .lx-detail .btn-subaction-pill { width: 100%; justify-content: center; }
 }
+
+/* F25: accessibility — skip link, screen-reader-only text, guaranteed keyboard focus. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.lx-skip-link { position: absolute; left: 12px; top: -48px; z-index: 400; padding: 10px 16px; border-radius: 10px; background: var(--ln-accent); color: var(--ln-on-accent, #fff); font-size: 14px; font-weight: 700; text-decoration: none; transition: top .15s ease; }
+.lx-skip-link:focus, .lx-skip-link:focus-visible { top: 12px; outline: 2px solid var(--ln-on-accent, #fff); outline-offset: 2px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ln-accent); outline-offset: 2px; }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
-import { activeTheme, darkMode, error, note } from './store/session'
+import { activeTheme, darkMode, error, note, t } from './store/session'
 </script>
 
 <template>
@@ -8,11 +8,11 @@ import { activeTheme, darkMode, error, note } from './store/session'
     <!-- Global Floating Alerts (Toast style) -->
     <div v-if="error" class="floating-alert error" role="alert">
       <span>⚠️ {{ error }}</span>
-      <button class="btn-dismiss" @click="error = ''">✕</button>
+      <button class="btn-dismiss" @click="error = ''" :aria-label="t('mvClose')">✕</button>
     </div>
     <div v-if="note" class="floating-alert note" role="status">
       <span>💡 {{ note }}</span>
-      <button class="btn-dismiss" @click="note = ''">✕</button>
+      <button class="btn-dismiss" @click="note = ''" :aria-label="t('mvClose')">✕</button>
     </div>
     <RouterView />
   </div>
