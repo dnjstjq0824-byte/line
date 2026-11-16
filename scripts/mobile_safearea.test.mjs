@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 // Regression guard for real-device mobile Safari/Chrome: bottom-anchored UI
-// (floating nav capsule, chat input dock) must clear the browser toolbar and
+// (phone tab bar, chat composer) must clear the browser toolbar and
 // the iPhone home indicator via env(safe-area-inset-bottom). Emulators report
 // zero insets, so this is asserted statically against the CSS cascade.
 const v2 = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8');
-const app = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
 const index = await readFile(new URL('../apps/user-web/index.html', import.meta.url), 'utf8');
 
 // Extract the body of the first @media block whose query contains `needle`,
@@ -96,61 +95,37 @@ function effectiveHeight(bodies) {
   return height;
 }
 
-const mobile700 = mediaBody(v2, 'max-width:699px');
+// The messenger shell (lx-*) lives at the end of luno-v2.css; its phone
+// block is written `@media (max-width: 699px)`.
+const shellPhone = mediaBody(v2, '(max-width: 699px)');
+const shellBase = v2.slice(v2.indexOf('LUNO messenger shell (lx-*)'));
 
-test('mobile (<=699px) floating nav clears the Safari toolbar (safe-area bottom)', () => {
-  const bottom = effectiveBottom(ruleBodies(mobile700, '.luno-mobile-floating-nav'));
-  assert.ok(bottom, 'expected a bottom declaration for .luno-mobile-floating-nav in the <=699px block');
-  assert.ok(
-    bottom.includes('env(safe-area-inset-bottom)'),
-    `nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
-  );
-  // FX-01 supersedes the 100vh-100dvh term: position:fixed already anchors
-  // to the visual viewport (toolbar excluded), so the extra term pushed the
-  // nav a toolbar-height above the bottom on real iPhones (6 captures).
-  assert.ok(
-    !bottom.includes('100dvh'),
-    `nav bottom must not double-count the toolbar, got: ${bottom}`,
-  );
-});
-
-test('mobile (<=699px) chat input dock keeps its safe-area padding (no shorthand clobber)', () => {
-  // Global rules apply first, then the <=699px block, in source order.
-  const bodies = [...ruleBodies(v2.split('@media')[0], '.pc-chat-input-dock'), ...ruleBodies(mobile700, '.pc-chat-input-dock')];
+test('phone tab bar clears the home indicator (safe-area bottom)', () => {
+  const bodies = ruleBodies(shellPhone, '.lx-tabbar');
   const bottom = effectivePaddingBottom(bodies);
-  assert.ok(bottom, 'expected a padding declaration for .pc-chat-input-dock');
-  assert.ok(
-    bottom.includes('env(safe-area-inset-bottom)'),
-    `dock padding-bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
-  );
+  assert.ok(bottom, 'expected a padding declaration for .lx-tabbar in the phone block');
+  assert.ok(bottom.includes('env(safe-area-inset-bottom)'), `tab bar padding-bottom must include env(safe-area-inset-bottom), got: ${bottom}`);
+  assert.ok(!bottom.includes('100dvh'), `tab bar must not double-count the toolbar, got: ${bottom}`);
+  assert.equal(effectiveBottom(bodies), '0', 'tab bar is pinned to the bottom edge');
 });
 
-test('App.vue mobile nav base also respects the safe-area inset', () => {
-  const base700 = mediaBody(app, 'max-width: 699px');
-  const bottom = effectiveBottom(ruleBodies(base700, '.luno-mobile-floating-nav'));
-  assert.ok(bottom, 'expected a bottom declaration for .luno-mobile-floating-nav in the <=699px block');
-  assert.ok(
-    bottom.includes('env(safe-area-inset-bottom)'),
-    `App.vue nav bottom must include env(safe-area-inset-bottom), got: ${bottom}`,
-  );
-  // FX-01: same double-count removal as the v2 rule above.
-  assert.ok(
-    !bottom.includes('100dvh'),
-    `App.vue nav bottom must not double-count the toolbar, got: ${bottom}`,
-  );
+test('phone composer keeps its safe-area padding (no shorthand clobber)', () => {
+  const bodies = [...ruleBodies(shellBase.split('@media')[0], '.lx-composer-dock'), ...ruleBodies(shellPhone, '.lx-composer-dock')];
+  const bottom = effectivePaddingBottom(bodies);
+  assert.ok(bottom, 'expected a padding declaration for .lx-composer-dock');
+  assert.ok(bottom.includes('env(safe-area-inset-bottom)'), `composer padding-bottom must include env(safe-area-inset-bottom), got: ${bottom}`);
 });
 
-test('mobile chat room sizes to the dynamic viewport so the send dock stays visible', () => {
-  const base700 = mediaBody(app, 'max-width: 699px');
-  const height = effectiveHeight(ruleBodies(base700, '.pc-chat-viewport'));
-  assert.ok(height, 'expected a height declaration for .pc-chat-viewport in the <=699px block');
-  assert.ok(
-    height.includes('100dvh'),
-    `chat viewport height must resolve to 100dvh (visible area above the toolbar), got: ${height}`,
-  );
+test('shell sizes to the dynamic viewport with a 100vh fallback', () => {
+  const bodies = ruleBodies(shellBase.split('@media')[0], '.lx-shell');
+  assert.equal(effectiveHeight(bodies), '100dvh', 'last height wins: dynamic viewport');
+  assert.ok(bodies.join(';').includes('height: 100vh'), 'older browsers get 100vh first');
+});
+
+test('an open room follows the visible area while the keyboard is up', () => {
+  assert.equal(effectiveHeight(ruleBodies(shellPhone, '.keyboard-open .lx-shell.is-detail .lx-main')), 'var(--lx-vv-h, 100dvh)');
 });
 
 test('viewport meta keeps viewport-fit=cover (safe-area insets are zero without it)', () => {
   assert.ok(index.includes('viewport-fit=cover'), 'index.html viewport meta must keep viewport-fit=cover');
 });
-

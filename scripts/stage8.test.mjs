@@ -56,7 +56,9 @@ test('UX1: legacy token files and dead views are deleted', async () => {
 test('UX1: one font load, extracted rules survive in the skin', async () => {
   const skin = await readFile(join(root, 'styles', 'luno-v2.css'), 'utf8');
   assert.equal((skin.match(/@import url\(/g) || []).length, 1, 'single font load');
-  for (const rule of ['.btn-primary{', '.btn-secondary{', '.story-ring{', '.ln-tnum {']) {
+  // .story-ring / .ln-tnum went with the markup that used them (VOOM and
+  // lists now use the lx-* shell); the shared button rules stay.
+  for (const rule of ['.btn-primary{', '.btn-secondary{']) {
     assert.ok(skin.includes(rule), `${rule} kept`);
   }
   assert.ok(!skin.includes('--om-primary:var(--ln-accent)'), 'remap block gone');
@@ -78,19 +80,19 @@ test('UX2: tokens, app and web share one breakpoint scale', async () => {
   }
 });
 
-test('UX3: tablet keeps rail 76, list 340, inline conversation, no floating nav', async () => {
+test('UX3: tablet keeps rail 76, list 340, inline conversation, no bottom tab bar', async () => {
   const skin = await readFile(join(root, 'styles', 'luno-v2.css'), 'utf8');
-  const m = skin.match(/@media\(min-width:700px\) and \(max-width:1099px\)\{([\s\S]*?)\n\}/);
+  const shell = skin.slice(skin.indexOf('LUNO messenger shell (lx-*)'));
+  // Base shell (everything >= 700px): rail 76 + list 340 + room, side by side.
+  assert.match(shell, /\.lx-shell \{[^}]*grid-template-columns: 76px 340px minmax\(0, 1fr\);/);
+  assert.match(shell, /\.lx-tabbar \{ display: none; \}/, 'tab bar hidden outside phones');
+  // The tablet block must not resize the rail or the list.
+  const m = shell.match(/@media \(min-width: 700px\) and \(max-width: 1099px\) \{([\s\S]*?)\n\}/);
   assert.ok(m, 'tablet 700-1099 media block present');
-  const block = m[1];
-  assert.ok(block.includes('.pc-side-pane{width:340px!important'), 'list pane 340px on tablet');
-  assert.ok(!/max-width:42vw/.test(block), 'no vw clamp shrinking the list below spec');
-  assert.ok(block.includes('.luno-mobile-floating-nav{display:none!important}'), 'floating bottom nav hidden on tablet');
-  assert.ok(block.includes('.pc-chat-viewport{position:relative!important'), 'conversation renders inline next to the list');
-  assert.ok(block.includes('.pc-friend-profile-viewport{flex:1;min-width:0'), 'friend profile stays inside its tablet slot');
-  assert.ok(block.includes('.pc-profile-preview-card{max-width:100%!important}'), 'friend card capped so its action row scrolls instead of clipping');
-  assert.ok(block.includes('.pc-rail-bottom{display:flex!important}'), 'rail bottom row visible on tablet');
-  assert.ok(skin.includes('.pc-rail{width:76px!important'), 'rail 76px shared by tablet and desktop');
+  assert.ok(!/grid-template-columns/.test(m[1]), 'tablet keeps the shared 76/340 columns');
+  // Only the phone block collapses to one pane.
+  const phone = shell.slice(shell.indexOf('@media (max-width: 699px)'));
+  assert.match(phone, /\.lx-shell \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
 
 test('UX3: translate languages load only after the token is restored (no 401 on boot)', async () => {

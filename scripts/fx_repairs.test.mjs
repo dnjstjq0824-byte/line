@@ -13,35 +13,34 @@ const paneSrc = await readFile(new URL('../apps/user-web/src/components/MessageP
 const workerSrc = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 
 // ---- FX-01: mobile bottom nav pins to the viewport bottom ----
-test('FX-01 nav bottom has no double-compensating toolbar term', () => {
-  assert.match(appCss, /\.luno-mobile-floating-nav \{[^}]*bottom: max\(12px, env\(safe-area-inset-bottom\)\);/);
-  assert.match(v2Css, /\.luno-mobile-floating-nav\{[^}]*bottom:max\(12px,env\(safe-area-inset-bottom\)\)/);
+test('FX-01 tab bar pins to the bottom without a double toolbar term', () => {
+  assert.match(v2Css, /\.lx-tabbar \{[^}]*position: fixed;[^}]*bottom: 0;[^}]*padding: 0 4px env\(safe-area-inset-bottom\);/);
   assert.ok(!appCss.includes('calc(100vh - 100dvh'), 'App.vue keeps no 100vh-100dvh term');
   assert.ok(!v2Css.includes('calc(100vh - 100dvh'), 'luno-v2 keeps no 100vh-100dvh term');
 });
 
-test('FX-01 list scroll clears the floating buttons', () => {
-  assert.match(appCss, /\.pc-pane-scroll \{[^}]*padding-bottom: 72px;/);
+test('FX-01 list scroll clears the phone tab bar', () => {
+  assert.match(v2Css, /\.lx-list \{ border-right: 0; padding-bottom: calc\(60px \+ env\(safe-area-inset-bottom\)\); \}/);
 });
 
-test('FX-01/FX-08 new-chat button rides above the nav capsule on phones', () => {
-  assert.match(appCss, /\.pc-floating-add-btn \{[^}]*bottom: 96px;/);
+test('FX-01/FX-08 new chat lives in the list header, never floats over the tab bar', async () => {
+  const list = await readFile(new URL('../apps/user-web/src/components/ChatList.vue', import.meta.url), 'utf8');
+  const head = list.split('<header class="lx-pane-head">')[1].split('</header>')[0];
+  assert.ok(head.includes("emit('new-chat')"), 'new-chat button sits in the header');
+  assert.ok(!/floating-add/.test(viewSrc + list), 'no floating add button remains');
 });
 
 // ---- FX-02: chat input cluster always on screen ----
-test('FX-02 message canvas shrinks so the dock stays visible', () => {
+test('FX-02 message canvas shrinks so the composer stays visible', () => {
   assert.match(appCss, /\.pc-chat-messages-canvas \{[^}]*min-height: 0;/);
-  assert.match(appCss, /\.pc-chat-input-dock \{[^}]*min-height: 135px;/);
-  assert.match(appCss, /\.pc-chat-input-dock \{[^}]*flex-shrink: 0;/);
-  assert.ok(!/(?<!min-)height: 135px;/.test(appCss.match(/\.pc-chat-input-dock \{[^}]*\}/)[0]), 'dock has no fixed height to overflow');
+  assert.match(v2Css, /\.lx-room \{[^}]*min-height: 0;[^}]*flex-direction: column;/);
+  assert.match(v2Css, /\.lx-composer-dock \{[^}]*flex-shrink: 0;/);
 });
 
 // ---- FX-07: iPhone height system + input sizes + keyboard ----
 test('FX-07 root heights fall back to dynamic viewport units', () => {
-  for (const sel of ['\\.luno-desktop-app', '\\.pc-workspace', '\\.pc-side-pane']) {
-    const re = new RegExp(sel + ' \\{[^}]*height: 100dvh;');
-    assert.match(appCss, re, `${sel} carries a 100dvh fallback`);
-  }
+  assert.match(appCss, /\.luno-desktop-app \{[^}]*height: 100dvh;/, 'app root carries a 100dvh fallback');
+  assert.match(v2Css, /\.lx-shell \{[^}]*height: 100vh;[^}]*height: 100dvh;/, 'shell carries a 100dvh fallback');
 });
 
 test('FX-07 text-entry controls are 16px or larger (no Safari zoom)', () => {
@@ -59,7 +58,7 @@ test('FX-07 text-entry controls are 16px or larger (no Safari zoom)', () => {
 test('FX-07 keyboard keeps the composer above it', () => {
   assert.ok(viewSrc.includes('visualViewport'), 'MessengerView listens to visualViewport');
   assert.ok(viewSrc.includes('keyboard-open'), 'MessengerView toggles a keyboard-open state');
-  assert.match(appCss, /\.keyboard-open \.pc-chat-input-dock \{[^}]*position: sticky;/);
+  assert.match(v2Css, /\.keyboard-open \.lx-composer-dock \{[^}]*position: sticky;/);
 });
 
 // ---- FX-09: toasts never cover a header, auto-dismissing ----
@@ -70,11 +69,6 @@ test('FX-09 alerts sit at the bottom centre, above the phone tab bar', async () 
   assert.match(shellCss, /\.floating-alert \{ bottom: calc\(72px \+ env\(safe-area-inset-bottom\)\); \}/);
 });
 
-// ---- FX-11: ecosystem cards show full titles ----
-test('FX-11 service titles are never clamped', () => {
-  assert.ok(!/\.svc-names strong \{[^}]*-webkit-line-clamp/.test(appCss), 'no line clamp on service titles');
-  assert.match(appCss, /\.svc-names strong \{[^}]*display: block;/);
-});
 
 // ---- FX-14: detail buttons stay on one line ----
 test('FX-14 subaction row scrolls instead of wrapping labels', () => {
@@ -98,19 +92,17 @@ test('FX-19 search hits jump to the message', () => {
 });
 
 // ---- FX-20: news hero and tabs ----
-test('FX-20 hero title is explicitly white over the photo', () => {
-  assert.match(appCss, /\.hero-title \{[^}]*color: #ffffff;/);
-  assert.match(v2Css, /\.hero-title\{[^}]*color:#fff/);
+test('FX-20 hero title sits under the photo in the text colour', () => {
+  assert.match(v2Css, /\.lx-news-hero-text h3 \{[^}]*color: var\(--ln-text\);/);
 });
 
 test('FX-20 category tabs never wrap to two lines', () => {
-  assert.match(appCss, /\.btn-subtab \{[^}]*white-space: nowrap;[^}]*flex-shrink: 0;/);
-  assert.match(appCss, /\.pc-chat-subtabs-row \{[^}]*overflow-x: auto;/);
+  assert.match(v2Css, /\.lx-chip \{[^}]*flex-shrink: 0;[^}]*white-space: nowrap;/);
+  assert.match(v2Css, /\.lx-chips \{[^}]*overflow-x: auto;/);
 });
 
 test('FX-20 hero shows a shimmer while the photo loads', () => {
-  assert.match(appCss, /\.hero-image-wrap \{[^}]*background: linear-gradient\(/);
-  assert.match(appCss, /\.news-hero-card \{[^}]*flex-shrink: 0;/);
+  assert.match(v2Css, /\.lx-news-hero-media \{[^}]*background: linear-gradient\(/);
 });
 
 // ---- FX-21: floating buttons yield to content ----

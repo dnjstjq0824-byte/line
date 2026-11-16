@@ -32,7 +32,7 @@ test('§7-2 typography tokens exist with exact values', () => {
     assert.ok(tokens.includes(`${name}: ${value}`), `${name} must be ${value}`);
   }
   assert.ok(tokens.includes(`--font-sans: 'Pretendard Variable', Pretendard,`), 'Pretendard-first stack');
-  assert.ok(tokens.includes('font-variant-numeric: tabular-nums'), 'tabular-nums utility');
+  assert.ok(tokens.includes('font-variant-numeric: tabular-nums'), 'tabular digits are used for times and counts');
 });
 
 test('§7-3 grouping tokens exist with exact values', () => {
@@ -49,16 +49,20 @@ test('§7-3 grouping tokens exist with exact values', () => {
 });
 
 test('§7-2 scale is applied to list, header, composer and stamps', () => {
-  for (const cls of ['.chat-row-title', '.friend-item-name']) {
-    assert.ok(appCss.includes(cls), `${cls} rule exists`);
-  }
-  assert.ok(appCss.includes('var(--text-list-name-size'), 'list names use the token');
-  assert.ok(appCss.includes('var(--text-title-size'), 'header title uses the token');
-  assert.ok(appCss.includes('-webkit-line-clamp: 2'), 'preview clamps to 2 lines');
-  assert.ok(appCss.includes('.pc-textarea-form textarea'), 'composer rule exists');
-  const composer = appCss.slice(appCss.indexOf('.pc-textarea-form textarea'));
-  assert.ok(composer.slice(0, 400).includes('var(--text-input-size, 1rem)'), 'composer is fixed 16px');
-  for (const cls of ['.chat-row-time', '.chat-unread-pill', '.pc-timestamp', '.pc-read-receipt', '.timer-active']) {
+  // The messenger shell (lx-*, end of luno-v2.css) carries the scale now.
+  const rule = (sel) => {
+    const m = new RegExp(`(^|\\n)${sel.replace(/[.]/g, '\\.')} \\{`).exec(tokens);
+    assert.ok(m, `${sel} rule exists`);
+    const at = m.index;
+    return tokens.slice(at, tokens.indexOf('}', at));
+  };
+  assert.ok(rule('.lx-row-name').includes('var(--text-list-name-size'), 'list names use the token');
+  assert.ok(rule('.lx-room-name-text').includes('var(--text-title-size'), 'room title uses the token');
+  assert.ok(rule('.lx-composer-input').includes('var(--text-input-size, 1rem)'), 'composer is fixed 16px');
+  assert.ok(rule('.lx-row-time').includes('tabular-nums'), 'list times use tabular digits');
+  assert.ok(rule('.lx-badge').includes('tabular-nums'), 'unread badges use tabular digits');
+  // Message stamps keep their pre-shell rules in App.vue.
+  for (const cls of ['.pc-timestamp', '.pc-read-receipt']) {
     const at = appCss.indexOf(cls);
     assert.ok(at >= 0, `${cls} rule exists`);
     assert.ok(appCss.slice(at, at + 600).includes('tabular-nums'), `${cls} uses tabular-nums`);

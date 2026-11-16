@@ -12,8 +12,8 @@ const v2 = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', imp
 const shell = v2; // the lx-* shell rules live at the end of the single skin (UX1)
 
 test('rail nav scrolls internally instead of pushing actions off-screen', () => {
-  assert.match(css, /\.pc-rail-top \{\s*flex: 1 1 auto;\s*min-height: 0;\s*overflow-y: auto;/);
-  assert.match(css, /\.pc-rail-bottom \{\s*flex-shrink: 0;/);
+  assert.match(shell, /\.lx-rail \{[^}]*min-height: 0;[^}]*overflow-y: auto;/);
+  assert.match(shell, /\.lx-rail-foot \{ margin-top: auto;/);
 });
 
 test('translate pill never squeezes or wraps its label', () => {
@@ -21,14 +21,6 @@ test('translate pill never squeezes or wraps its label', () => {
   assert.match(css, /\.ai-translate-tool-pill span \{\s*white-space: nowrap;/);
 });
 
-test('service names show in full instead of one-char ellipsis', () => {
-  // FX-11 supersedes the 2-line clamp: card titles render complete.
-  assert.ok(!/\.svc-names strong \{[^}]*-webkit-line-clamp/.test(css));
-  assert.match(css, /\.svc-names strong \{[^}]*display: block;/);
-  assert.match(css, /\.svc-status-pill \{[^}]*flex-shrink: 0;/);
-  assert.match(css, /\.svc-status-pill \{[^}]*max-width: 110px;/);
-  assert.match(css, /\.ecosystem-cards-grid \{[^}]*minmax\(300px, 1fr\)/);
-});
 
 test('sticker picker overlays above the dock instead of squeezing in-flow', () => {
   assert.match(css, /\.sticker-picker-popover \{[^}]*position: absolute; bottom: 100%;/);
@@ -50,11 +42,10 @@ test('message rows cannot slide content under the avatar', () => {
 });
 
 test('C1: chat header stays one line with translate/theme/calendar in the menu', () => {
-  assert.match(v2, /\.pc-chat-topbar\{[^}]*flex-wrap:nowrap/);
-  assert.match(v2, /\.chat-header-title\{[^}]*text-overflow:ellipsis;white-space:nowrap/);
+  assert.match(shell, /\.lx-room-head \{[^}]*display: flex;[^}]*height: 60px;/);
+  assert.match(shell, /\.lx-room-name-text \{[^}]*text-overflow: ellipsis; white-space: nowrap;/);
   assert.ok(messagePane.includes('chat-topbar-menu'), 'more menu exists');
   const actionsBlock = messagePane.split('<div class="lx-room-actions">')[1].split('chat-topbar-menu-wrap')[0];
-  assert.match(shell, /\.lx-room-name-text \{[^}]*text-overflow: ellipsis; white-space: nowrap;/);
   assert.ok(!actionsBlock.includes('ai-translate-tool-pill'), 'translate pill moved into the menu');
   assert.ok(!actionsBlock.includes('cycle-wallpaper'), 'wallpaper moved into the menu');
 });
@@ -68,10 +59,10 @@ test('C1: composer attachments collapse into the + panel (all nine kept)', () =>
   }
 });
 
-test('C1: chat touch targets meet 44px and bubbles cap at 70% on mobile', () => {
-  for (const sel of ['.btn-chat-action', '.btn-tool-icon', '.btn-mobile-back']) {
-    assert.match(v2, new RegExp(sel.replace(/\./g, '\\.') + '\\{[^}]*min-width:44px'));
-  }
-  assert.match(v2, /\.pc-msg-row\{max-width:70%/);
-  assert.match(v2, /\.pc-msg-row \.pc-speech-bubble\{max-width:70%/);
+test('C1: phone touch targets meet 44px and bubbles get most of the width', () => {
+  const phone = shell.slice(shell.indexOf('@media (max-width: 699px)'));
+  assert.match(phone, /\.lx-icon-btn \{ width: 44px; height: 44px; \}/);
+  assert.match(phone, /\.lx-send \{ width: 44px; height: 44px;/);
+  assert.match(phone, /\.lx-room \.pc-msg-row \{ max-width: 88% !important; \}/);
+  assert.match(phone, /\.lx-room \.pc-msg-row \.pc-speech-bubble \{ max-width: 100% !important; \}/);
 });

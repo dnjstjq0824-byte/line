@@ -89,9 +89,6 @@
 
 /* Fixed-width numerals (§7-2): chat-list times, unread badges, read counts,
    call timers must never wobble as digits change. */
-.ln-tnum {
-  font-variant-numeric: tabular-nums;
-}
 
 [data-theme="dark"] {
   /* Brand & Accent */
@@ -177,9 +174,7 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .ln-connection-state{display:inline-flex;align-items:center;gap:6px;color:var(--ln-muted)!important}
 .luno-desktop-app .ln-connection-state::before{content:'';width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--ln-muted)}
 .luno-desktop-app .ln-connection-state[data-state=connected]::before{background:var(--ln-accent)}
-.luno-desktop-app .chat-header-title{color:var(--ln-text)!important}
 .luno-desktop-app :is(.pc-sender-header,.pc-timestamp){color:var(--ln-muted)!important}
-.luno-desktop-app :is(.chat-topbar-actions button,.chat-topbar-actions select,.btn-tool-icon){color:var(--ln-muted)!important}
 .luno-desktop-app .ai-translate-tool-pill{background:var(--ln-subtle)!important;border-color:var(--ln-line)!important}
 .luno-desktop-app .pc-bubble-toolbar{background:var(--ln-surface)!important;border:1px solid var(--ln-line)!important;box-shadow:var(--ln-shadow)!important}
 .luno-desktop-app .pc-bubble-toolbar button{color:var(--ln-muted)!important}
@@ -218,47 +213,16 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .pc-qr-session-id{font-size:11px;color:var(--ln-muted)!important;line-height:1.7}
 .luno-desktop-app :is(.btn-auth-locale,.btn-win-dark){color:var(--ln-muted)!important;background:transparent!important;border-radius:8px!important;min-height:32px}
 .luno-desktop-app .btn-auth-locale.active{background:var(--ln-accent-soft)!important;color:var(--ln-accent)!important}
-.luno-desktop-app .pc-demo-chips-compact{border-top:1px solid var(--ln-line)!important;padding-top:18px!important}
-.luno-desktop-app .btn-demo-pill{border:1px solid var(--ln-line)!important;background:var(--ln-surface)!important;color:var(--ln-muted)!important;border-radius:8px!important}
 /* Conversation workspace and shared content surfaces. */
-.luno-desktop-app .pc-workspace{width:100%!important;height:100dvh!important;background:var(--ln-bg)!important}
-.luno-desktop-app .pc-rail{width:76px!important;min-width:76px!important;background:var(--ln-surface)!important;border-right:1px solid var(--ln-line)!important;padding:18px 10px!important}
-.luno-desktop-app .pc-rail-btn{border-radius:14px!important;color:var(--ln-muted)!important;margin:4px auto!important;width:48px!important;height:44px!important}
-.luno-desktop-app .pc-rail-btn.active{color:var(--ln-accent)!important;background:var(--ln-accent-soft)!important}
-.luno-desktop-app .pc-rail-indicator{display:none!important}
-.luno-desktop-app .pc-rail-top{min-height:0;overflow-y:auto;overflow-x:hidden;flex:1;scrollbar-width:thin;padding-bottom:12px}
-.luno-desktop-app .pc-rail-btn{flex-shrink:0}
-.luno-desktop-app .pc-rail-bottom{flex-shrink:0;border-top:1px solid var(--ln-line);padding-top:8px}
-.luno-desktop-app .pc-rail-bottom .pc-rail-btn{height:34px!important;margin:1px auto!important}
-.luno-desktop-app :is(.pc-side-pane,.pc-pane-body){background:var(--ln-surface)!important;color:var(--ln-text)!important;border-color:var(--ln-line)!important}
-.luno-desktop-app .pc-side-pane{width:340px!important;min-width:280px;max-width:42vw}
-.luno-desktop-app .pc-side-pane.is-collapsed{width:52px!important;min-width:0!important;max-width:52px!important}
-.luno-desktop-app :is(.pc-empty-canvas,.pc-friend-profile-viewport){background:var(--ln-bg)!important;color:var(--ln-text)!important}
-.luno-desktop-app :is(.pc-friend-item-row,.pc-my-profile-card,.home-services-grid,.chat-ad-banner-card,.pc-call-item-row){background:var(--ln-surface)!important;color:var(--ln-text)!important;border-color:var(--ln-line)!important}
 .luno-desktop-app :is(.friend-item-name,.my-name-text,.pc-empty-title){color:var(--ln-text)!important}
 .luno-desktop-app :is(.friend-item-sub,.my-status-text,.pc-empty-desc,.chat-item-preview){color:var(--ln-muted)!important}
 .luno-desktop-app :is(.chat-main-heading,.ad-tag-title,.pc-chat-item-name,.chat-item-name,.call-peer-name){color:var(--ln-text)!important}
-.luno-desktop-app :is(.dropdown-caret,.btn-chat-head-tool,.btn-subtab,.btn-scan-qr-search){color:var(--ln-muted)!important}
-.luno-desktop-app .btn-subtab.active{color:var(--ln-accent)!important;border-color:var(--ln-accent)!important}
-.luno-desktop-app :is(.pc-search-bar-header,.pc-search-box-wrap){background:var(--ln-surface)!important;border-color:var(--ln-line)!important}
-.luno-desktop-app .pc-search-box-wrap input{background:transparent!important;border-radius:0!important}
 .luno-desktop-app :is(.btn-start-chat-large,.btn-green-send){background:var(--ln-accent)!important;color:var(--ln-on-accent)!important;border-radius:12px!important}
 .luno-desktop-app .btn-subaction-pill{color:var(--ln-text)!important;background:var(--ln-subtle)!important;border-color:var(--ln-line)!important}
-.luno-desktop-app .pc-unread-pill{background:var(--ln-accent)!important;color:var(--ln-on-accent)!important;border-color:var(--ln-surface)!important}
-.luno-desktop-app :is(.pc-pane,.pc-list-pane,.pc-chat-list-pane,.pc-friends-pane){background:var(--ln-surface)!important;border-color:var(--ln-line)!important}
-.luno-desktop-app :is(.pc-chat-main-header,.pc-pane-header,.pc-chat-topbar,.pc-home-header){background:var(--ln-surface)!important;border-color:var(--ln-line)!important;padding:20px 24px!important}
-.luno-desktop-app :is(.pc-pane-title,.pc-chat-title,.pc-chat-header-title){color:var(--ln-text)!important;font-weight:650!important}
-.luno-desktop-app :is(.pc-chat-item-row,.friend-item,.pc-friend-row){border-radius:12px!important;margin:4px 10px!important;padding:14px!important;color:var(--ln-text)!important}
-.luno-desktop-app :is(.pc-chat-item-row,.friend-item,.pc-friend-row):hover{background:var(--ln-bg)!important}
-.luno-desktop-app .pc-chat-item-row.active{background:var(--ln-accent-soft)!important}
-.luno-desktop-app :is(.pc-chat-subtabs-row,.pc-search-history,.pc-accordion-header){background:var(--ln-surface)!important;border-color:var(--ln-line)!important;color:var(--ln-muted)!important}
 .luno-desktop-app .pc-chat-messages-canvas{background:var(--ln-chat)!important;padding:32px!important}
 .luno-desktop-app .pc-speech-bubble{border-radius:18px!important;padding:12px 16px!important;box-shadow:0 2px 4px #11182704;line-height:1.48!important}
 .luno-desktop-app .pc-msg-row.mine .pc-speech-bubble{background:var(--ln-accent)!important;color:var(--ln-on-accent)!important;border-bottom-right-radius:4px!important}
 .luno-desktop-app .pc-msg-row:not(.mine) .pc-speech-bubble{background:var(--ln-surface)!important;color:var(--ln-text)!important;border:1px solid var(--ln-line);border-top-left-radius:4px!important;border-bottom-left-radius:18px!important}
-.luno-desktop-app .pc-chat-input-dock{background:var(--ln-surface)!important;border-color:var(--ln-line)!important;padding:16px 24px!important}
-.luno-desktop-app .pc-chat-input-dock textarea{padding:12px!important;border:1px solid var(--ln-line)!important}
-.luno-desktop-app :is(.pc-chat-viewport,.pc-home-viewport,.pc-profile-viewport,.pc-calls-viewport,.pc-news-pane,.pc-openchat-viewport){background:var(--ln-bg)!important;color:var(--ln-text)!important}
 .luno-desktop-app :is(.pc-dropdown-menu,.context-menu,.standard-modal-box,.pc-modal-card,.pc-call-detail-card,.keep-item-card,.ecosystem-service-card){background:var(--ln-surface)!important;color:var(--ln-text)!important;border:1px solid var(--ln-line)!important;border-radius:18px!important;box-shadow:var(--ln-shadow)!important}
 .luno-desktop-app :is(.modal-backdrop,.pc-modal-backdrop){background:#10132170!important;backdrop-filter:blur(8px);padding:20px}
 .luno-desktop-app .floating-alert{z-index:120000!important;max-width:calc(100vw - 32px);border-radius:12px}
@@ -310,33 +274,11 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .settings-modal .modal-body-form{overflow-y:auto!important;min-height:0;flex:1;max-height:none!important}
 .luno-desktop-app .setting-group{padding:18px!important;border:1px solid var(--ln-line)!important;border-radius:14px!important;margin:0 0 14px!important}
 .luno-desktop-app .setting-toggle-row{border-color:var(--ln-line)!important;padding:12px 0!important}
-.luno-desktop-app .mobile-bottom-nav{background:var(--ln-surface)!important;border-color:var(--ln-line)!important}
-.luno-desktop-app .mobile-nav-item{color:var(--ln-muted)!important}.luno-desktop-app .mobile-nav-item.active{color:var(--ln-accent)!important}
 @media(max-width:1099px){.luno-desktop-app .pc-auth-col{padding:36px!important}.luno-desktop-app .pc-chat-messages-canvas{padding:24px!important}}
 @media(max-width:699px){
-  .luno-desktop-app .pc-chat-topbar{height:56px!important;min-height:56px;flex-wrap:nowrap!important;padding:0 12px!important;gap:8px!important;flex-shrink:0}
-  .luno-desktop-app .chat-topbar-left{min-width:0;flex:1 1 auto;gap:8px;overflow:hidden}
-  .luno-desktop-app .chat-topbar-info{flex:1;min-width:0;overflow:hidden}
-  .luno-desktop-app .chat-topbar-info .title-row{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .luno-desktop-app .chat-header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .luno-desktop-app .chat-topbar-actions{min-width:0;flex-shrink:0;justify-content:flex-end;gap:2px!important}
-  .luno-desktop-app .chat-topbar-actions>*{flex-shrink:0}
   .luno-desktop-app .pc-msg-row{max-width:70%!important}
   .luno-desktop-app .pc-msg-row .pc-speech-bubble{max-width:70%!important}
-  .luno-desktop-app .btn-chat-action{min-width:44px!important;min-height:44px!important}
-  .luno-desktop-app .btn-tool-icon{min-width:44px!important;min-height:44px!important}
-  .luno-desktop-app .btn-mobile-back{min-width:44px!important;min-height:44px!important}
   .luno-desktop-app .btn-green-send{min-height:44px!important;padding-left:16px!important;padding-right:16px!important}
-  .luno-desktop-app .mobile-nav-item{min-height:52px!important}
-  .luno-desktop-app .pc-chat-input-dock{flex-shrink:0;padding-bottom:max(12px,env(safe-area-inset-bottom))!important}
-  .luno-desktop-app .pc-input-toolbar{overflow-x:auto;max-width:100%;flex-wrap:nowrap!important}
-  .luno-desktop-app .pc-textarea-form textarea{min-height:56px!important;max-height:120px}
-  .luno-desktop-app .pc-side-pane{width:100%!important;max-width:none!important;min-width:0!important;flex:1;height:100dvh!important;padding-bottom:88px!important}
-  .luno-desktop-app .pc-empty-canvas{display:none!important}
-  .luno-desktop-app .pc-friend-profile-viewport{position:fixed;inset:0 0 80px;z-index:100;overflow:auto;padding:20px}
-  .luno-desktop-app .luno-mobile-floating-nav{background:var(--ln-surface)!important;border:1px solid var(--ln-line)!important;border-radius:22px!important;bottom:12px!important;bottom:max(12px,env(safe-area-inset-bottom))!important;padding:6px!important;gap:0!important}
-  .luno-desktop-app .mobile-nav-item{padding:8px 20px!important;border-radius:16px!important}
-  .luno-desktop-app .mobile-nav-item.active{background:var(--ln-accent-soft)!important}
   .luno-desktop-app .pc-auth-viewport{padding:16px!important;align-items:flex-start!important}
   .luno-desktop-app .pc-auth-window-2col{margin:16px 0!important;border-radius:22px!important;min-height:0!important}
   .luno-desktop-app .pc-window-bar{padding:0 20px!important;height:56px!important}
@@ -346,18 +288,12 @@ ul, ol {list-style:none;margin:0;padding:0}
   .luno-desktop-app .pc-qr-matrix-card{width:148px!important;height:148px!important;padding:10px!important;margin:12px auto!important}.ln-qr-brand{width:58px;height:58px}
   .luno-desktop-app .ln-auth-title{font-size:28px}
   .luno-desktop-app .pc-chat-messages-canvas{padding:16px!important}
-  .luno-desktop-app .pc-chat-input-dock{padding:12px!important;padding-bottom:max(12px,env(safe-area-inset-bottom))!important}
   .luno-desktop-app .profile-actions-footer{padding:0 20px 20px!important}
   .luno-desktop-app .pc-profile-preview-card{padding:24px!important}
   .luno-desktop-app .modal-body-form{padding:18px!important}
   .luno-desktop-app .setting-group .flex-row{flex-wrap:wrap}
   /* UX5: 44px minimum touch targets on finger widths. */
-  .luno-desktop-app :is(.btn-chat-head-tool,.btn-pc-header-tool,.btn-hero-nav,.btn-scan-qr-search,.btn-pane-collapse){min-width:44px!important;min-height:44px!important}
   .luno-desktop-app :is(.btn-subtab,.btn-profile-chip,.btn-subaction-pill,.btn-pay-action,.btn-new-call-labeled){min-height:44px!important}
-  .luno-desktop-app .pc-pane-search-input{min-height:44px!important}
-  .luno-desktop-app .pc-search-box-wrap{min-width:0}
-  .luno-desktop-app .pc-pane-search-input{min-width:0}
-  .luno-desktop-app .btn-subtab.filter-btn{min-width:44px!important}
   .luno-desktop-app .pc-bubble-toolbar{flex-wrap:wrap!important;max-width:calc(100vw - 32px)!important}
   .luno-desktop-app .pc-bubble-toolbar button{min-width:44px!important;min-height:44px!important}
   .luno-desktop-app :is(.btn-modal-close){min-width:44px!important;min-height:44px!important}
@@ -369,99 +305,11 @@ ul, ol {list-style:none;margin:0;padding:0}
   .luno-desktop-app .settings-modal input:not([type=checkbox]):not([type=radio]){min-height:44px!important}
 }
 @media(min-width:700px) and (max-width:1099px){
-  .luno-desktop-app .pc-workspace{flex-direction:row!important}
-  .luno-desktop-app .pc-side-pane{width:340px!important;min-width:280px;max-width:340px;height:100dvh!important;padding-bottom:0!important}
-  .luno-desktop-app .pc-rail{display:flex!important;flex-direction:column!important;height:100dvh!important}
-  .luno-desktop-app .pc-rail-top{flex-direction:column!important;justify-content:flex-start!important;gap:6px!important}
-  .luno-desktop-app .pc-rail-bottom{display:flex!important}
-  .luno-desktop-app .luno-mobile-floating-nav{display:none!important}
-  .luno-desktop-app .pc-chat-viewport{position:relative!important;inset:auto!important;flex:1;width:auto!important;height:100dvh!important;min-width:0}
-  .luno-desktop-app .pc-friend-profile-viewport{flex:1;min-width:0;height:100dvh!important;overflow:auto}
   .luno-desktop-app .pc-profile-preview-card{max-width:100%!important}
-  .luno-desktop-app .pc-chat-topbar{flex-wrap:wrap!important;height:auto!important;min-height:64px;gap:8px 10px!important}
-  .luno-desktop-app .chat-topbar-left{min-width:0;flex:1 1 auto}
-  .luno-desktop-app .chat-header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .luno-desktop-app .chat-topbar-actions{overflow-x:auto;flex-shrink:0;justify-content:flex-start;scrollbar-width:thin}
-  .luno-desktop-app .chat-topbar-actions>*{flex-shrink:0}
   .luno-desktop-app .pc-chat-messages-canvas{padding:20px!important}
 }
 
 /* LUNO-style Interactive Rich Menu */
-.pc-rich-menu-container {
-  background: var(--ln-surface, #ffffff);
-  border-top: 1px solid var(--ln-line, #e2e8f0);
-  border-bottom: 1px solid var(--ln-line, #e2e8f0);
-  overflow: hidden;
-  transition: all 0.2s ease;
-}
-.rich-menu-toggle-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 16px;
-  background: var(--ln-subtle, #f8fafc);
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ln-muted, #64748b);
-  border-bottom: 1px solid var(--ln-line, #e2e8f0);
-}
-.rich-menu-toggle-bar:hover {
-  background: var(--ln-line, #f1f5f9);
-}
-.btn-rich-menu-toggle {
-  background: transparent;
-  border: none;
-  font-size: 11px;
-  color: var(--ln-accent, #315bcd);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-.rich-menu-grid {
-  display: grid;
-  background: var(--ln-surface, #ffffff);
-  padding: 8px;
-  gap: 8px;
-  box-sizing: border-box;
-}
-.rich-menu-grid.grid_2x3 {
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 68px);
-}
-.rich-menu-grid.grid_1x3 {
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: 68px;
-}
-.rich-menu-tile-card {
-  background: var(--ln-subtle, #f8fafc);
-  border: 1px solid var(--ln-line, #e2e8f0);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.rich-menu-tile-card:hover {
-  background: var(--ln-accent-soft, #e6f9ed);
-  border-color: var(--ln-accent, #315bcd);
-  transform: translateY(-1px);
-}
-.rich-menu-tile-card:active {
-  transform: translateY(1px);
-}
-.rich-menu-tile-card .tile-icon {
-  font-size: 18px;
-  margin-bottom: 2px;
-}
-.rich-menu-tile-card .tile-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ln-text, #1e293b);
-}
 
 /* LINE parity: effect stickers render large, pop in on arrival, replay on click. */
 .bubble-sticker-svg {
@@ -615,54 +463,6 @@ ul, ol {list-style:none;margin:0;padding:0}
 }
 
 /* Shop pane: pack rows over the shared catalog parser. */
-.shop-empty {
-  padding: 24px 16px;
-  text-align: center;
-  color: var(--ln-muted, #64748b);
-  font-size: 13px;
-}
-.shop-pack-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--ln-surface, #ffffff);
-  margin: 0 12px 8px;
-}
-.shop-pack-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-}
-.shop-pack-main small {
-  color: var(--ln-muted, #64748b);
-  font-size: 12px;
-}
-.shop-pack-strip {
-  font-size: 18px;
-  margin-top: 4px;
-}
-.shop-price {
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.shop-owned {
-  font-size: 12px;
-  font-weight: 700;
-  color: #22c55e;
-  white-space: nowrap;
-}
-.shop-pay-note {
-  padding: 4px 16px 16px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ln-muted, #64748b);
-}
 
 .cam-tabs {
   display: flex;
@@ -688,9 +488,7 @@ ul, ol {list-style:none;margin:0;padding:0}
   cursor: default;
 }
 .luno-desktop-app .call-dialog-box h3{color:#fff!important}
-.luno-desktop-app .hero-title{color:#fff!important}
 .luno-desktop-app input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']),.luno-desktop-app textarea,.luno-desktop-app select{font-size:16px!important}
-
 
 /* C1: header more-menu + composer attach panel (all widths). */
 .luno-desktop-app .chat-topbar-menu-wrap{position:relative;flex-shrink:0}
@@ -699,7 +497,6 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .chat-topbar-menu .ai-translate-tool-pill{justify-content:space-between;width:100%}
 .luno-desktop-app .chat-topbar-menu-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;background:none;border:0;border-radius:10px;cursor:pointer;font-size:14px;color:inherit;text-align:left}
 .luno-desktop-app .chat-topbar-menu-item:hover{background:var(--ln-accent-soft,#eef4ff)}
-.luno-desktop-app .pc-input-toolbar{position:relative}
 .luno-desktop-app .attach-panel-popover{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);z-index:91;display:grid;grid-template-columns:repeat(5,1fr);gap:6px;background:var(--ln-surface,#fff);border:1px solid var(--ln-line,#e2e8f0);border-radius:14px;padding:10px;box-shadow:0 8px 24px rgba(15,23,42,.12)}
 .luno-desktop-app .attach-panel-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;background:none;border:0;border-radius:10px;cursor:pointer;font-size:20px;color:inherit}
 .luno-desktop-app .attach-panel-item small{font-size:10px;color:var(--ln-muted,#64748b);white-space:nowrap}
@@ -709,17 +506,8 @@ ul, ol {list-style:none;margin:0;padding:0}
 .btn-primary{background-color:var(--ln-accent);color:var(--ln-on-accent)}
 .btn-primary:hover{background-color:var(--ln-accent-hover)}
 .btn-secondary{background-color:var(--ln-subtle);color:var(--ln-text)}
-.story-ring{width:64px;height:64px;border-radius:var(--ln-lamp-radius);border:3px solid var(--ln-line);display:flex;align-items:center;justify-content:center;font-size:var(--ln-fs-body);font-weight:700;color:var(--ln-text);background-color:var(--ln-surface)}
-.story-ring.viewed{border-color:var(--ln-muted)}
-.story-ring.new{border-color:var(--ln-accent);box-shadow:0 0 0 4px var(--ln-accent)}
-.story-ring.plus{border-color:var(--ln-accent);background-color:var(--ln-accent);color:var(--ln-on-accent)}
 /* Chat composer: one bordered box holds the textarea and its send row, so the
    send button sits inside the box (bottom right) instead of hanging under it. */
-.luno-desktop-app .pc-chat-input-dock .pc-textarea-form{padding:0;margin-top:8px;border:1px solid var(--ln-line);border-radius:12px;background:var(--ln-bg);overflow:hidden}
-.luno-desktop-app .pc-chat-input-dock .pc-textarea-form:focus-within{border-color:var(--ln-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--ln-accent) 22%,transparent)}
-.luno-desktop-app .pc-chat-input-dock .pc-textarea-form textarea{border:0!important;border-radius:0!important;background:transparent!important;padding:12px 14px 4px!important;outline:none}
-.luno-desktop-app .pc-chat-input-dock .pc-textarea-bottom{padding:6px 8px 8px 14px;gap:10px}
-.luno-desktop-app .pc-chat-input-dock .btn-green-send{height:36px;min-width:68px;padding:0 16px;border-radius:10px;font-size:14px}
 
 /* LUNO messenger shell (lx-*): rail + list + main on PC/tablet, one pane with
    a bottom tab bar on phones. Loaded after luno-v2.css; uses only the Harbor
@@ -857,6 +645,7 @@ ul, ol {list-style:none;margin:0;padding:0}
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .lx-badge.inline { flex-shrink: 0; }
 
@@ -1002,11 +791,11 @@ ul, ol {list-style:none;margin:0;padding:0}
 .lx-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .lx-row-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .lx-row-title { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.lx-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; color: var(--ln-text); }
+.lx-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-list-name-size, 15px); font-weight: var(--text-list-name-weight, 600); color: var(--ln-text); }
 .lx-row-count { flex-shrink: 0; font-size: 13px; font-weight: 500; color: var(--ln-muted); }
 .lx-row-mark { flex-shrink: 0; color: var(--ln-muted); }
 .lx-row-star { flex-shrink: 0; color: #f5a524; }
-.lx-row-time { flex-shrink: 0; font-size: 11.5px; color: var(--ln-muted); }
+.lx-row-time { flex-shrink: 0; font-size: var(--text-stamp-size, 11px); color: var(--ln-muted); font-variant-numeric: tabular-nums; }
 .lx-row-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--ln-muted); }
 .lx-row-me { padding: 12px 18px 14px; border-bottom: 1px solid var(--ln-line); margin-bottom: 4px; }
 .lx-me-name { font-size: 16px; font-weight: 700; }
@@ -1051,7 +840,7 @@ ul, ol {list-style:none;margin:0;padding:0}
 .lx-back { display: none; }
 .lx-room-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .lx-room-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.lx-room-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 700; color: var(--ln-text); }
+.lx-room-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-title-size, 16px); font-weight: 700; color: var(--ln-text); }
 .lx-room-state { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ln-muted); }
 .lx-room-state[data-state="disconnected"], .lx-room-state[data-state="failed"] { color: var(--ln-danger); }
 .lx-room-state[data-state="reconnecting"], .lx-room-state[data-state="connecting"] { color: var(--ln-warning); }
@@ -1101,7 +890,8 @@ ul, ol {list-style:none;margin:0;padding:0}
   background: transparent;
   color: var(--ln-text);
   font: inherit;
-  font-size: 15px !important;
+  /* 16px: smaller inputs make iOS zoom the page on focus. */
+  font-size: var(--text-input-size, 1rem) !important;
   line-height: 1.5;
   field-sizing: content;
 }
@@ -1266,9 +1056,8 @@ ul, ol {list-style:none;margin:0;padding:0}
 
 /* ---------- Tablet ---------- */
 @media (min-width: 700px) and (max-width: 1099px) {
-  .lx-shell { grid-template-columns: 68px 300px minmax(0, 1fr); }
-  .lx-rail-btn { width: 58px; font-size: 10.5px; }
-  .lx-more { left: 76px; }
+  /* Rail 76 / list 340 is the shared layout token (app tablet too); only
+     the room's inner padding tightens. */
   .lx-room .pc-chat-messages-canvas { padding: 16px 18px !important; }
 }
 
@@ -1305,7 +1094,7 @@ ul, ol {list-style:none;margin:0;padding:0}
   .lx-wide-only { display: none !important; }
   .lx-room-head { height: 56px; padding: 0 4px; gap: 6px; }
   .lx-room .pc-chat-messages-canvas { padding: 12px !important; }
-  .lx-composer-dock { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+  .lx-composer-dock { padding: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   .lx-composer {
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas: "tools input send";
@@ -1455,9 +1244,6 @@ ul, ol {list-style:none;margin:0;padding:0}
 .lx-shop-tag { flex-shrink: 0; padding: 4px 10px; border-radius: 999px; background: var(--ln-accent-soft); color: var(--ln-accent); font-size: 12px; font-weight: 800; white-space: nowrap; }
 .lx-shop-tag.owned { background: color-mix(in srgb, var(--ln-success) 14%, var(--ln-surface)); color: var(--ln-success); }
 
-@media (min-width: 700px) and (max-width: 1099px) {
-  .lx-shell.is-page { grid-template-columns: 68px minmax(0, 1fr); }
-}
 @media (max-width: 1099px) {
   .lx-news-layout { grid-template-columns: minmax(0, 1fr); }
 }
