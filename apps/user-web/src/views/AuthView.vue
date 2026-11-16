@@ -61,7 +61,6 @@ const authMethod = ref<'email' | 'phone'>('email')
 // in the tree for layout stability, but entry is gated until then.
 const phoneAuthAvailable = false
 const autoLoginCheck = ref(true)
-const startOnBootCheck = ref(false)
 const showPassword = ref(false)
 const phoneInput = ref('')
 const phoneCountryCode = ref('+82')
@@ -91,9 +90,6 @@ const formattedQrCountdown = computed(() => {
   return `${m}:${s}`
 })
 
-// Demo login exists on the edge worker only; the Go backend has no passwordless
-// demo endpoint by design, so the demo chips stay hidden when API_URL is Go.
-const demoLoginAvailable = computed(() => !appVersion.value.worker_version.startsWith('go-'))
 
 const showRecoverModal = ref(false)
 const recoverEmail = ref('')
@@ -282,7 +278,6 @@ async function startQrLoginChallenge() {
     const res = await request<{ challenge_id: string; qr_token: string }>('/api/v1/auth/qr/challenge', null, 'POST', {})
     qrChallengeID.value = res.challenge_id
     qrToken.value = res.qr_token
-    note.value = t('qrScanNote')
     if (qrPollInterval) clearInterval(qrPollInterval)
     qrPollInterval = setInterval(async () => {
       try {
@@ -403,18 +398,6 @@ async function passkeyLogin() {
     })
     storeSession(data, autoLoginCheck.value)
     router.push('/chats')
-  })
-}
-
-async function quickDemoLogin(account: 'user' | 'alice') {
-  await wrap(async () => {
-    const data = await request<LoginResult>('/api/v1/auth/demo', null, 'POST', {
-      account
-    })
-    storeSession(data, autoLoginCheck.value)
-    currentUser.value = await api<User>('/api/v1/me')
-    password.value = ''
-    await router.push('/chats')
   })
 }
 
@@ -549,11 +532,7 @@ onBeforeUnmount(() => {
                 </button>
               </div>
 
-              <div class="pc-login-options-row">
-                <label class="pc-custom-check">
-                  <input type="checkbox" v-model="startOnBootCheck" disabled />
-                  <span>{{ t('startOnBoot') }}</span>
-                </label>
+              <div class="pc-login-options-row ln-register-row">
                 <button type="button" class="btn-subtle-link accent" @click="registerMode = !registerMode">
                   {{ registerMode ? t('backToLogin') : t('createAccount') }}
                 </button>
@@ -567,14 +546,6 @@ onBeforeUnmount(() => {
                 </button>
               </div>
 
-              <!-- Quick One-Click Demo Credentials (Fail-closed & Passwordless) -->
-              <div v-if="demoLoginAvailable" class="pc-demo-chips-compact">
-                <span class="demo-caption">{{ t('quickDemoLabel') }}</span>
-                <div class="demo-pill-group">
-                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('user')">{{ t('demoUser') }}</button>
-                  <button type="button" class="btn-demo-pill" @click="quickDemoLogin('alice')">{{ t('demoAlice') }}</button>
-                </div>
-              </div>
             </form>
 
             <!-- Phone Login Mode (Article 3.C) -->

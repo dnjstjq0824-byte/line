@@ -51,8 +51,9 @@ test('C2: official rooms reject sends and calls', async () => {
 const paneSource = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
 
 test('C2: web hides calls and composer in official rooms', () => {
-  assert.ok(paneSource.includes('v-if="!selectedChat?.official" class="btn-chat-action"'), 'call buttons gated');
-  assert.ok(paneSource.includes('<footer v-if="!selectedChat?.official" class="pc-chat-input-dock">'), 'composer gated');
+  const callButtons = paneSource.match(/<button v-if="!selectedChat\?\.official"[^>]*emit\('call', '(voice|video)'\)/g) || [];
+  assert.equal(callButtons.length, 2, 'voice and video call buttons gated');
+  assert.ok(paneSource.includes('<footer v-if="!selectedChat?.official" class="lx-composer-dock">'), 'composer gated');
 });
 
 // ---------- H1: auth-adjacent rate limits ----------

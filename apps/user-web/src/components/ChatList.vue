@@ -61,7 +61,7 @@ const showListMenu = ref(false)
 
     <label class="lx-search">
       <LunoIcon name="search" :size="16" />
-      <input v-model="searchKeyword" :placeholder="t('lxSearchChats')" :aria-label="t('lxSearchChats')" class="pc-pane-search-input" />
+      <input v-model="searchKeyword" :placeholder="t('lxSearchChats')" :aria-label="t('lxSearchChats')" />
       <button v-if="searchKeyword" type="button" class="lx-search-clear" :title="t('mvClose')" :aria-label="t('mvClose')" @click="searchKeyword = ''"><LunoIcon name="close" :size="14" /></button>
     </label>
 
@@ -86,7 +86,7 @@ const showListMenu = ref(false)
       <div
         v-for="c in filteredChats"
         :key="c.id"
-        class="lx-row pc-chat-item-row"
+        class="lx-row"
         :class="{ selected: selectedChatId === c.id }"
         role="button"
         tabindex="0"

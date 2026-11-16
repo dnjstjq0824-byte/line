@@ -7108,7 +7108,7 @@ const workerCore = {
           kind: 'user',
           email_verified: needsVerify ? 0 : 1,
           handle,
-          bio: 'New Messenger User',
+          bio: '',
           created_at: new Date().toISOString()
         };
         await setPassword(newUser, body.password);

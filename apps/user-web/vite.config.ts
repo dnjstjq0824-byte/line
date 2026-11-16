@@ -13,7 +13,7 @@ export default defineConfig({
   server: devApi
     ? {
         proxy: {
-          '/api': forward,
+          '/api': { ...forward, ws: true },
           '/ws': { ...forward, ws: true },
           '/healthz': forward,
           '/download': forward,

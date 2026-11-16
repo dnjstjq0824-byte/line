@@ -62,9 +62,12 @@ test('FX-07 keyboard keeps the composer above it', () => {
   assert.match(appCss, /\.keyboard-open \.pc-chat-input-dock \{[^}]*position: sticky;/);
 });
 
-// ---- FX-09: toasts below the header, auto-dismissing ----
-test('FX-09 alerts sit below the header bar', () => {
-  assert.match(appCss, /\.floating-alert \{[^}]*top: 64px;[^}]*left: 50%;[^}]*transform: translateX\(-50%\);/);
+// ---- FX-09: toasts never cover a header, auto-dismissing ----
+test('FX-09 alerts sit at the bottom centre, above the phone tab bar', async () => {
+  const shellCss = v2Css;
+  assert.match(appCss, /\.floating-alert \{[^}]*left: 50%;[^}]*transform: translateX\(-50%\);/);
+  assert.match(shellCss, /\.luno-desktop-app \.floating-alert \{ top: auto !important; bottom: 96px; \}/);
+  assert.match(shellCss, /\.floating-alert \{ bottom: calc\(72px \+ env\(safe-area-inset-bottom\)\); \}/);
 });
 
 // ---- FX-11: ecosystem cards show full titles ----

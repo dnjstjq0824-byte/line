@@ -229,7 +229,8 @@ const consoleLinks = computed(() => currentUser.value?.role === 'admin'
   : [])
 // Phone widths show one pane at a time: the list, or whatever was opened.
 const mobileDetailOpen = computed(() => !!selectedChat.value || !!selectedFriendProfile.value
-  || (activeNav.value === 'openchat' && !!selectedOpenChatRoom.value))
+  || (activeNav.value === 'openchat' && !!selectedOpenChatRoom.value)
+  || (activeNav.value === 'calls' && !!selectedCallRecord.value))
 const chatSortAsc = ref(false)
 const showNewChatModal = ref(false)
 const showNewCallModal = ref(false)
@@ -2771,6 +2772,8 @@ function syncKeyboardOpen() {
   if (!vv) return
   const open = vv.height < window.innerHeight - 120
   document.documentElement.classList.toggle('keyboard-open', open)
+  // The phone room pane follows the visible area so the composer stays above the keyboard.
+  document.documentElement.style.setProperty('--lx-vv-h', `${Math.round(vv.height)}px`)
 }
 
 onMounted(async () => {
@@ -3222,6 +3225,9 @@ onBeforeUnmount(() => {
       <!-- Main pane: room / profile / call detail / empty state -->
       <section class="lx-main">
       <section v-if="activeNav === 'calls'" class="lx-detail">
+        <button v-if="selectedCallRecord" type="button" class="lx-icon-btn lx-back lx-detail-back" :title="t('mvGoBack')" :aria-label="t('mvGoBack')" @click="selectedCallRecord = null">
+          <LunoIcon name="back" :size="20" />
+        </button>
         <div v-if="selectedCallRecord" class="pc-call-detail-card">
           <div class="profile-preview-avatar" :style="{ background: selectedCallRecord.peer_avatar_color || '#315BCD' }">
             {{ initialOf(selectedCallRecord.peer_name) }}
@@ -3261,16 +3267,17 @@ onBeforeUnmount(() => {
       </section>
 
       <section v-else-if="activeNav === 'openchat' && selectedOpenChatRoom" class="lx-room">
-        <header class="pc-chat-topbar">
-          <div class="chat-topbar-left">
-            <div class="pc-avatar circle-36" style="background: #2563EB;">💬</div>
-            <div class="chat-topbar-info">
-              <div class="title-row">
-                <span class="chat-header-title">{{ selectedOpenChatRoom.name }}</span>
-                <span class="badge-verified">{{ t('mvPublicCommunity') }}</span>
-              </div>
-              <small class="e2ee-tag">{{ selectedOpenChatRoom.description }}</small>
+        <header class="lx-room-head">
+          <button type="button" class="lx-icon-btn lx-back" :title="t('mvGoBack')" :aria-label="t('mvGoBack')" @click="selectedOpenChatRoom = null">
+            <LunoIcon name="back" :size="20" />
+          </button>
+          <span class="lx-avatar s36" style="background: var(--ln-info);"><LunoIcon name="openchat" :size="18" /></span>
+          <div class="lx-room-title">
+            <div class="lx-room-name">
+              <span class="lx-room-name-text">{{ selectedOpenChatRoom.name }}</span>
+              <span class="badge-verified">{{ t('mvPublicCommunity') }}</span>
             </div>
+            <small class="lx-room-state">{{ selectedOpenChatRoom.description }}</small>
           </div>
         </header>
         <div class="pc-chat-messages-canvas">
@@ -3283,18 +3290,22 @@ onBeforeUnmount(() => {
             <p class="openchat-post-body">{{ post.body }}</p>
           </div>
         </div>
-        <footer class="pc-chat-input-dock">
-          <form class="pc-textarea-form" @submit.prevent="submitOpenChatPost">
+        <footer class="lx-composer-dock">
+          <form class="lx-composer" @submit.prevent="submitOpenChatPost">
+            <span class="lx-composer-tools lx-composer-count">{{ newOpenChatPostBody.length }}/500</span>
             <textarea
               v-model="newOpenChatPostBody"
+              class="lx-composer-input"
               :placeholder="t('mvOpenChatPh')"
-              rows="2"
+              :aria-label="t('mvOpenChatPh')"
+              rows="1"
+              maxlength="500"
               @keydown.enter.exact.prevent="submitOpenChatPost"
             ></textarea>
-            <div class="pc-textarea-bottom">
-              <span class="char-count">{{ newOpenChatPostBody.length }}/500</span>
-              <button class="btn-green-send" :disabled="!newOpenChatPostBody.trim()">{{ t('mvSubmit') }}</button>
-            </div>
+            <button class="lx-send btn-green-send" :title="t('mvSubmit')" :aria-label="t('mvSubmit')" :disabled="!newOpenChatPostBody.trim()">
+              <LunoIcon name="send" :size="18" />
+              <span class="lx-send-label">{{ t('mvSubmit') }}</span>
+            </button>
           </form>
         </footer>
       </section>
@@ -3413,6 +3424,9 @@ onBeforeUnmount(() => {
 
       <!-- Case B: Friend Profile Selected Preview (Screenshot 5) -->
       <section v-else-if="selectedFriendProfile" class="lx-detail">
+        <button type="button" class="lx-icon-btn lx-back lx-detail-back" :title="t('mvGoBack')" :aria-label="t('mvGoBack')" @click="selectedFriendProfile = null">
+          <LunoIcon name="back" :size="20" />
+        </button>
         <div class="pc-profile-preview-card">
           <div class="profile-preview-avatar" :style="{ background: selectedFriendProfile.avatar_color || 'var(--ln-accent)' }">
             {{ initialOf(selectedFriendProfile.display_name) }}
@@ -3440,6 +3454,7 @@ onBeforeUnmount(() => {
                 <span>{{ t('mvSendMoney') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" :title="t('mvFavTitle')" @click="toggleFriendFavorite(selectedFriendProfile)">
+                <LunoIcon name="star" :size="16" />
                 <span>{{ (selectedFriendProfile as any).is_favorite ? t('mvFaved') : t('mvFav') }}</span>
               </button>
             </div>

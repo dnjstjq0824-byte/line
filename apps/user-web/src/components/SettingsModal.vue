@@ -92,7 +92,12 @@ const profileSaving = ref(false)
 const profileSaveError = ref('')
 const profileSaved = ref(false)
 
-const profileDirty = computed(() => editProfileName.value.trim() !== (currentUser.value?.display_name || '') || editProfileHandle.value.trim() !== (currentUser.value?.handle || '') || editProfileBio.value.trim() !== (currentUser.value?.status_message || currentUser.value?.bio || ''))
+// Accounts made before the server stopped filling a placeholder bio still carry it; show it as empty.
+function storedBio() {
+  const bio = currentUser.value?.status_message || currentUser.value?.bio || ''
+  return bio === 'New Messenger User' ? '' : bio
+}
+const profileDirty = computed(() => editProfileName.value.trim() !== (currentUser.value?.display_name || '') || editProfileHandle.value.trim() !== (currentUser.value?.handle || '') || editProfileBio.value.trim() !== storedBio())
 
 async function approveQrLogin() {
   if (!approveChallengeInput.value.trim() || !approveTokenInput.value.trim()) return
@@ -238,7 +243,7 @@ onMounted(() => {
   profileSaved.value = false
   profileSaveError.value = ''
   editProfileName.value = currentUser.value?.display_name || ''
-  editProfileBio.value = currentUser.value?.status_message || currentUser.value?.bio || ''
+  editProfileBio.value = storedBio()
   editProfileHandle.value = currentUser.value?.handle || ''
   refreshNotifyState()
   void fetchPasskeys()

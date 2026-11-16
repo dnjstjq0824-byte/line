@@ -95,7 +95,7 @@ function hideBrokenAvatar(ev: Event) {
 
     <label class="lx-search">
       <LunoIcon name="search" :size="16" />
-      <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" :aria-label="t('searchFriends')" class="pc-pane-search-input" @keydown.enter="addSearchKeyword(friendSearchQuery)" />
+      <input v-model="friendSearchQuery" :placeholder="t('searchFriends')" :aria-label="t('searchFriends')" @keydown.enter="addSearchKeyword(friendSearchQuery)" />
       <button v-if="friendSearchQuery" type="button" class="lx-search-clear" :title="t('mvClose')" :aria-label="t('mvClose')" @click="friendSearchQuery = ''"><LunoIcon name="close" :size="14" /></button>
     </label>
 
@@ -137,7 +137,7 @@ function hideBrokenAvatar(ev: Event) {
           <div
             v-for="fav in favoriteFriends"
             :key="'fav-' + fav.id"
-            class="lx-row pc-friend-item-row"
+            class="lx-row"
             :class="{ selected: selectedFriendProfile?.id === fav.id }"
             role="button"
             tabindex="0"
@@ -168,7 +168,7 @@ function hideBrokenAvatar(ev: Event) {
           <div
             v-for="grp in groupChats"
             :key="grp.id"
-            class="lx-row pc-friend-item-row"
+            class="lx-row"
             :class="{ selected: selectedChatId === grp.id }"
             role="button"
             tabindex="0"
@@ -196,7 +196,7 @@ function hideBrokenAvatar(ev: Event) {
           <div
             v-for="oa in officialAccounts"
             :key="oa.id"
-            class="lx-row pc-friend-item-row"
+            class="lx-row"
             role="button"
             tabindex="0"
             @click="emit('follow-oa', oa)"
@@ -228,7 +228,7 @@ function hideBrokenAvatar(ev: Event) {
           <div
             v-for="f in filteredFriends"
             :key="f.id"
-            class="lx-row pc-friend-item-row"
+            class="lx-row"
             :class="{ selected: selectedFriendProfile?.id === f.id }"
             role="button"
             tabindex="0"

@@ -9,6 +9,7 @@ const css = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.u
 const messengerView = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
 const messagePane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
 const v2 = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8');
+const shell = v2; // the lx-* shell rules live at the end of the single skin (UX1)
 
 test('rail nav scrolls internally instead of pushing actions off-screen', () => {
   assert.match(css, /\.pc-rail-top \{\s*flex: 1 1 auto;\s*min-height: 0;\s*overflow-y: auto;/);
@@ -33,11 +34,15 @@ test('sticker picker overlays above the dock instead of squeezing in-flow', () =
   assert.match(css, /\.sticker-picker-popover \{[^}]*position: absolute; bottom: 100%;/);
 });
 
-test('mobile capsule fits five tabs without edge clipping (C1: profile moved to Home top)', () => {
-  assert.match(css, /\.mobile-nav-item \{[^}]*padding: 6px 12px;[^}]*flex-shrink: 0;/);
-  assert.match(css, /\.luno-mobile-floating-nav \{[^}]*overflow-x: auto;/);
-  const items = messengerView.match(/class="mobile-nav-item"/g) || [];
-  assert.equal(items.length, 5, 'exactly five bottom tabs');
+test('phone tab bar: four named destinations plus More, sharing the width evenly', () => {
+  // The shell replaced the floating capsule with a full-width tab bar.
+  const nav = messengerView.split('const PRIMARY_NAV')[1].split('= [')[1].split(/\r?\n\]/)[0];
+  assert.equal((nav.match(/\{ nav: '/g) || []).length, 4, 'four primary destinations');
+  const tabbar = messengerView.split('<nav class="lx-tabbar"')[1].split('</nav>')[0];
+  assert.ok(tabbar.includes('v-for="item in PRIMARY_NAV"'), 'tabs come from PRIMARY_NAV');
+  assert.ok(tabbar.includes("t('lxMore')"), 'More is the fifth tab');
+  assert.match(shell, /\.lx-tab \{[^}]*flex: 1;[^}]*min-width: 0;/);
+  assert.match(shell, /\.lx-tabbar \{[^}]*position: fixed;[^}]*display: flex;/);
 });
 
 test('message rows cannot slide content under the avatar', () => {
@@ -48,7 +53,8 @@ test('C1: chat header stays one line with translate/theme/calendar in the menu',
   assert.match(v2, /\.pc-chat-topbar\{[^}]*flex-wrap:nowrap/);
   assert.match(v2, /\.chat-header-title\{[^}]*text-overflow:ellipsis;white-space:nowrap/);
   assert.ok(messagePane.includes('chat-topbar-menu'), 'more menu exists');
-  const actionsBlock = messagePane.split('<div class="chat-topbar-actions">')[1].split('chat-topbar-menu-wrap')[0];
+  const actionsBlock = messagePane.split('<div class="lx-room-actions">')[1].split('chat-topbar-menu-wrap')[0];
+  assert.match(shell, /\.lx-room-name-text \{[^}]*text-overflow: ellipsis; white-space: nowrap;/);
   assert.ok(!actionsBlock.includes('ai-translate-tool-pill'), 'translate pill moved into the menu');
   assert.ok(!actionsBlock.includes('cycle-wallpaper'), 'wallpaper moved into the menu');
 });

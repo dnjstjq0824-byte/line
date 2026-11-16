@@ -235,7 +235,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
       </span>
       <div class="lx-room-title">
         <div class="lx-room-name">
-          <span class="lx-room-name-text chat-header-title">{{ selectedChat.title }}</span>
+          <span class="lx-room-name-text">{{ selectedChat.title }}</span>
           <span v-if="selectedChat.kind === 'group'" class="lx-row-count" :title="t('lxMembers')">{{ selectedChat.member_count || 2 }}</span>
           <span v-if="selectedChat.official" class="badge-verified">{{ t('mvOfficialChannel') }}</span>
         </div>
@@ -247,12 +247,12 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
 
       <div class="lx-room-actions">
         <button type="button" class="lx-icon-btn lx-wide-only" :title="t('mvSearchInChatPh')" :aria-label="t('mvSearchInChatPh')" @click="openRoomSearch"><LunoIcon name="search" :size="19" /></button>
-        <button v-if="!selectedChat?.official" type="button" class="lx-icon-btn btn-chat-action" :title="t('callVoice')" :aria-label="t('callVoice')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'voice')"><LunoIcon name="call-voice" :size="19" /></button>
-        <button v-if="!selectedChat?.official" type="button" class="lx-icon-btn btn-chat-action" :title="t('callVideo')" :aria-label="t('callVideo')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'video')"><LunoIcon name="call-video" :size="19" /></button>
-        <button type="button" class="lx-icon-btn btn-chat-action" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" :aria-label="t('mvDrawerTitle')" @click="emit('drawer', 'notes')"><LunoIcon name="drawer" :size="19" /></button>
+        <button v-if="!selectedChat?.official" type="button" class="lx-icon-btn" :title="t('callVoice')" :aria-label="t('callVoice')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'voice')"><LunoIcon name="call-voice" :size="19" /></button>
+        <button v-if="!selectedChat?.official" type="button" class="lx-icon-btn" :title="t('callVideo')" :aria-label="t('callVideo')" :disabled="!selectedChatId && chats.length === 0" @click="emit('call', 'video')"><LunoIcon name="call-video" :size="19" /></button>
+        <button type="button" class="lx-icon-btn" :class="{ active: activeDrawer !== 'none' }" :title="t('mvDrawerTitle')" :aria-label="t('mvDrawerTitle')" @click="emit('drawer', 'notes')"><LunoIcon name="drawer" :size="19" /></button>
         <!-- C1: translate/theme/calendar live in the ⋯ menu so the bar stays one line -->
         <div class="chat-topbar-menu-wrap">
-          <button type="button" class="lx-icon-btn btn-chat-action" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" :aria-expanded="showTopbarMenu" @click="showTopbarMenu = !showTopbarMenu"><LunoIcon name="more" :size="19" /></button>
+          <button type="button" class="lx-icon-btn" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" :aria-expanded="showTopbarMenu" @click="showTopbarMenu = !showTopbarMenu"><LunoIcon name="more" :size="19" /></button>
           <div v-if="showTopbarMenu" class="chat-topbar-menu-layer" @click="showTopbarMenu = false"></div>
           <div v-if="showTopbarMenu" class="chat-topbar-menu" role="menu">
             <!-- AI Translation Bar Controls (Article 10) -->
@@ -704,11 +704,11 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
 
       <!-- Composer: one box. Wide screens put the tools under the text; phones put them beside it. -->
       <form class="lx-composer" :aria-busy="sendingConversations.has(selectedChatId)" @submit.prevent="emit('send')">
-        <div class="lx-composer-tools pc-input-toolbar">
-          <button type="button" class="lx-icon-btn btn-tool-icon btn-attach-plus" :class="{ active: showAttachPanel }" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" :aria-expanded="showAttachPanel" @click="showAttachPanel = !showAttachPanel"><LunoIcon name="plus" :size="20" /></button>
-          <button type="button" class="lx-icon-btn btn-tool-icon lx-wide-only" :class="{ active: showStickerPicker }" :title="t('mvAttachSticker')" :aria-label="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker"><LunoIcon name="smile" :size="20" /></button>
-          <button type="button" class="lx-icon-btn btn-tool-icon lx-wide-only" :title="t('mvAttachFile')" :aria-label="t('mvAttachFile')" :disabled="uploading" @click="emit('attach', 'file')"><LunoIcon name="attach" :size="20" /></button>
-          <button type="button" class="lx-icon-btn btn-tool-icon" :class="{ recording: isRecordingVoice }" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" :aria-label="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="emit('voice-toggle')">
+        <div class="lx-composer-tools">
+          <button type="button" class="lx-icon-btn" :class="{ active: showAttachPanel }" :title="t('mvMoreActions')" :aria-label="t('mvMoreActions')" :aria-expanded="showAttachPanel" @click="showAttachPanel = !showAttachPanel"><LunoIcon name="plus" :size="20" /></button>
+          <button type="button" class="lx-icon-btn lx-wide-only" :class="{ active: showStickerPicker }" :title="t('mvAttachSticker')" :aria-label="t('mvAttachSticker')" @click="showStickerPicker = !showStickerPicker"><LunoIcon name="smile" :size="20" /></button>
+          <button type="button" class="lx-icon-btn lx-wide-only" :title="t('mvAttachFile')" :aria-label="t('mvAttachFile')" :disabled="uploading" @click="emit('attach', 'file')"><LunoIcon name="attach" :size="20" /></button>
+          <button type="button" class="lx-icon-btn" :class="{ recording: isRecordingVoice }" :title="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" :aria-label="isRecordingVoice ? t('mvRecStop') : t('mvRecStart')" @click="emit('voice-toggle')">
             <LunoIcon :name="isRecordingVoice ? 'stop' : 'mic'" :size="20" />
           </button>
         </div>
@@ -723,7 +723,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           rows="1"
           @keydown.enter.exact="emit('composer-enter', $event)"
         ></textarea>
-        <button class="lx-send btn-green-send" :title="t('sendBtn')" :aria-label="t('sendBtn')" :disabled="!draftMessage.trim() || sendingConversations.has(selectedChatId)">
+        <button class="lx-send" :title="t('sendBtn')" :aria-label="t('sendBtn')" :disabled="!draftMessage.trim() || sendingConversations.has(selectedChatId)">
           <LunoIcon name="send" :size="18" />
           <span class="lx-send-label">{{ sendingConversations.has(selectedChatId) ? t('message_sending') : t('sendBtn') }}</span>
         </button>

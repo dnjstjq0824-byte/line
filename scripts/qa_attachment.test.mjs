@@ -55,6 +55,7 @@ const vue = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue
 const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8')
 const appCss = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8')
 const v2Css = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8')
+const shellCss = v2Css // lx-* shell rules live at the end of the single skin (UX1)
 const i18n = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8')
 
 test('drawer buttons guide the user when no chat is selected', () => {
@@ -65,10 +66,12 @@ test('drawer buttons guide the user when no chat is selected', () => {
   for (const h of hits) assert.doesNotMatch(h, /mvDrawerNeedChat:\s*'mvDrawerNeedChat'/)
 })
 
-test('collapse wins over the desktop width override and stays reversible', () => {
-  assert.match(v2Css, /\.pc-side-pane\.is-collapsed\{\s*width:\s*52px\s*!important/)
-  assert.match(v2Css, /\.pc-side-pane\.is-collapsed\{[^}]*min-width:\s*0\s*!important/)
-  assert.match(vue, /btn-pane-expand[\s\S]{0,200}isPanelCollapsed\s*=\s*false/)
+test('list pane is a fixed shell column on wide screens and the only pane on phones', () => {
+  // The collapse toggle went away with the shell rework: the rail, list and
+  // main pane are grid columns, and phones swap list/detail instead.
+  assert.match(shellCss, /\.lx-shell \{[^}]*grid-template-columns: 76px 340px minmax\(0, 1fr\);/)
+  assert.match(shellCss, /\.lx-shell\.is-detail \.lx-list \{ display: none; \}/)
+  assert.match(vue, /class="lx-shell" :class="\{ 'is-detail': mobileDetailOpen \}"/)
 })
 
 test('file input is programmatically clickable (no hidden attribute)', () => {
