@@ -200,7 +200,6 @@ const MORE_ITEMS: { id: string; icon: string; label: string; nav?: NavItem }[] =
   { id: 'add-friend', icon: 'add-friends', label: 'mvAddFriend' },
   { id: 'qr', icon: 'scan', label: 'lxMyQr' },
   { id: 'capture', icon: 'camera', label: 'lxCapture' },
-  { id: 'services', icon: 'open-services', label: 'lxServices' },
   { id: 'download', icon: 'download', label: 'lxGetApp' },
   { id: 'settings', icon: 'settings', label: 'navSettings' },
 ]
@@ -212,7 +211,6 @@ function runMoreItem(id: string) {
   else if (id === 'add-friend') showAddFriendModal.value = true
   else if (id === 'qr') showQrModal.value = true
   else if (id === 'capture') void captureScreenToChat()
-  else if (id === 'services') showEcosystemHub.value = true
   else if (id === 'download') window.open('./download.html', '_blank', 'noopener')
   else if (id === 'settings') showSettingsModal.value = true
 }
@@ -234,8 +232,6 @@ const mobileDetailOpen = computed(() => !!selectedChat.value || !!selectedFriend
 const chatSortAsc = ref(false)
 const showNewChatModal = ref(false)
 const showNewCallModal = ref(false)
-const showEcosystemHub = ref(false)
-const activeEcosystemId = ref<string | null>(null)
 const notificationsEnabled = ref(true)
 
 // --- News Tab State (Section 10 & Screenshot 5) ---
@@ -1081,28 +1077,6 @@ function toggleNotifications() {
   note.value = notificationsEnabled.value ? t('mvNotifEnabled') : t('mvDndEnabled')
 }
 
-function openEcosystemService(serviceId: string) {
-  activeEcosystemId.value = serviceId
-  if (serviceId === 'open-ai') {
-    autoTranslateEnabled.value = true
-    note.value = t('mvAiEnabled')
-  } else if (serviceId === 'open-video') {
-    if (friends.value.length > 0) {
-      startCallWithUser(friends.value[0], 'video')
-    } else {
-      note.value = t('mvPickCallPeer')
-    }
-  } else if (serviceId === 'open-cloud') {
-    showKeepModal.value = true
-  } else if (serviceId === 'open-chat') {
-    activeNav.value = 'openchat'
-  } else if (serviceId === 'open-search') {
-    activeNav.value = 'chats'
-    searchKeyword.value = ''
-  } else {
-    showEcosystemHub.value = true
-  }
-}
 
 
 
@@ -2607,151 +2581,6 @@ async function deleteUserAccount() {
   })
 }
 
-export interface EcosystemServiceItem {
-  id: string
-  name: string
-  nameKo: string
-  icon: string
-  category: 'core' | 'communication' | 'productivity' | 'lifestyle' | 'developer'
-  status: 'active' | 'beta' | 'preview'
-  statusText: string
-  description: string
-  actionUrl?: string
-}
-
-const ECOSYSTEM_SERVICES: EcosystemServiceItem[] = [
-  {
-    id: 'open-search',
-    name: 'Open Search',
-    nameKo: t('mvEcoSearchName'),
-    icon: 'open-search',
-    category: 'core',
-    status: 'active',
-    statusText: t('mvEcoSearchStatus'),
-    description: t('mvEcoSearchDesc')
-  },
-  {
-    id: 'open-mail',
-    name: 'Open Mail',
-    nameKo: t('mvEcoMailName'),
-    icon: 'open-mail',
-    category: 'communication',
-    status: 'active',
-    statusText: t('mvEcoMailStatus'),
-    description: t('mvEcoMailDesc')
-  },
-  {
-    id: 'open-apps',
-    name: 'Open Apps',
-    nameKo: t('mvEcoAppsName'),
-    icon: 'open-apps',
-    category: 'productivity',
-    status: 'active',
-    statusText: t('mvEcoAppsStatus'),
-    description: t('mvEcoAppsDesc')
-  },
-  {
-    id: 'open-video',
-    name: 'Open Video',
-    nameKo: t('mvEcoVideoName'),
-    icon: 'open-video',
-    category: 'communication',
-    status: 'active',
-    statusText: t('mvEcoVideoStatus'),
-    description: t('mvEcoVideoDesc')
-  },
-  {
-    id: 'open-stream',
-    name: 'Open Stream',
-    nameKo: t('mvEcoStreamName'),
-    icon: 'open-stream',
-    category: 'communication',
-    status: 'beta',
-    statusText: t('mvEcoStreamStatus'),
-    description: t('mvEcoStreamDesc')
-  },
-  {
-    id: 'open-ai',
-    name: 'Open AI Assistant',
-    nameKo: t('mvEcoAiName'),
-    icon: 'open-ai',
-    category: 'core',
-    status: 'active',
-    statusText: t('mvEcoAiStatus'),
-    description: t('mvEcoAiDesc')
-  },
-  {
-    id: 'open-shopping',
-    name: 'Open Shopping',
-    nameKo: t('mvEcoPayName'),
-    icon: 'money',
-    category: 'lifestyle',
-    status: 'beta',
-    statusText: t('mvEcoPayStatus'),
-    description: t('mvEcoPayDesc')
-  },
-  {
-    id: 'open-news',
-    name: 'Open News',
-    nameKo: t('mvEcoNewsName'),
-    icon: 'globe',
-    category: 'lifestyle',
-    status: 'preview',
-    statusText: t('mvEcoNewsStatus'),
-    description: t('mvEcoNewsDesc')
-  },
-  {
-    id: 'open-travel',
-    name: 'Open Travel',
-    nameKo: t('mvEcoTravelName'),
-    icon: 'globe',
-    category: 'lifestyle',
-    status: 'preview',
-    statusText: t('mvEcoTravelStatus'),
-    description: t('mvEcoTravelDesc')
-  },
-  {
-    id: 'open-cloud',
-    name: 'Open Cloud (Keep Vault)',
-    nameKo: t('mvEcoDriveName'),
-    icon: 'keep',
-    category: 'productivity',
-    status: 'active',
-    statusText: t('mvEcoDriveStatus'),
-    description: t('mvEcoDriveDesc')
-  },
-  {
-    id: 'open-workspace',
-    name: 'Open Workspace',
-    nameKo: t('mvEcoDocsName'),
-    icon: 'file',
-    category: 'productivity',
-    status: 'beta',
-    statusText: t('mvEcoDocsStatus'),
-    description: t('mvEcoDocsDesc')
-  },
-  {
-    id: 'open-chat',
-    name: t('mvEcoOcName'),
-    nameKo: t('mvEcoOcTag'),
-    icon: 'openchat',
-    category: 'communication',
-    status: 'active',
-    statusText: t('mvEcoOcStatus'),
-    description: t('mvEcoOcDesc')
-  },
-  {
-    id: 'open-developer',
-    name: 'Open Developer Platform',
-    nameKo: t('mvEcoDevName'),
-    icon: 'settings',
-    category: 'developer',
-    status: 'active',
-    statusText: t('mvEcoDevStatus'),
-    description: t('mvEcoDevDesc'),
-    actionUrl: './developer/'
-  }
-]
 
 function handleGlobalKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
@@ -3018,16 +2847,6 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <!-- Ad Banner Card (Screenshot 5) -->
-            <div class="news-ad-banner" @click="openEcosystemService('open-apps')">
-              <div class="ad-text-block">
-                <span class="ad-headline">{{ t('mvAdHeadline') }}</span>
-                <span class="ad-sub">{{ t('mvAdSub') }}</span>
-              </div>
-              <div class="ad-thumb">
-                <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?w=120&auto=format&fit=crop&q=80" alt="AD" />
-              </div>
-            </div>
 
             <!-- Category Section: 오늘의 인기 기사 (Screenshot 5) -->
             <div class="news-section-wrap">
@@ -4099,57 +3918,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- OPEN SCANNER ECOSYSTEM CENTER MODAL (Article 4 & Left Rail) -->
-    <div v-if="showEcosystemHub" class="modal-backdrop" @click.self="showEcosystemHub = false">
-      <div class="standard-modal-box ecosystem-modal">
-        <div class="modal-header">
-          <div class="ecosystem-modal-title">
-            <LunoIcon name="open-messenger-logo" :size="24" />
-            <h3>{{ t('mvEcoTitle') }}</h3>
-          </div>
-          <button class="btn-modal-close" @click="showEcosystemHub = false">✕</button>
-        </div>
-        <div class="modal-body-form ecosystem-body">
-          <p class="ecosystem-intro">{{ t('mvEcoIntro') }}</p>
-          <div class="ecosystem-cards-grid">
-            <div
-              v-for="svc in ECOSYSTEM_SERVICES"
-              :key="svc.id"
-              class="ecosystem-card"
-              :class="svc.status"
-            >
-              <div class="ecosystem-card-header">
-                <div class="svc-icon-box">
-                  <LunoIcon :name="svc.icon" :size="20" />
-                </div>
-                <div class="svc-names">
-                  <strong>{{ svc.name }}</strong>
-                  <span class="svc-ko">{{ svc.nameKo }}</span>
-                </div>
-                <span class="svc-status-pill" :class="svc.status" :title="svc.statusText">{{ svc.statusText }}</span>
-              </div>
-              <p class="svc-desc">{{ svc.description }}</p>
-              <div class="svc-card-footer">
-                <a
-                  v-if="svc.actionUrl"
-                  :href="svc.actionUrl"
-                  target="_blank"
-                  class="btn-svc-action link"
-                >{{ t('mvOpenConsole') }}</a>
-                <button
-                  v-else
-                  type="button"
-                  class="btn-svc-action"
-                  @click="openEcosystemService(svc.id); showEcosystemHub = false"
-                >
-                  {{ svc.status === 'preview' ? t('mvPreviewGuide') : t('mvRunService') }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+
     <!-- Global LUNO PC Context Menu -->
     <LunoContextMenu
       :visible="contextMenu.visible"
