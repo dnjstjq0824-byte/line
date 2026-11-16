@@ -50,4 +50,11 @@ cd tools/pc-agent && node --test "test/*.test.mjs"
 ## 4. 끝났을 때
 
 마지막에 이 파일 맨 아래에 "## 결과"를 추가해 카드별 커밋 해시, 테스트 결과, 대표 조치 필요 항목을 적고 커밋한다.
-병합·푸시·배포는 하지 않는다. Claude가 검토해서 main에 합친다.
+
+그다음 **네가 직접 main에 합친다** (대표 지시, 2026-11-17). 순서:
+1. `git -C C:\Users\dnjst\Desktop\project\line status --porcelain` 이 비어 있는지 확인한다. 비어 있지 않으면 합치지 말고 결과에 적는다.
+2. `C:\luno-studio`에서 `git rebase main` → 2장의 테스트를 전부 다시 돌려 통과시킨다(충돌은 양쪽 의도를 살려 해결).
+3. `git -C C:\Users\dnjst\Desktop\project\line merge --ff-only studio/remote-work-20261117`
+4. main 폴더에서 `node --test "scripts/*.test.mjs"` 와 `cd tools/pc-agent && node --test "test/*.test.mjs"` 를 한 번 더 돌려 확인한다.
+러너가 같은 때 main 에 병합 중이면 3이 실패할 수 있다. 그때는 2부터 다시 한다.
+푸시·배포는 여전히 하지 않는다(대표가 따로 지시).
