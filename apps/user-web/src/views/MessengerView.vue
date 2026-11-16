@@ -191,6 +191,21 @@ const PRIMARY_NAV: { nav: NavItem; icon: string; label: string }[] = [
   { nav: 'news', icon: 'news', label: 'lxNews' },
 ]
 const MORE_NAVS: NavItem[] = ['wallet', 'shop', 'voom', 'openchat']
+// Content tabs are whole pages: no list/detail split, so they use both columns.
+const PAGE_NAVS: NavItem[] = ['news', 'wallet', 'voom', 'shop']
+// Status line for a person; accounts made before the server stopped filling
+// a placeholder bio still carry "New Messenger User", which is shown as empty.
+function taglineOf(u: { status_message?: string; bio?: string } | null | undefined): string {
+  if (!u) return ''
+  const bio = u.bio && u.bio !== 'New Messenger User' ? u.bio : ''
+  return u.status_message || bio
+}
+// The main pane's empty state names what the list on its left is for.
+const emptyMain = computed(() => {
+  if (activeNav.value === 'home') return { icon: 'friends', title: t('lxPickFriend'), desc: t('lxPickFriendDesc') }
+  if (activeNav.value === 'openchat') return { icon: 'openchat', title: t('lxPickOpenChat'), desc: t('lxPickOpenChatDesc') }
+  return null
+})
 const MORE_ITEMS: { id: string; icon: string; label: string; nav?: NavItem }[] = [
   { id: 'wallet', icon: 'wallet', label: 'mvWallet', nav: 'wallet' },
   { id: 'shop', icon: 'shop', label: 'lxStickerShop', nav: 'shop' },
@@ -427,7 +442,7 @@ function switchNav(nav: NavItem) {
   if (nav !== 'chats') {
     selectedChatId.value = ''
   }
-  if (nav === 'calls' && !selectedCallRecord.value && callHistoryList.value.length > 0) {
+  if (nav === 'calls' && !selectedCallRecord.value && callHistoryList.value.length > 0 && window.matchMedia('(min-width: 700px)').matches) {
     selectedCallRecord.value = callHistoryList.value[0]
   }
   if (nav === 'shop') void loadStorePacks()
@@ -2653,7 +2668,7 @@ onBeforeUnmount(() => {
 
 
     <!-- Messenger shell: rail (PC/tablet) · list pane · main pane · tab bar (phone) -->
-    <main class="lx-shell" :class="{ 'is-detail': mobileDetailOpen }">
+    <main class="lx-shell" :class="{ 'is-detail': mobileDetailOpen, 'is-page': PAGE_NAVS.includes(activeNav) }">
       <nav class="lx-rail" :aria-label="t('lxMainNav')">
         <button type="button" class="lx-rail-me" :title="t('profileTitle')" :aria-label="t('profileTitle')" @click="activeProfileUser = currentUser">
           <span class="lx-avatar s40" :style="{ background: currentUser?.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(currentUser?.display_name) }}</span><img v-if="currentUser?.avatar_url" :src="currentUser?.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
@@ -2787,20 +2802,16 @@ onBeforeUnmount(() => {
           @chat-menu="openChatContextMenu"
         />
 
-        <!-- VIEW: NEWS (뉴스 & 콘텐츠 - Screenshot 5 & Section 10) -->
-        <div v-else-if="activeNav === 'news'" class="lx-pane lx-news-pane">
-          <!-- News Header -->
+        <!-- NEWS: full-width page (hero + ranked list) -->
+        <div v-else-if="activeNav === 'news'" class="lx-pane lx-page">
           <div class="lx-pane-head">
             <h2 class="lx-pane-title">{{ t('mvNews') }}</h2>
-            <div class="news-header-tools">
-
-            </div>
           </div>
-          <!-- News Category Filter Tabs -->
           <div class="lx-chips">
             <button
               v-for="cat in NEWS_CATEGORY_IDS"
               :key="cat"
+              type="button"
               class="lx-chip"
               :class="{ active: selectedNewsCategory === cat }"
               @click="selectedNewsCategory = cat"
@@ -2808,236 +2819,269 @@ onBeforeUnmount(() => {
               {{ newsCatLabel(cat) }}
             </button>
           </div>
-
-          <!-- News Scroll List -->
-          <div class="lx-scroll news-scroll">
-            <div v-if="newsIsSample" class="news-sample-banner" style="margin:8px 12px;padding:8px 12px;border-radius:8px;background:#fff7e0;color:#7a5b00;font-size:12px;">{{ t('mvNewsSampleBanner') }}</div>
-            <!-- Hero Featured News Card (Screenshot 5 & 9) -->
-            <div
-              v-if="heroNews"
-              class="news-hero-card"
-              @click="openNewsArticle(heroNews)"
-              @mouseenter="isHeroHovered = true"
-              @mouseleave="isHeroHovered = false"
-            >
-              <div class="hero-image-wrap">
-                <img :src="heroNews.image_url" :alt="heroNews.title" class="hero-img" />
-                <div class="hero-gradient-overlay"></div>
-                <button class="btn-hero-nav prev" :title="t('mvPrevArticle')" @click.stop="prevHeroSlide">‹</button>
-                <button class="btn-hero-nav next" :title="t('mvNextArticle')" @click.stop="nextHeroSlide">›</button>
-                <div class="hero-slide-badge">{{ activeHeroSlideIndex + 1 }} / {{ heroNewsSlides.length }}</div>
-                <div class="hero-meta-bottom">
-                  <h3 class="hero-title">{{ heroNews.title }}</h3>
-                  <div class="hero-press-row">
-                    <span class="hero-press">{{ heroNews.press }}</span>
-                    <span class="hero-time">{{ heroNews.published_at }}</span>
-                  </div>
-                </div>
-              </div>
-              <!-- Carousel Dots Indicator (Interactive 5 Slides - Screenshot 9) -->
-              <div class="hero-carousel-dots" @click.stop>
-                <span
-                  v-for="(slide, idx) in heroNewsSlides"
-                  :key="slide.id"
-                  class="hero-dot"
-                  :class="{ active: activeHeroSlideIndex === idx }"
-                  :title="t('mvSlide').replace('{n}', String(idx + 1))"
-                  @click.stop="activeHeroSlideIndex = idx"
-                ></span>
-              </div>
-            </div>
-
-
-            <!-- Category Section: 오늘의 인기 기사 (Screenshot 5) -->
-            <div class="news-section-wrap">
-              <div class="news-section-header">
-                <h4 class="section-title">{{ t('mvTodayPopular') }}</h4>
-              </div>
-
-              <div class="news-ranked-list">
-                <div
-                  v-for="article in filteredPopularNews"
-                  :key="article.id"
-                  class="news-ranked-item"
-                  @click="openNewsArticle(article)"
+          <div class="lx-scroll">
+            <div class="lx-page-body">
+              <p v-if="newsIsSample" class="lx-notice">{{ t('mvNewsSampleBanner') }}</p>
+              <div class="lx-news-layout">
+                <article
+                  v-if="heroNews"
+                  class="lx-news-hero"
+                  role="button"
+                  tabindex="0"
+                  @click="openNewsArticle(heroNews)"
+                  @keydown.enter="openNewsArticle(heroNews)"
+                  @mouseenter="isHeroHovered = true"
+                  @mouseleave="isHeroHovered = false"
                 >
-                  <div class="news-thumb-col">
-                    <img :src="article.image_url" :alt="article.title" class="ranked-thumb" />
-                    <span class="ranked-badge">{{ article.rank }}</span>
+                  <div class="lx-news-hero-media">
+                    <img :src="heroNews.image_url" alt="" />
+                    <span class="lx-news-hero-count">{{ activeHeroSlideIndex + 1 }} / {{ heroNewsSlides.length }}</span>
+                    <button type="button" class="lx-news-hero-nav prev" :title="t('mvPrevArticle')" :aria-label="t('mvPrevArticle')" @click.stop="prevHeroSlide"><LunoIcon name="back" :size="18" /></button>
+                    <button type="button" class="lx-news-hero-nav next" :title="t('mvNextArticle')" :aria-label="t('mvNextArticle')" @click.stop="nextHeroSlide"><LunoIcon name="chevron-right" :size="18" /></button>
                   </div>
-                  <div class="news-info-col">
-                    <h5 class="ranked-title">{{ article.title }}</h5>
-                    <div class="ranked-meta">
-                      <span class="ranked-press">{{ article.press }}</span>
-                      <span class="ranked-time">{{ article.published_at }}</span>
-                    </div>
+                  <div class="lx-news-hero-text">
+                    <h3>{{ heroNews.title }}</h3>
+                    <small>{{ heroNews.press }} · {{ heroNews.published_at }}</small>
                   </div>
-                </div>
+                  <div class="lx-news-dots" @click.stop>
+                    <button
+                      v-for="(slide, idx) in heroNewsSlides"
+                      :key="slide.id"
+                      type="button"
+                      class="lx-news-dot"
+                      :class="{ active: activeHeroSlideIndex === idx }"
+                      :aria-label="t('mvSlide').replace('{n}', String(idx + 1))"
+                      @click.stop="activeHeroSlideIndex = idx"
+                    ></button>
+                  </div>
+                </article>
+
+                <section class="lx-news-list">
+                  <h3 class="lx-page-subtitle">{{ t('mvTodayPopular') }}</h3>
+                  <p v-if="!filteredPopularNews.length" class="lx-list-empty">{{ t('lxNoNews') }}</p>
+                  <button
+                    v-for="article in filteredPopularNews"
+                    :key="article.id"
+                    type="button"
+                    class="lx-news-item"
+                    @click="openNewsArticle(article)"
+                  >
+                    <span class="lx-news-rank">{{ article.rank }}</span>
+                    <span class="lx-news-item-text">
+                      <strong>{{ article.title }}</strong>
+                      <small>{{ article.press }} · {{ article.published_at }}</small>
+                    </span>
+                    <img :src="article.image_url" alt="" class="lx-news-thumb" />
+                  </button>
+                </section>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- VIEW: CALLS (통화 이력 - Screenshot 3 & Section 9) -->
-        <div v-else-if="activeNav === 'calls'" class="lx-pane lx-calls-pane">
-          <!-- Calls Header -->
+        <!-- CALLS: history list (detail opens in the main pane) -->
+        <div v-else-if="activeNav === 'calls'" class="lx-pane">
           <div class="lx-pane-head">
             <h2 class="lx-pane-title">{{ t('mvCall') }}</h2>
-            <div class="calls-header-tools">
-              <button class="lx-text-btn" :title="t('mvNewCall')" @click="showNewCallModal = true">
-                <LunoIcon name="call-voice" :size="17" />
-                <span>{{ t('mvNewCall') }}</span>
-              </button>
-            </div>
+            <button type="button" class="lx-text-btn" @click="showNewCallModal = true">
+              <LunoIcon name="call-voice" :size="16" />
+              <span>{{ t('mvNewCall') }}</span>
+            </button>
           </div>
-
-          <!-- Calls Filter Subtabs -->
           <div class="lx-chips">
-            <button class="lx-chip" :class="{ active: callFilter === 'all' }" @click="callFilter = 'all'">{{ t('tabAll') }} ({{ callHistoryList.length }})</button>
-            <button class="lx-chip" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">{{ t('mvMissed') }}</button>
+            <button type="button" class="lx-chip" :class="{ active: callFilter === 'all' }" @click="callFilter = 'all'">{{ t('tabAll') }} {{ callHistoryList.length }}</button>
+            <button type="button" class="lx-chip" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">{{ t('mvMissed') }}</button>
           </div>
-
-          <!-- Calls Scroll List -->
-          <div class="lx-scroll calls-scroll">
+          <div class="lx-scroll">
+            <div v-if="!filteredCallHistory.length" class="lx-list-empty">
+              <p>{{ t('lxNoCalls') }}</p>
+              <button type="button" class="lx-text-btn" @click="showNewCallModal = true">{{ t('mvNewCall') }}</button>
+            </div>
             <div
               v-for="log in filteredCallHistory"
               :key="log.id"
-              class="call-history-row"
-              :class="{ 'is-missed': log.direction === 'missed', selected: selectedCallRecord?.id === log.id }"
+              class="lx-row"
+              :class="{ selected: selectedCallRecord?.id === log.id }"
+              role="button"
+              tabindex="0"
               @click="selectedCallRecord = log"
+              @keydown.enter="selectedCallRecord = log"
             >
-              <!-- Peer Avatar -->
-              <div class="pc-avatar circle-40" :style="{ background: log.peer_avatar_color || '#315BCD' }">
-                {{ initialOf(log.peer_name) }}
-              </div>
-
-              <!-- Meta: Name, Direction Arrow, Date -->
-              <div class="call-history-meta">
-                <div class="call-row-name" :class="{ 'text-red': log.direction === 'missed' }">
-                  {{ log.peer_name }}
-                  <span v-if="log.count && log.count > 1" class="call-count-tag">({{ log.count }})</span>
-                </div>
-                <div class="call-row-sub">
-                  <span class="direction-arrow">{{ log.direction === 'incoming' || log.direction === 'missed' ? '↙' : '↗' }}</span>
+              <span class="lx-avatar s44" :style="{ background: log.peer_avatar_color || 'var(--ln-accent)' }">{{ initialOf(log.peer_name) }}</span>
+              <span class="lx-row-main">
+                <span class="lx-row-title">
+                  <span class="lx-row-name" :class="{ 'lx-danger': log.direction === 'missed' }">{{ log.peer_name }}</span>
+                  <span v-if="log.count && log.count > 1" class="lx-row-count">({{ log.count }})</span>
+                </span>
+                <span class="lx-row-preview lx-call-sub">
                   <span class="call-kind-icon" :title="log.call_type === 'video' ? t('mvVideoCallLabel') : t('mvVoiceCall')"><LunoIcon :name="log.call_type === 'video' ? 'call-video' : 'call-voice'" :size="13" /></span>
-                  <span class="timestamp-text">{{ log.timestamp_text }}</span>
-                  <span v-if="log.duration_text" class="duration-text">({{ log.duration_text }})</span>
-                </div>
-              </div>
-
-              <!-- Quick Call Button on the Right -->
+                  <span>{{ log.direction === 'missed' ? t('mvMissedCall') : log.direction === 'incoming' ? t('mvIncomingCall') : t('mvOutgoingCall') }}</span>
+                  <span>· {{ log.timestamp_text }}</span>
+                  <span v-if="log.duration_text">· {{ log.duration_text }}</span>
+                </span>
+              </span>
               <button
-                class="btn-call-history-action"
+                type="button"
+                class="lx-icon-btn lx-call-again"
                 :title="t('mvCallBack').replace('{name}', log.peer_name)"
+                :aria-label="t('mvCallBack').replace('{name}', log.peer_name)"
                 @click.stop="startCallFromHistory(log, normalizeCallKind(log.call_type))"
               >
-                <LunoIcon name="calls" :size="18" />
+                <LunoIcon :name="log.call_type === 'video' ? 'call-video' : 'call-voice'" :size="19" />
               </button>
             </div>
           </div>
         </div>
 
-        <!-- VIEW 3: VOOM -->
-        <div v-else-if="activeNav === 'voom'" class="lx-pane">
+        <!-- VOOM: full-width feed -->
+        <div v-else-if="activeNav === 'voom'" class="lx-pane lx-page">
           <div class="lx-pane-head">
-            <h2 class="lx-pane-title">LUNO VOOM</h2>
-            <button class="lx-icon-btn" :title="t('mvNewStory')" :aria-label="t('mvNewStory')" @click="showNewStoryModal = true"><LunoIcon name="plus" :size="20" /></button>
+            <h2 class="lx-pane-title">VOOM</h2>
+            <button type="button" class="lx-text-btn" @click="showNewStoryModal = true">
+              <LunoIcon name="plus" :size="16" />
+              <span>{{ t('mvAddStory') }}</span>
+            </button>
           </div>
-          <div class="stories-row">
-            <div class="story-item" @click="showNewStoryModal = true">
-              <div class="story-ring plus">＋</div>
-              <small>{{ t('mvAddStory') }}</small>
-            </div>
-            <div v-for="s in stories" :key="s.id" class="story-item">
-              <div class="story-ring" :style="{ background: s.bg || 'var(--ln-accent)' }">{{ initialOf(s.author_name, 'L') }}</div>
-              <small>{{ s.author_name || t('navFriends') }}</small>
-            </div>
-          </div>
-          <div class="voom-list">
-            <div v-for="v in voomVideos" :key="v.id" class="voom-card">
-              <div class="voom-banner" :style="{ background: v.media_bg || v.bg || '#e2e8f0' }">
-                <span>{{ v.media_emoji || v.emoji || '🎬' }}</span>
-              </div>
-              <div class="voom-meta">
-                <strong>{{ v.title || v.body }}</strong>
-                <div class="voom-actions">
-                  <button class="btn-like" :class="{ liked: v.liked }" @click="likeVoomPost(v.id)">
-                    {{ v.liked ? '❤️' : '🤍' }} {{ v.likes || v.like_count || 0 }}
-                  </button>
-                  <small>{{ t('mvCommentCount').replace('{n}', String(v.comments?.length || 0)) }}</small>
+          <div class="lx-scroll">
+            <div class="lx-page-body">
+              <div class="lx-stories">
+                <button type="button" class="lx-story" @click="showNewStoryModal = true">
+                  <span class="lx-story-ring add"><LunoIcon name="plus" :size="22" /></span>
+                  <small>{{ t('mvAddStory') }}</small>
+                </button>
+                <div v-for="s in stories" :key="s.id" class="lx-story">
+                  <span class="lx-story-ring" :class="{ viewed: s.viewed }"><span class="lx-avatar s56" :style="{ background: s.bg || 'var(--ln-accent)' }">{{ initialOf(s.author_name, 'L') }}</span></span>
+                  <small>{{ s.author_name || t('navFriends') }}</small>
                 </div>
+              </div>
+              <div v-if="!voomVideos.length" class="lx-page-empty">
+                <LunoIcon name="voom" :size="40" />
+                <strong>{{ t('lxNoVoom') }}</strong>
+                <p>{{ t('lxNoVoomDesc') }}</p>
+              </div>
+              <div class="lx-voom-grid">
+                <article v-for="v in voomVideos" :key="v.id" class="lx-card lx-voom-card">
+                  <div class="lx-voom-media" :style="{ background: v.media_bg || v.bg || 'var(--ln-subtle)' }">
+                    <span>{{ v.media_emoji || v.emoji || '🎬' }}</span>
+                  </div>
+                  <div class="lx-voom-body">
+                    <div class="lx-voom-author">
+                      <span class="lx-avatar s36" style="background: var(--ln-accent)">{{ initialOf(v.author_name || v.author?.display_name, 'L') }}</span>
+                      <strong>{{ v.author_name || v.author?.display_name || 'LUNO' }}</strong>
+                    </div>
+                    <p>{{ v.title || v.body }}</p>
+                    <div class="lx-voom-actions">
+                      <button type="button" class="lx-pill-btn" :class="{ liked: v.liked }" :aria-pressed="!!v.liked" @click="likeVoomPost(v.id)">
+                        <LunoIcon name="heart" :size="15" />
+                        <span>{{ v.likes || v.like_count || 0 }}</span>
+                      </button>
+                      <small>{{ t('mvCommentCount').replace('{n}', String(v.comments?.length || 0)) }}</small>
+                    </div>
+                  </div>
+                </article>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- VIEW 4: OPENCHAT -->
+        <!-- OPEN CHAT: room list (the room opens in the main pane) -->
         <div v-else-if="activeNav === 'openchat'" class="lx-pane">
           <div class="lx-pane-head">
             <h2 class="lx-pane-title">{{ t('navOpenChat') }}</h2>
-            <button class="lx-icon-btn" :title="t('mvCreateOpenChat')" :aria-label="t('mvCreateOpenChat')" @click="showCreateOpenChatModal = true"><LunoIcon name="plus" :size="20" /></button>
+            <button type="button" class="lx-icon-btn" :title="t('mvCreateOpenChat')" :aria-label="t('mvCreateOpenChat')" @click="showCreateOpenChatModal = true"><LunoIcon name="plus" :size="20" /></button>
           </div>
-          <div class="openchat-list">
-            <div v-for="room in openChatRooms" :key="room.id" class="openchat-card" @click="selectOpenChatRoom(room)">
-              <div class="card-icon">💬</div>
-              <div class="card-info">
-                <strong>{{ room.name }}</strong>
-                <p>{{ room.description }}</p>
-              </div>
+          <div class="lx-scroll">
+            <div v-if="!openChatRooms.length" class="lx-list-empty">
+              <p>{{ t('lxNoOpenChat') }}</p>
+              <button type="button" class="lx-text-btn" @click="showCreateOpenChatModal = true">{{ t('mvCreateOpenChat') }}</button>
             </div>
-          </div>
-        </div>
-
-        <!-- VIEW 5: WALLET / SERVICES -->
-        <div v-else-if="activeNav === 'wallet'" class="lx-pane">
-          <div class="lx-pane-head">
-            <h2 class="lx-pane-title">{{ t('mvLunoPayServices') }}</h2>
-          </div>
-          <div class="luno-pay-card">
-            <div class="pay-top">
-              <span>LUNO Pay</span>
-              <span>POINT {{ walletPoints.toLocaleString() }} P</span>
-            </div>
-            <div class="pay-balance">₩ {{ walletBalance.toLocaleString() }}</div>
-            <div class="pay-actions">
-              <button class="btn-pay-action" @click="showChargeModal = true">{{ t('mvCharge') }}</button>
-              <button class="btn-pay-action secondary" @click="showSendMoneyModal = true">{{ t('mvSend') }}</button>
-            </div>
-          </div>
-          <div class="services-grid">
-            <div class="service-box" @click="switchNav('voom')"><span class="icon">🎬</span><span class="title">LUNO VOOM</span></div>
-            <div class="service-box" @click="showSettingsModal = true"><span class="icon">🎨</span><span class="title">{{ t('mvThemeSettings') }}</span></div>
-            <div class="service-box" @click="showStickerPicker = true"><span class="icon">🐻</span><span class="title">{{ t('mvStickerShop') }}</span></div>
-          </div>
-          <div v-if="walletTx.length" class="wallet-tx-section">
-            <h4 class="wallet-tx-heading">{{ t('mvRecentTx') }}</h4>
-            <div v-for="tx in walletTx.slice(0, 8)" :key="tx.id" class="wallet-tx-row">
-              <div class="wallet-tx-info">
-                <strong>{{ tx.title || tx.note || tx.kind || t('mvTxFallback') }}</strong>
-                <small>{{ formatTime(tx.created_at) }}</small>
-              </div>
-              <span class="wallet-tx-amount" :class="{ plus: tx.amount > 0 }">
-                {{ (tx.amount > 0 ? '+' : '') + formatKRW(tx.amount) }}
+            <div
+              v-for="room in openChatRooms"
+              :key="room.id"
+              class="lx-row"
+              :class="{ selected: selectedOpenChatRoom?.id === room.id }"
+              role="button"
+              tabindex="0"
+              @click="selectOpenChatRoom(room)"
+              @keydown.enter="selectOpenChatRoom(room)"
+            >
+              <span class="lx-avatar s48" style="background: var(--ln-info)"><LunoIcon name="openchat" :size="22" /></span>
+              <span class="lx-row-main">
+                <span class="lx-row-name">{{ room.name }}</span>
+                <span class="lx-row-preview">{{ room.description }}</span>
               </span>
             </div>
           </div>
         </div>
-        <div v-else-if="activeNav === 'shop'" class="lx-pane">
+
+        <!-- WALLET: full-width page -->
+        <div v-else-if="activeNav === 'wallet'" class="lx-pane lx-page">
+          <div class="lx-pane-head">
+            <h2 class="lx-pane-title">{{ t('mvWallet') }}</h2>
+          </div>
+          <div class="lx-scroll">
+            <div class="lx-page-body lx-wallet">
+              <section class="lx-pay-card">
+                <div class="lx-pay-top">
+                  <span>LUNO Pay</span>
+                  <span>{{ walletPoints.toLocaleString() }} P</span>
+                </div>
+                <div class="lx-pay-balance">₩ {{ walletBalance.toLocaleString() }}</div>
+                <div class="lx-pay-actions">
+                  <button type="button" class="lx-pay-btn" @click="showChargeModal = true"><LunoIcon name="plus" :size="16" /><span>{{ t('mvCharge') }}</span></button>
+                  <button type="button" class="lx-pay-btn" @click="showSendMoneyModal = true"><LunoIcon name="send" :size="16" /><span>{{ t('mvSend') }}</span></button>
+                </div>
+              </section>
+              <section class="lx-card">
+                <h3 class="lx-page-subtitle">{{ t('lxShortcuts') }}</h3>
+                <div class="lx-shortcuts">
+                  <button type="button" class="lx-more-item" @click="switchNav('shop')"><span class="lx-more-icon"><LunoIcon name="shop" :size="22" /></span><span>{{ t('lxStickerShop') }}</span></button>
+                  <button type="button" class="lx-more-item" @click="switchNav('voom')"><span class="lx-more-icon"><LunoIcon name="voom" :size="22" /></span><span>{{ t('lxVoom') }}</span></button>
+                  <button type="button" class="lx-more-item" @click="showSettingsModal = true"><span class="lx-more-icon"><LunoIcon name="settings" :size="22" /></span><span>{{ t('mvThemeSettings') }}</span></button>
+                </div>
+              </section>
+              <section class="lx-card">
+                <h3 class="lx-page-subtitle">{{ t('mvRecentTx') }}</h3>
+                <p v-if="!walletTx.length" class="lx-list-empty">{{ t('lxNoTx') }}</p>
+                <div v-for="tx in walletTx.slice(0, 20)" :key="tx.id" class="lx-tx-row">
+                  <span class="lx-tx-main">
+                    <strong>{{ tx.title || tx.note || tx.kind || t('mvTxFallback') }}</strong>
+                    <small>{{ formatTime(tx.created_at) }}</small>
+                  </span>
+                  <span class="lx-tx-amount" :class="{ plus: tx.amount > 0 }">{{ (tx.amount > 0 ? '+' : '') + formatKRW(tx.amount) }}</span>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <!-- STICKER SHOP: full-width page -->
+        <div v-else-if="activeNav === 'shop'" class="lx-pane lx-page">
           <div class="lx-pane-head">
             <h2 class="lx-pane-title">{{ t('shopTitle') }}</h2>
           </div>
-          <div v-if="storeLoading" class="shop-empty">{{ t('attachment_loading') }}</div>
-          <div v-else-if="!storePacks.length" class="shop-empty">{{ t('shopEmpty') }}</div>
-          <div v-for="pk in storePacks" :key="pk.id" class="shop-pack-row">
-            <div class="shop-pack-main">
-              <strong>{{ pk.title }}</strong>
-              <small v-if="pk.description">{{ pk.description }}</small>
-              <span v-if="pk.stickers.length" class="shop-pack-strip">{{ pk.stickers.slice(0, 8).join(' ') }}</span>
+          <div class="lx-scroll">
+            <div class="lx-page-body">
+              <p class="lx-notice">{{ t('shopPayNote') }}</p>
+              <p v-if="storeLoading" class="lx-list-empty">{{ t('attachment_loading') }}</p>
+              <p v-else-if="!storePacks.length" class="lx-list-empty">{{ t('shopEmpty') }}</p>
+              <div class="lx-shop-grid">
+                <article v-for="pk in storePacks" :key="pk.id" class="lx-card lx-shop-card">
+                  <div class="lx-shop-strip">
+                    <span v-for="(s, i) in pk.stickers.slice(0, 8)" :key="i">{{ s }}</span>
+                  </div>
+                  <div class="lx-shop-meta">
+                    <span class="lx-shop-text">
+                      <strong>{{ pk.title }}</strong>
+                      <small v-if="pk.description">{{ pk.description }}</small>
+                    </span>
+                    <span v-if="pk.owned" class="lx-shop-tag owned">{{ t('shopOwned') }}</span>
+                    <span v-else class="lx-shop-tag">{{ pk.priceMinor <= 0 ? t('shopFree') : pk.priceMinor.toLocaleString() + ' ' + pk.currency }}</span>
+                  </div>
+                </article>
+              </div>
             </div>
-            <span v-if="pk.owned" class="shop-owned">{{ t('shopOwned') }}</span>
-            <span v-else class="shop-price">{{ pk.priceMinor <= 0 ? t('shopFree') : pk.priceMinor + ' ' + pk.currency }}</span>
           </div>
-          <p class="shop-pay-note">{{ t('shopPayNote') }}</p>
         </div>
       </aside>
 
@@ -3251,8 +3295,8 @@ onBeforeUnmount(() => {
             {{ initialOf(selectedFriendProfile.display_name) }}
           </div>
           <h2 class="profile-preview-name">{{ selectedFriendProfile.display_name }} <span v-if="(selectedFriendProfile as any).kind === 'bot'" class="badge-bot">BOT</span></h2>
-          <p v-if="selectedFriendProfile.status_message || selectedFriendProfile.bio" class="profile-preview-bio">
-            {{ selectedFriendProfile.status_message || selectedFriendProfile.bio }}
+          <p v-if="taglineOf(selectedFriendProfile)" class="profile-preview-bio">
+            {{ taglineOf(selectedFriendProfile) }}
           </p>
           <div class="profile-preview-actions">
             <!-- Large Prominent Start Chat Button (Matching Screenshot 5) -->
@@ -3273,7 +3317,6 @@ onBeforeUnmount(() => {
                 <span>{{ t('mvSendMoney') }}</span>
               </button>
               <button type="button" class="btn-subaction-pill" :title="t('mvFavTitle')" @click="toggleFriendFavorite(selectedFriendProfile)">
-                <LunoIcon name="star" :size="16" />
                 <span>{{ (selectedFriendProfile as any).is_favorite ? t('mvFaved') : t('mvFav') }}</span>
               </button>
             </div>
@@ -3285,10 +3328,11 @@ onBeforeUnmount(() => {
       <section v-else class="lx-empty">
         <div class="pc-empty-dialog">
           <div class="pc-watermark-wrap">
-            <img :src="lunoMark" alt="LUNO" width="72" height="72" />
+            <LunoIcon v-if="emptyMain" :name="emptyMain.icon" :size="64" />
+            <img v-else :src="lunoMark" alt="LUNO" width="72" height="72" />
           </div>
-          <h3 class="pc-empty-title">{{ t('emptyChatTitle') }}</h3>
-          <p class="pc-empty-desc">{{ t('emptyChatDesc') }}</p>
+          <h3 class="pc-empty-title">{{ emptyMain ? emptyMain.title : t('emptyChatTitle') }}</h3>
+          <p class="pc-empty-desc">{{ emptyMain ? emptyMain.desc : t('emptyChatDesc') }}</p>
         </div>
       </section>
 
@@ -3450,7 +3494,7 @@ onBeforeUnmount(() => {
         <div class="profile-body-center">
           <h2>{{ activeProfileUser.display_name }} <span v-if="(activeProfileUser as any).kind === 'bot'" class="badge-bot">BOT</span></h2>
           <div v-if="activeProfileUser.handle" class="user-handle">@{{ activeProfileUser.handle }}</div>
-          <p class="user-status-text">{{ activeProfileUser.status_message || activeProfileUser.bio || t('profile_empty') }}</p>
+          <p class="user-status-text">{{ taglineOf(activeProfileUser) || t('profile_empty') }}</p>
           <p v-if="activeProfileUser.id === currentUser?.id && currentUser?.email" class="user-handle">{{ currentUser?.email }}</p>
         </div>
         <div v-if="activeProfileUser.id === currentUser?.id" class="profile-actions-footer">
@@ -3909,7 +3953,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="friend-pick-meta">
                 <strong>{{ f.display_name }}</strong>
-                <small>{{ f.status_message || f.bio || 'Open Messenger' }}</small>
+                <small>{{ taglineOf(f) }}</small>
               </div>
               <button class="btn-mini-chat">{{ t('mvChats') }}</button>
             </div>

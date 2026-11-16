@@ -1357,3 +1357,126 @@ ul, ol {list-style:none;margin:0;padding:0}
 @media (prefers-reduced-motion: reduce) {
   .lx-shell * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- Content pages (news, wallet, VOOM, sticker shop) ---------- */
+.lx-shell.is-page { grid-template-columns: 76px minmax(0, 1fr); }
+.lx-shell.is-page .lx-main { display: none; }
+.lx-shell.is-page .lx-list { border-right: 0; background: var(--ln-bg); }
+.lx-page .lx-pane-head, .lx-page > .lx-chips, .lx-page-body { width: 100%; max-width: 1040px; margin-left: auto; margin-right: auto; }
+.lx-page .lx-pane-head { padding-left: 24px; padding-right: 24px; }
+.lx-page > .lx-chips { padding-left: 24px; padding-right: 24px; }
+.lx-page-body { padding: 4px 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+.lx-page-subtitle { margin: 0 0 10px; font-size: 15px; font-weight: 800; color: var(--ln-text); }
+.lx-notice { margin: 0; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--ln-warning) 12%, var(--ln-surface)); color: var(--ln-warning); font-size: 13px; line-height: 1.5; }
+.lx-card { padding: 16px; border: 1px solid var(--ln-line); border-radius: 16px; background: var(--ln-surface); }
+.lx-card > .lx-list-empty { padding: 16px 0; }
+.lx-page-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 16px; color: var(--ln-muted); text-align: center; }
+.lx-page-empty strong { color: var(--ln-text); font-size: 16px; }
+.lx-page-empty p { margin: 0; font-size: 13px; }
+.lx-danger { color: var(--ln-danger) !important; }
+.lx-pill-btn.liked { color: var(--ln-danger); border-color: color-mix(in srgb, var(--ln-danger) 40%, var(--ln-line)); }
+
+/* News */
+.lx-news-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.lx-news-hero { position: relative; overflow: hidden; border-radius: 18px; background: var(--ln-surface); border: 1px solid var(--ln-line); cursor: pointer; }
+.lx-news-hero:focus-visible { outline: 2px solid var(--ln-accent); outline-offset: 2px; }
+.lx-news-hero-media { position: relative; aspect-ratio: 16 / 10; background: linear-gradient(110deg, var(--ln-subtle) 30%, var(--ln-bg) 50%, var(--ln-subtle) 70%); }
+.lx-news-hero-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lx-news-hero-count { position: absolute; top: 12px; right: 12px; padding: 3px 9px; border-radius: 999px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 12px; font-weight: 700; }
+.lx-news-hero-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .88); color: #14213d; cursor: pointer; }
+.lx-news-hero-nav.prev { left: 12px; }
+.lx-news-hero-nav.next { right: 12px; }
+.lx-news-hero-text { padding: 14px 16px 6px; }
+.lx-news-hero-text h3 { margin: 0 0 6px; font-size: 18px; font-weight: 800; line-height: 1.4; color: var(--ln-text); }
+.lx-news-hero-text small { color: var(--ln-muted); font-size: 12px; }
+.lx-news-dots { display: flex; gap: 6px; padding: 8px 16px 14px; }
+.lx-news-dot { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 999px; background: var(--ln-line); cursor: pointer; }
+.lx-news-dot.active { width: 22px; background: var(--ln-accent); }
+.lx-news-list { display: flex; flex-direction: column; padding: 16px; border: 1px solid var(--ln-line); border-radius: 18px; background: var(--ln-surface); }
+.lx-news-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 0; border: 0; border-top: 1px solid var(--ln-line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lx-news-list .lx-page-subtitle + .lx-news-item, .lx-news-list .lx-list-empty + .lx-news-item { border-top: 0; }
+.lx-news-item:hover strong { color: var(--ln-accent); }
+.lx-news-rank { flex-shrink: 0; width: 20px; font-size: 15px; font-weight: 800; color: var(--ln-accent); text-align: center; }
+.lx-news-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lx-news-item-text strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14px; font-weight: 700; line-height: 1.4; color: var(--ln-text); }
+.lx-news-item-text small { font-size: 12px; color: var(--ln-muted); }
+.lx-news-thumb { flex-shrink: 0; width: 72px; height: 54px; border-radius: 10px; object-fit: cover; background: var(--ln-subtle); }
+
+/* Calls */
+.lx-call-sub { display: flex; align-items: center; gap: 4px; }
+.lx-call-sub .call-kind-icon { display: inline-flex; }
+.lx-call-again { color: var(--ln-accent); }
+
+/* VOOM */
+.lx-stories { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: none; }
+.lx-story { flex-shrink: 0; width: 68px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ln-text); font: inherit; cursor: pointer; }
+.lx-story small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--ln-muted); }
+.lx-story-ring { width: 64px; height: 64px; display: inline-flex; align-items: center; justify-content: center; padding: 3px; border-radius: 40%; border: 2px solid var(--ln-accent); }
+.lx-story-ring.viewed { border-color: var(--ln-line); }
+.lx-story-ring.add { border-style: dashed; color: var(--ln-accent); background: var(--ln-accent-soft); }
+.lx-voom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.lx-voom-card { padding: 0; overflow: hidden; }
+.lx-voom-media { aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; font-size: 56px; }
+.lx-voom-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.lx-voom-author { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.lx-voom-body p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ln-text); overflow-wrap: anywhere; }
+.lx-voom-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ln-muted); }
+
+/* Wallet */
+.lx-wallet { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: start; }
+.lx-wallet > :nth-child(3) { grid-column: 2; grid-row: 1 / span 2; }
+@media (max-width: 1099px) {
+  .lx-wallet { grid-template-columns: minmax(0, 1fr); }
+  .lx-wallet > :nth-child(3) { grid-column: auto; grid-row: auto; }
+}
+.lx-pay-card { padding: 20px; border-radius: 20px; background: linear-gradient(135deg, var(--ln-accent), color-mix(in srgb, var(--ln-accent) 65%, #0b1a3a)); color: #fff; }
+.lx-pay-top { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; opacity: .9; }
+.lx-pay-balance { margin: 14px 0 18px; font-size: 30px; font-weight: 800; letter-spacing: -.5px; }
+.lx-pay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lx-pay-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 0; border-radius: 12px; background: rgba(255, 255, 255, .18); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.lx-pay-btn:hover { background: rgba(255, 255, 255, .28); }
+.lx-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.lx-tx-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--ln-line); }
+.lx-page-subtitle + .lx-tx-row { border-top: 0; }
+.lx-tx-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lx-tx-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.lx-tx-main small { font-size: 12px; color: var(--ln-muted); }
+.lx-tx-amount { flex-shrink: 0; font-weight: 800; color: var(--ln-text); }
+.lx-tx-amount.plus { color: var(--ln-success); }
+
+/* Sticker shop */
+.lx-shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.lx-shop-card { display: flex; flex-direction: column; gap: 12px; }
+.lx-shop-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px; border-radius: 12px; background: var(--ln-bg); font-size: 28px; text-align: center; }
+.lx-shop-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.lx-shop-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lx-shop-text strong { font-size: 15px; }
+.lx-shop-text small { font-size: 12px; color: var(--ln-muted); line-height: 1.4; }
+.lx-shop-tag { flex-shrink: 0; padding: 4px 10px; border-radius: 999px; background: var(--ln-accent-soft); color: var(--ln-accent); font-size: 12px; font-weight: 800; white-space: nowrap; }
+.lx-shop-tag.owned { background: color-mix(in srgb, var(--ln-success) 14%, var(--ln-surface)); color: var(--ln-success); }
+
+@media (min-width: 700px) and (max-width: 1099px) {
+  .lx-shell.is-page { grid-template-columns: 68px minmax(0, 1fr); }
+}
+@media (max-width: 1099px) {
+  .lx-news-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 699px) {
+  .lx-shell.is-page { grid-template-columns: minmax(0, 1fr); }
+  .lx-page .lx-pane-head, .lx-page > .lx-chips { padding-left: 16px; padding-right: 12px; }
+  .lx-page-body { padding: 4px 12px 24px; gap: 12px; }
+  .lx-voom-grid, .lx-shop-grid { grid-template-columns: minmax(0, 1fr); }
+  .lx-news-hero-text h3 { font-size: 16px; }
+  .lx-news-hero-nav { width: 44px; height: 44px; }
+  .lx-pay-balance { font-size: 26px; }
+}
+
+/* Friend / call detail card: fits any phone width, actions in a 2x2 grid. */
+@media (max-width: 699px) {
+  .luno-desktop-app .lx-detail { align-items: stretch; }
+  .luno-desktop-app .lx-detail :is(.pc-profile-preview-card, .pc-call-detail-card) { width: 100%; max-width: 100% !important; box-sizing: border-box; padding: 24px 16px !important; }
+  .luno-desktop-app .lx-detail .profile-preview-actions { width: 100%; }
+  .luno-desktop-app .lx-detail .btn-start-chat-large { width: 100%; }
+  .luno-desktop-app .lx-detail .profile-preview-subactions { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; overflow: visible !important; }
+  .luno-desktop-app .lx-detail .btn-subaction-pill { width: 100%; justify-content: center; }
+}

@@ -71,7 +71,10 @@ test('list pane is a fixed shell column on wide screens and the only pane on pho
   // main pane are grid columns, and phones swap list/detail instead.
   assert.match(shellCss, /\.lx-shell \{[^}]*grid-template-columns: 76px 340px minmax\(0, 1fr\);/)
   assert.match(shellCss, /\.lx-shell\.is-detail \.lx-list \{ display: none; \}/)
-  assert.match(vue, /class="lx-shell" :class="\{ 'is-detail': mobileDetailOpen \}"/)
+  assert.match(vue, /class="lx-shell" :class="\{ 'is-detail': mobileDetailOpen, 'is-page': PAGE_NAVS\.includes\(activeNav\) \}"/)
+  // Content tabs (news, wallet, VOOM, shop) are whole pages that use both columns.
+  assert.match(shellCss, /\.lx-shell\.is-page \{ grid-template-columns: 76px minmax\(0, 1fr\); \}/)
+  assert.match(shellCss, /\.lx-shell\.is-page \.lx-main \{ display: none; \}/)
 })
 
 test('file input is programmatically clickable (no hidden attribute)', () => {
