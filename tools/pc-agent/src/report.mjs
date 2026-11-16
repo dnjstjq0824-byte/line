@@ -85,7 +85,9 @@ export function failureBody({ task, ms, reason }) {
 // The lines a person (or the next Muse turn) needs to fix a red run: failing
 // test names and the assertion / overflow messages under them. Capped.
 export function failureExcerpt(output, max = 3000) {
-  const keep = /^\s*(✖ |not ok |FAIL\b|AssertionError|Error:|error -|  error|Expected:|Actual:|Which:|.*overflowed by|.*\[E\]$|C:[\\/].*_test\.dart: )/;
+  // The last alternative keeps Flutter's "error-causing widget" line
+  // (e.g. "Row Row:file:///…/home.dart:132:11"), which names the culprit.
+  const keep = /^\s*(✖ |not ok |FAIL\b|AssertionError|Error:|error -|  error|Expected:|Actual:|Which:|.*overflowed by|.*\[E\]$|C:[\\/].*_test\.dart: |\w+ \w+:file:\/\/\/.*\.dart:\d+)/;
   const lines = String(output || '').split(/\r?\n/).filter((l) => keep.test(l) && !/failing tests:$/.test(l));
   const unique = [...new Set(lines.map((l) => l.trimEnd()))];
   const text = unique.join('\n');
