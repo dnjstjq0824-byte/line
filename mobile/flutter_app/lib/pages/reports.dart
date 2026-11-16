@@ -41,6 +41,7 @@ class _ReportsPageState extends State<ReportsPage> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.backWord,
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),

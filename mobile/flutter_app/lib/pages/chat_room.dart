@@ -206,13 +206,18 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(context.l10n.roomReplying,
-                    style: TextStyle(
-                        fontSize: HarborType.small,
-                        fontWeight: FontWeight.w600,
-                        color: dark ? HarborDark.ink : HarborLight.harbor)),
+                // F25: let a scaled reply label shrink instead of
+                // overflowing the row on a 360px phone.
+                Expanded(
+                  child: Text(context.l10n.roomReplying,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: HarborType.small,
+                          fontWeight: FontWeight.w600,
+                          color: dark ? HarborDark.ink : HarborLight.harbor)),
+                ),
                 IconButton(
                   tooltip: context.l10n.mvCancel,
                   icon: const Icon(Icons.close, size: 16),
