@@ -214,6 +214,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         fontWeight: FontWeight.w600,
                         color: dark ? HarborDark.ink : HarborLight.harbor)),
                 IconButton(
+                  tooltip: context.l10n.mvCancel,
                   icon: const Icon(Icons.close, size: 16),
                   onPressed: () =>
                       SessionScope.of(context, listen: false).setReply(''),
