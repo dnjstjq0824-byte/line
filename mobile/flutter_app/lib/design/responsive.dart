@@ -475,6 +475,7 @@ class _TabBar extends StatelessWidget {
                     selected: i == index,
                     color: i == index ? accent : idle,
                     badge: LunoNav.primary[i].route == '/chats' ? unread : 0,
+                    compact: compact,
                   ),
                 ),
             ],
@@ -490,11 +491,13 @@ class _TabItem extends StatelessWidget {
   final bool selected;
   final Color color;
   final int badge;
+  final bool compact;
   const _TabItem({
     required this.destination,
     required this.selected,
     required this.color,
     required this.badge,
+    required this.compact,
   });
 
   @override
@@ -502,6 +505,9 @@ class _TabItem extends StatelessWidget {
     final label = destination.labelIn(context.l10n);
     final icon = Icon(selected ? destination.activeIcon : destination.icon,
         size: 24, color: color);
+    // F25: shrink-wrap the column (no Center: it expands to the Scaffold's
+    // loose max height and squeezes the page body to zero). Fixed vertical
+    // padding restores the ~56/60 touch height at 1x and still grows at 200%.
     return Semantics(
       button: true,
       selected: selected,
@@ -511,28 +517,30 @@ class _TabItem extends StatelessWidget {
         onTap: () => context.go(destination.route),
         containedInkWell: true,
         highlightShape: BoxShape.rectangle,
-        child: Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: compact ? 8 : 9),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            badge > 0
-                ? Badge(
-                    label: Text(badge > 99 ? '99+' : '$badge'),
-                    backgroundColor: Theme.of(context).brightness == Brightness.dark
-                        ? HarborDark.beacon
-                        : HarborLight.beacon,
-                    child: icon,
-                  )
-                : icon,
-            const SizedBox(height: 3),
-            Text(label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: HarborType.micro,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                    color: color)),
+            children: [
+              badge > 0
+                  ? Badge(
+                      label: Text(badge > 99 ? '99+' : '$badge'),
+                      backgroundColor:
+                          Theme.of(context).brightness == Brightness.dark
+                              ? HarborDark.beacon
+                              : HarborLight.beacon,
+                      child: icon,
+                    )
+                  : icon,
+              const SizedBox(height: 3),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: HarborType.micro,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                      color: color)),
             ],
           ),
         ),

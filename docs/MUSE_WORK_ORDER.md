@@ -22,7 +22,7 @@
 ## 카드
 
 - [x] **A1 F25 웹 접근성 마무리** — `f25f591`의 axe 하네스로 로그인·채팅 목록·대화방·친구·더보기 화면을 검사해 위반 0으로 만든다. 아이콘 버튼 aria-label, 포커스 순서, 대비 AA, 새 메시지 `aria-live` 안내. 완료: axe 위반 0을 확인하는 테스트(`scripts/`)가 통과. → 완료: 아이콘 버튼 전체에 aria-label·스킵링크·aria-live·포커스 가시화 적용, axe_scan 5화면(chats/room/friends/more) 확장, scripts/f25_accessibility.test.mjs 7/7 통과(전체 스위트·vue-tsc·실브라우저 axe는 셸 장애로 러너 확인 필요).
-- [ ] **A2 F25 앱 접근성 마무리** — 아이콘 버튼 Semantics/tooltip, 글자 크기 200%(textScaler 2.0)에서 홈·채팅·채팅방·통화·뉴스·더보기·설정이 overflow 없이 그려진다. 완료: 360px·textScaler 2.0 위젯 테스트 추가, `flutter test` 통과.
+- [x] **A2 F25 앱 접근성 마무리** — 아이콘 버튼 Semantics/tooltip, 글자 크기 200%(textScaler 2.0)에서 홈·채팅·채팅방·통화·뉴스·더보기·설정이 overflow 없이 그려진다. 완료: 360px·textScaler 2.0 위젯 테스트 추가, `flutter test` 통과. → 완료: f25_text_scale_test 14/14·전체 flutter 371/371 통과, 탭바가 본문을 0 높이로 누르던 결함 수정(축소 래핑+패딩).
 - [ ] **A3 F30 고객 문의 — 서버·관리자** — D1 테이블(런타임 스키마, `CREATE TABLE IF NOT EXISTS`), `POST /api/v1/support/tickets`(분류·내용·앱 버전·기기 정보, 첨부 id 선택), 내 문의 목록, 관리자 목록·답변 API. 답변 시 공식 계정 메시지로 전달. 완료: 문의→답변→내 목록에 답변 표시 E2E 테스트 통과.
 - [ ] **A4 F30 고객 문의 — 웹** — 설정 창에 "문의하기"(분류·내용·제출)와 내 문의 목록(답변 표시). 완료: 컴포넌트 존재·API 호출을 핀하는 테스트, vue-tsc 통과.
 - [ ] **A5 F30 고객 문의 — 앱** — 설정 > 문의하기 화면(분류·내용·제출, 앱 버전 자동 포함)과 내 문의 목록. 완료: 위젯 테스트(제출 요청 경로·본문 확인), `flutter test` 통과.
