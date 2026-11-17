@@ -1418,6 +1418,16 @@ async function d1Batch(db, stmts) {
 // F3: 30-day deletion grace. Reasons come from a fixed set; the confirm
 // phrase is the account email (locale-free, no new strings).
 const ACCOUNT_DELETE_GRACE_MS = 30 * 24 * 3600 * 1000;
+// F28: retention windows in days. TEMPORARY VALUES (임시값) — legal review
+// must fix the final periods; every number below is a placeholder, not policy.
+// Deleted-account grace reuses the settled F3 30-day window (not provisional).
+const RETENTION_DAYS = {
+  messages: 1095, // 3y 임시값
+  attachments: 1095, // 3y 임시값
+  access_records: 90, // revoked sessions only; 90d 임시값
+  audit_logs: 1825, // 5y 임시값
+  reports: 1095, // closed reports only; 3y 임시값
+};
 const DELETE_REASONS = new Set(['not_using', 'privacy', 'hard_to_use', 'other']);
 function deletionGraceUntil(fromIso) {
   return new Date(Date.parse(fromIso) + ACCOUNT_DELETE_GRACE_MS).toISOString();
@@ -1590,6 +1600,45 @@ async function deleteAccountData(userId) {
   // Migration-only tables may not exist on every database; purge past them.
   await db.prepare('DELETE FROM luno_conversation_members WHERE user_id = ?').bind(userId).run().catch(() => null);
   await db.prepare('DELETE FROM luno_user_roles WHERE user_id = ?').bind(userId).run().catch(() => null);
+}
+// F28: delete only rows past their retention window. Live sessions stay
+// (current state, not history), open reports stay (pending work), and
+// deletions finalize only past the F3 grace. Returns per-type counts.
+async function purgeExpiredData() {
+  const db = dbOf();
+  if (!db) return null;
+  await ensureSchema();
+  const counts = { messages: 0, attachments: 0, access_records: 0, audit_logs: 0, reports: 0, deleted_accounts: 0 };
+  const cutoff = (days) => new Date(Date.now() - days * 86400000).toISOString();
+  const msgCut = cutoff(RETENTION_DAYS.messages);
+  counts.messages = Number((await db.prepare('DELETE FROM luno_messages WHERE created_at < ?').bind(msgCut).run().catch(() => null))?.meta?.changes || 0);
+  for (const [cid, list] of Array.from(messages)) {
+    const kept = (list || []).filter(m => !(m.created_at && m.created_at < msgCut));
+    if (kept.length !== (list || []).length) messages.set(cid, kept);
+  }
+  const attCut = cutoff(RETENTION_DAYS.attachments);
+  const bucket = mediaBucketOf();
+  const old = await db.prepare('SELECT id, object_key FROM attachments WHERE created_at < ?').bind(attCut).all().catch(() => ({ results: [] }));
+  for (const r of (old.results || [])) {
+    if (bucket && r.object_key) await bucket.delete(r.object_key).catch(() => {});
+  }
+  counts.attachments = Number((await db.prepare('DELETE FROM attachments WHERE created_at < ?').bind(attCut).run().catch(() => null))?.meta?.changes || 0)
+    + Number((await db.prepare('DELETE FROM luno_attachments WHERE created_at < ?').bind(attCut).run().catch(() => null))?.meta?.changes || 0);
+  counts.access_records = Number((await db.prepare('DELETE FROM luno_sessions WHERE revoked_at IS NOT NULL AND revoked_at < ?').bind(cutoff(RETENTION_DAYS.access_records)).run().catch(() => null))?.meta?.changes || 0);
+  counts.audit_logs = Number((await db.prepare('DELETE FROM luno_audit WHERE created_at < ?').bind(cutoff(RETENTION_DAYS.audit_logs)).run().catch(() => null))?.meta?.changes || 0);
+  counts.reports = Number((await db.prepare("DELETE FROM reports WHERE status IN ('resolved','dismissed') AND created_at < ?").bind(cutoff(RETENTION_DAYS.reports)).run().catch(() => null))?.meta?.changes || 0);
+  for (const r of (await db.prepare("SELECT id, deleted_at FROM users WHERE state = 'deleted'").all().catch(() => ({ results: [] }))).results || []) {
+    if (deletionExpired({ state: 'deleted', deleted_at: r.deleted_at })) {
+      await deleteAccountData(r.id);
+      counts.deleted_accounts++;
+    }
+  }
+  for (const rep of Array.from(adminReports)) {
+    if ((rep.state === 'resolved' || rep.state === 'dismissed') && rep.created_at && rep.created_at < cutoff(RETENTION_DAYS.reports)) {
+      adminReports.splice(adminReports.indexOf(rep), 1);
+    }
+  }
+  return counts;
 }
 async function listSessionsFor(userId, currentSid) {
   const db = dbOf();
@@ -6336,6 +6385,17 @@ function entitled(u, feature) {
       await saveFeatureFlag(key, b.enabled);
       await persistAudit(myId, `feature_flag.${b.enabled ? 'enable' : 'disable'}`, key);
       return json({ status: 'updated', feature_flags: await listFeatureFlags() });
+    }
+    // F28: admin-run retention purge (manual execution only, never cron).
+    if (p === 'admin/retention/purge' && method === 'POST') {
+      if (!dbOf()) return bad('retention purge requires a configured database', 503);
+      const counts = await purgeExpiredData();
+      await persistAudit(myId, 'retention.purge', 'retention', counts || {});
+      return json({
+        status: 'purged',
+        purged: counts,
+        retention_days: { ...RETENTION_DAYS, deleted_accounts_grace_days: Math.round(ACCOUNT_DELETE_GRACE_MS / 86400000) },
+      });
     }
     // F29: instant blind (temporary; unhide restores). Hiding an attachment
     // deletes its bytes and blocklists the SHA-256 against re-upload.
