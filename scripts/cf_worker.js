@@ -137,7 +137,7 @@ const THEME_CATALOG = [
 ];
 const DEFAULT_PREFS = {
   theme: 'mint', dark_mode: false, language: 'ko', font_size: 'medium',
-  show_read_receipts: true, searchable_by_id: true, searchable_by_email: false,
+  show_read_receipts: true, searchable_by_id: true, searchable_by_email: false, discoverable_by_phone: true,
   allow_friend_requests: true, notifications: true, notification_preview: true,
   letter_sealing: false, wallpaper: 'default', link_previews: true
 };
@@ -328,6 +328,7 @@ const LUNO_SCHEMA_BASE = [
     status_message TEXT DEFAULT '', bio TEXT DEFAULT '', phone_number TEXT DEFAULT '',
     birthday TEXT DEFAULT '', state TEXT DEFAULT 'active', kind TEXT DEFAULT 'user',
     email_verified INTEGER DEFAULT 0, deleted_at TEXT DEFAULT '', deletion_reason TEXT DEFAULT '',
+    phone_verified INTEGER DEFAULT 0, phone_hmac TEXT DEFAULT '', contact_consent_at TEXT DEFAULT '',
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   // F1: email verification codes (hash only, 15-minute life, 5 attempts).
   `CREATE TABLE IF NOT EXISTS luno_email_codes (
@@ -555,6 +556,9 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['users', 'status_message', "TEXT DEFAULT ''"],
   ['users', 'bio', "TEXT DEFAULT ''"],
   ['users', 'phone_number', "TEXT DEFAULT ''"],
+  ['users', 'phone_verified', 'INTEGER DEFAULT 0'],
+  ['users', 'phone_hmac', "TEXT DEFAULT ''"],
+  ['users', 'contact_consent_at', "TEXT DEFAULT ''"],
   ['users', 'state', "TEXT DEFAULT 'active'"],
   ['users', 'kind', "TEXT DEFAULT 'user'"],
   // F1: legacy rows grandfather to verified (they registered before
@@ -2687,6 +2691,7 @@ function cacheUserRow(row, granted) {
   const u = applyStoredPassword({
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: granted,
+    phone: row.phone_number || '', phone_verified: row.phone_verified ? 1 : 0, phone_hmac: row.phone_hmac || '', contact_consent_at: row.contact_consent_at || '',
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', plan: row.plan || 'personal', created_at: row.created_at,
     state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
     deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
@@ -2705,6 +2710,7 @@ async function loadUserFromD1(id, knownRole) {
   const u = applyStoredPassword({
     id: row.id, email: row.email, handle: row.handle || '', birthday: row.birthday || '',
     display_name: row.display_name || row.email.split('@')[0], role: knownRole === undefined ? await storedUserRole(row.id) : knownRole,
+    phone: row.phone_number || '', phone_verified: row.phone_verified ? 1 : 0, phone_hmac: row.phone_hmac || '', contact_consent_at: row.contact_consent_at || '',
     bio: row.bio || '', status_message: row.status_message || '', avatar_url: row.avatar_url || '', cover_url: row.cover_url || '', avatar_color: row.avatar_color || '#4F7CFF', plan: row.plan || 'personal', created_at: row.created_at,
     state: row.state || undefined, kind: row.kind || 'user', email_verified: row.email_verified === 0 ? 0 : 1,
     deleted_at: row.deleted_at || '', deletion_reason: row.deletion_reason || ''
@@ -3401,6 +3407,14 @@ function parseJsonSafe(text, fallback) {
     const v = JSON.parse(String(text ?? ''));
     return v === undefined ? fallback : v;
   } catch { return fallback; }
+}
+// F26: strict E.164 for the contact directory (uploads and bindings alike).
+const E164_RE = /^\+[1-9][0-9]{7,14}$/;
+// F26: directory HMAC key. Short or missing means discovery stays off.
+function contactMatchSecret(env) {
+  const src = env || (typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null);
+  const s = String((src && src.CONTACT_MATCH_SECRET) || '');
+  return s.length >= 16 ? s : '';
 }
 async function hmacSha256Hex(secret, text) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(secret)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -4269,6 +4283,66 @@ async function fetchLinkPreview(target) {
     }
     await dbOf().prepare('INSERT INTO luno_link_previews (url, title, description, image_url, ok, fetched_at) VALUES (?, ?, ?, ?, 1, ?) ON CONFLICT(url) DO UPDATE SET title = excluded.title, description = excluded.description, image_url = excluded.image_url, ok = 1, fetched_at = excluded.fetched_at').bind(target, pv.title, pv.description, pv.image_url, Date.now()).run();
     return json({ url: target, title: pv.title, description: pv.description, image_url: pv.image_url, unavailable: false, cached: false });
+  }
+  // F26: contact discovery. Off unless phone auth runs; consented callers
+  // match E.164 uploads against verified, discoverable, unblocked users.
+  // Uploaded numbers are HMAC-compared and never stored or logged.
+  if (p === 'contacts/consent') {
+    if (method === 'GET') return json({ consented: !!me.contact_consent_at, consented_at: me.contact_consent_at || '' });
+    if (method === 'POST') {
+      if (!await rateLimit('rl:contactconsent:' + myId, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+      const b = await readJson(request);
+      if (typeof b.consented !== 'boolean') return bad('consented must be true or false');
+      me.contact_consent_at = b.consented ? now() : '';
+      if (dbOf()) {
+        await ensureSchema();
+        await dbOf().prepare('UPDATE users SET contact_consent_at = ? WHERE id = ?').bind(me.contact_consent_at, myId).run();
+      }
+      return json({ consented: !!me.contact_consent_at, consented_at: me.contact_consent_at });
+    }
+  }
+  if (p === 'contacts/match' && method === 'POST') {
+    const cenv = (typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null);
+    if (resolveSmsDriver(cenv) === 'none') return json({ error: '연락처 찾기를 사용할 수 없습니다. 휴대폰 인증 기능이 꺼져 있습니다.', code: 'PHONE_AUTH_DISABLED' }, 503);
+    const secret = contactMatchSecret(cenv);
+    if (!secret) return json({ error: 'contact discovery not configured', code: 'CONTACT_DISCOVERY_UNCONFIGURED' }, 503);
+    if (!dbOf()) return json({ error: 'contact discovery needs a database', code: 'DB_REQUIRED' }, 503);
+    if (!me.contact_consent_at) return json({ error: '연락처 찾기에 먼저 동의해 주세요.', code: 'CONTACT_CONSENT_REQUIRED' }, 403);
+    const b = await readJson(request);
+    if (!Array.isArray(b.phones) || !b.phones.length) return bad('전화번호 목록이 필요합니다');
+    if (b.phones.length > 500) return json({ error: 'too many numbers', code: 'TOO_MANY_NUMBERS' }, 400);
+    if (!await rateLimit('rl:contactmatch:' + myId, 30)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const want = [];
+    for (const raw of b.phones) {
+      const e164 = String(raw || '').trim();
+      if (E164_RE.test(e164)) want.push(e164);
+    }
+    const matches = [];
+    if (want.length) {
+      await ensureSchema();
+      const hmacs = [];
+      for (const e of want) hmacs.push(await hmacSha256Hex(secret, e));
+      const ph = hmacs.map(() => '?').join(',');
+      const rows = (await dbOf().prepare(`SELECT id, phone_hmac, prefs_json FROM users WHERE phone_verified = 1 AND phone_hmac IN (${ph})`).bind(...hmacs).all().catch(() => ({ results: [] }))).results || [];
+      const byHmac = new Map(rows.map(r => [r.phone_hmac, r]));
+      for (let i = 0; i < want.length; i++) {
+        const row = byHmac.get(hmacs[i]);
+        if (!row || row.id === myId) continue;
+        hydrateUserPrefs(row.id, row.prefs_json);
+        if (prefsOf(row.id).discoverable_by_phone === false) continue;
+        const blk = await blockState(myId, row.id);
+        if (blk.byMe || blk.byThem) continue;
+        if (fMeta(myId, row.id).hidden || fMeta(row.id, myId).hidden) continue;
+        const hid = await dbOf().prepare('SELECT 1 AS x FROM friends WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) AND is_hidden = 1').bind(myId, row.id, row.id, myId).first().catch(() => null);
+        if (hid) continue;
+        const u = usersById.get(row.id) || await loadUserFromD1(row.id, undefined);
+        if (!u || u.state === 'suspended' || u.state === 'deleted') continue;
+        if (matches.some(m => m.user.id === u.id)) continue;
+        matches.push({ phone: want[i], user: publicUser(u) });
+      }
+    }
+    await persistAudit(myId, 'contacts.match', myId, { uploaded: want.length, matched: matches.length });
+    return json({ matches });
   }
   if (p === 'me/settings') {
     const prefs = prefsOf(myId);
@@ -7774,6 +7848,31 @@ const workerCore = {
           return bad('인증번호가 올바르지 않거나 만료되었습니다', 400);
         }
         phoneVerificationCodes.delete(phone);
+        // F26: an authenticated caller binds the verified number to their own
+        // account (strict E.164, single owner). Anonymous callers keep the
+        // login-by-phone path below exactly as before.
+        const binder = await getAuthUser(request);
+        if (binder) {
+          if (!E164_RE.test(phone)) return json({ error: '휴대폰 번호는 +8210... 형식이어야 합니다', code: 'E164_REQUIRED' }, 400);
+          const ownedMem = Array.from(users.values()).some(u => u.id !== binder.id && (u.phone === phone || u.phone_number === phone));
+          let ownedDb = null;
+          if (dbOf()) {
+            await ensureSchema();
+            ownedDb = await dbOf().prepare('SELECT id FROM users WHERE phone_number = ? AND id != ?').bind(phone, binder.id).first().catch(() => null);
+          }
+          if (ownedMem || ownedDb) return json({ error: '이미 등록된 전화번호입니다', code: 'PHONE_TAKEN' }, 409);
+          const secret = contactMatchSecret(env);
+          const hmac = secret ? await hmacSha256Hex(secret, phone) : '';
+          binder.phone = phone;
+          binder.phone_verified = 1;
+          binder.phone_hmac = hmac;
+          if (dbOf()) {
+            await ensureSchema();
+            await dbOf().prepare('UPDATE users SET phone_number = ?, phone_verified = 1, phone_hmac = ? WHERE id = ?').bind(phone, hmac, binder.id).run();
+          }
+          await persistAudit(binder.id, 'phone.bind', binder.id, {});
+          return json({ status: 'verified' });
+        }
         const user = Array.from(users.values()).find(u => u.phone === phone);
         if (!user) return bad('가입되지 않은 전화번호입니다', 404);
         if (user.role === 'admin') return bad('관리자 계정은 전화번호로 로그인할 수 없습니다', 403);
