@@ -3660,6 +3660,9 @@ onBeforeUnmount(() => {
               <option value="spam">{{ t('reportCatSpam') }}</option>
               <option value="abuse">{{ t('reportCatAbuse') }}</option>
               <option value="harassment">{{ t('reportCatHarassment') }}</option>
+              <option value="illegal_filming">{{ t('reportCatIllegalFilming') }}</option>
+              <option value="child_exploitation">{{ t('reportCatChildExploitation') }}</option>
+              <option value="violence">{{ t('reportCatViolence') }}</option>
               <option value="other">{{ t('reportCatOther') }}</option>
             </select>
           </label>

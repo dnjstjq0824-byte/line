@@ -253,6 +253,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportCatHarassment => 'Harassment';
 
   @override
+  String get reportCatIllegalFilming => 'Illegal filming';
+
+  @override
+  String get reportCatChildExploitation => 'Child exploitation';
+
+  @override
+  String get reportCatViolence => 'Violence';
+
+  @override
   String get mvDeleteReasonOther => 'Other';
 
   @override

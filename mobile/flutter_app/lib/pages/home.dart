@@ -397,6 +397,9 @@ Future<void> reportUserSheet(BuildContext context, SessionController session,
     'spam': context.l10n.reportCatSpam,
     'abuse': context.l10n.reportCatAbuse,
     'harassment': context.l10n.reportCatHarassment,
+    'illegal_filming': context.l10n.reportCatIllegalFilming,
+    'child_exploitation': context.l10n.reportCatChildExploitation,
+    'violence': context.l10n.reportCatViolence,
     'other': context.l10n.mvDeleteReasonOther,
   };
   await showModalBottomSheet<void>(

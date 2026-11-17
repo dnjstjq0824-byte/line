@@ -252,6 +252,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reportCatHarassment => '嫌がらせ';
 
   @override
+  String get reportCatIllegalFilming => '盗撮物';
+
+  @override
+  String get reportCatChildExploitation => '児童性的搾取物';
+
+  @override
+  String get reportCatViolence => '暴力';
+
+  @override
   String get mvDeleteReasonOther => 'その他';
 
   @override

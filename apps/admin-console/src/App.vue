@@ -19,6 +19,8 @@ const email = ref(''), password = ref(''), token = ref(''), error = ref(''), not
 const metrics = ref<Record<string, number>>({})
 const users = ref<Array<Record<string, string>>>([])
 const reports = ref<Array<Record<string, string>>>([])
+// F29: instant-blind form state (target comes from the report details).
+const hideType = ref('message'), hideTargetId = ref(''), hideReason = ref('')
 const auditLogs = ref<Array<Record<string, string>>>([])
 const featureFlags = ref<Array<Record<string, unknown>>>([])
 // F22: masked client telemetry (errors + API timings).
@@ -50,6 +52,28 @@ const teleColumns = computed(() => [
   { key: 'name', label: 'name' },
   { key: 'message', label: 'message' },
 ])
+
+// F29: the severe new categories pin to the top of the queue (stable).
+const severeReportCats = ['illegal_filming', 'child_exploitation', 'violence']
+const sortedReports = computed(() => {
+  const rank = (c: string) => (severeReportCats.includes(c) ? 0 : 1)
+  return [...reports.value].sort((a, b) => rank(a.category || '') - rank(b.category || ''))
+})
+
+async function blindTarget(unhide: boolean) {
+  if (!hideTargetId.value.trim()) return
+  await run(async () => {
+    await request(unhide ? '/api/v1/admin/moderation/unhide' : '/api/v1/admin/moderation/hide', token.value, 'POST', {
+      target_type: hideType.value,
+      target_id: hideTargetId.value.trim(),
+      reason: hideReason.value.trim(),
+    })
+    note.value = t(unhide ? 'admin.unhideDone' : 'admin.hideDone')
+    hideTargetId.value = ''
+    hideReason.value = ''
+    await load()
+  })
+}
 
 async function run(fn: () => Promise<void>) {
   error.value = ''; note.value = ''
@@ -241,8 +265,22 @@ async function deleteNewsArticle(id: string) {
 
       <section class="panel">
         <h2>{{ t('admin.reports') }}</h2>
+        <form @submit.prevent="blindTarget(false)" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+          <strong style="font-size:13px">{{ t('admin.hideTitle') }}</strong>
+          <label style="font-size:12px;color:#64748b">{{ t('admin.hideType') }}</label>
+          <select v-model="hideType" style="padding:6px 10px;border:1px solid #b6c5d5;border-radius:8px">
+            <option value="message">message</option>
+            <option value="feed_post">feed_post</option>
+            <option value="community_post">community_post</option>
+            <option value="attachment">attachment</option>
+          </select>
+          <input v-model="hideTargetId" :placeholder="t('admin.hideTargetPh')" required style="flex:1;min-width:160px" />
+          <input v-model="hideReason" :placeholder="t('admin.hideReasonPh')" style="flex:1;min-width:160px" />
+          <BaseButton type="submit" variant="danger">{{ t('admin.hideNow') }}</BaseButton>
+          <BaseButton type="button" @click="blindTarget(true)">{{ t('admin.unhideNow') }}</BaseButton>
+        </form>
         <BaseEmpty v-if="!reports.length" :title="t('admin.reportsEmptyT')" :hint="t('admin.reportsEmptyH')" />
-        <div v-for="r in reports" :key="r.id" class="report-item">
+        <div v-for="r in sortedReports" :key="r.id" class="report-item">
           <div>
             <strong>[{{ r.category }}]</strong> {{ t('admin.reportState') }} <span class="badge">{{ r.state }}</span> — {{ r.details }}
           </div>

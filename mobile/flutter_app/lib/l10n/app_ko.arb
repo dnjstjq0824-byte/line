@@ -324,6 +324,18 @@
   "@reportCatHarassment": {
     "description": "reportCatHarassment (F20)"
   },
+  "reportCatIllegalFilming": "불법촬영물",
+  "@reportCatIllegalFilming": {
+    "description": "reportCatIllegalFilming (F29)"
+  },
+  "reportCatChildExploitation": "아동 성착취물",
+  "@reportCatChildExploitation": {
+    "description": "reportCatChildExploitation (F29)"
+  },
+  "reportCatViolence": "폭력",
+  "@reportCatViolence": {
+    "description": "reportCatViolence (F29)"
+  },
   "mvDeleteReasonOther": "기타",
   "@mvDeleteReasonOther": {
     "description": "mvDeleteReasonOther (F20)"

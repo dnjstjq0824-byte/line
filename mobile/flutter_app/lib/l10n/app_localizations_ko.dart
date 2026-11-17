@@ -252,6 +252,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reportCatHarassment => '괴롭힘';
 
   @override
+  String get reportCatIllegalFilming => '불법촬영물';
+
+  @override
+  String get reportCatChildExploitation => '아동 성착취물';
+
+  @override
+  String get reportCatViolence => '폭력';
+
+  @override
   String get mvDeleteReasonOther => '기타';
 
   @override

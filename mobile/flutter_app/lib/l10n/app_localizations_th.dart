@@ -253,6 +253,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reportCatHarassment => 'คุกคาม';
 
   @override
+  String get reportCatIllegalFilming => 'ภาพแอบถ่าย';
+
+  @override
+  String get reportCatChildExploitation => 'การแสวงหาประโยชน์จากเด็ก';
+
+  @override
+  String get reportCatViolence => 'ความรุนแรง';
+
+  @override
   String get mvDeleteReasonOther => 'อื่น ๆ';
 
   @override

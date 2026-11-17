@@ -588,6 +588,24 @@ abstract class AppLocalizations {
   /// **'괴롭힘'**
   String get reportCatHarassment;
 
+  /// reportCatIllegalFilming (F29)
+  ///
+  /// In ko, this message translates to:
+  /// **'불법촬영물'**
+  String get reportCatIllegalFilming;
+
+  /// reportCatChildExploitation (F29)
+  ///
+  /// In ko, this message translates to:
+  /// **'아동 성착취물'**
+  String get reportCatChildExploitation;
+
+  /// reportCatViolence (F29)
+  ///
+  /// In ko, this message translates to:
+  /// **'폭력'**
+  String get reportCatViolence;
+
   /// mvDeleteReasonOther (F20)
   ///
   /// In ko, this message translates to:
