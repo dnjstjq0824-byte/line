@@ -1985,6 +1985,51 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  /// F26: contact discovery. Consent gates uploads; a 503 marks the
+  /// server feature off (guidance only, never a retry loop).
+  bool contactConsent = false;
+  bool contactConsentLoaded = false;
+  List<dynamic> contactMatches = [];
+  bool contactUnavailable = false;
+
+  Future<void> loadContactConsent() async {
+    try {
+      final res = await api.call('/api/v1/contacts/consent');
+      contactConsent = res['consented'] == true;
+    } catch (_) {
+      contactConsent = false;
+    }
+    contactConsentLoaded = true;
+    notifyListeners();
+  }
+
+  Future<void> setContactConsent(bool v) {
+    return run(() async {
+      final res = await api.call('/api/v1/contacts/consent',
+          method: 'POST', data: {'consented': v});
+      contactConsent = res['consented'] == true;
+      contactConsentLoaded = true;
+    });
+  }
+
+  Future<void> findContacts(List<String> phones) {
+    return run(() async {
+      contactUnavailable = false;
+      try {
+        final res = await api.call('/api/v1/contacts/match',
+            method: 'POST', data: {'phones': phones});
+        contactMatches = (res['matches'] as List?) ?? [];
+      } on ApiException catch (e) {
+        if (e.statusCode == 503) {
+          contactMatches = [];
+          contactUnavailable = true;
+          return;
+        }
+        rethrow;
+      }
+    });
+  }
+
   Future<void> decideProposal(
       String roomId, String messageId, String decision) {
     return run(() async {

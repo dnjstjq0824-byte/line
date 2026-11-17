@@ -14,6 +14,7 @@ import 'pages/channels.dart';
 import 'pages/chat_archive.dart';
 import 'pages/chat_room.dart';
 import 'pages/chats.dart';
+import 'pages/contact_find.dart';
 import 'pages/group_settings.dart';
 import 'pages/console.dart';
 import 'pages/feed.dart';
@@ -137,6 +138,7 @@ GoRouter buildRouter(SessionController session) {
           GoRoute(path: '/qr/scan', pageBuilder: (c, s) => harborPage(c, s, const QrScanPage())),
         GoRoute(path: '/reports', pageBuilder: (c, s) => harborPage(c, s, const ReportsPage())),
           GoRoute(path: '/support', pageBuilder: (c, s) => harborPage(c, s, const SupportPage())),
+          GoRoute(path: '/contacts/find', pageBuilder: (c, s) => harborPage(c, s, const ContactFindPage())),
           GoRoute(path: '/keep', pageBuilder: (c, s) => harborPage(c, s, const KeepPage())),
           GoRoute(path: '/more', pageBuilder: (c, s) => harborPage(c, s, const MorePage())),
           GoRoute(path: '/apps', pageBuilder: (c, s) => harborPage(c, s, const AppsPage())),

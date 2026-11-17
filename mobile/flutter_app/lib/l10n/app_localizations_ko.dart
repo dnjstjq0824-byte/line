@@ -261,6 +261,40 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reportCatViolence => '폭력';
 
   @override
+  String get contactFindTitle => '연락처로 찾기';
+
+  @override
+  String get contactConsentTitle => '연락처 찾기 동의';
+
+  @override
+  String get contactConsentBody =>
+      '주소록의 전화번호를 LUNO 서버와 대조해 친구를 찾습니다. 번호는 저장되지 않습니다.';
+
+  @override
+  String get contactConsentAgree => '동의하고 계속하기';
+
+  @override
+  String get contactConsentLater => '나중에';
+
+  @override
+  String get contactLoad => '연락처 불러오기';
+
+  @override
+  String get contactFindHint => '버튼을 눌러 주소록에서 친구를 찾아보세요.';
+
+  @override
+  String get contactFindEmpty => '일치하는 친구를 찾지 못했습니다.';
+
+  @override
+  String get contactUnavailable => '연락처 찾기를 사용할 수 없습니다.';
+
+  @override
+  String get contactPermTitle => '연락처 권한';
+
+  @override
+  String get contactPermDesc => '주소록에서 친구를 찾으려면 연락처 권한이 필요합니다.';
+
+  @override
   String get mvDeleteReasonOther => '기타';
 
   @override

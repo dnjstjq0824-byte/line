@@ -114,6 +114,12 @@ class _SearchPageState extends State<SearchPage> {
             ),
             if (query.isEmpty) ...[
               const SizedBox(height: 12),
+              _ResultRow(
+                icon: Icons.contacts_outlined,
+                title: context.l10n.contactFindTitle,
+                subtitle: context.l10n.contactFindHint,
+                onTap: () => context.go('/contacts/find'),
+              ),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(context.l10n.mvRecentSearch,

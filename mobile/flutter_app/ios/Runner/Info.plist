@@ -73,6 +73,8 @@
 	<string>LUNO requires microphone access to send voice messages and conduct crystal-clear voice/video calls.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>LUNO requires photo library access to share photos, videos, and media attachments with your friends.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>LUNO reads your address book to find friends by phone number. Numbers are matched as E.164 and never stored.</string>
 	<!-- Background Modes: Push notifications, VoIP CallKit, Audio background session -->
 	<key>UIBackgroundModes</key>
 	<array>

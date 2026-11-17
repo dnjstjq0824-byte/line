@@ -261,6 +261,40 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reportCatViolence => '暴力';
 
   @override
+  String get contactFindTitle => '連絡先から探す';
+
+  @override
+  String get contactConsentTitle => '連絡先検索の同意';
+
+  @override
+  String get contactConsentBody =>
+      'アドレス帳の電話番号をLUNOと照合して友達を探します。番号が保存されることはありません。';
+
+  @override
+  String get contactConsentAgree => '同意して続ける';
+
+  @override
+  String get contactConsentLater => 'あとで';
+
+  @override
+  String get contactLoad => '連絡先を読み込む';
+
+  @override
+  String get contactFindHint => 'ボタンを押してアドレス帳から友達を探しましょう。';
+
+  @override
+  String get contactFindEmpty => '一致する友達が見つかりませんでした。';
+
+  @override
+  String get contactUnavailable => '連絡先検索は利用できません。';
+
+  @override
+  String get contactPermTitle => '連絡先の権限';
+
+  @override
+  String get contactPermDesc => '友達を探すには連絡先へのアクセスが必要です。';
+
+  @override
   String get mvDeleteReasonOther => 'その他';
 
   @override

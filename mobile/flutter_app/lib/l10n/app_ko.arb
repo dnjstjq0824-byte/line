@@ -336,6 +336,50 @@
   "@reportCatViolence": {
     "description": "reportCatViolence (F29)"
   },
+  "contactFindTitle": "연락처로 찾기",
+  "@contactFindTitle": {
+    "description": "contactFindTitle (F26)"
+  },
+  "contactConsentTitle": "연락처 찾기 동의",
+  "@contactConsentTitle": {
+    "description": "contactConsentTitle (F26)"
+  },
+  "contactConsentBody": "주소록의 전화번호를 LUNO 서버와 대조해 친구를 찾습니다. 번호는 저장되지 않습니다.",
+  "@contactConsentBody": {
+    "description": "contactConsentBody (F26)"
+  },
+  "contactConsentAgree": "동의하고 계속하기",
+  "@contactConsentAgree": {
+    "description": "contactConsentAgree (F26)"
+  },
+  "contactConsentLater": "나중에",
+  "@contactConsentLater": {
+    "description": "contactConsentLater (F26)"
+  },
+  "contactLoad": "연락처 불러오기",
+  "@contactLoad": {
+    "description": "contactLoad (F26)"
+  },
+  "contactFindHint": "버튼을 눌러 주소록에서 친구를 찾아보세요.",
+  "@contactFindHint": {
+    "description": "contactFindHint (F26)"
+  },
+  "contactFindEmpty": "일치하는 친구를 찾지 못했습니다.",
+  "@contactFindEmpty": {
+    "description": "contactFindEmpty (F26)"
+  },
+  "contactUnavailable": "연락처 찾기를 사용할 수 없습니다.",
+  "@contactUnavailable": {
+    "description": "contactUnavailable (F26)"
+  },
+  "contactPermTitle": "연락처 권한",
+  "@contactPermTitle": {
+    "description": "contactPermTitle (F26)"
+  },
+  "contactPermDesc": "주소록에서 친구를 찾으려면 연락처 권한이 필요합니다.",
+  "@contactPermDesc": {
+    "description": "contactPermDesc (F26)"
+  },
   "mvDeleteReasonOther": "기타",
   "@mvDeleteReasonOther": {
     "description": "mvDeleteReasonOther (F20)"

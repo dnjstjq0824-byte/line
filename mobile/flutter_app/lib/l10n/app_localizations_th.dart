@@ -262,6 +262,40 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reportCatViolence => 'ความรุนแรง';
 
   @override
+  String get contactFindTitle => 'ค้นหาจากรายชื่อ';
+
+  @override
+  String get contactConsentTitle => 'ยินยอมค้นหาจากรายชื่อ';
+
+  @override
+  String get contactConsentBody =>
+      'เปรียบเทียบเบอร์โทรจากสมุดที่อยู่กับ LUNO เพื่อหาเพื่อน ระบบจะไม่เก็บเบอร์ไว้';
+
+  @override
+  String get contactConsentAgree => 'ยินยอมและดำเนินการต่อ';
+
+  @override
+  String get contactConsentLater => 'ภายหลัง';
+
+  @override
+  String get contactLoad => 'โหลดรายชื่อ';
+
+  @override
+  String get contactFindHint => 'แตะปุ่มเพื่อหาเพื่อนจากสมุดที่อยู่';
+
+  @override
+  String get contactFindEmpty => 'ไม่พบเพื่อนที่ตรงกัน';
+
+  @override
+  String get contactUnavailable => 'ใช้ค้นหาจากรายชื่อไม่ได้';
+
+  @override
+  String get contactPermTitle => 'สิทธิ์รายชื่อ';
+
+  @override
+  String get contactPermDesc => 'การหาเพื่อนต้องเข้าถึงรายชื่อของคุณ';
+
+  @override
   String get mvDeleteReasonOther => 'อื่น ๆ';
 
   @override

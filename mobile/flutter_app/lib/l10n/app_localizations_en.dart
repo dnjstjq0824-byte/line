@@ -262,6 +262,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportCatViolence => 'Violence';
 
   @override
+  String get contactFindTitle => 'Find by contacts';
+
+  @override
+  String get contactConsentTitle => 'Contact discovery consent';
+
+  @override
+  String get contactConsentBody =>
+      'Match phone numbers from your address book against LUNO to find friends. Numbers are never stored.';
+
+  @override
+  String get contactConsentAgree => 'Agree and continue';
+
+  @override
+  String get contactConsentLater => 'Later';
+
+  @override
+  String get contactLoad => 'Load contacts';
+
+  @override
+  String get contactFindHint =>
+      'Tap the button to find friends from your address book.';
+
+  @override
+  String get contactFindEmpty => 'No matching friends found.';
+
+  @override
+  String get contactUnavailable => 'Contact discovery is unavailable.';
+
+  @override
+  String get contactPermTitle => 'Contacts permission';
+
+  @override
+  String get contactPermDesc =>
+      'Finding friends needs access to your contacts.';
+
+  @override
   String get mvDeleteReasonOther => 'Other';
 
   @override

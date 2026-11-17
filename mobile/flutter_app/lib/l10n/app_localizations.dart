@@ -606,6 +606,72 @@ abstract class AppLocalizations {
   /// **'폭력'**
   String get reportCatViolence;
 
+  /// contactFindTitle (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'연락처로 찾기'**
+  String get contactFindTitle;
+
+  /// contactConsentTitle (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'연락처 찾기 동의'**
+  String get contactConsentTitle;
+
+  /// contactConsentBody (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'주소록의 전화번호를 LUNO 서버와 대조해 친구를 찾습니다. 번호는 저장되지 않습니다.'**
+  String get contactConsentBody;
+
+  /// contactConsentAgree (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'동의하고 계속하기'**
+  String get contactConsentAgree;
+
+  /// contactConsentLater (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'나중에'**
+  String get contactConsentLater;
+
+  /// contactLoad (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'연락처 불러오기'**
+  String get contactLoad;
+
+  /// contactFindHint (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'버튼을 눌러 주소록에서 친구를 찾아보세요.'**
+  String get contactFindHint;
+
+  /// contactFindEmpty (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'일치하는 친구를 찾지 못했습니다.'**
+  String get contactFindEmpty;
+
+  /// contactUnavailable (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'연락처 찾기를 사용할 수 없습니다.'**
+  String get contactUnavailable;
+
+  /// contactPermTitle (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'연락처 권한'**
+  String get contactPermTitle;
+
+  /// contactPermDesc (F26)
+  ///
+  /// In ko, this message translates to:
+  /// **'주소록에서 친구를 찾으려면 연락처 권한이 필요합니다.'**
+  String get contactPermDesc;
+
   /// mvDeleteReasonOther (F20)
   ///
   /// In ko, this message translates to:

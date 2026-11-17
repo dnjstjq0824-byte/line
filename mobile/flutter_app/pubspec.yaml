@@ -28,6 +28,7 @@ dependencies:
   flutter_webrtc: 1.6.3 # N2-L: pinned (stage 7 allows the add, version fixed)
   flutter_local_notifications: 22.3.3 # N1-L: pinned (stage 7 allows the add, version fixed)
   url_launcher: ^6.3.3
+  flutter_contacts: ^2.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
