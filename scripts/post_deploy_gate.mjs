@@ -38,8 +38,15 @@ await check('authed route rejects anonymous callers', async () => {
   const r = await get('/api/v1/me');
   if (r.status !== 401) throw new Error(`expected 401, got ${r.status}`);
 });
-await check('unknown api path 404s as json', async () => {
+// /api/v1 checks auth before route lookup, so an anonymous miss is a JSON
+// 401 (anonymous callers cannot map which routes exist); signed-in misses
+// are 404s (f22_monitor.test.mjs). Either way it must never be the SPA page.
+await check('unknown v1 api path is a json error, not the spa', async () => {
   const r = await get('/api/v1/definitely-not-a-route');
+  if (r.status !== 401 || r.json?.error !== 'unauthorized') throw new Error(`status=${r.status}`);
+});
+await check('unknown api path 404s as json', async () => {
+  const r = await get('/api/definitely-not-a-route');
   if (r.status !== 404 || !r.json?.error) throw new Error(`status=${r.status}`);
 });
 

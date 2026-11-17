@@ -40,3 +40,28 @@ test('B1: no watcher or helper script deploys behind the npm scripts', () => {
   }
   assert.deepEqual(offenders, [], 'raw wrangler-deploy invocations must not exist outside gated npm scripts');
 });
+
+// The live gate's api checks, run against the worker with an asset layer
+// that serves the SPA: an /api/ miss must never come back as the page.
+test('B1: unknown api paths are json errors, never the spa', async () => {
+  const { makeD1 } = await import('./test_helpers.mjs');
+  const mod = await import('./cf_worker.js?gate-404');
+  const env = {
+    DB: makeD1(),
+    DURABLE_CONVERSATIONS: 'true',
+    ASSETS: { fetch: async () => new Response('<!doctype html>', { status: 200, headers: { 'Content-Type': 'text/html' } }) },
+  };
+  const get = async (path) => {
+    const res = await mod.default.fetch(new Request('https://localhost' + path), env);
+    return { status: res.status, type: res.headers.get('content-type') || '', body: await res.json().catch(() => null) };
+  };
+  for (const path of ['/api/definitely-not-a-route', '/api/v2/x', '/api']) {
+    const r = await get(path);
+    assert.equal(r.status, 404, path);
+    assert.match(r.type, /application\/json/, path);
+    assert.equal(r.body?.error, 'not_found', path);
+  }
+  const v1 = await get('/api/v1/definitely-not-a-route');
+  assert.equal(v1.status, 401);
+  assert.equal(v1.body?.error, 'unauthorized');
+});

@@ -8775,6 +8775,11 @@ const workerCore = {
       // Unknown routes are real 404s; a placeholder 200 would masquerade as an implemented endpoint.
       return json({ error: 'not_found', path: p }, 404);
     }
+    // Any other /api/ path (no v1 prefix, unknown version) is an API miss,
+    // not a page: without this it fell through to the SPA as a 200 HTML.
+    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+      return json({ error: 'not_found', path: url.pathname }, 404);
+    }
 
     // /download hands over the recommended APK itself (streamed from the
     // release asset, so nothing is stored here); the landing page with every
