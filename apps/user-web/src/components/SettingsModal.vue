@@ -37,6 +37,18 @@ export interface ReportHistoryItem {
   created_at: string
 }
 
+// F30: customer support tickets filed from settings; answers arrive via the
+// admin console and show in my list (plus the official room + push).
+interface SupportTicketItem {
+  id: string
+  category: string
+  body: string
+  status: string
+  answer: string
+  answered_at: string
+  created_at: string
+}
+
 const props = defineProps<{
   devicesList: DeviceItem[]
   translateConfigured: boolean
@@ -239,6 +251,50 @@ async function testPushNotification() {
   })
 }
 
+const supportCategory = ref('bug')
+const supportBody = ref('')
+const supportBusy = ref(false)
+const supportNote = ref('')
+const supportTickets = ref<SupportTicketItem[]>([])
+const supportLoaded = ref(false)
+const supportCategoryOptions = computed(() => [
+  { value: 'account', label: t('supportCatAccount') },
+  { value: 'chat', label: t('supportCatChat') },
+  { value: 'payment', label: t('supportCatPayment') },
+  { value: 'bug', label: t('supportCatBug') },
+  { value: 'other', label: t('supportCatOther') },
+])
+function supportCategoryLabel(category: string) {
+  return supportCategoryOptions.value.find((o) => o.value === category)?.label || category
+}
+async function fetchSupportTickets() {
+  await wrap(async () => {
+    const res = await api<{ tickets: SupportTicketItem[] }>('/api/v1/support/tickets', 'GET')
+    supportTickets.value = res?.tickets || []
+    supportLoaded.value = true
+  })
+}
+async function submitSupportTicket() {
+  if (!supportBody.value.trim() || supportBusy.value) return
+  supportBusy.value = true
+  supportNote.value = ''
+  try {
+    await wrap(async () => {
+      await api('/api/v1/support/tickets', 'POST', {
+        category: supportCategory.value,
+        body: supportBody.value.trim(),
+        app_version: 'web ' + (appVersion.value.worker_version || ''),
+        device_info: typeof navigator === 'undefined' ? 'web' : navigator.userAgent,
+      })
+      supportBody.value = ''
+      supportNote.value = t('supportDoneNote')
+      await fetchSupportTickets()
+    })
+  } finally {
+    supportBusy.value = false
+  }
+}
+
 onMounted(() => {
   profileSaved.value = false
   profileSaveError.value = ''
@@ -247,6 +303,7 @@ onMounted(() => {
   editProfileHandle.value = currentUser.value?.handle || ''
   refreshNotifyState()
   void fetchPasskeys()
+  void fetchSupportTickets()
   void api<Record<string, unknown>>('/api/v1/me/settings').then((prefs) => { linkPreviews.value = prefs.link_previews !== false }).catch(() => {})
 })
 </script>
@@ -397,6 +454,33 @@ onMounted(() => {
               <span>{{ r.state === 'resolved' ? t('reportStateResolved') : r.state === 'dismissed' ? t('reportStateDismissed') : t('reportStateOpen') }}</span>
             </div>
             <div v-if="r.details" class="approval-row-body">{{ r.details }}</div>
+          </div>
+        </div>
+
+        <div class="setting-group" style="margin-top:8px">
+          <strong>{{ t('supportTitle') }}</strong>
+          <label class="pc-input-row" style="margin-top:4px">
+            <span>{{ t('supportCategory') }}</span>
+            <select v-model="supportCategory" class="pc-login-input">
+              <option v-for="opt in supportCategoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+          </label>
+          <textarea v-model="supportBody" rows="3" :placeholder="t('supportBodyPh')" :aria-label="t('supportBodyPh')" class="pc-login-input" style="margin:2px 0 6px" />
+          <div class="flex-row" style="margin-top:6px;gap:8px">
+            <button class="btn-secondary" style="flex:1" :disabled="supportBusy || !supportBody.trim()" @click="submitSupportTicket">{{ t('supportSubmit') }}</button>
+          </div>
+          <div v-if="supportNote" class="muted" style="font-size:12px;margin-top:4px" role="status">{{ supportNote }}</div>
+        </div>
+        <div class="setting-group" style="margin-top:8px">
+          <strong>{{ t('supportHistoryTitle') }}</strong>
+          <p v-if="supportLoaded && !supportTickets.length" class="muted" style="font-size:12px">{{ t('supportHistoryEmpty') }}</p>
+          <div v-for="tk in supportTickets" :key="tk.id" class="approval-row" style="margin-top:6px">
+            <div class="approval-row-head">
+              <span class="badge-kind">{{ supportCategoryLabel(tk.category) }}</span>
+              <span>{{ tk.status === 'answered' ? t('supportStateAnswered') : t('supportStateOpen') }}</span>
+            </div>
+            <div class="approval-row-body">{{ tk.body }}</div>
+            <div v-if="tk.answer" class="approval-row-body">{{ tk.answer }}</div>
           </div>
         </div>
 
