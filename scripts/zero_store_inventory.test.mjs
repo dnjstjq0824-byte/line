@@ -28,6 +28,7 @@ const STATIC = new Set([
   'pushProviders', // N1-L: push provider registry, populated once at module load
   'F22_SECRET_CONTAINS', 'F22_SECRET_EXACT', 'F22_BODY_EXACT', 'F22_EMAIL_EXACT', // F22: frozen mask vocabulary
   'SUPPORT_TICKET_CATEGORIES', // F30: frozen ticket vocabulary
+  'REPORT_CATEGORIES', 'HIDE_TARGET_TYPES', // F29: frozen report + hide vocabularies
 ]);
 const EPHEMERAL = new Set([
   'activeSockets', 'AUTH_CTX', 'callSessions', 'groupCallRooms',

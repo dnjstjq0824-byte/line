@@ -310,6 +310,15 @@ const LUNO_SCHEMA = [
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_support_user ON luno_support_tickets(user_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_support_status ON luno_support_tickets(status, created_at)`,
+  // F29: moderation hide list (temporary blind) + blocked attachment hashes.
+  `CREATE TABLE IF NOT EXISTS luno_hidden_targets (
+    target_type TEXT NOT NULL, target_id TEXT NOT NULL,
+    hidden_by TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (target_type, target_id))`,
+  `CREATE TABLE IF NOT EXISTS luno_blocked_hashes (
+    sha256 TEXT PRIMARY KEY, reason TEXT NOT NULL DEFAULT '',
+    blocked_by TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
 ];
 const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -3471,6 +3480,9 @@ const BOT_ONLY_KINDS = new Set(['proposal', 'decision', 'report']);
 const FORGED_CLIENT_KINDS = new Set(['security_notice', 'pay', 'transfer', 'call_status', 'system']);
 // F30: frozen ticket vocabulary (STATIC in zero_store_inventory).
 const SUPPORT_TICKET_CATEGORIES = ['account', 'chat', 'payment', 'bug', 'other'];
+// F29: frozen report + hide vocabularies (spam predates F29, kept as-is).
+const REPORT_CATEGORIES = ['spam', 'abuse', 'harassment', 'illegal_filming', 'child_exploitation', 'violence', 'other'];
+const HIDE_TARGET_TYPES = ['message', 'feed_post', 'community_post', 'attachment'];
 const pushTokens = new Map();
 const deviceKeys = new Map();
 const userKeys = new Map();
@@ -4681,12 +4693,14 @@ async function followedMap(userId) {
         // D7: deep history pages straight from D1 instead of the 500-message
         // memory window, so rooms beyond 500 messages stay readable.
         await ensureSchema();
-        const { results } = await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence < ? ORDER BY sequence DESC LIMIT ?').bind(cid, before, limit + 1).all();
+        const { results } = await db.prepare("SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence < ? AND id NOT IN (SELECT target_id FROM luno_hidden_targets WHERE target_type = 'message') ORDER BY sequence DESC LIMIT ?").bind(cid, before, limit + 1).all();
         const rows = (results || []).filter(r => !(hs && hs.has(r.id)));
         await hydrateReactions(rows.map(r => r.id));
         return json({ messages: rows.slice(0, limit).reverse().map(r => decorateMessage(rowToMessage(r), myId, cid)), has_more: rows.length > limit });
       }
       let list = (messages.get(cid) || []).filter(x => !(hs && hs.has(x.id)));
+      const hidMem = await hiddenTargetIds('message', list.map(x => x.id));
+      list = list.filter(x => !hidMem.has(x.id));
       if (before) list = list.filter(x => x.sequence < before);
       return json({ messages: list.slice(-limit).map(x => decorateMessage(x, myId, cid)), has_more: list.length > limit });
     }
@@ -4821,6 +4835,19 @@ async function followedMap(userId) {
   }
 // F9: unsend removes the attachment bytes with the metadata rows so an R2
 // object never outlives its message (account purge covers the rest).
+// F29: hidden ids among the given page (bounded IN query; empty without D1).
+async function hiddenTargetIds(type, ids) {
+  const out = new Set();
+  const list = (ids || []).filter(Boolean);
+  if (!list.length) return out;
+  const db = dbOf();
+  if (!db) return out;
+  await ensureSchema().catch(() => {});
+  const ph = list.map(() => '?').join(',');
+  const rows = (await db.prepare(`SELECT target_id FROM luno_hidden_targets WHERE target_type = ? AND target_id IN (${ph})`).bind(type, ...list).all().catch(() => ({ results: [] }))).results || [];
+  for (const r of rows) out.add(r.target_id);
+  return out;
+}
 async function deleteAttachmentEverywhere(attId) {
   const db = dbOf();
   if (!db) return;
@@ -5352,6 +5379,11 @@ async function deleteAttachmentEverywhere(attId) {
     if (!quota.ok) return json({ error: 'daily upload quota exceeded', code: 'QUOTA_EXCEEDED', quota_reason: quota.reason }, 429);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    // F29: moderation-blocked bytes are rejected before they touch storage.
+    const upHash = await sha256Hex(bytes);
+    await ensureSchema().catch(() => {});
+    const blocked = await store.prepare('SELECT sha256 FROM luno_blocked_hashes WHERE sha256 = ?').bind(upHash).first().catch(() => null);
+    if (blocked) return json({ error: '차단된 파일입니다', code: 'ATTACHMENT_BLOCKED' }, 403);
     const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, bytes };
     await persistAttachmentR2(att);
     return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: bytes.length, quota: { uploads_today: quota.uploads, bytes_today: quota.bytes } }, 201);
@@ -5508,7 +5540,7 @@ async function deleteAttachmentEverywhere(attId) {
       const visible = [myId, ...friendIds(myId).filter(f => !fMeta(myId, f).hidden && !fMeta(myId, f).blocked)];
       const ph = visible.map(() => '?').join(',');
       const { results } = await sdb.prepare(
-        `SELECT * FROM luno_timeline_posts WHERE author_id IN (${ph}) AND (visibility = 'friends' OR author_id = ?) ORDER BY created_at DESC, rowid DESC LIMIT 100`
+        `SELECT * FROM luno_timeline_posts WHERE author_id IN (${ph}) AND (visibility = 'friends' OR author_id = ?) AND id NOT IN (SELECT target_id FROM luno_hidden_targets WHERE target_type = 'feed_post') ORDER BY created_at DESC, rowid DESC LIMIT 100`
       ).bind(...visible, myId).all();
       const rows = results || [];
       const ids = rows.map(r => r.id);
@@ -5826,7 +5858,7 @@ function entitled(u, feature) {
     if (!room) return bad('오픈채팅을 찾을 수 없습니다', 404);
     if (method === 'GET') {
       const mine = await sdb.prepare('SELECT nickname FROM luno_community_members WHERE room_id = ? AND user_id = ?').bind(m[1], myId).first();
-      const { results } = await sdb.prepare('SELECT * FROM luno_community_posts WHERE room_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 200').bind(m[1]).all();
+      const { results } = await sdb.prepare("SELECT * FROM luno_community_posts WHERE room_id = ? AND id NOT IN (SELECT target_id FROM luno_hidden_targets WHERE target_type = 'community_post') ORDER BY created_at DESC, rowid DESC LIMIT 200").bind(m[1]).all();
       const rows = results || [];
       const likesByPost = await likeMap(sdb, 'community', rows.map(r => r.id));
       return json({ posts: rows.map(x => communityPostRowView(x, likesByPost.get(x.id) || [], myId)), joined: !!mine, nickname: mine?.nickname || '' });
@@ -5876,10 +5908,12 @@ function entitled(u, feature) {
         if (String(x.body).toLowerCase().includes(q)) foundMsgs.push({ ...x, conversation_title: title });
       }
     }
+    const hidSearch = await hiddenTargetIds('message', foundMsgs.map(x => x.id));
+    const visSearch = foundMsgs.filter(x => !hidSearch.has(x.id));
     const friendsFound = friendIds(myId).map(id => usersById.get(id)).filter(u => u && (u.display_name.toLowerCase().includes(q) || u.handle === q)).map(publicUser);
     const chatsFound = mine.map(c => chatSummary(c, myId)).filter(c => (c.title || '').toLowerCase().includes(q));
     const oaFound = Array.from(officialAccounts.values()).filter(o => o.name.toLowerCase().includes(q) || o.handle.includes(q));
-    return json({ messages: foundMsgs.slice(-30).reverse(), users: friendsFound, chats: chatsFound, official_accounts: oaFound });
+    return json({ messages: visSearch.slice(-30).reverse(), users: friendsFound, chats: chatsFound, official_accounts: oaFound });
   }
   // F4: reports persist to D1 (memory mirror kept for the no-DB path).
   function reportView(r) {
@@ -5888,7 +5922,7 @@ function entitled(u, feature) {
   if (p === 'reports' && method === 'POST') {
     const b = await readJson(request);
     const category = clip(b.category, 80);
-    if (!usersById.has(b.subject_user_id) || category.length < 3) return bad('신고 정보가 올바르지 않습니다');
+    if (!usersById.has(b.subject_user_id) || !REPORT_CATEGORIES.includes(category)) return bad('신고 정보가 올바르지 않습니다');
     const rep = { id: uid(), reporter_id: myId, subject_user_id: b.subject_user_id, category, details: clip(b.details || '', 2000), state: 'open', created_at: now() };
     adminReports.unshift(rep);
     if (dbOf()) {
@@ -6289,6 +6323,40 @@ function entitled(u, feature) {
       await persistAudit(myId, `feature_flag.${b.enabled ? 'enable' : 'disable'}`, key);
       return json({ status: 'updated', feature_flags: await listFeatureFlags() });
     }
+    // F29: instant blind (temporary; unhide restores). Hiding an attachment
+    // deletes its bytes and blocklists the SHA-256 against re-upload.
+    if ((p === 'admin/moderation/hide' || p === 'admin/moderation/unhide') && method === 'POST') {
+      if (!dbOf()) return bad('moderation requires a configured database', 503);
+      await ensureSchema();
+      const b = await readJson(request);
+      const type = clip(b.target_type, 30);
+      const tid = clip(b.target_id, 120);
+      if (!HIDE_TARGET_TYPES.includes(type)) return bad('target_type must be message, feed_post, community_post or attachment');
+      if (!tid) return bad('target_id is required');
+      if (p.endsWith('/unhide')) {
+        if (type === 'attachment') return bad('삭제된 첨부는 복원할 수 없습니다');
+        await dbOf().prepare('DELETE FROM luno_hidden_targets WHERE target_type = ? AND target_id = ?').bind(type, tid).run();
+        await persistAudit(myId, 'moderation.unhide', tid, { target_type: type });
+        return json({ status: 'visible', target_id: tid });
+      }
+      let row = null;
+      if (type === 'message') row = await dbOf().prepare('SELECT id FROM luno_messages WHERE id = ?').bind(tid).first().catch(() => null);
+      else if (type === 'feed_post') row = await dbOf().prepare('SELECT id FROM luno_timeline_posts WHERE id = ?').bind(tid).first().catch(() => null);
+      else if (type === 'community_post') row = await dbOf().prepare('SELECT id FROM luno_community_posts WHERE id = ?').bind(tid).first().catch(() => null);
+      else row = await dbOf().prepare('SELECT id, sha256 FROM attachments WHERE id = ?').bind(tid).first().catch(() => null)
+        || await dbOf().prepare('SELECT id FROM luno_attachments WHERE id = ?').bind(tid).first().catch(() => null);
+      if (!row) return bad('대상을 찾을 수 없습니다', 404);
+      if (type === 'attachment') {
+        const hash = row.sha256 || '';
+        await deleteAttachmentEverywhere(tid);
+        if (hash) await dbOf().prepare('INSERT OR IGNORE INTO luno_blocked_hashes (sha256, reason, blocked_by, created_at) VALUES (?, ?, ?, ?)').bind(hash, clip(b.reason, 300), myId, now()).run();
+        await persistAudit(myId, 'moderation.attach_block', tid, { sha256: hash ? 'listed' : 'unknown' });
+        return json({ status: 'blocked', target_id: tid });
+      }
+      await dbOf().prepare('INSERT OR REPLACE INTO luno_hidden_targets (target_type, target_id, hidden_by, reason, created_at) VALUES (?, ?, ?, ?, ?)').bind(type, tid, myId, clip(b.reason, 300), now()).run();
+      await persistAudit(myId, 'moderation.hide', tid, { target_type: type });
+      return json({ status: 'hidden', target_id: tid });
+    }
     if (p === 'admin/moderation/actions' && method === 'POST') {
       const b = await readJson(request);
       const uidTarget = b.subject_user_id || b.user_id;
@@ -6388,10 +6456,12 @@ function entitled(u, feature) {
     let delta;
     if (db) {
       await ensureSchema();
-      const { results } = await db.prepare('SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence > ? ORDER BY sequence ASC LIMIT 501').bind(cid, since).all();
+      const { results } = await db.prepare("SELECT * FROM luno_messages WHERE conversation_id = ? AND sequence > ? AND id NOT IN (SELECT target_id FROM luno_hidden_targets WHERE target_type = 'message') ORDER BY sequence ASC LIMIT 501").bind(cid, since).all();
       delta = (results || []).map(rowToMessage);
     } else {
       delta = (messages.get(cid) || []).filter(x => x.sequence > since).sort((a, b) => a.sequence - b.sequence);
+      const hidSync = await hiddenTargetIds('message', delta.map(x => x.id));
+      delta = delta.filter(x => !hidSync.has(x.id));
     }
     const hasMore = delta.length > 500;
     delta = delta.slice(0, 500);
