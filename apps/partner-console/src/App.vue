@@ -60,7 +60,7 @@ const richMenuTiles = ref<RichMenuTile[]>([
   { id: 't3', label: t('partner.seed3L'), icon: '🔒', action: { type: 'message', text: t('partner.seed3T') } },
   { id: 't4', label: t('partner.seed4L'), icon: '🎁', action: { type: 'message', text: t('partner.seed4T') } },
   { id: 't5', label: t('partner.seed5L'), icon: '❓', action: { type: 'message', text: t('partner.seed5T') } },
-  { id: 't6', label: t('partner.seed6L'), icon: '🌐', action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } },
+  { id: 't6', label: t('partner.seed6L'), icon: '🌐', action: { type: 'uri', uri: '__LUNO_PUBLIC_BASE__' } },
 ])
 const selectedTileIndex = ref(0)
 

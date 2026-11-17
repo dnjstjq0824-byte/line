@@ -2309,7 +2309,7 @@ function seedExtras() {
       { id: 't3', label: '🔒 보안 가이드', icon: '🔒', action: { type: 'message', text: '보안 안내' } },
       { id: 't4', label: '🎁 진행중 이벤트', icon: '🎁', action: { type: 'message', text: '이벤트' } },
       { id: 't5', label: '⚡ 신규 기능 안내', icon: '⚡', action: { type: 'message', text: '신규 기능' } },
-      { id: 't6', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } }
+      { id: 't6', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: publicBaseUrl() } }
     ]
   });
 
@@ -2509,6 +2509,19 @@ function json(data, status = 200, headers = {}) {
   });
 }
 
+// F27: single public base address. Env PUBLIC_BASE_URL wins; the default is
+// the current production host. CORS and every absolute self-link derive
+// from this one value (no other host literals in this file). STANDALONE_HOSTS
+// stays explicit opt-in per the hostname-gate security contract.
+const DEFAULT_PUBLIC_BASE_URL = 'https://luno-messenger.dnjstjqppk.workers.dev';
+function publicBaseUrl(env) {
+  const src = env || (typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null);
+  const v = String((src && src.PUBLIC_BASE_URL) || DEFAULT_PUBLIC_BASE_URL).trim().replace(/\/+$/, '');
+  return v || DEFAULT_PUBLIC_BASE_URL;
+}
+function publicBaseOrigin(env) {
+  try { return new URL(publicBaseUrl(env)).origin; } catch { return new URL(DEFAULT_PUBLIC_BASE_URL).origin; }
+}
 function requestOrigin(request) {
   try { return new URL(request.url).origin; } catch { return ''; }
 }
@@ -2518,6 +2531,7 @@ function corsOrigin(request, env) {
   const origin = request.headers.get('Origin') || '';
   if (!origin) return '';
   if (origin === requestOrigin(request)) return origin;
+  if (origin === publicBaseOrigin(env)) return origin;
   const list = String((env && env.ALLOWED_ORIGINS) || '').split(',').map(s => s.trim()).filter(Boolean);
   return list.includes(origin) ? origin : '';
 }
@@ -3582,7 +3596,7 @@ function ensureKeepMemo(userId) {
     });
     messages.set(keepCid, [
       { id: `m-keep-${userId}-1`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-1', sequence: 1, kind: 'text', body: '나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.', read_count: 1, created_at: '2026-08-01T11:00:00Z' },
-      { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: 'https://luno-messenger.dnjstjqppk.workers.dev/ 프로덕션 점검 완료', read_count: 1, created_at: '2026-08-01T11:30:00Z' }
+      { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: `${publicBaseUrl()}/ 프로덕션 점검 완료`, read_count: 1, created_at: '2026-08-01T11:30:00Z' }
     ]);
   }
 }
@@ -6646,14 +6660,14 @@ function entitled(u, feature) {
         areas: [
           { bounds: { x: 0, y: 0, width: 400, height: 400 }, action: { type: 'message', text: '공식 공지사항' } },
           { bounds: { x: 400, y: 0, width: 400, height: 400 }, action: { type: 'message', text: '고객센터 상담' } },
-          { bounds: { x: 800, y: 0, width: 400, height: 400 }, action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } },
+          { bounds: { x: 800, y: 0, width: 400, height: 400 }, action: { type: 'uri', uri: publicBaseUrl() } },
           { bounds: { x: 0, y: 400, width: 600, height: 400 }, action: { type: 'message', text: '진행중 이벤트' } },
           { bounds: { x: 600, y: 400, width: 600, height: 400 }, action: { type: 'message', text: '자주 묻는 질문' } }
         ],
         tiles: [
           { id: 't1', label: '📢 공식 공지', icon: '📢', action: { type: 'message', text: '공지사항' } },
           { id: 't2', label: '💬 고객센터 상담', icon: '💬', action: { type: 'message', text: '상담' } },
-          { id: 't3', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: 'https://luno-messenger.dnjstjqppk.workers.dev' } },
+          { id: 't3', label: '🌐 공식 웹사이트', icon: '🌐', action: { type: 'uri', uri: publicBaseUrl() } },
           { id: 't4', label: '🎁 진행중 이벤트', icon: '🎁', action: { type: 'message', text: '이벤트' } },
           { id: 't5', label: '❓ 자주 묻는 질문', icon: '❓', action: { type: 'message', text: '도움말' } },
           { id: 't6', label: '💳 LUNO Pay 혜택', icon: '💳', action: { type: 'message', text: '쿠폰' } }

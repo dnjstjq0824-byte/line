@@ -48,6 +48,12 @@ for (const sub of subApps) {
   }
 }
 
+// F27: stamp the public base URL into static SEO/links (__LUNO_PUBLIC_BASE__).
+const { stampPublicBase, defaultBaseFromWorker } = require('./public_base_stamp.cjs');
+const publicBase = (process.env.PUBLIC_BASE_URL || defaultBaseFromWorker(path.join(__dirname, 'cf_worker.js'))).replace(/\/+$/, '');
+const stampedBase = stampPublicBase(distRoot, publicBase);
+console.log(`Public base stamped (${stampedBase.base}, ${stampedBase.hits} links in ${stampedBase.files} files)`);
+
 // 3. Generate version.json and update worker BUILD_INFO
 let gitCommit = 'unknown';
 try {
