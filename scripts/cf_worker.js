@@ -300,6 +300,16 @@ const LUNO_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS luno_owned_items (
     user_id TEXT NOT NULL, item_type TEXT NOT NULL, item_id TEXT NOT NULL,
     PRIMARY KEY (user_id, item_type, item_id))`,
+  // F30: customer support tickets. Answers ride the ticket row plus an
+  // official-room message (luno_messages). No memory mirror: D1 required.
+  `CREATE TABLE IF NOT EXISTS luno_support_tickets (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, category TEXT NOT NULL,
+    body TEXT NOT NULL, app_version TEXT NOT NULL DEFAULT '', device_info TEXT NOT NULL DEFAULT '',
+    attachment_id TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open',
+    answer TEXT NOT NULL DEFAULT '', answered_by TEXT NOT NULL DEFAULT '', answered_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_support_user ON luno_support_tickets(user_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_support_status ON luno_support_tickets(status, created_at)`,
 ];
 const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -3459,6 +3469,8 @@ const MESSAGE_KINDS = new Set(['text', 'sticker', 'image', 'video', 'voice', 'fi
 const BOT_ONLY_KINDS = new Set(['proposal', 'decision', 'report']);
 // A-5: server-minted kinds a client must never send directly.
 const FORGED_CLIENT_KINDS = new Set(['security_notice', 'pay', 'transfer', 'call_status', 'system']);
+// F30: frozen ticket vocabulary (STATIC in zero_store_inventory).
+const SUPPORT_TICKET_CATEGORIES = ['account', 'chat', 'payment', 'bug', 'other'];
 const pushTokens = new Map();
 const deviceKeys = new Map();
 const userKeys = new Map();
@@ -3561,6 +3573,23 @@ function ensureKeepMemo(userId) {
       { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: 'https://luno-messenger.dnjstjqppk.workers.dev/ 프로덕션 점검 완료', read_count: 1, created_at: '2026-08-01T11:30:00Z' }
     ]);
   }
+}
+
+// F30: per-user customer-center room. Reuses the oa-notice official identity
+// (the seed list stays exactly one account — pinned by test) with its own
+// room id so answers never mix into the security-notice room.
+function ensureSupportRoom(userId) {
+  if (!userId) return null;
+  const cid = `conv-oa-support-${userId}`;
+  if (!conversations.has(cid)) {
+    conversations.set(cid, {
+      id: cid, kind: 'official', title: 'LUNO 고객센터',
+      members: [userId, 'oa-notice'], official: true,
+      last_sequence: 0, updated_at: now()
+    });
+    messages.set(cid, []);
+  }
+  return cid;
 }
 
 function ensureDemoConversationsForUser(userId) {
@@ -5877,6 +5906,37 @@ function entitled(u, feature) {
     }
     return json({ reports: adminReports.filter(r => r.reporter_id === myId).map(reportView) });
   }
+  // F30: customer support tickets (D1 only, like official accounts/news).
+  function supportTicketView(r) {
+    return { id: r.id, category: r.category, body: r.body, app_version: r.app_version || '', device_info: r.device_info || '', attachment_id: r.attachment_id || '', status: r.status, answer: r.answer || '', answered_at: r.answered_at || '', created_at: r.created_at, updated_at: r.updated_at };
+  }
+  if (p === 'support/tickets' && method === 'POST') {
+    if (!dbOf()) return bad('support tickets unavailable', 503);
+    if (!await rateLimit('rl:support:' + myId, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const b = await readJson(request);
+    const category = clip(b.category, 30);
+    if (!SUPPORT_TICKET_CATEGORIES.includes(category)) return bad('문의 분류를 선택하세요');
+    const body = clip(b.body, 5000);
+    if (!body) return bad('문의 내용을 입력하세요');
+    const attachmentId = clip(b.attachment_id, 80);
+    await ensureSchema();
+    if (attachmentId) {
+      const ownNew = await dbOf().prepare('SELECT uploader_id AS o FROM attachments WHERE id = ?').bind(attachmentId).first().catch(() => null);
+      const ownLegacy = ownNew ? null : await dbOf().prepare('SELECT owner_id AS o FROM luno_attachments WHERE id = ?').bind(attachmentId).first().catch(() => null);
+      if ((ownNew?.o ?? ownLegacy?.o) !== myId) return bad('첨부 파일을 찾을 수 없습니다');
+    }
+    const id = `sup-${uid()}`;
+    const at = now();
+    await dbOf().prepare('INSERT INTO luno_support_tickets (id, user_id, category, body, app_version, device_info, attachment_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, myId, category, body, clip(b.app_version, 40), clip(b.device_info, 200), attachmentId, 'open', at, at).run();
+    return json({ id }, 201);
+  }
+  if (p === 'support/tickets' && method === 'GET') {
+    if (!dbOf()) return bad('support tickets unavailable', 503);
+    await ensureSchema();
+    const { results } = await dbOf().prepare('SELECT * FROM luno_support_tickets WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 100').bind(myId).all().catch(() => ({ results: [] }));
+    return json({ tickets: (results || []).map(supportTicketView) });
+  }
 
   // ---------- L-07 bot jobs (claim/complete; bots only, rooms in scope) ----------
   if (p === 'bot/jobs/claim' && method === 'POST') {
@@ -6042,6 +6102,34 @@ function entitled(u, feature) {
       await dbOf().prepare('UPDATE luno_news SET title = ?, press = ?, category = ?, published_at = ?, image_url = ?, summary = ?, content = ? WHERE id = ?').bind(title, b.press === undefined ? row.press : clip(String(b.press), 60), b.category === undefined ? row.category : clip(String(b.category), 30), b.published_at === undefined ? row.published_at : clip(String(b.published_at), 30), b.image_url === undefined ? row.image_url : clip(String(b.image_url), 2000), b.summary === undefined ? row.summary : clip(String(b.summary), 500), b.content === undefined ? row.content : clip(String(b.content), 20000), m[1]).run();
       await persistAudit(myId, 'news.update', row.id);
       return json({ id: row.id, title });
+    }
+    // F30: support ticket queue + answers. An answer lands on the ticket row
+    // and posts into the user's customer-center official room (read-only for
+    // the user, like other official rooms) plus the N1-L push funnel.
+    if (p === 'admin/support/tickets' && method === 'GET') {
+      if (!dbOf()) return bad('support tickets unavailable', 503);
+      await ensureSchema();
+      const status = clip(url.searchParams.get('status'), 20);
+      const q = status
+        ? await dbOf().prepare('SELECT * FROM luno_support_tickets WHERE status = ? ORDER BY created_at DESC, rowid DESC LIMIT 100').bind(status).all().catch(() => ({ results: [] }))
+        : await dbOf().prepare('SELECT * FROM luno_support_tickets ORDER BY created_at DESC, rowid DESC LIMIT 100').all().catch(() => ({ results: [] }));
+      return json({ tickets: q.results || [] });
+    }
+    if ((m = p.match(/^admin\/support\/tickets\/([\w-]+)\/reply$/)) && method === 'POST') {
+      if (!dbOf()) return bad('support tickets unavailable', 503);
+      const b = await readJson(request);
+      const answer = clip(b.answer, 5000);
+      if (!answer) return bad('답변 내용을 입력하세요');
+      await ensureSchema();
+      const t = await dbOf().prepare('SELECT * FROM luno_support_tickets WHERE id = ?').bind(m[1]).first().catch(() => null);
+      if (!t) return bad('문의를 찾을 수 없습니다', 404);
+      const at = now();
+      await dbOf().prepare("UPDATE luno_support_tickets SET status = 'answered', answer = ?, answered_by = ?, answered_at = ?, updated_at = ? WHERE id = ?").bind(answer, myId, at, at, m[1]).run();
+      const cid = ensureSupportRoom(t.user_id);
+      await pushPersistent(cid, 'oa-notice', { kind: 'text', body: answer, metadata: { support_ticket_id: t.id } });
+      await notify(notifyEnv(), [t.user_id], { kind: 'message', conversation_id: cid, sender_id: 'oa-notice', title: 'LUNO 고객센터', body: notifyMessagePreview('text', answer) });
+      await persistAudit(myId, 'support.ticket.reply', t.id, { user_id: t.user_id });
+      return json({ status: 'answered', id: t.id, conversation_id: cid });
     }
     // L-01: admin-only bot issuance. Bots carry no password material and
     // authenticate with L-06 scope tokens only. The admin guard above
