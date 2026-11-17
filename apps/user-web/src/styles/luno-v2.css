@@ -1272,3 +1272,17 @@ ul, ol {list-style:none;margin:0;padding:0}
 .lx-skip-link { position: absolute; left: 12px; top: -48px; z-index: 400; padding: 10px 16px; border-radius: 10px; background: var(--ln-accent); color: var(--ln-on-accent, #fff); font-size: 14px; font-weight: 700; text-decoration: none; transition: top .15s ease; }
 .lx-skip-link:focus, .lx-skip-link:focus-visible { top: 12px; outline: 2px solid var(--ln-on-accent, #fff); outline-offset: 2px; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ln-accent); outline-offset: 2px; }
+
+/* A12: PC-agent runner bar above the composer in bot rooms. */
+.lx-pcagent-bar { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 8px; border-top: 1px solid var(--ln-line); background: var(--ln-surface); }
+.lx-pcagent-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lx-pcagent-dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--ln-muted); }
+.lx-pcagent-dot.is-ready { background: var(--ln-success); }
+.lx-pcagent-dot.is-busy { background: var(--ln-accent); }
+.lx-pcagent-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--ln-text); }
+.lx-pcagent-text strong { font-weight: 700; }
+.lx-pcagent-text > span { font-weight: 600; margin-left: 8px; }
+.lx-pcagent-detail { font-weight: 400; color: var(--ln-muted); }
+.lx-pcagent-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.lx-pcagent-chip { flex-shrink: 0; padding: 7px 14px; border-radius: 999px; border: none; background: var(--ln-accent-soft); color: var(--ln-accent); font-size: 13px; font-weight: 700; cursor: pointer; }
+.lx-pcagent-chip:disabled { opacity: 0.5; cursor: default; }

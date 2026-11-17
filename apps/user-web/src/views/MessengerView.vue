@@ -1509,6 +1509,11 @@ async function runConversationSearch() {
 }
 
 // --- Messaging ---
+// A12: runner chips fill the draft and ride the normal send path.
+function sendCommand(text: string) {
+  draftMessage.value = text
+  void sendMessage()
+}
 async function sendMessage() {
   if (!selectedChatId.value || !draftMessage.value.trim() || sendingConversations.value.has(selectedChatId.value)) return
   const body = draftMessage.value.trim()
@@ -3284,6 +3289,7 @@ onBeforeUnmount(() => {
         @capture="captureScreenToChat"
         @send-money="openSendMoneyFromChat"
         @send="sendMessage"
+        @send-command="sendCommand"
         @composer-enter="handleComposerEnter"
       />
 

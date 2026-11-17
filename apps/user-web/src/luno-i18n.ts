@@ -21,6 +21,16 @@ export const SUPPORTED_LOCALES: LocaleMeta[] = [
 
 export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
   ko: {
+    pcAgentReady: '준비됨',
+    pcAgentBusy: '작업 중',
+    pcAgentOffline: '오프라인',
+    pcAgentLastSeen: '마지막 접속 {time}',
+    pcAgentQueue: '대기 {count}건',
+    pcQuickStatus: '현재 작업 상태 보고',
+    pcQuickGit: 'git status·브랜치 확인',
+    pcQuickCheck: '정적 분석·빌드 점검',
+    pcQuickContinue: 'Muse Spark 1.3 이어서 진행',
+    pcQuickAutoOff: '자동 진행 멈춤',
     lxNoNews: "이 분야의 기사가 아직 없습니다.",
     lxNoCalls: "통화 기록이 없습니다.",
     lxNoVoom: "아직 게시물이 없습니다",
@@ -731,6 +741,16 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvKeepDeleted: 'Keep 보관함에서 항목을 삭제했습니다.'
   },
   en: {
+    pcAgentReady: 'Ready',
+    pcAgentBusy: 'Working',
+    pcAgentOffline: 'Offline',
+    pcAgentLastSeen: 'Last seen {time}',
+    pcAgentQueue: '{count} queued',
+    pcQuickStatus: 'Report current status',
+    pcQuickGit: 'Check git status & branch',
+    pcQuickCheck: 'Run analysis & build checks',
+    pcQuickContinue: 'Continue with Muse Spark 1.3',
+    pcQuickAutoOff: 'Stop autopilot',
     lxNoNews: "No articles in this section yet.",
     lxNoCalls: "No calls yet.",
     lxNoVoom: "No posts yet",
@@ -1437,6 +1457,16 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvKeepDeleted: 'Removed the item from Keep.'
   },
   th: {
+    pcAgentReady: 'พร้อม',
+    pcAgentBusy: 'กำลังทำงาน',
+    pcAgentOffline: 'ออฟไลน์',
+    pcAgentLastSeen: 'ออนไลน์ล่าสุด {time}',
+    pcAgentQueue: 'รอ {count} งาน',
+    pcQuickStatus: 'รายงานสถานะปัจจุบัน',
+    pcQuickGit: 'ตรวจ git status และ branch',
+    pcQuickCheck: 'ตรวจ static analysis และ build',
+    pcQuickContinue: 'ให้ Muse Spark 1.3 ทำต่อ',
+    pcQuickAutoOff: 'หยุด autopilot',
     lxNoNews: "ยังไม่มีบทความในหมวดนี้",
     lxNoCalls: "ยังไม่มีประวัติการโทร",
     lxNoVoom: "ยังไม่มีโพสต์",
@@ -2143,6 +2173,16 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
     mvKeepDeleted: 'ลบรายการออกจาก Keep แล้ว'
   },
   ja: {
+    pcAgentReady: '待機中',
+    pcAgentBusy: '作業中',
+    pcAgentOffline: 'オフライン',
+    pcAgentLastSeen: '最終接続 {time}',
+    pcAgentQueue: '待機 {count}件',
+    pcQuickStatus: '現在の作業状況を報告',
+    pcQuickGit: 'git status・ブランチ確認',
+    pcQuickCheck: '静的解析・ビルド点検',
+    pcQuickContinue: 'Muse Spark 1.3 で続行',
+    pcQuickAutoOff: '自動進行を停止',
     lxNoNews: "このカテゴリの記事はまだありません。",
     lxNoCalls: "通話履歴はありません。",
     lxNoVoom: "まだ投稿がありません",

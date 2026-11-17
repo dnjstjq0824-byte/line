@@ -14,6 +14,7 @@ import LinkPreview from './LinkPreview.vue'
 import { currentUser, t, token } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import MessageAttachment from './MessageAttachment.vue'
+import PcAgentBar from './PcAgentBar.vue'
 import type { DrawerTab } from './ChatList.vue'
 
 export interface PinnedItem { message_id: string; pinned_by: string; pinned_at: string; body?: string }
@@ -122,6 +123,7 @@ const emit = defineEmits<{
   capture: []
   'send-money': []
   send: []
+  'send-command': [text: string]
   'composer-enter': [event: KeyboardEvent]
 }>()
 
@@ -710,6 +712,13 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
         <button class="attach-panel-item" @click="emit('capture'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="scan" :size="22" /></span><small>{{ t('mvCapture') }}</small></button>
         <button class="attach-panel-item" @click="emit('send-money'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="money" :size="22" /></span><small>{{ t('mvSend') }}</small></button>
       </div>
+
+      <!-- A12: runner presence + command chips above the composer in bot rooms. -->
+      <PcAgentBar
+        :conversation-id="selectedChatId"
+        :disabled="sendingConversations.has(selectedChatId)"
+        @command="emit('send-command', $event)"
+      />
 
       <!-- Composer: one box. Wide screens put the tools under the text; phones put them beside it. -->
       <form class="lx-composer" :aria-busy="sendingConversations.has(selectedChatId)" @submit.prevent="emit('send')">
