@@ -293,6 +293,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportHistoryEmpty => 'No reports filed.';
 
   @override
+  String get supportTitle => 'Contact support';
+
+  @override
+  String get supportCategory => 'Category';
+
+  @override
+  String get supportBodyPh => 'Describe your issue';
+
+  @override
+  String get supportSubmit => 'Submit inquiry';
+
+  @override
+  String get supportDoneNote => 'Your inquiry has been received.';
+
+  @override
+  String get supportHistoryTitle => 'My inquiries';
+
+  @override
+  String get supportHistoryEmpty => 'No inquiries filed.';
+
+  @override
+  String get supportStateOpen => 'Pending';
+
+  @override
+  String get supportStateAnswered => 'Answered';
+
+  @override
+  String get supportCatAccount => 'Account';
+
+  @override
+  String get supportCatChat => 'Chat';
+
+  @override
+  String get supportCatPayment => 'Payment';
+
+  @override
+  String get supportCatBug => 'Bug report';
+
+  @override
+  String get supportCatOther => 'Other';
+
+  @override
+  String get settingsSupportDesc => 'File inquiries and read answers';
+
+  @override
   String get mvRecentSearch => 'Recent searches';
 
   @override

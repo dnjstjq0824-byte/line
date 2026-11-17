@@ -97,6 +97,17 @@ class SettingsPage extends StatelessWidget {
                   chevron: true,
                   onTap: () => context.go('/reports'),
                 ),
+                const _RowDivider(),
+                _ActionRow(
+                  icon: Icons.support_agent,
+                  title: context.l10n.supportTitle,
+                  subtitle: context.l10n.settingsSupportDesc,
+                  ink: ink,
+                  sub: sub,
+                  dark: dark,
+                  chevron: true,
+                  onTap: () => context.go('/support'),
+                ),
               ],
             ),
             _Section(

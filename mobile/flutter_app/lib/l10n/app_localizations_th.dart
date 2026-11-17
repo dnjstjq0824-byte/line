@@ -292,6 +292,51 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reportHistoryEmpty => 'ไม่มีรายงาน';
 
   @override
+  String get supportTitle => 'ติดต่อฝ่ายสนับสนุน';
+
+  @override
+  String get supportCategory => 'หมวดหมู่';
+
+  @override
+  String get supportBodyPh => 'อธิบายปัญหาของคุณ';
+
+  @override
+  String get supportSubmit => 'ส่งคำขอ';
+
+  @override
+  String get supportDoneNote => 'ได้รับคำขอแล้ว';
+
+  @override
+  String get supportHistoryTitle => 'คำขอของฉัน';
+
+  @override
+  String get supportHistoryEmpty => 'ไม่มีคำขอ';
+
+  @override
+  String get supportStateOpen => 'รอดำเนินการ';
+
+  @override
+  String get supportStateAnswered => 'ตอบแล้ว';
+
+  @override
+  String get supportCatAccount => 'บัญชี';
+
+  @override
+  String get supportCatChat => 'แชท';
+
+  @override
+  String get supportCatPayment => 'การชำระเงิน';
+
+  @override
+  String get supportCatBug => 'รายงานข้อผิดพลาด';
+
+  @override
+  String get supportCatOther => 'อื่น ๆ';
+
+  @override
+  String get settingsSupportDesc => 'ส่งคำขอและดูคำตอบ';
+
+  @override
   String get mvRecentSearch => 'คำค้นหาล่าสุด';
 
   @override

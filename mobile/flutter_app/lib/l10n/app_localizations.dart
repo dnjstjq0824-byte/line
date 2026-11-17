@@ -666,6 +666,96 @@ abstract class AppLocalizations {
   /// **'접수한 신고가 없습니다.'**
   String get reportHistoryEmpty;
 
+  /// supportTitle (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'문의하기'**
+  String get supportTitle;
+
+  /// supportCategory (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'분류'**
+  String get supportCategory;
+
+  /// supportBodyPh (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'문의 내용을 입력해 주세요'**
+  String get supportBodyPh;
+
+  /// supportSubmit (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'문의 접수'**
+  String get supportSubmit;
+
+  /// supportDoneNote (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'문의가 접수되었습니다.'**
+  String get supportDoneNote;
+
+  /// supportHistoryTitle (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'내 문의 내역'**
+  String get supportHistoryTitle;
+
+  /// supportHistoryEmpty (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'접수한 문의가 없습니다.'**
+  String get supportHistoryEmpty;
+
+  /// supportStateOpen (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'처리 중'**
+  String get supportStateOpen;
+
+  /// supportStateAnswered (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'답변 완료'**
+  String get supportStateAnswered;
+
+  /// supportCatAccount (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'계정'**
+  String get supportCatAccount;
+
+  /// supportCatChat (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'대화'**
+  String get supportCatChat;
+
+  /// supportCatPayment (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'결제'**
+  String get supportCatPayment;
+
+  /// supportCatBug (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'오류 신고'**
+  String get supportCatBug;
+
+  /// supportCatOther (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'기타'**
+  String get supportCatOther;
+
+  /// settingsSupportDesc (F30)
+  ///
+  /// In ko, this message translates to:
+  /// **'문의 접수와 답변 확인'**
+  String get settingsSupportDesc;
+
   /// mvRecentSearch (F20)
   ///
   /// In ko, this message translates to:

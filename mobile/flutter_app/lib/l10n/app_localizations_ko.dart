@@ -291,6 +291,51 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reportHistoryEmpty => '접수한 신고가 없습니다.';
 
   @override
+  String get supportTitle => '문의하기';
+
+  @override
+  String get supportCategory => '분류';
+
+  @override
+  String get supportBodyPh => '문의 내용을 입력해 주세요';
+
+  @override
+  String get supportSubmit => '문의 접수';
+
+  @override
+  String get supportDoneNote => '문의가 접수되었습니다.';
+
+  @override
+  String get supportHistoryTitle => '내 문의 내역';
+
+  @override
+  String get supportHistoryEmpty => '접수한 문의가 없습니다.';
+
+  @override
+  String get supportStateOpen => '처리 중';
+
+  @override
+  String get supportStateAnswered => '답변 완료';
+
+  @override
+  String get supportCatAccount => '계정';
+
+  @override
+  String get supportCatChat => '대화';
+
+  @override
+  String get supportCatPayment => '결제';
+
+  @override
+  String get supportCatBug => '오류 신고';
+
+  @override
+  String get supportCatOther => '기타';
+
+  @override
+  String get settingsSupportDesc => '문의 접수와 답변 확인';
+
+  @override
   String get mvRecentSearch => '최근 검색어';
 
   @override

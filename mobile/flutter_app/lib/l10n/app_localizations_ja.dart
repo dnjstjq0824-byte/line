@@ -291,6 +291,51 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reportHistoryEmpty => '通報はありません。';
 
   @override
+  String get supportTitle => 'お問い合わせ';
+
+  @override
+  String get supportCategory => 'カテゴリ';
+
+  @override
+  String get supportBodyPh => 'お問い合わせ内容を入力してください';
+
+  @override
+  String get supportSubmit => '問い合わせる';
+
+  @override
+  String get supportDoneNote => 'お問い合わせを受け付けました。';
+
+  @override
+  String get supportHistoryTitle => '問い合わせ履歴';
+
+  @override
+  String get supportHistoryEmpty => '問い合わせはありません。';
+
+  @override
+  String get supportStateOpen => '対応中';
+
+  @override
+  String get supportStateAnswered => '回答済み';
+
+  @override
+  String get supportCatAccount => 'アカウント';
+
+  @override
+  String get supportCatChat => 'チャット';
+
+  @override
+  String get supportCatPayment => '決済';
+
+  @override
+  String get supportCatBug => '不具合報告';
+
+  @override
+  String get supportCatOther => 'その他';
+
+  @override
+  String get settingsSupportDesc => '問い合わせと回答の確認';
+
+  @override
   String get mvRecentSearch => '最近の検索';
 
   @override

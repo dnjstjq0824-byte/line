@@ -376,6 +376,66 @@
   "@reportHistoryEmpty": {
     "description": "reportHistoryEmpty (F20)"
   },
+  "supportTitle": "문의하기",
+  "@supportTitle": {
+    "description": "supportTitle (F30)"
+  },
+  "supportCategory": "분류",
+  "@supportCategory": {
+    "description": "supportCategory (F30)"
+  },
+  "supportBodyPh": "문의 내용을 입력해 주세요",
+  "@supportBodyPh": {
+    "description": "supportBodyPh (F30)"
+  },
+  "supportSubmit": "문의 접수",
+  "@supportSubmit": {
+    "description": "supportSubmit (F30)"
+  },
+  "supportDoneNote": "문의가 접수되었습니다.",
+  "@supportDoneNote": {
+    "description": "supportDoneNote (F30)"
+  },
+  "supportHistoryTitle": "내 문의 내역",
+  "@supportHistoryTitle": {
+    "description": "supportHistoryTitle (F30)"
+  },
+  "supportHistoryEmpty": "접수한 문의가 없습니다.",
+  "@supportHistoryEmpty": {
+    "description": "supportHistoryEmpty (F30)"
+  },
+  "supportStateOpen": "처리 중",
+  "@supportStateOpen": {
+    "description": "supportStateOpen (F30)"
+  },
+  "supportStateAnswered": "답변 완료",
+  "@supportStateAnswered": {
+    "description": "supportStateAnswered (F30)"
+  },
+  "supportCatAccount": "계정",
+  "@supportCatAccount": {
+    "description": "supportCatAccount (F30)"
+  },
+  "supportCatChat": "대화",
+  "@supportCatChat": {
+    "description": "supportCatChat (F30)"
+  },
+  "supportCatPayment": "결제",
+  "@supportCatPayment": {
+    "description": "supportCatPayment (F30)"
+  },
+  "supportCatBug": "오류 신고",
+  "@supportCatBug": {
+    "description": "supportCatBug (F30)"
+  },
+  "supportCatOther": "기타",
+  "@supportCatOther": {
+    "description": "supportCatOther (F30)"
+  },
+  "settingsSupportDesc": "문의 접수와 답변 확인",
+  "@settingsSupportDesc": {
+    "description": "settingsSupportDesc (F30)"
+  },
   "mvRecentSearch": "최근 검색어",
   "@mvRecentSearch": {
     "description": "mvRecentSearch (F20)"

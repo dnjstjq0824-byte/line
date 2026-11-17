@@ -1959,6 +1959,32 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// F30: customer support tickets. My filings with admin answers.
+  List<dynamic> supportTickets = [];
+
+  Future<void> loadSupportTickets() async {
+    try {
+      final res = await api.call('/api/v1/support/tickets');
+      supportTickets = (res['tickets'] as List?) ?? [];
+    } catch (_) {
+      supportTickets = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> fileSupportTicket(String category, String body) {
+    return run(() async {
+      await api.call('/api/v1/support/tickets', method: 'POST', data: {
+        'category': category,
+        'body': body,
+        'app_version': currentAppVersion,
+        'device_info': 'LUNO Android Client',
+      });
+      notice = strings.supportDoneNote;
+      await loadSupportTickets();
+    });
+  }
+
   Future<void> decideProposal(
       String roomId, String messageId, String decision) {
     return run(() async {
