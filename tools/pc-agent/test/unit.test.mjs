@@ -153,3 +153,9 @@ test('config: fails closed', () => {
   assert.equal(branchName({ id: 'T-0007', cmd: 'dev' }, new Date('2026-11-15T03:00:00Z')), 'luno-auto/task-20261115-t-0007');
   assert.equal(branchName({ id: 'T-0008', cmd: 'mkt' }, new Date('2026-11-15T03:00:00Z')), 'luno-auto/mkt-20261115-t-0008');
 });
+
+test('commands: revert parses a task id and never goes urgent', () => {
+  assert.deepEqual(parseCommand('/revert t-0007'), { cmd: 'revert', urgent: false, taskId: 'T-0007', text: '' });
+  assert.deepEqual(parseCommand('/되돌리기 T-0007'), { cmd: 'revert', urgent: false, taskId: 'T-0007', text: '' });
+  assert.equal(parseCommand('/revert! T-0007').urgent, false);
+});

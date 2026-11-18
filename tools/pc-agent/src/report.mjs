@@ -59,6 +59,8 @@ export const fmt = {
   rejected: (task) => `🗑 #${task.id} 병합하지 않음 · 브랜치 ${task.branch} 보관 (/retry ${task.id} 로 이어서 가능)`,
 };
 
+export const REVERT_OPS_NOTE = '운영에는 아직 남아 있음, 배포 필요';
+
 export function reportBody({ task, title, ok, ms, summary, tests, diff, large, usage, note }) {
   const lines = [`#${task.id} /${task.cmd} ${clip(title || task.text, 60)} ${ok ? '✅ 성공' : '❌ 실패'} (${minutes(ms)}분)`, RULE];
   if (note) lines.push(note);

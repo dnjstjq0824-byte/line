@@ -6,9 +6,9 @@ import { LunoClient } from './luno.mjs';
 import { TaskQueue, stopRequested } from './queue.mjs';
 import { parseCommand, QUEUED, HELP } from './commands.mjs';
 import { museExec, museUsage } from './muse.mjs';
-import { createWorktree, removeWorktree, changedFiles, commitAll, diffSummary, mergeToMain, repoStatus } from './git.mjs';
+import { createWorktree, removeWorktree, changedFiles, commitAll, diffSummary, mergeToMain, repoStatus, revertCommit } from './git.mjs';
 import { checkDiff, mask } from './guards.mjs';
-import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, failureExcerpt, minutes } from './report.mjs';
+import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, failureExcerpt, minutes, REVERT_OPS_NOTE } from './report.mjs';
 import { devPrompt, mktPrompt, askPrompt } from './prompts.mjs';
 import { runCommand, killTree } from './proc.mjs';
 import { Autopilot, autopilotPrompt } from './autopilot.mjs';
@@ -162,19 +162,27 @@ export class Agent {
     if (this.queue.countToday() >= this.cfg.maxPerDay) return reply(fmt.held(`오늘 작업 한도 ${this.cfg.maxPerDay}건에 도달했습니다`));
     let { cmd, text } = command;
     let parentId = '';
+    let revertOf = '';
     if (cmd === 'retry') {
       const parent = this.queue.get(command.taskId);
       if (!parent || !parent.branch) return reply(`이어서 할 작업을 찾을 수 없습니다. 예: /retry ${project.prefix}-0001 버튼 색을 파랗게`);
       if (!text) return reply('추가 지시를 함께 적어 주세요.');
       if (parent.state === 'running' || parent.state === 'queued') return reply(`#${parent.id} 는 아직 진행 중입니다.`);
       parentId = parent.id;
+    } else if (cmd === 'revert') {
+      const target = this.queue.get(command.taskId);
+      if (!command.taskId || !target) return reply('되돌릴 작업 번호를 적어 주세요. 예: /revert T-0001');
+      if (target.state !== 'merged' || !target.mergedSha) return reply(`#${target.id} 은(는) 병합된 작업이 아니라 되돌릴 수 없습니다. 병합된 작업만 되돌릴 수 있습니다.`);
+      revertOf = target.id;
+      text = text || `revert ${target.id}`;
     } else if (cmd === 'continue') {
       if (!project.continuePrompt && !text) return reply('이 프로젝트에는 이어서 진행할 기본 지시(continuePrompt)가 없습니다. /dev <지시> 를 쓰세요.');
       text = [project.continuePrompt, text].filter(Boolean).join('\n\n추가 지시: ');
-    } else if (cmd !== 'check' && !text) {
+    } else if (cmd !== 'check' && cmd !== 'revert' && !text) {
       return reply(`내용을 함께 적어 주세요. 예: /${cmd} 로그인 버튼 버그 고쳐줘`);
     }
     const task = this.queue.create({ project, cmd, text, urgent: command.urgent, roomId, messageId, parentId });
+    if (revertOf) { task.revertOf = revertOf; this.queue.save(task); }
     this.taskLog(task, `accepted /${cmd} ${text.replace(/\s+/g, ' ').slice(0, 200)}`);
     const waiting = this.queue.queued().length - 1 + (this.current ? 1 : 0);
     await this.say(project.id, roomId, { body: fmt.accepted(task, waiting), replyTo: messageId, task });
@@ -324,6 +332,7 @@ export class Agent {
     try {
       if (task.cmd === 'check') return await this.runCheck(project, task, startedAt);
       if (task.cmd === 'ask') return await this.runAsk(project, task, startedAt, control, fail);
+      if (task.cmd === 'revert') return await this.runRevert(project, task, startedAt, fail);
       return await this.runWork(project, task, startedAt, control, fail);
     } catch (error) {
       await fail(String(error.message || error));
@@ -457,6 +466,59 @@ export class Agent {
     this.taskLog(task, `reported tests=${testsOk} files=${diff.files.length}`);
   }
 
+  // S2: revert a merged commit on a fresh branch, then the same bar as
+  // runWork (tests, diff guards, report, proposal). No model is called.
+  async runRevert(project, task, startedAt, fail) {
+    const target = this.queue.get(task.revertOf);
+    if (!target || target.state !== 'merged' || !target.mergedSha) {
+      return fail(`#${task.revertOf || '?'} 은(는) 병합된 작업이 아니라 되돌릴 수 없습니다.`);
+    }
+    const wt = await createWorktree({ project, worktreeRoot: this.cfg.worktreeRoot, task });
+    task.worktree = wt.path;
+    task.branch = wt.branch;
+    this.queue.save(task);
+    await this.say(project.id, task.roomId, { body: fmt.started(task, task.branch), task });
+    const rev = await revertCommit(task.worktree, target.mergedSha);
+    if (!rev.ok) return fail(`자동 되돌리기 실패: ${rev.reason}\n브랜치 ${task.branch} 는 보존했습니다. 집에서 직접 해결하세요.`);
+    if (rev.empty) {
+      task.state = 'done';
+      await removeWorktree({ project, path: task.worktree });
+      this.queue.save(task);
+      return this.say(project.id, task.roomId, { kind: 'report', body: reportBody({ task, title: `Revert #${target.id}`, ok: true, ms: Date.now() - startedAt, summary: '이미 되돌려졌거나 되돌릴 변경이 없습니다.', note: '코드 변경 없음' }), task });
+    }
+    await commitAll(task.worktree, `luno-auto(${task.id}): revert ${target.id}\n\nLuno-Task: ${task.id}\nLuno-Revert: ${target.mergedSha}`);
+    const diff = await diffSummary(task.worktree, project.mainBranch);
+    const guard = checkDiff({ files: diff.files, addedText: diff.addedText, forbiddenPaths: project.forbiddenPaths, allowedPaths: null });
+    if (guard.violations.length) return fail(`안전 규칙 위반으로 병합 제안을 하지 않습니다:\n- ${guard.violations.slice(0, 10).join('\n- ')}\n브랜치 ${task.branch} 는 보존했습니다.`);
+    const tests = [];
+    const failures = [];
+    for (const entry of project.testCommands) {
+      const spec = Array.isArray(entry) ? { label: entry.join(' '), cwd: '.', cmd: entry } : entry;
+      const t = await runCommand(spec.cmd, { cwd: join(task.worktree, spec.cwd || '.'), timeoutMs: 15 * 60000 });
+      const out = `${t.stdout}\n${t.stderr}`;
+      const ok = t.code === 0 && !t.timedOut;
+      tests.push({ label: spec.label || spec.cmd.join(' '), ok, detail: t.timedOut ? '시간 초과' : testDetail(out) });
+      if (!ok) failures.push(`[${spec.label || spec.cmd.join(' ')}]\n${t.timedOut ? '시간 초과' : failureExcerpt(out)}`);
+      this.taskLog(task, `test ${spec.label || spec.cmd.join(' ')}: exit ${t.code}`);
+    }
+    const testsOk = tests.every((t) => t.ok);
+    task.testFailures = failures.join('\n\n').slice(0, 6000);
+    const stats = { ...diff, added: guard.added, deleted: guard.deleted };
+    task.state = 'reported';
+    task.testsOk = testsOk;
+    const note = !testsOk ? '테스트 실패 — 병합 제안을 하지 않았습니다. 답장으로 수정 지시를 보내면 이어서 합니다.'
+      : guard.large ? '대형 변경 — 병합 제안을 하지 않았습니다. 집에서 검토 후 직접 병합하세요.' : '';
+    task.reportMessageId = await this.say(project.id, task.roomId, {
+      kind: 'report', task,
+      body: reportBody({ task, title: `Revert #${target.id}`, ok: testsOk, ms: Date.now() - startedAt, summary: `병합 ${target.mergedSha} 되돌리기`, tests, diff: stats, large: guard.large, note }),
+    });
+    if (testsOk && !guard.large) {
+      task.proposalMessageId = await this.say(project.id, task.roomId, { kind: 'proposal', body: `${fmt.proposal(task, stats)}\n${REVERT_OPS_NOTE}`, task });
+    }
+    this.queue.save(task);
+    this.taskLog(task, `reported tests=${testsOk} files=${diff.files.length}`);
+  }
+
   async handleDecision(project, roomId, p) {
     const task = this.queue.all().find((t) => t.proposalMessageId && t.proposalMessageId === p.proposal_message_id);
     if (!task || task.state !== 'reported') return;
@@ -474,7 +536,8 @@ export class Agent {
       task.mergedSha = res.sha;
       await removeWorktree({ project: owner, path: task.worktree });
       this.taskLog(task, `merged ${res.sha}`);
-      return this.say(owner.id, roomId, { body: fmt.merged(task, res.sha), task });
+      const doneBody = task.cmd === 'revert' ? `${fmt.merged(task, res.sha)}\n${REVERT_OPS_NOTE}` : fmt.merged(task, res.sha);
+      return this.say(owner.id, roomId, { body: doneBody, task });
     }
     // The worktree stays for /retry; cleanupOld() removes it after a week.
     task.state = 'rejected';

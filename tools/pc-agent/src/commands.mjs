@@ -1,10 +1,10 @@
 // Chat text -> command. Only text that reached the runner through the
 // server's allowlist is ever parsed here.
-export const QUEUED = new Set(['dev', 'mkt', 'ask', 'check', 'continue', 'retry']);
+export const QUEUED = new Set(['dev', 'mkt', 'ask', 'check', 'continue', 'retry', 'revert']);
 export const INSTANT = new Set(['status', 'stop', 'cancel', 'log', 'diff', 'usage', 'help', 'git', 'merge', 'auto']);
 const ALIASES = {
   상태: 'status', 중지: 'stop', 멈춰: 'stop', 취소: 'cancel', 로그: 'log', 사용량: 'usage', 도움말: 'help',
-  개발: 'dev', 마케팅: 'mkt', 질문: 'ask', 점검: 'check', 이어서: 'continue', 계속: 'continue', 재시도: 'retry', 깃: 'git', 자동: 'auto',
+  개발: 'dev', 마케팅: 'mkt', 질문: 'ask', 점검: 'check', 이어서: 'continue', 계속: 'continue', 재시도: 'retry', 되돌리기: 'revert', 깃: 'git', 자동: 'auto',
 };
 const TASK_ID = /^[A-Z][A-Z0-9]{0,7}-\d{4}$/;
 
@@ -19,7 +19,7 @@ export function parseCommand(body) {
   let rest = (m[3] || '').trim();
   if (!QUEUED.has(cmd) && !INSTANT.has(cmd)) return { cmd: 'unknown', name: m[1] };
   let taskId = '';
-  if (['cancel', 'log', 'diff', 'retry', 'merge'].includes(cmd)) {
+  if (['cancel', 'log', 'diff', 'retry', 'merge', 'revert'].includes(cmd)) {
     const first = rest.split(/\s+/)[0] || '';
     if (TASK_ID.test(first.toUpperCase())) {
       taskId = first.toUpperCase();
@@ -40,6 +40,7 @@ export const HELP = [
   '/mkt <지시> — 마케팅 문구·랜딩 작업',
   '/ask <질문> — 코드를 읽고 답만 (수정 없음)',
   '/retry <작업번호> <추가 지시> — 같은 브랜치에서 이어서',
+  '/revert <작업번호> — 병합된 작업을 되돌리는 브랜치·테스트·제안',
   '/stop — 실행 중 작업 중단 · /cancel <작업번호> — 대기 작업 취소',
   '/merge <작업번호> — 승인했지만 보류된 병합 다시 시도',
   '/log <작업번호> · /diff <작업번호> · /usage · /help',

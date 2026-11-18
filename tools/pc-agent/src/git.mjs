@@ -89,6 +89,21 @@ export async function commitAll(wt, message) {
   return head.out;
 }
 
+// Reverts one merged commit into the worktree without committing, so the
+// caller keeps its own commit message shape.
+export async function revertCommit(wt, sha) {
+  const res = await git(wt, ['revert', '--no-commit', sha]);
+  if (!res.ok) {
+    await git(wt, ['revert', '--abort']);
+    return { ok: false, reason: (res.err || res.out || 'revert failed').slice(0, 300) };
+  }
+  if (!(await changedFiles(wt)).length) {
+    await git(wt, ['revert', '--quit']);
+    return { ok: true, empty: true };
+  }
+  return { ok: true, empty: false };
+}
+
 // Diff of the task branch against main: per-file numbers, added text, a head excerpt.
 export async function diffSummary(wt, mainBranch, headLines = 120) {
   const range = `${mainBranch}...HEAD`;

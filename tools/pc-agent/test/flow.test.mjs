@@ -385,3 +385,41 @@ test('worktrees share each app\'s node_modules and removing them never touches t
   assert.ok(!existsSync(task.worktree), 'worktree removed');
   assert.equal(readFileSync(marker, 'utf8'), 'real package\n', 'the real node_modules is untouched');
 });
+
+test('/revert: merged work is undone on a new branch, tested, proposed, merged back', async () => {
+  const w = world();
+  w.luno.command('/dev add a file WRITE:src/new.txt');
+  await w.drain();
+  w.luno.decide(w.luno.last('proposal').id, 'approved');
+  await w.drain();
+  assert.equal(w.agent.queue.get('T-0001').state, 'merged');
+  assert.ok(existsSync(join(w.repo, 'src', 'new.txt')), 'main has the file before the revert');
+  w.luno.command('/revert T-0001');
+  await w.drain();
+  const task = w.agent.queue.get('T-0002');
+  assert.equal(task.state, 'reported');
+  assert.ok(task.branch.startsWith('luno-auto/'), 'a new luno-auto branch');
+  assert.notEqual(task.branch, w.agent.queue.get('T-0001').branch);
+  assert.match(git(w.repo, 'log', '-1', '--format=%B', task.branch), /luno-auto\(T-0002\)[\s\S]*Luno-Revert: [0-9a-f]+/);
+  const rp = w.luno.last('proposal');
+  assert.ok(rp && rp.body.includes('#T-0002'));
+  assert.ok(rp.body.includes('운영에는 아직 남아 있음, 배포 필요'), 'the proposal carries the ops note');
+  w.luno.decide(rp.id, 'approved');
+  await w.drain();
+  assert.equal(w.agent.queue.get('T-0002').state, 'merged');
+  assert.ok(!existsSync(join(w.repo, 'src', 'new.txt')), 'main no longer has the file');
+  assert.ok(w.luno.last().body.includes('운영에는 아직 남아 있음, 배포 필요'), 'the merged notice carries the ops note');
+});
+
+test('/revert refuses work that was never merged', async () => {
+  const w = world();
+  w.luno.command('/dev WRITE:a.txt');
+  await w.drain();
+  w.luno.command('/revert T-0001');
+  await w.drain();
+  assert.ok(w.luno.last().body.includes('병합된 작업이 아니라'), 'reported-but-unmerged is refused with a reason');
+  assert.equal(w.agent.queue.get('T-0002'), null, 'no task created');
+  w.luno.command('/revert T-9999');
+  await w.drain();
+  assert.ok(w.luno.last().body.includes('/revert T-0001'), 'unknown id gets a usage hint');
+});
