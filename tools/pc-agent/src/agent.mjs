@@ -12,9 +12,14 @@ import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, failur
 import { devPrompt, mktPrompt, askPrompt } from './prompts.mjs';
 import { runCommand, killTree } from './proc.mjs';
 import { Autopilot, autopilotPrompt } from './autopilot.mjs';
+import { Every, EVERY_MAX } from './every.mjs';
 
 export const VERSION = '1.0.0';
 export const RECOVERY_GAP_MS = 3 * 60 * 1000;
+function dayKey(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 const WORK_CMDS = new Set(['dev', 'mkt', 'continue', 'retry']);
 
 export class Agent {
@@ -24,6 +29,7 @@ export class Agent {
     this.log = log;
     this.queue = new TaskQueue(dir);
     this.autopilot = new Autopilot(dir);
+    this.every = new Every(dir);
     this.clients = new Map();
     for (const project of cfg.projects) {
       const token = secrets.tokens[project.tokenRef];
@@ -92,7 +98,7 @@ export class Agent {
   // S3: one morning briefing per day, after the configured time.
   async maybeBriefing(nowMs = this.now()) {
     const d = new Date(nowMs);
-    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const day = dayKey(nowMs);
     const mins = d.getHours() * 60 + d.getMinutes();
     const [bh, bm] = this.cfg.briefing.time.split(':').map(Number);
     if (mins < bh * 60 + bm) return false;
@@ -148,6 +154,55 @@ export class Agent {
     }
     return sent;
   }
+  // S4: daily scheduled commands. Registration, listing and removal.
+  async everyCommand(project, roomId, command, reply) {
+    const text = (command.text || '').trim();
+    const sub = (text.split(/\s+/)[0] || '').toLowerCase();
+    if (!text) return reply('매일 같은 시각에 실행합니다. 예: /every 07:00 /ask 어제 커밋 요약\n/every list · /every off <번호>');
+    if (sub === 'list') {
+      const items = this.every.list();
+      if (!items.length) return reply('정기 작업이 없습니다.');
+      return reply(items.map((e, i) => `${i + 1}. ${e.time} ${e.command}`).join('\n'));
+    }
+    if (sub === 'off') {
+      const n = text.split(/\s+/)[1];
+      const gone = this.every.remove(n);
+      return reply(gone ? `⏹️ 정기 작업 ${n}번을 껐습니다 (${gone.time} ${gone.command}).` : '해당 번호의 정기 작업이 없습니다. /every list 로 확인하세요.');
+    }
+    const m = text.match(/^(\d{1,2}:\d{2})\s+(\/[\s\S]+)$/);
+    if (!m) return reply('형식: /every 07:00 /ask 어제 커밋 요약');
+    const norm = m[1].length === 4 ? `0${m[1]}` : m[1];
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(norm)) return reply('형식: /every 07:00 /ask 어제 커밋 요약 (시각은 00:00~23:59)');
+    const inner = parseCommand(m[2].trim());
+    if (!inner || inner.cmd === 'unknown') return reply('등록할 명령을 해석할 수 없습니다. 예: /every 07:00 /ask 어제 커밋 요약');
+    if (['dev', 'mkt', 'auto', 'continue', 'retry'].includes(inner.cmd)) return reply(`/${inner.cmd} 은(는) 정기 작업으로 등록할 수 없습니다(코드 변경 명령).`);
+    if (this.every.list().length >= EVERY_MAX) return reply('정기 작업은 최대 5개입니다. /every off <번호> 로 끄고 등록하세요.');
+    const at = this.every.add({ time: norm, command: m[2].trim(), roomId, projectId: project.id });
+    return reply(`⏰ 매일 ${norm}에 실행합니다 (${at.index + 1}번): ${m[2].trim()}`);
+  }
+
+  // S4: run due entries through the normal job path, at most once a day.
+  async checkEvery(nowMs = this.now()) {
+    const d = new Date(nowMs);
+    const day = dayKey(nowMs);
+    const mins = d.getHours() * 60 + d.getMinutes();
+    let ran = 0;
+    for (const { index, entry } of this.every.due(day, mins)) {
+      const project = this.project(entry.projectId);
+      if (!project || !project.roomIds.includes(entry.roomId)) continue;
+      this.every.stampRun(index, day);
+      const stamp = `every-${day.replace(/-/g, '')}-${index}`;
+      try {
+        await this.handleJob(project, {
+          id: stamp, every: true, room_id: entry.roomId, kind: 'command',
+          payload: { message_id: stamp, author_id: this.cfg.ownerUserIds[0], body: entry.command, created_at: new Date(nowMs).toISOString() },
+        });
+        ran++;
+      } catch (error) { this.log(`every ${entry.time} ${entry.command} failed: ${error.message}`); }
+    }
+    this.startNext();
+    return ran;
+  }
   async notePollOk(now = Date.now()) {
     const path = join(this.dir, 'lastpoll');
     let prev = 0;
@@ -193,7 +248,7 @@ export class Agent {
       return;
     }
     // Release the 120 s server lock at once; the work continues in the local queue.
-    await client.complete(job.id, 'done', { result: { accepted: true } }).catch(() => {});
+    if (!job.every) await client.complete(job.id, 'done', { result: { accepted: true } }).catch(() => {});
     if (job.kind === 'decision') return this.handleDecision(project, job.room_id, p);
     if (job.kind !== 'command' && job.kind !== 'mention') return;
     if (p.message_id) {
@@ -292,6 +347,7 @@ export class Agent {
       this.startNext();
       return reply(`▶️ 자동 진행을 켰습니다: ${workOrder}\n카드를 하나씩 끝내며 보고합니다. 멈추려면 /auto off 또는 /stop.`);
     }
+    if (cmd === 'every') return this.everyCommand(project, roomId, command, reply);
     const task = command.taskId ? this.queue.get(command.taskId) : null;
     if (cmd === 'cancel') {
       if (!task || task.state !== 'queued') return reply('취소할 대기 작업을 찾을 수 없습니다. 실행 중이면 /stop 을 쓰세요.');
