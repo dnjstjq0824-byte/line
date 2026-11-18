@@ -39,6 +39,7 @@
   // ---------------------------------------------------------------------------
   "durable_objects": { "bindings": [{ "name": "USER_HUB", "class_name": "UserSocketHub" }] },
   "migrations": [{ "tag": "v1-user-socket-hub", "new_sqlite_classes": ["UserSocketHub"] }],
+  "triggers": { "crons": ["*/2 * * * *"] },
   "vars": {
     // Preserve the existing standalone service on its one approved hostname.
     // All other public hosts still fail closed. Demo-account policy is unchanged.

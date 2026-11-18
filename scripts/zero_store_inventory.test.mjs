@@ -48,6 +48,7 @@ const CACHE = new Set([
   'partnerCoupons', // F17: D1 write-through coupon cache (luno_partner_coupons)
   'userConsents', // F24: D1 write-through consent cache (luno_consents; seeds are memory bootstrap like seed users)
   'botPresenceCache', // PC agent: write-throttle for runner presence; D1 (luno_bot_config presence:<bot>) is what status reads
+  'seenCache', // S1: write-throttle for the claim heartbeat; D1 (luno_bot_config seen:<bot>) is what the cron reads
 ]);
 const UNBACKED = new Set([
   'passkeyCreds', 'storeOrders',

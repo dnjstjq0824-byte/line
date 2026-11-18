@@ -3166,6 +3166,62 @@ async function botPresenceTouch(bot, input) {
     } catch { /* presence fan-out never fails a claim */ }
   }
 }
+// S1 (blueprint 9-2): PC-off detection. Every claim records a throttled
+// seen:<bot> heartbeat ({ at, rooms }); a 2-minute cron warns each work
+// room once when its bot has been silent for over BOT_OFFLINE_WARN_MS.
+// warned:<bot> dedups the warning until the next claim clears it.
+const BOT_SEEN_WRITE_MS = 60 * 1000;
+const BOT_OFFLINE_WARN_MS = 3 * 60 * 1000;
+const KST_OFFSET_MS = 9 * 3600 * 1000;
+const seenCache = new Map();
+async function botSeenTouch(bot, rooms) {
+  const db = dbOf();
+  if (!db) return;
+  const at = Date.now();
+  const list = Array.isArray(rooms) ? rooms.filter((r) => typeof r === 'string' && r).slice(0, 50) : [];
+  const roomsKey = list.join(',');
+  const prev = seenCache.get(bot.id);
+  if (prev && at - prev.at < BOT_SEEN_WRITE_MS && prev.roomsKey === roomsKey) return;
+  seenCache.set(bot.id, { at, roomsKey });
+  const value = JSON.stringify({ at, rooms: list });
+  await db.prepare('INSERT INTO luno_bot_config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = ?')
+    .bind('seen:' + bot.id, value, value).run().catch(() => null);
+  await db.prepare('DELETE FROM luno_bot_config WHERE key = ?').bind('warned:' + bot.id).run().catch(() => null);
+}
+function offlineWarningBody(at) {
+  const hhmm = new Date(at + KST_OFFSET_MS).toISOString().slice(11, 16);
+  return `⚠️ 집 PC 응답 없음 (마지막 접속 ${hhmm}) — 정전·재부팅 확인 필요`;
+}
+async function sweepOfflineBots() {
+  const db = dbOf();
+  if (!db) return 0;
+  if (!llmEnabled() || await botKilled()) return 0;
+  await ensureSchema();
+  const rows = await db.prepare("SELECT key, value FROM luno_bot_config WHERE key LIKE 'seen:%'").all().catch(() => null);
+  const list = (rows && rows.results) || [];
+  const nowMs = Date.now();
+  let warned = 0;
+  for (const row of list) {
+    const botId = String(row.key).slice(5);
+    let seen = null;
+    try { seen = JSON.parse(row.value); } catch { seen = null; }
+    const at = Number(seen && seen.at) || 0;
+    if (!at || nowMs - at <= BOT_OFFLINE_WARN_MS) continue;
+    const already = await db.prepare('SELECT value FROM luno_bot_config WHERE key = ?').bind('warned:' + botId).first().catch(() => null);
+    if (already) continue;
+    const rooms = Array.isArray(seen.rooms) ? seen.rooms.filter((r) => typeof r === 'string' && r) : [];
+    const body = offlineWarningBody(at);
+    for (const roomId of rooms) {
+      try {
+        await pushPersistent(roomId, botId, { kind: 'text', body, metadata: { offline_warning: true, last_seen_at: at } });
+      } catch { /* one bad room never blocks the sweep */ }
+    }
+    await db.prepare('INSERT INTO luno_bot_config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = ?')
+      .bind('warned:' + botId, String(nowMs), String(nowMs)).run().catch(() => null);
+    warned++;
+  }
+  return warned;
+}
 // L-04: append one decision. Called by approvals (L-05) only. Returns the
 // decision id, or null when the proposal was already decided.
 async function recordDecision({ roomId, proposalMessageId, decidedBy, decision }) {
@@ -6118,6 +6174,7 @@ function entitled(u, feature) {
     await ensureSchema();
     const claimBody = await readJson(request).catch(() => ({}));
     await botPresenceTouch(me, claimBody && claimBody.presence);
+    await botSeenTouch(me, (me.botScope && me.botScope.rooms) || []);
     if (await botKilled()) return json({ error: 'bot work halted by operator', code: 'LLM_KILLED' }, 403);
     if (!(await botQuotaOk(myId))) return json({ error: 'daily bot quota exceeded', code: 'BOT_QUOTA_EXCEEDED' }, 429);
     const rooms = (me.botScope && me.botScope.rooms) || [];
@@ -8940,6 +8997,21 @@ export default {
       if (err?.code === 'CONVERSATION_CONFLICT') return tag(json({ error: err.message, code: err.code }, 409));
       logx('error', 'internal', { error: err instanceof Error ? (err.stack || err.message) : err });
       return tag(withCors(request, env, json({ error: 'internal_error' }, 500)));
+    } finally {
+      CURRENT_RID = '';
+    }
+  },
+
+  // S1: the 2-minute PC-off cron (wrangler triggers). Dedicated to the
+  // offline sweep; no other job may ride this handler.
+  async scheduled(event, env, ctx) {
+    CURRENT_ENV = env;
+    CURRENT_CTX = ctx || null;
+    CURRENT_RID = uid().slice(0, 8);
+    try {
+      await sweepOfflineBots();
+    } catch (err) {
+      logx('error', 'cron', { error: err instanceof Error ? (err.stack || err.message) : err });
     } finally {
       CURRENT_RID = '';
     }

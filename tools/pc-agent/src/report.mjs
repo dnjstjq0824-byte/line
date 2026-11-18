@@ -46,6 +46,7 @@ export function splitBody(body, max = MAX_BODY) {
 export const fmt = {
   online: ({ version, projects, recovered }) =>
     `🟢 PC 작업봇 온라인 (v${version}) · 프로젝트 ${projects}${recovered ? ` · 재시작으로 중단된 작업 ${recovered}건` : ''}\n/help 로 명령 목록을 볼 수 있습니다.`,
+  recovered: (queued) => `🟢 복구됨, 대기 중 지시 ${queued}건 처리 시작`,
   accepted: (task, waiting) => `📥 #${task.id} 접수 · /${task.cmd}${task.urgent ? '!' : ''} · 대기 ${waiting}건`,
   started: (task, branch) => `▶️ #${task.id} 시작${branch ? ` · 브랜치 ${branch}` : ''}`,
   progress: (task, ms, steps) => `⏳ #${task.id} ${minutes(ms)}분 경과 · 단계 ${steps}`,

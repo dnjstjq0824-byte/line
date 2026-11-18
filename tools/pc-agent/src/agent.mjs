@@ -14,6 +14,7 @@ import { runCommand, killTree } from './proc.mjs';
 import { Autopilot, autopilotPrompt } from './autopilot.mjs';
 
 export const VERSION = '1.0.0';
+export const RECOVERY_GAP_MS = 3 * 60 * 1000;
 const WORK_CMDS = new Set(['dev', 'mkt', 'continue', 'retry']);
 
 export class Agent {
@@ -73,6 +74,22 @@ export class Agent {
     return firstId;
   }
 
+  // S1: after a gap with no successful poll the runner announces its own
+  // recovery once. lastpoll is a plain timestamp file, not task state.
+  async notePollOk(now = Date.now()) {
+    const path = join(this.dir, 'lastpoll');
+    let prev = 0;
+    try { prev = Number(readFileSync(path, 'utf8').trim()) || 0; } catch { prev = 0; }
+    try { writeFileSync(path, String(now)); } catch { /* the next poll retries */ }
+    if (!prev || now - prev <= RECOVERY_GAP_MS) return false;
+    const queued = this.queue.queued().length;
+    for (const project of this.cfg.projects) {
+      for (const roomId of project.roomIds) {
+        await this.say(project.id, roomId, { body: fmt.recovered(queued) });
+      }
+    }
+    return true;
+  }
   async announceOnline(recovered) {
     for (const project of this.cfg.projects) {
       const mine = recovered.filter((t) => t.projectId === project.id);
