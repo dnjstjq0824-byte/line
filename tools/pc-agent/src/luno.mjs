@@ -52,10 +52,19 @@ export class LunoClient {
   }
 
   // clientId makes a retried post idempotent (server dedups per sender).
-  async post(roomId, { kind = 'text', body, replyTo, clientId }) {
+  async post(roomId, { kind = 'text', body, replyTo, clientId, metadata }) {
     const data = await this.request('POST', `conversations/${roomId}/messages`, {
-      kind, body, ...(replyTo ? { reply_to: replyTo } : {}), ...(clientId ? { client_id: clientId } : {}),
+      kind, body, ...(replyTo ? { reply_to: replyTo } : {}), ...(clientId ? { client_id: clientId } : {}), ...(metadata ? { metadata } : {}),
     });
     return (data && (data.id || (data.message && data.message.id))) || '';
+  }
+
+  // S7: screenshot bytes for one room. Returns the attachment id.
+  async uploadAttachment(roomId, { name, mime, bytes }) {
+    const data = await this.request('POST', 'attachments', {
+      conversation_id: roomId, content_base64: Buffer.from(bytes).toString('base64'),
+      mime_type: mime, original_name: name,
+    });
+    return data && data.id;
   }
 }

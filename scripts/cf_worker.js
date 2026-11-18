@@ -83,6 +83,8 @@ const userConsents = new Map();
 // A-20/B-3: attachment bytes live in R2 (MEDIA_BUCKET); D1 keeps metadata
 // only. Base64 intake is kept so existing clients keep working.
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+// S7: bot screenshot uploads cap lower than user uploads.
+const BOT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 const MAX_ATTACHMENT_B64 = 14_000_000;
 const ATTACHMENT_MIME_ALLOW = new Set([
   'image/png', 'image/jpeg', 'image/gif', 'image/webp',
@@ -3062,6 +3064,7 @@ function isBotApiRoute(p, method) {
   if (method === 'GET' && p === 'bot/token') return true;
   if (method === 'POST' && p === 'bot/jobs/claim') return true;
   if (method === 'POST' && /^bot\/jobs\/[\w-]+\/complete$/.test(p)) return true;
+  if (method === 'POST' && p === 'attachments') return true;
   return false;
 }
 // L-02: direct bot mentions become mention jobs — one per mentioned bot per
@@ -5560,15 +5563,22 @@ async function deleteAttachmentEverywhere(attId) {
     let b = {};
     try { const v = JSON.parse(rawBody || '{}'); if (v && typeof v === 'object') b = v; } catch { b = {}; }
     const conv = conversations.get(b.conversation_id);
-    if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
+    if (!conv) return bad('대화방을 찾을 수 없습니다', 404);
+    if (userKind(me) === 'bot') {
+      if (!botScopeAllows(me, 'post', conv.id)) return json({ error: 'forbidden' }, 403);
+    } else if (!conv.members.includes(myId)) {
+      return bad('대화방을 찾을 수 없습니다', 404);
+    }
     if (typeof b.content_base64 !== 'string' || !b.content_base64 || b.content_base64.length > MAX_ATTACHMENT_B64 || !/^[A-Za-z0-9+/=]+$/.test(b.content_base64)) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
     const mime = typeof b.mime_type === 'string' ? b.mime_type.toLowerCase() : '';
     if (!ATTACHMENT_MIME_ALLOW.has(mime)) return json({ error: '허용되지 않은 파일 형식입니다', code: 'MIME_NOT_ALLOWED' }, 415);
+    if (userKind(me) === 'bot' && !mime.startsWith('image/')) return json({ error: '허용되지 않은 파일 형식입니다', code: 'MIME_NOT_ALLOWED' }, 415);
     const bucket = mediaBucketOf();
     const store = dbOf();
     if (!bucket || !store) return json({ error: '미디어 스토리지가 아직 연결되지 않았습니다', code: 'MEDIA_UNAVAILABLE' }, 503);
     const bin = atob(b.content_base64);
     if (bin.length > MAX_ATTACHMENT_BYTES) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
+    if (userKind(me) === 'bot' && bin.length > BOT_ATTACHMENT_MAX_BYTES) return bad('파일이 비어 있거나 너무 큽니다 (최대 5MB)', 413);
     const quota = await quotaConsumeUpload(myId, bin.length);
     if (!quota.ok) return json({ error: 'daily upload quota exceeded', code: 'QUOTA_EXCEEDED', quota_reason: quota.reason }, 429);
     const bytes = new Uint8Array(bin.length);

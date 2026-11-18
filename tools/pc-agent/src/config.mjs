@@ -15,6 +15,7 @@ const PROJECT_DEFAULTS = {
   mktAllowedPaths: ['marketing/**'],
   timeoutsMin: { dev: 40, mkt: 20, ask: 8, check: 20 },
   allowPush: false, allowDeploy: false,
+  screenshots: [],
 };
 const DEFAULTS = {
   model: 'muse-spark-1.3', worktreeRoot: 'C:\\luno-wt', staleMinutes: 30, maxQueued: 10, maxPerDay: 30,
@@ -61,7 +62,9 @@ export function validateConfig(raw, secrets) {
       `project ${project.id}: roomIds is required`);
     need(typeof project.repoPath === 'string' && isAbsolute(project.repoPath), `project ${project.id}: repoPath must be absolute`);
     need(existsSync(join(project.repoPath, '.git')), `project ${project.id}: repoPath is not a git repository`);
-    project.tokenRef = project.tokenRef || project.id;
+    need(Array.isArray(project.screenshots), `project ${project.id}: screenshots must be an array`);
+    need(project.screenshots.every((s) => typeof s === 'string' && s.startsWith('/') && s.length <= 200), `project ${project.id}: screenshots must be root paths`);
+    project.tokenRef = project.tokenRef || project.id;    project.tokenRef = project.tokenRef || project.id;
     const token = secrets && secrets.tokens && secrets.tokens[project.tokenRef];
     need(typeof token === 'string' && token.startsWith('cf-bot-'), `project ${project.id}: bot token "${project.tokenRef}" missing in secrets.json`);
     project.name = project.name || project.id;

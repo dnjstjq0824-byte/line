@@ -7,13 +7,14 @@ import { TaskQueue, stopRequested, URGENT_PER_DAY } from './queue.mjs';
 import { parseCommand, QUEUED, HELP } from './commands.mjs';
 import { museExec, museUsage } from './muse.mjs';
 import { createWorktree, removeWorktree, changedFiles, commitAll, diffSummary, mergeToMain, repoStatus, revertCommit } from './git.mjs';
-import { checkDiff, mask } from './guards.mjs';
+import { checkDiff, mask, matchesAny } from './guards.mjs';
 import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, failureExcerpt, minutes, REVERT_OPS_NOTE, URGENT_DAILY_NOTE } from './report.mjs';
 import { devPrompt, mktPrompt, askPrompt } from './prompts.mjs';
 import { runCommand, killTree } from './proc.mjs';
 import { Autopilot, autopilotPrompt } from './autopilot.mjs';
 import { Every, EVERY_MAX } from './every.mjs';
 import { ntfyPing } from './ntfy.mjs';
+import { defaultCapture, shotName } from './capture.mjs';
 
 export const VERSION = '1.0.0';
 export const RECOVERY_GAP_MS = 3 * 60 * 1000;
@@ -24,7 +25,7 @@ function dayKey(ms) {
 const WORK_CMDS = new Set(['dev', 'mkt', 'continue', 'retry']);
 
 export class Agent {
-  constructor({ cfg, secrets, dir, clientFactory, log = () => {}, now = null, ntfyFetch = null }) {
+  constructor({ cfg, secrets, dir, clientFactory, log = () => {}, now = null, ntfyFetch = null, captureImpl = null }) {
     this.cfg = cfg;
     this.dir = dir;
     this.log = log;
@@ -44,6 +45,7 @@ export class Agent {
     this.replySeq = 0;
     this.now = now || (() => Date.now());
     this.ntfyFetch = ntfyFetch;
+    this.captureImpl = captureImpl;
   }
 
   project(id) { return this.cfg.projects.find((p) => p.id === id); }
@@ -59,7 +61,7 @@ export class Agent {
   }
 
   // Posts one logical message (split when long). Never throws.
-  async say(projectId, roomId, { kind = 'text', body, replyTo, task }) {
+  async say(projectId, roomId, { kind = 'text', body, replyTo, task, metadata }) {
     const client = this.client(projectId);
     const owner = this.project(projectId);
     const parts = splitBody(mask(stripPaths(body, [task && task.worktree, owner && owner.repoPath])));
@@ -72,7 +74,7 @@ export class Agent {
       } else clientId = `pca-r-${this.startedAt}-${++this.replySeq}`;
       try {
         // Only the first part carries the special kind; continuations are plain text.
-        const id = await client.post(roomId, { kind: i === 0 ? kind : 'text', body: parts[i], replyTo: i === 0 ? replyTo : undefined, clientId });
+        const id = await client.post(roomId, { kind: i === 0 ? kind : 'text', body: parts[i], replyTo: i === 0 ? replyTo : undefined, clientId, metadata: i === 0 ? metadata : undefined });
         if (!firstId) firstId = id;
         if (task && id) task.postedMessageIds = [...(task.postedMessageIds || []), id].slice(-40);
       } catch (error) {
@@ -213,6 +215,33 @@ export class Agent {
       const r = await ntfyPing({ topic, body: text, fetchImpl: this.ntfyFetch || fetch });
       return r.sent;
     } catch { return false; }
+  }
+  // S7: shoot the changed web UI and attach the captures after the report.
+  // Capture or upload failures never fail the task.
+  async attachScreenshots(project, task) {
+    const pages = project.screenshots || [];
+    if (!pages.length || !task.worktree) return 0;
+    const capture = this.captureImpl || defaultCapture;
+    let shots;
+    try {
+      shots = await capture({ worktree: task.worktree, pages });
+    } catch (error) {
+      this.taskLog(task, `capture failed: ${error.message}`);
+      this.log(`capture failed (${task.id}): ${error.message}`);
+      return 0;
+    }
+    let n = 0;
+    for (const shot of shots || []) {
+      try {
+        const name = shotName(shot.page, shot.size);
+        const id = await this.client(project.id).uploadAttachment(task.roomId, { name, mime: 'image/png', bytes: shot.png });
+        await this.say(project.id, task.roomId, { kind: 'image', body: `${shot.page} · ${shot.size}`, metadata: { attachment_id: id }, task });
+        n++;
+      } catch (error) {
+        this.taskLog(task, `shot upload failed (${shot.page} ${shot.size}): ${error.message}`);
+      }
+    }
+    return n;
   }
   async notePollOk(now = Date.now()) {
     const path = join(this.dir, 'lastpoll');
@@ -581,7 +610,8 @@ export class Agent {
       task.state = 'done';
       await removeWorktree({ project, path: task.worktree });
 
-      await this.pingNtfy(`LUNO: ${task.id} 완료`);      return this.say(project.id, task.roomId, { kind: 'report', body: reportBody({ task, title, ok: true, ms: Date.now() - startedAt, summary: res.text, note: '코드 변경 없음', usage }), task });
+      await this.pingNtfy(`LUNO: ${task.id} 완료`);
+      return this.say(project.id, task.roomId, { kind: 'report', body: reportBody({ task, title, ok: true, ms: Date.now() - startedAt, summary: res.text, note: '코드 변경 없음', usage }), task });
     }
     const guard = checkDiff({ files: diff.files, addedText: diff.addedText, forbiddenPaths: project.forbiddenPaths, allowedPaths: task.mode === 'mkt' ? project.mktAllowedPaths : null });
     if (guard.violations.length) return fail(`안전 규칙 위반으로 병합 제안을 하지 않습니다:\n- ${guard.violations.slice(0, 10).join('\n- ')}\n브랜치 ${task.branch} 는 보존했습니다.`);
@@ -609,6 +639,9 @@ export class Agent {
       kind: 'report', task,
       body: reportBody({ task, title, ok: testsOk, ms: Date.now() - startedAt, summary: res.text, tests, diff: stats, large: guard.large, usage, note }),
     });
+    if (testsOk && project.screenshots.length && task.worktree && diff.files.some((f) => matchesAny(f.path, ['apps/user-web/**']))) {
+      await this.attachScreenshots(project, task);
+    }
     if (testsOk && !guard.large) {
       task.proposalMessageId = await this.say(project.id, task.roomId, { kind: 'proposal', body: fmt.proposal(task, stats), task });
     }
