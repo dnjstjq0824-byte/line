@@ -120,3 +120,27 @@ node --test "test/*.test.mjs"
 - `muse exec --json` 은 한 줄에 이벤트 하나를 낸다. 러너가 쓰는 것: `task.lifecycle.started`(단계 수),
   `run.output.delta`(본문 조각), `run.terminal.completed|failed`(마지막 답 `text`, `reason`). 모르는 이벤트는 무시한다.
 - `muse usage` 출력의 `Weekly: N% used` 가 90% 이상이면 `/dev`·`/mkt`·`/continue` 를 보류한다(`/ask` 는 계속).
+
+### S0: `muse exec` 셸 샌드박스 진단 (2026-11-18, 1.4.20·1.4.23 실측)
+
+- 증상: 러너가 띄운 `muse exec` 안에서 셸 도구가 전부 실패한다.
+  `windows_elevated unified exec session failed: ... WindowsRunnerSpawnReadyDeadlineExpired after 1000ms`
+  또는 `CreateProcessAsUserW failed ... (os error 5)`. 파일 읽기·쓰기는 정상이라 작업은 파일만 바꾼 채 끝난다.
+- 범위: 11-15 작업(T-0001~T-0018)은 셸 실패 0건, 11-16 이후 개발 작업(T-0019/21/22/28/29/31)은 전부 실패.
+  `/ask` 작업은 셸을 쓰지 않아 실패가 없다. 그 사이 muse(1.4.20 단일)·러너 호출부는 무변경이다.
+  바뀐 것은 KB5132061 보안 업데이트와 재부팅뿐이다. 증거: `%USERPROFILE%\.luno-agent\logs\T-*.jsonl`.
+- 원인: exec 경로의 managed 셸이 샌드박스 사용자(muse-sbx-*)로 자식 프로세스를 띄우려는데
+  그 호출이 이 PC에서 거부된다. 샌드박스 사용자 로그온 자체는 성공한다(최종 로그온 시각 갱신 확인).
+  `serve` 경로(같은 사용자 자식)는 정상이라 대화형 세션은 영향을 받지 않는다.
+- 샌드박스를 끄지 않는 해결책은 찾지 못했다. 아래는 전부 직접 재현·검증했고 전부 실패했다:
+  상승 권한 실행(High 무결성 확인), `--enable-shell-tool`, 1.4.20 바이너리 직접 실행.
+  최고 권한 예약 작업(`/RL HIGHEST`)도 같은 지점에서 실패하므로 등록할 필요가 없다.
+- 재현(구독 과금 몇 단계 소모): 셸 1회 호출에 실패 5줄·whoami 출력 없음이 재현 상태다.
+  ```powershell
+  mkdir $env:TEMP\luno-s0 -Force
+  Set-Content $env:TEMP\luno-s0\prompt.txt 'Use the shell tool to run `whoami` exactly once. Report its output verbatim. Do not use file tools.'
+  muse exec --json --prompt-file $env:TEMP\luno-s0\prompt.txt --model muse-spark-1.3 --reasoning-effort medium --workspace $env:TEMP\luno-s0 --approval-mode never --approval-judge on --sandbox-network proxy-only --disable-request-user-input --max-model-steps 10 --session-id ([guid]::NewGuid().ToString()) 2>&1 | Set-Content $env:TEMP\luno-s0\repro.jsonl
+  Select-String $env:TEMP\luno-s0\repro.jsonl -Pattern 'tool failed|spawn_ready|os error 5' | Measure-Object | Select-Object Count
+  ```
+- 대표 조치 필요: 벤더 버그 리포트(위 재현 + T-0021.jsonl).
+  임시 우회(러너가 셸을 직접 실행하고 결과를 모델에 전달)는 격리 약화라 대표 결정 없이 하지 않는다.
