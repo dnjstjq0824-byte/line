@@ -58,3 +58,24 @@ cd tools/pc-agent && node --test "test/*.test.mjs"
 4. main 폴더에서 `node --test "scripts/*.test.mjs"` 와 `cd tools/pc-agent && node --test "test/*.test.mjs"` 를 한 번 더 돌려 확인한다.
 러너가 같은 때 main 에 병합 중이면 3이 실패할 수 있다. 그때는 2부터 다시 한다.
 푸시·배포는 여전히 하지 않는다(대표가 따로 지시).
+## 결과 (S0~S7, 2026-11-18)
+
+| 카드 | 커밋 | 테스트 |
+|---|---|---|
+| S0 셸 샌드박스 진단 | f81c9b4 | scripts 595/595·pc-agent 23/23 |
+| S1 PC 꺼짐 감지 | 512a215 | scripts 601/601·pc-agent 27/27 |
+| S2 되돌리기 /revert | 4c14e78 | scripts 601/601·pc-agent 30/30 |
+| S3 브리핑·재알림·조용한 시간 | b70a0f1 | scripts 602/602·pc-agent 36/36 |
+| S4 정기 작업 /every | 9e363ec | scripts 602/602·pc-agent 40/40 |
+| S5 긴급 지시 5회 제한 | 40cf077 | scripts 602/602·pc-agent 43/43 |
+| S6 ntfy 임시 알림 | 92a44a4 | scripts 602/602·pc-agent 49/49 |
+| S7 화면 캡처 보고 | 40750cd | scripts 609/609·pc-agent 55/55 |
+
+대표 조치 필요:
+- 벤더 버그 리포트: muse exec 셸 실행 실패 (원인·재현법은 tools/pc-agent/README.md "Muse CLI 실측" S0절). 임시 우회(셸을 러너가 직접 실행)는 격리 약화라 대표 결정 없이 채택하지 않음.
+- 배포 후 발효: S1 cron(2분)은 다음 `npm run deploy` 때부터 돈다. 배포는 대표 지시 후.
+- 러너 재시작: main 병합 뒤 `powershell -File tools\pc-agent\windows\restart-agent.ps1` (S2~S7 러너 코드 반영). 직접 재시작하지 않음.
+- 선택 설정: 프로젝트 `screenshots[]`(S7, 기본 꺼짐), `notify.ntfyTopic`(S6, 추측 불가능한 무작위 32자, 기본 꺼짐).
+- S8/S9는 이 차례 범위 밖이라 미착수.
+
+발견(범위밖, 수정 안 함): `tools/pc-agent/src/proc.mjs` resolveCommand는 공백 포함 경로의 .cmd 심을 인용 없이 cmd /c에 넘겨 실패한다. S7은 node로 vite 바이너리를 직접 실행해 회피.
