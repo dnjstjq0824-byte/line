@@ -3046,7 +3046,7 @@ async function authBotToken(token) {
   let rooms = [], ops = [];
   try { rooms = JSON.parse(row.rooms_json); ops = JSON.parse(row.ops_json); } catch { return null; }
   if (!Array.isArray(rooms) || !Array.isArray(ops)) return null;
-  return { ...bot, role: 'user', kind: 'bot', botScope: { id: row.id, rooms, ops } };
+  return { ...bot, role: 'user', kind: 'bot', botScope: { id: row.id, rooms, ops, expires_at: Number(row.expires_at) } };
 }
 function botScopeAllows(me, op, roomId) {
   const s = me && me.botScope;
@@ -3059,6 +3059,7 @@ function isBotApiRoute(p, method) {
   if (method === 'GET' && /^conversations\/[\w-]+$/.test(p)) return true;
   // L-08: runners re-read mention context through the delta sync (read op).
   if (method === 'GET' && /^conversations\/[\w-]+\/sync$/.test(p)) return true;
+  if (method === 'GET' && p === 'bot/token') return true;
   if (method === 'POST' && p === 'bot/jobs/claim') return true;
   if (method === 'POST' && /^bot\/jobs\/[\w-]+\/complete$/.test(p)) return true;
   return false;
@@ -6165,6 +6166,11 @@ function entitled(u, feature) {
     return json({ tickets: (results || []).map(supportTicketView) });
   }
 
+  // S3: a bot reads its own token expiry for the morning briefing.
+  if (p === 'bot/token' && method === 'GET') {
+    if (userKind(me) !== 'bot') return json({ error: 'forbidden' }, 403);
+    return json({ bot_id: myId, expires_at: me.botScope.expires_at, rooms: me.botScope.rooms, ops: me.botScope.ops });
+  }
   // ---------- L-07 bot jobs (claim/complete; bots only, rooms in scope) ----------
   if (p === 'bot/jobs/claim' && method === 'POST') {
     if (userKind(me) !== 'bot') return json({ error: 'forbidden' }, 403);

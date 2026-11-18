@@ -63,6 +63,8 @@ for (;;) {
   try {
     await agent.pollOnce();
     try { await agent.notePollOk(); } catch (error) { log(`recovery note failed: ${error.message}`); }
+    try { await agent.maybeBriefing(); } catch (error) { log(`briefing failed: ${error.message}`); }
+    try { await agent.maybeRemind(); } catch (error) { log(`remind failed: ${error.message}`); }
     backoff = 0;
     const active = agent.current || Date.now() - agent.lastActivity < 120000;
     const hour = new Date().getHours();

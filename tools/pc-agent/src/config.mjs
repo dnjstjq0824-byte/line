@@ -20,6 +20,7 @@ const DEFAULTS = {
   model: 'muse-spark-1.3', worktreeRoot: 'C:\\luno-wt', staleMinutes: 30, maxQueued: 10, maxPerDay: 30,
   usageHoldPercent: 90, pollMs: { active: 5000, idle: 10000, night: 20000 }, progressEveryMs: 120000,
   maxModelSteps: 150,
+  briefing: { time: '07:30', quietStart: '01:00', quietEnd: '07:00', remindAfterHours: 6 },
 };
 
 function need(cond, message) {
@@ -37,7 +38,7 @@ export function findMuseLauncher() {
 
 export function validateConfig(raw, secrets) {
   need(raw && typeof raw === 'object', 'must be an object');
-  const cfg = { ...DEFAULTS, ...raw, pollMs: { ...DEFAULTS.pollMs, ...(raw.pollMs || {}) } };
+  const cfg = { ...DEFAULTS, ...raw, pollMs: { ...DEFAULTS.pollMs, ...(raw.pollMs || {}) }, briefing: { ...DEFAULTS.briefing, ...(raw.briefing || {}) } };
   need(/^https:\/\/[^\s]+\/api\/v1$/.test(cfg.baseUrl || '') || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/api\/v1$/.test(cfg.baseUrl || ''),
     'baseUrl must be https://…/api/v1');
   need(typeof cfg.ownerUserId === 'string' && cfg.ownerUserId.length >= 8, 'ownerUserId is required');
@@ -74,6 +75,11 @@ export function validateConfig(raw, secrets) {
     const wt = cfg.worktreeRoot.toLowerCase();
     need(!wt.startsWith(p.repoPath.toLowerCase()), 'worktreeRoot must be outside the repository');
   }
+  const hhmm = (v) => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  need(hhmm(cfg.briefing.time), 'briefing.time must be HH:MM');
+  need(hhmm(cfg.briefing.quietStart), 'briefing.quietStart must be HH:MM');
+  need(hhmm(cfg.briefing.quietEnd), 'briefing.quietEnd must be HH:MM');
+  need(Number.isFinite(cfg.briefing.remindAfterHours) && cfg.briefing.remindAfterHours > 0, 'briefing.remindAfterHours must be positive');
   return cfg;
 }
 

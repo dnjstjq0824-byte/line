@@ -291,3 +291,16 @@ test('production config turns the remote-work switches on', async () => {
   assert.match(worker, /CREATE TABLE IF NOT EXISTS luno_conversations \(/, 'the flag is only safe because the tables self-create');
   assert.match(worker, /CREATE TABLE IF NOT EXISTS luno_conversation_members \(/);
 });
+
+test('a bot token reports its own expiry, users get 403', async () => {
+  const w = await world();
+  try {
+    const res = await w.api('bot/token', 'GET', null, w.tokA);
+    assert.equal(res.status, 200);
+    const info = await res.json();
+    assert.equal(info.bot_id, w.botA.id);
+    assert.ok(Math.abs(info.expires_at - (Date.now() + 3600000)) < 120000);
+    assert.deepEqual(info.rooms, [w.room.id]);
+    assert.equal((await w.api('bot/token', 'GET', null, w.owner)).status, 403);
+  } finally { w.db.raw.close(); }
+});

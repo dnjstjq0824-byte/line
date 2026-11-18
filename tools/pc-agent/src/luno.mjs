@@ -47,6 +47,10 @@ export class LunoClient {
     return this.request('POST', `bot/jobs/${jobId}/complete`, { status, usage: { requests: 1, tokens: 0 }, ...extra });
   }
 
+  tokenInfo() {
+    return this.request('GET', 'bot/token');
+  }
+
   // clientId makes a retried post idempotent (server dedups per sender).
   async post(roomId, { kind = 'text', body, replyTo, clientId }) {
     const data = await this.request('POST', `conversations/${roomId}/messages`, {

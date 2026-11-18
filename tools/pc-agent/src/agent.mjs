@@ -18,7 +18,7 @@ export const RECOVERY_GAP_MS = 3 * 60 * 1000;
 const WORK_CMDS = new Set(['dev', 'mkt', 'continue', 'retry']);
 
 export class Agent {
-  constructor({ cfg, secrets, dir, clientFactory, log = () => {} }) {
+  constructor({ cfg, secrets, dir, clientFactory, log = () => {}, now = null }) {
     this.cfg = cfg;
     this.dir = dir;
     this.log = log;
@@ -35,6 +35,7 @@ export class Agent {
     this.lastActivity = 0;
     this.startedAt = Date.now();
     this.replySeq = 0;
+    this.now = now || (() => Date.now());
   }
 
   project(id) { return this.cfg.projects.find((p) => p.id === id); }
@@ -76,6 +77,77 @@ export class Agent {
 
   // S1: after a gap with no successful poll the runner announces its own
   // recovery once. lastpoll is a plain timestamp file, not task state.
+  // S3: quiet hours skip progress chatter (started pings, progress pings).
+  // Command replies, reports, proposals, decisions and recoveries always
+  // go through.
+  quietNow(atMs = this.now()) {
+    const toMin = (s) => { const [h, m] = String(s).split(':').map(Number); return h * 60 + m; };
+    const d = new Date(atMs);
+    const mins = d.getHours() * 60 + d.getMinutes();
+    const from = toMin(this.cfg.briefing.quietStart);
+    const to = toMin(this.cfg.briefing.quietEnd);
+    return from <= to ? (mins >= from && mins < to) : (mins >= from || mins < to);
+  }
+
+  // S3: one morning briefing per day, after the configured time.
+  async maybeBriefing(nowMs = this.now()) {
+    const d = new Date(nowMs);
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const mins = d.getHours() * 60 + d.getMinutes();
+    const [bh, bm] = this.cfg.briefing.time.split(':').map(Number);
+    if (mins < bh * 60 + bm) return false;
+    const path = join(this.dir, 'briefing.json');
+    try {
+      const prev = JSON.parse(readFileSync(path, 'utf8'));
+      if (prev && prev.day === day) return false;
+    } catch { /* first briefing */ }
+    const body = await this.briefingBody(nowMs, day);
+    const first = this.cfg.projects[0];
+    await this.say(first.id, first.roomIds[0], { body });
+    try { writeFileSync(path, JSON.stringify({ day })); } catch { /* the next loop retries */ }
+    return true;
+  }
+
+  async briefingBody(nowMs, day) {
+    const since = nowMs - 24 * 3600 * 1000;
+    const at = (t) => Date.parse(t.updatedAt || t.createdAt || 0);
+    const recent = this.queue.all().filter((t) => at(t) >= since);
+    const done = recent.filter((t) => t.state === 'done' || t.state === 'merged').length;
+    const failed = recent.filter((t) => t.state === 'failed').length;
+    const pending = this.queue.all().filter((t) => t.state === 'reported' && t.proposalMessageId);
+    const lines = [`☀️ 아침 브리핑 (${day})`, `지난 24시간: 완료 ${done}건 · 실패 ${failed}건`];
+    lines.push(pending.length ? `승인 대기: ${pending.map((t) => `#${t.id}`).join(', ')}` : '승인 대기 없음');
+    lines.push(this.autopilotText());
+    const { usage } = await museUsage(this.cfg).catch(() => ({ usage: null }));
+    if (usage) lines.push(`Muse 사용량: 주간 ${usage.weekly ?? '?'}% · 현재 창 ${usage.window ?? '?'}%`);
+    for (const project of this.cfg.projects) {
+      try {
+        const info = await this.client(project.id).tokenInfo();
+        const days = Math.ceil((Number(info.expires_at) - nowMs) / 86400000);
+        const e = new Date(Number(info.expires_at));
+        lines.push(`${project.name} 토큰 만료 D-${days} (${e.getMonth() + 1}/${e.getDate()})`);
+      } catch { lines.push(`${project.name} 토큰 만료일 확인 불가`); }
+    }
+    return lines.join('\n');
+  }
+
+  // S3: a proposal waiting past the remind threshold gets exactly one
+  // nudge. The original proposal message stays the live one.
+  async maybeRemind(nowMs = this.now()) {
+    const afterMs = this.cfg.briefing.remindAfterHours * 3600 * 1000;
+    let sent = 0;
+    for (const task of this.queue.all()) {
+      if (task.state !== 'reported' || !task.proposalMessageId || task.remindedAt) continue;
+      const proposedAt = Date.parse(task.updatedAt || task.createdAt || 0);
+      if (!proposedAt || nowMs - proposedAt < afterMs) continue;
+      const hours = Math.floor((nowMs - proposedAt) / 3600000);
+      task.remindedAt = new Date(nowMs).toISOString();
+      this.queue.save(task);
+      await this.say(task.projectId, task.roomId, { body: `⏰ #${task.id} 병합 제안이 ${hours}시간째 승인 대기 중입니다. 위 제안을 확인해 주세요.`, replyTo: task.proposalMessageId, task });
+      sent++;
+    }
+    return sent;
+  }
   async notePollOk(now = Date.now()) {
     const path = join(this.dir, 'lastpoll');
     let prev = 0;
@@ -340,7 +412,7 @@ export class Agent {
   }
 
   async runCheck(project, task, startedAt) {
-    await this.say(project.id, task.roomId, { body: fmt.started(task), task });
+    if (!this.quietNow()) await this.say(project.id, task.roomId, { body: fmt.started(task), task });
     const tests = [];
     for (const check of project.checkCommands) {
       const res = await runCommand(check.cmd, { cwd: join(project.repoPath, check.cwd || '.'), timeoutMs: project.timeoutsMin.check * 60000 });
@@ -366,11 +438,11 @@ export class Agent {
       const c = this.current;
       if (!c) return;
       c.steps = state.steps;
-      const now = Date.now();
+      const now = this.now();
       if (now - (c.lastProgressAt || startedAt) < this.cfg.progressEveryMs) return;
       c.lastProgressAt = now;
       this.taskLog(task, `progress steps=${state.steps}`);
-      this.say(project.id, task.roomId, { body: fmt.progress(task, now - startedAt, state.steps), task });
+      if (!this.quietNow(now)) this.say(project.id, task.roomId, { body: fmt.progress(task, now - startedAt, state.steps), task });
     };
   }
 
@@ -411,7 +483,7 @@ export class Agent {
       task.mode = mode;
     }
     this.queue.save(task);
-    await this.say(project.id, task.roomId, { body: fmt.started(task, task.branch), task });
+    if (!this.quietNow()) await this.say(project.id, task.roomId, { body: fmt.started(task, task.branch), task });
     const promptText = (task.mode === 'mkt' ? mktPrompt : devPrompt)({ project, text: task.text, previous });
     const res = await museExec({
       cfg: this.cfg, mode: task.mode, promptFile: this.writePrompt(task, promptText), workspace: task.worktree,
@@ -477,7 +549,7 @@ export class Agent {
     task.worktree = wt.path;
     task.branch = wt.branch;
     this.queue.save(task);
-    await this.say(project.id, task.roomId, { body: fmt.started(task, task.branch), task });
+    if (!this.quietNow()) await this.say(project.id, task.roomId, { body: fmt.started(task, task.branch), task });
     const rev = await revertCommit(task.worktree, target.mergedSha);
     if (!rev.ok) return fail(`자동 되돌리기 실패: ${rev.reason}\n브랜치 ${task.branch} 는 보존했습니다. 집에서 직접 해결하세요.`);
     if (rev.empty) {
