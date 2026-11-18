@@ -45,7 +45,7 @@ cd tools/pc-agent && node --test "test/*.test.mjs"
 - [x] **S6 보고 도착 임시 알림 ntfy (9-1, 기본 꺼짐)** — 러너 설정 `notify.ntfyTopic`이 있을 때만, 완료·실패·승인 대기·PC 꺼짐을 **내용 없는 한 줄**(`LUNO: T-0003 완료`)로 보낸다. 요약·코드·diff는 절대 넣지 않는다. 설정이 없으면 외부 호출 0건. 완료: 설정 없음 → 호출 0, 설정 있음 → 본문에 작업 번호와 상태만 있는지 테스트(가짜 fetch). → 완료: ntfy 한 줄 알림(미설정 0건·설정 시 번호+상태만·복구 포함), pc-agent 49/49.
 - [x] **S7 화면 캡처 보고 (9-5)** — 서버: 봇 토큰으로 `POST attachments`(토큰 범위 안의 방, `post` 권한, 이미지만, 5MB 이하)와 범위 검사 테스트. 러너: 웹(`apps/user-web/**`)이 바뀐 작업이면 worktree에서 개발 서버를 띄우고 루트 `node_modules`의 Playwright로 390×844·1280×800을 캡처해 보고에 첨부(프로젝트 설정 `screenshots[]`, 기본 끔). 완료: 서버 범위 검사 테스트 + 러너는 가짜 캡처 함수로 첨부 흐름 테스트. → 완료: 봇 이미지 업로드 범위검사+5MB+실기반 실증(vite+Playwright), scripts 609/609·pc-agent 55/55.
 - [x] **S8 관리자 콘솔 봇 관리 화면** — `apps/admin-console`에 봇 목록, 새 봇 발급, 토큰 갱신(만료일 표시), 킬스위치 켜기/끄기, 허용목록 보기. 서버의 기존 관리자 API(`admin/bots`, `admin/llm/*`)만 쓰고, 토큰 원문은 발급 직후 한 번만 보여 준다. 완료: 콘솔 vue-tsc·빌드 통과, 관리자 API 호출을 핀하는 테스트. → 완료: 콘솔 봇 관리(목록·발급·토큰갱신·킬스위치·허용목록, 기존 API만), vue-tsc·빌드·scripts 611/611.
-- [ ] **S9 프로젝트 추가 자동화** — `node tools/pc-agent/setup/provision.mjs add-project --id shop --name 쇼핑몰 --repo <경로>`: 봇 발급·작업방 생성·허용목록·토큰·`config.json`의 `projects[]` 추가를 한 번에. 실서버 쓰기는 대표가 실행하는 명령이므로, 로컬 테스트는 가짜 서버로. 완료: 가짜 서버로 add-project 전체 흐름 테스트 + README 사용법.
+- [x] **S9 프로젝트 추가 자동화** — `node tools/pc-agent/setup/provision.mjs add-project --id shop --name 쇼핑몰 --repo <경로>`: 봇 발급·작업방 생성·허용목록·토큰·`config.json`의 `projects[]` 추가를 한 번에. 실서버 쓰기는 대표가 실행하는 명령이므로, 로컬 테스트는 가짜 서버로. 완료: 가짜 서버로 add-project 전체 흐름 테스트 + README 사용법. → 완료: add-project 한 번에 개설(봇·방·허용·토큰·config)+가짜서버 e2e+README, pc-agent 58/58.
 
 ## 4. 끝났을 때
 

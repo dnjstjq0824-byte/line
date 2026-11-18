@@ -4,6 +4,7 @@
 //   node setup/provision.mjs setup      as that owner (must be admin): bot, work room, allowlist, token, config
 //   node setup/provision.mjs add-owner --email <email>   let another of your accounts command the bot from a 1:1 chat
 //   node setup/provision.mjs rotate     mint a fresh 30-day bot token (the old one is revoked)
+//   node setup/provision.mjs add-project --id shop --name 쇼핑몰 --repo <path>   bot, room, allowlist, token, config entry
 //   node setup/provision.mjs status     show what is configured (never prints secrets)
 //
 // Secrets (owner password, bot token) are written only to the state folder
@@ -11,7 +12,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { userInfo } from 'node:os';
 import { stateDir, findMuseLauncher } from '../src/config.mjs';
@@ -97,14 +98,14 @@ async function register() {
   console.log(`password saved to ${paths.owner}`);
 }
 
-async function mintToken(token, botId, rooms) {
+async function mintToken(token, botId, rooms, ref = 'line') {
   const data = must(await api(`admin/bots/${botId}/tokens`, {
     method: 'POST', token, body: { rooms, ops: ['read', 'post', 'propose'], ttl_sec: 2592000 },
   }), 'bot token', 201);
   const secrets = read(paths.secrets, { tokens: {}, expires: {} });
-  secrets.tokens = { ...(secrets.tokens || {}), line: data.token };
-  secrets.expires = { ...(secrets.expires || {}), line: data.expires_at };
-  secrets.tokenIds = { ...(secrets.tokenIds || {}), line: data.id };
+  secrets.tokens = { ...(secrets.tokens || {}), [ref]: data.token };
+  secrets.expires = { ...(secrets.expires || {}), [ref]: data.expires_at };
+  secrets.tokenIds = { ...(secrets.tokenIds || {}), [ref]: data.id };
   write(paths.secrets, secrets);
   return data.expires_at;
 }
@@ -195,6 +196,52 @@ async function addOwner() {
   console.log(`bot token re-issued for ${allRooms(state).length} rooms (expires ${new Date(expires).toISOString()}); restart the runner`);
 }
 
+// S9: provision a whole project at once: bot, work room, room allowlist,
+// scoped token, and the projects[] entry. Idempotent across reruns.
+async function addProject() {
+  const id = opt('id', '');
+  const name = opt('name', '');
+  const repo = opt('repo', '');
+  if (!/^[a-z][a-z0-9_-]{0,23}$/.test(id)) throw new Error('usage: provision.mjs add-project --id <lowercase id> --name <name> --repo <absolute path>');
+  if (!name) throw new Error('usage: provision.mjs add-project --id <lowercase id> --name <name> --repo <absolute path>');
+  if (!repo || !isAbsolute(repo)) throw new Error(`--repo must be an absolute path: ${repo || '(missing)'}`);
+  if (!existsSync(join(repo, '.git'))) throw new Error(`--repo is not a git repository: ${repo}`);
+  const prefix = id.replace(/[^a-z0-9]/g, '').toUpperCase().slice(0, 8);
+  if (!/^[A-Z][A-Z0-9]{0,7}$/.test(prefix)) throw new Error(`cannot derive a task prefix from --id ${id}`);
+  const config = read(paths.config, null);
+  if (!config || !Array.isArray(config.projects)) throw new Error(`${paths.config} missing — run "provision.mjs setup" first`);
+  if (config.projects.some((p) => p.id === id)) throw new Error(`project ${id} already exists in ${paths.config}`);
+  const { token, role } = await loginOwner();
+  if (role !== 'admin') throw new Error('the provisioning account is not an admin on this server');
+  const state = read(paths.provision, {});
+  state.projects = state.projects || {};
+  const slot = state.projects[id] || {};
+  slot.name = name;
+  slot.repo = repo;
+  const botHandle = `luno_${id}`.replace(/-/g, '_').slice(0, 20);
+  if (!slot.botId) {
+    const bot = must(await api('admin/bots', { method: 'POST', token, body: { display_name: `${name} 작업봇`, handle: botHandle } }), 'bot issue', 201);
+    slot.botId = bot.id;
+    state.projects[id] = slot;
+    write(paths.provision, state);
+    console.log(`bot issued: ${bot.handle} (id ${bot.id})`);
+  }
+  if (!slot.roomId) {
+    const room = must(await api('conversations', { method: 'POST', token, body: { kind: 'group', title: `${name} 작업실`, member_ids: [slot.botId] } }), 'work room', 201);
+    slot.roomId = room.id;
+    state.projects[id] = slot;
+    write(paths.provision, state);
+    console.log(`work room created: ${slot.roomId}`);
+  }
+  must(await api('admin/llm/allowlist', { method: 'POST', token, body: { kind: 'room', ref_id: slot.roomId } }), 'allowlist room', 200, 201);
+  const expires = await mintToken(token, slot.botId, [slot.roomId], id);
+  config.projects.push({ id, name, prefix, roomIds: [slot.roomId], repoPath: repo, mainBranch: 'main' });
+  write(paths.config, config);
+  lockDown();
+  console.log(`project added: ${id} (prefix ${prefix})`);
+  console.log(`bot token minted (expires ${new Date(expires).toISOString()})`);
+  console.log('next: set testCommands/checkCommands for the project in config.json, then restart the runner');
+}
 async function rotate() {
   const { token } = await loginOwner();
   const state = read(paths.provision, {});
@@ -218,6 +265,6 @@ function status() {
   }, null, 2));
 }
 
-const steps = { register, setup, rotate, status, 'add-owner': addOwner };
-if (!steps[step]) { console.error(`unknown step "${step}" (register | setup | add-owner | rotate | status)`); process.exit(2); }
+const steps = { register, setup, rotate, status, 'add-owner': addOwner, 'add-project': addProject };
+if (!steps[step]) { console.error(`unknown step "${step}" (register | setup | add-owner | add-project | rotate | status)`); process.exit(2); }
 try { await steps[step](); } catch (error) { console.error(String(error.message || error)); process.exit(1); }

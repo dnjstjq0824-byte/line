@@ -103,6 +103,7 @@ powershell -ExecutionPolicy Bypass -File tools\pc-agent\windows\restart-agent.ps
 - 제거: `powershell -File tools\pc-agent\windows\uninstall.ps1`.
 - 재부팅 뒤에는 Windows에 로그인해야 러너가 다시 뜬다. 완전 무인 복구가 필요하면 Windows 자동 로그인을 켠다.
 - 프로젝트 추가: `config.json` 의 `projects[]` 에 항목을 더하고(다른 저장소, 다른 봇 토큰, 다른 방) 러너를 재시작한다.
+- 새 프로젝트 한 번에: `node tools\pc-agent\setup\provision.mjs add-project --id shop --name 쇼핑몰 --repo <절대경로>` (봇·작업방·허용목록·토큰·config 항목까지, 서버에 쓰므로 대표가 직접 실행). 끝나면 config의 testCommands/checkCommands를 채우고 러너를 재시작한다.
 - 폰 알림(임시, 기본 꺼짐): 안드로이드 ntfy 앱에 추측 불가능한 무작위 32자 주제를 만들고 `config.json`의 `notify.ntfyTopic`에 넣는다. 완료·실패·승인 대기·PC 복구만 `LUNO: …` 한 줄로 온다(내용 없음).
 
 ## 테스트
