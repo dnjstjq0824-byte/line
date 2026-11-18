@@ -33,6 +33,13 @@ const oaList = ref<Array<Record<string, string>>>([])
 const newsList = ref<Array<Record<string, string>>>([])
 const newOaName = ref(''), newOaHandle = ref(''), newOaDesc = ref('')
 const newNewsTitle = ref(''), newNewsPress = ref(''), newNewsCat = ref(''), newNewsSummary = ref('')
+// S8: bot management (existing admin APIs only; bots filter by issuer domain).
+const bots = computed(() => users.value.filter((u) => (u.email || '').endsWith('@bots.invalid')))
+const newBotName = ref(''), newBotHandle = ref('')
+const mintBotId = ref(''), mintRooms = ref(''), mintOpsRead = ref(true), mintOpsPost = ref(true), mintOpsPropose = ref(true), mintTtl = ref('2592000')
+const revealedToken = ref(''), revealedExpires = ref('')
+const revokeBotId = ref(''), revokeTokenId = ref('')
+const llmSwitch = ref<{ enabled: boolean; killed: boolean; rooms: string[]; users: string[] }>({ enabled: false, killed: false, rooms: [], users: [] })
 const userColumns = computed(() => [
   { key: 'display_name', label: t('admin.colName') },
   { key: 'email', label: t('admin.colEmail') },
@@ -91,7 +98,7 @@ async function login() {
 
 async function load() {
   await run(async () => {
-    const [m, u, r, a, f, oa, nw] = await Promise.all([
+    const [m, u, r, a, f, oa, nw, llm] = await Promise.all([
       request<{ metrics: Record<string, number> }>('/api/v1/admin/stats', token.value),
       request<{ users: Array<Record<string, string>> }>('/api/v1/admin/users', token.value),
       request<{ reports: Array<Record<string, string>> }>('/api/v1/admin/reports', token.value),
@@ -99,6 +106,7 @@ async function load() {
       request<{ feature_flags: Array<Record<string, unknown>> }>('/api/v1/admin/feature-flags', token.value),
       request<{ accounts: Array<Record<string, string>> }>('/api/v1/admin/official-accounts', token.value),
       request<{ articles: Array<Record<string, string>> }>('/api/v1/admin/news', token.value),
+      request<{ enabled: boolean; killed: boolean; rooms: string[]; users: string[] }>('/api/v1/admin/llm/allowlist', token.value),
     ])
     metrics.value = m.metrics
     users.value = u.users
@@ -107,6 +115,9 @@ async function load() {
     featureFlags.value = f.feature_flags
     oaList.value = oa.accounts
     newsList.value = nw.articles
+    llmSwitch.value = { enabled: !!llm.enabled, killed: !!llm.killed, rooms: llm.rooms || [], users: llm.users || [] }
+    revealedToken.value = ''
+    revealedExpires.value = ''
     await loadTelemetry()
   })
 }
@@ -198,6 +209,57 @@ async function deleteNewsArticle(id: string) {
     await load()
   })
 }
+async function issueBot() {
+  if (!newBotName.value.trim()) return
+  await run(async () => {
+    const handle = newBotHandle.value.trim()
+    await request('/api/v1/admin/bots', token.value, 'POST', {
+      display_name: newBotName.value.trim(),
+      ...(handle ? { handle } : {}),
+    })
+    newBotName.value = ''
+    newBotHandle.value = ''
+    note.value = t('admin.botIssued')
+    await load()
+  })
+}
+
+async function mintBotToken() {
+  if (!mintBotId.value || !mintRooms.value.trim()) return
+  await run(async () => {
+    const ops = [
+      ...(mintOpsRead.value ? ['read'] : []),
+      ...(mintOpsPost.value ? ['post'] : []),
+      ...(mintOpsPropose.value ? ['propose'] : []),
+    ]
+    const res = await request<{ token: string; expires_at: number }>(`/api/v1/admin/bots/${mintBotId.value}/tokens`, token.value, 'POST', {
+      rooms: mintRooms.value.split(',').map((s) => s.trim()).filter(Boolean),
+      ops,
+      ttl_sec: Number(mintTtl.value) || 2592000,
+    })
+    revealedToken.value = res.token
+    revealedExpires.value = new Date(res.expires_at).toLocaleString()
+    note.value = t('admin.botMinted')
+  })
+}
+
+async function revokeBotToken() {
+  if (!revokeBotId.value || !revokeTokenId.value.trim()) return
+  if (!window.confirm(t('admin.revokeConfirm'))) return
+  await run(async () => {
+    await request(`/api/v1/admin/bots/${revokeBotId.value}/tokens/${revokeTokenId.value.trim()}`, token.value, 'DELETE')
+    revokeTokenId.value = ''
+    note.value = t('admin.botRevoked')
+  })
+}
+
+async function setKill(stopped: boolean) {
+  await run(async () => {
+    await request('/api/v1/admin/llm/kill', token.value, 'PUT', { stopped })
+    note.value = t('admin.killDone')
+    await load()
+  })
+}
 </script>
 
 <template>
@@ -261,6 +323,68 @@ async function deleteNewsArticle(id: string) {
             </span>
           </template>
         </BaseTable>
+      </section>
+
+      <section class="panel">
+        <h2>{{ t('admin.bots') }}</h2>
+        <form @submit.prevent="issueBot" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <input v-model="newBotName" :placeholder="t('admin.botNamePh')" required />
+          <input v-model="newBotHandle" :placeholder="t('admin.botHandlePh')" />
+          <BaseButton type="submit" variant="primary">{{ t('admin.botIssue') }}</BaseButton>
+        </form>
+        <p class="muted" v-if="!bots.length">{{ t('admin.allowEmpty') }}</p>
+        <div v-for="b in bots" :key="b.id" class="item-line">
+          <span><strong>{{ b.display_name }}</strong> <code>{{ b.email }}</code></span>
+          <BaseBadge :tone="b.state === 'active' ? 'success' : 'danger'">{{ b.state }}</BaseBadge>
+        </div>
+        <form @submit.prevent="mintBotToken" style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center">
+          <select v-model="mintBotId" required style="padding:6px 10px;border:1px solid #b6c5d5;border-radius:8px">
+            <option value="" disabled>{{ t('admin.botTarget') }}</option>
+            <option v-for="b in bots" :key="b.id" :value="b.id">{{ b.display_name }}</option>
+          </select>
+          <input v-model="mintRooms" :placeholder="t('admin.botRoomsPh')" required style="flex:1;min-width:160px" />
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" v-model="mintOpsRead" style="width:auto" /> read</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" v-model="mintOpsPost" style="width:auto" /> post</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" v-model="mintOpsPropose" style="width:auto" /> propose</label>
+          <input v-model="mintTtl" :placeholder="t('admin.botTtlPh')" inputmode="numeric" style="width:130px" />
+          <BaseButton type="submit" variant="primary">{{ t('admin.botMint') }}</BaseButton>
+        </form>
+        <div v-if="revealedToken" style="margin:0 0 12px;padding:10px 12px;background:#fff8e1;border:1px solid #f0d48a;border-radius:8px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px">{{ t('admin.botTokenLabel') }}</div>
+          <code style="word-break:break-all">{{ revealedToken }}</code>
+          <div style="font-size:13px;margin-top:6px">{{ t('admin.botExpiresAt') }}: {{ revealedExpires }}</div>
+          <BaseButton size="sm" @click="revealedToken = ''; revealedExpires = ''">{{ t('admin.botClose') }}</BaseButton>
+        </div>
+        <form @submit.prevent="revokeBotToken" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select v-model="revokeBotId" required style="padding:6px 10px;border:1px solid #b6c5d5;border-radius:8px">
+            <option value="" disabled>{{ t('admin.botTarget') }}</option>
+            <option v-for="b in bots" :key="b.id" :value="b.id">{{ b.display_name }}</option>
+          </select>
+          <input v-model="revokeTokenId" :placeholder="t('admin.botTokenIdPh')" required style="flex:1;min-width:160px" />
+          <BaseButton type="submit" variant="danger">{{ t('admin.botRevoke') }}</BaseButton>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>{{ t('admin.killTitle') }}</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:13px">{{ t('admin.killMaster') }}</span>
+          <BaseBadge :tone="llmSwitch.enabled ? 'success' : 'danger'">{{ llmSwitch.enabled ? 'ON' : 'OFF' }}</BaseBadge>
+          <span style="font-size:13px;margin-left:12px">{{ t('admin.killSwitch') }}</span>
+          <BaseBadge :tone="llmSwitch.killed ? 'danger' : 'success'">{{ llmSwitch.killed ? t('admin.killStopped') : t('admin.killRunning') }}</BaseBadge>
+          <BaseButton v-if="!llmSwitch.killed" size="sm" variant="danger" @click="setKill(true)">{{ t('admin.killStop') }}</BaseButton>
+          <BaseButton v-else size="sm" variant="primary" @click="setKill(false)">{{ t('admin.killResume') }}</BaseButton>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>{{ t('admin.allowTitle') }}</h2>
+        <div style="font-size:13px;margin-bottom:4px"><strong>{{ t('admin.allowRooms') }}</strong></div>
+        <p class="muted" v-if="!llmSwitch.rooms.length">{{ t('admin.allowEmpty') }}</p>
+        <div v-for="r in llmSwitch.rooms" :key="r" class="item-line"><code>{{ r }}</code></div>
+        <div style="font-size:13px;margin:8px 0 4px"><strong>{{ t('admin.allowUsers') }}</strong></div>
+        <p class="muted" v-if="!llmSwitch.users.length">{{ t('admin.allowEmpty') }}</p>
+        <div v-for="u in llmSwitch.users" :key="u" class="item-line"><code>{{ u }}</code></div>
       </section>
 
       <section class="panel">
