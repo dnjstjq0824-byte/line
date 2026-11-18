@@ -60,6 +60,7 @@ export const fmt = {
 };
 
 export const REVERT_OPS_NOTE = '운영에는 아직 남아 있음, 배포 필요';
+export const URGENT_DAILY_NOTE = '오늘 긴급 지시 5회를 다 써서 일반 대기로 접수합니다.';
 
 export function reportBody({ task, title, ok, ms, summary, tests, diff, large, usage, note }) {
   const lines = [`#${task.id} /${task.cmd} ${clip(title || task.text, 60)} ${ok ? '✅ 성공' : '❌ 실패'} (${minutes(ms)}분)`, RULE];

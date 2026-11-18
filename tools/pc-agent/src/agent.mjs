@@ -3,12 +3,12 @@
 import { writeFileSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { LunoClient } from './luno.mjs';
-import { TaskQueue, stopRequested } from './queue.mjs';
+import { TaskQueue, stopRequested, URGENT_PER_DAY } from './queue.mjs';
 import { parseCommand, QUEUED, HELP } from './commands.mjs';
 import { museExec, museUsage } from './muse.mjs';
 import { createWorktree, removeWorktree, changedFiles, commitAll, diffSummary, mergeToMain, repoStatus, revertCommit } from './git.mjs';
 import { checkDiff, mask } from './guards.mjs';
-import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, failureExcerpt, minutes, REVERT_OPS_NOTE } from './report.mjs';
+import { fmt, reportBody, failureBody, splitBody, stripPaths, testDetail, failureExcerpt, minutes, REVERT_OPS_NOTE, URGENT_DAILY_NOTE } from './report.mjs';
 import { devPrompt, mktPrompt, askPrompt } from './prompts.mjs';
 import { runCommand, killTree } from './proc.mjs';
 import { Autopilot, autopilotPrompt } from './autopilot.mjs';
@@ -288,6 +288,10 @@ export class Agent {
     if (this.queue.queued().length >= this.cfg.maxQueued) return reply(fmt.held(`대기 작업이 ${this.cfg.maxQueued}건으로 가득 찼습니다`));
     if (this.queue.countToday() >= this.cfg.maxPerDay) return reply(fmt.held(`오늘 작업 한도 ${this.cfg.maxPerDay}건에 도달했습니다`));
     let { cmd, text } = command;
+    // S5: past five urgent commands a day, the rest ride the normal line.
+    let urgent = command.urgent;
+    let capped = false;
+    if (urgent && this.queue.countUrgentToday() >= URGENT_PER_DAY) { urgent = false; capped = true; }
     let parentId = '';
     let revertOf = '';
     if (cmd === 'retry') {
@@ -308,11 +312,13 @@ export class Agent {
     } else if (cmd !== 'check' && cmd !== 'revert' && !text) {
       return reply(`내용을 함께 적어 주세요. 예: /${cmd} 로그인 버튼 버그 고쳐줘`);
     }
-    const task = this.queue.create({ project, cmd, text, urgent: command.urgent, roomId, messageId, parentId });
+    const task = this.queue.create({ project, cmd, text, urgent, roomId, messageId, parentId });
     if (revertOf) { task.revertOf = revertOf; this.queue.save(task); }
+    if (command.urgent && !capped) this.queue.noteUrgent();
     this.taskLog(task, `accepted /${cmd} ${text.replace(/\s+/g, ' ').slice(0, 200)}`);
     const waiting = this.queue.queued().length - 1 + (this.current ? 1 : 0);
-    await this.say(project.id, roomId, { body: fmt.accepted(task, waiting), replyTo: messageId, task });
+    const acceptedBody = fmt.accepted(task, waiting) + (capped ? `\n${URGENT_DAILY_NOTE}` : '');
+    await this.say(project.id, roomId, { body: acceptedBody, replyTo: messageId, task });
   }
 
   async instant(project, roomId, command, reply) {

@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, exists
 import { join } from 'node:path';
 
 export const OPEN_STATES = new Set(['queued', 'running', 'reported']);
+export const URGENT_PER_DAY = 5;
 
 export function atomicWrite(path, text) {
   const tmp = `${path}.${process.pid}.tmp`;
@@ -20,7 +21,7 @@ export class TaskQueue {
     this.tasksDir = join(dir, 'tasks');
     for (const d of [dir, this.tasksDir, join(dir, 'logs'), join(dir, 'prompts')]) mkdirSync(d, { recursive: true });
     this.metaPath = join(dir, 'queue-meta.json');
-    this.meta = readJson(this.metaPath, { counters: {}, seen: [], day: '', dayCount: 0 });
+    this.meta = readJson(this.metaPath, { counters: {}, seen: [], day: '', dayCount: 0, urgentDay: '', urgentCount: 0 });
     this.tasks = new Map();
     for (const name of readdirSync(this.tasksDir)) {
       if (!name.endsWith('.json')) continue;
@@ -51,6 +52,18 @@ export class TaskQueue {
     const day = new Date().toISOString().slice(0, 10);
     if (this.meta.day !== day) { this.meta.day = day; this.meta.dayCount = 0; }
     return this.meta.dayCount;
+  }
+
+  // S5: urgent commands granted today (UTC day, like countToday).
+  countUrgentToday() {
+    const day = new Date().toISOString().slice(0, 10);
+    if (this.meta.urgentDay !== day) { this.meta.urgentDay = day; this.meta.urgentCount = 0; }
+    return this.meta.urgentCount || 0;
+  }
+  noteUrgent() {
+    this.countUrgentToday();
+    this.meta.urgentCount += 1;
+    this.saveMeta();
   }
 
   create({ project, cmd, text, urgent = false, roomId, messageId, parentId = '' }) {
