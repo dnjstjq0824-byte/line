@@ -13,6 +13,7 @@ import { devPrompt, mktPrompt, askPrompt } from './prompts.mjs';
 import { runCommand, killTree } from './proc.mjs';
 import { Autopilot, autopilotPrompt } from './autopilot.mjs';
 import { Every, EVERY_MAX } from './every.mjs';
+import { ntfyPing } from './ntfy.mjs';
 
 export const VERSION = '1.0.0';
 export const RECOVERY_GAP_MS = 3 * 60 * 1000;
@@ -23,7 +24,7 @@ function dayKey(ms) {
 const WORK_CMDS = new Set(['dev', 'mkt', 'continue', 'retry']);
 
 export class Agent {
-  constructor({ cfg, secrets, dir, clientFactory, log = () => {}, now = null }) {
+  constructor({ cfg, secrets, dir, clientFactory, log = () => {}, now = null, ntfyFetch = null }) {
     this.cfg = cfg;
     this.dir = dir;
     this.log = log;
@@ -42,6 +43,7 @@ export class Agent {
     this.startedAt = Date.now();
     this.replySeq = 0;
     this.now = now || (() => Date.now());
+    this.ntfyFetch = ntfyFetch;
   }
 
   project(id) { return this.cfg.projects.find((p) => p.id === id); }
@@ -203,6 +205,15 @@ export class Agent {
     this.startNext();
     return ran;
   }
+  // S6: content-free ntfy one-liners. Silent unless notify.ntfyTopic is set.
+  async pingNtfy(text) {
+    const topic = this.cfg.notify && this.cfg.notify.ntfyTopic;
+    if (!topic) return false;
+    try {
+      const r = await ntfyPing({ topic, body: text, fetchImpl: this.ntfyFetch || fetch });
+      return r.sent;
+    } catch { return false; }
+  }
   async notePollOk(now = Date.now()) {
     const path = join(this.dir, 'lastpoll');
     let prev = 0;
@@ -215,6 +226,7 @@ export class Agent {
         await this.say(project.id, roomId, { body: fmt.recovered(queued) });
       }
     }
+    await this.pingNtfy('LUNO: PC 복구됨');
     return true;
   }
   async announceOnline(recovered) {
@@ -462,6 +474,7 @@ export class Agent {
       task.error = reason;
       this.taskLog(task, `failed: ${reason}`);
       await this.say(project.id, task.roomId, { kind: 'report', body: failureBody({ task, ms: Date.now() - startedAt, reason }), task });
+      if (!control.stopped) await this.pingNtfy(`LUNO: ${task.id} 실패`);
     };
     try {
       if (task.cmd === 'check') return await this.runCheck(project, task, startedAt);
@@ -486,6 +499,7 @@ export class Agent {
     const ok = tests.length > 0 && tests.every((t) => t.ok);
     task.state = 'done';
     const note = tests.length ? `브랜치 ${s.branch} · 커밋 안 된 변경 ${s.changed.length}개` : '이 프로젝트에는 점검 명령(checkCommands)이 설정돼 있지 않습니다.';
+    await this.pingNtfy(`LUNO: ${task.id} ${ok ? '완료' : '실패'}`);
     await this.say(project.id, task.roomId, { kind: 'report', body: reportBody({ task, title: '정적 분석·테스트 점검', ok, ms: Date.now() - startedAt, tests, note }), task });
   }
 
@@ -518,6 +532,7 @@ export class Agent {
     if (!res.ok) return fail(res.reason);
     task.state = 'done';
     this.taskLog(task, 'answered');
+    await this.pingNtfy(`LUNO: ${task.id} 완료`);
     await this.say(project.id, task.roomId, { body: `#${task.id} 답변\n${res.text}`, replyTo: task.messageId, task });
   }
 
@@ -565,7 +580,8 @@ export class Agent {
     if (!diff.files.length) {
       task.state = 'done';
       await removeWorktree({ project, path: task.worktree });
-      return this.say(project.id, task.roomId, { kind: 'report', body: reportBody({ task, title, ok: true, ms: Date.now() - startedAt, summary: res.text, note: '코드 변경 없음', usage }), task });
+
+      await this.pingNtfy(`LUNO: ${task.id} 완료`);      return this.say(project.id, task.roomId, { kind: 'report', body: reportBody({ task, title, ok: true, ms: Date.now() - startedAt, summary: res.text, note: '코드 변경 없음', usage }), task });
     }
     const guard = checkDiff({ files: diff.files, addedText: diff.addedText, forbiddenPaths: project.forbiddenPaths, allowedPaths: task.mode === 'mkt' ? project.mktAllowedPaths : null });
     if (guard.violations.length) return fail(`안전 규칙 위반으로 병합 제안을 하지 않습니다:\n- ${guard.violations.slice(0, 10).join('\n- ')}\n브랜치 ${task.branch} 는 보존했습니다.`);
@@ -596,6 +612,7 @@ export class Agent {
     if (testsOk && !guard.large) {
       task.proposalMessageId = await this.say(project.id, task.roomId, { kind: 'proposal', body: fmt.proposal(task, stats), task });
     }
+    await this.pingNtfy(`LUNO: ${task.id} ${task.proposalMessageId ? '승인 대기' : (testsOk ? '완료' : '실패')}`);
     this.queue.save(task);
     this.taskLog(task, `reported tests=${testsOk} files=${diff.files.length}`);
   }
@@ -618,6 +635,7 @@ export class Agent {
       task.state = 'done';
       await removeWorktree({ project, path: task.worktree });
       this.queue.save(task);
+      await this.pingNtfy(`LUNO: ${task.id} 완료`);
       return this.say(project.id, task.roomId, { kind: 'report', body: reportBody({ task, title: `Revert #${target.id}`, ok: true, ms: Date.now() - startedAt, summary: '이미 되돌려졌거나 되돌릴 변경이 없습니다.', note: '코드 변경 없음' }), task });
     }
     await commitAll(task.worktree, `luno-auto(${task.id}): revert ${target.id}\n\nLuno-Task: ${task.id}\nLuno-Revert: ${target.mergedSha}`);
@@ -649,6 +667,7 @@ export class Agent {
     if (testsOk && !guard.large) {
       task.proposalMessageId = await this.say(project.id, task.roomId, { kind: 'proposal', body: `${fmt.proposal(task, stats)}\n${REVERT_OPS_NOTE}`, task });
     }
+    await this.pingNtfy(`LUNO: ${task.id} ${task.proposalMessageId ? '승인 대기' : (testsOk ? '완료' : '실패')}`);
     this.queue.save(task);
     this.taskLog(task, `reported tests=${testsOk} files=${diff.files.length}`);
   }
