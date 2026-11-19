@@ -194,38 +194,58 @@ void main() {
   });
 
   group('StickerImage widget', () {
+    // Real file IO hangs under testWidgets' fake clock, so every IO step —
+    // temp dir, cache wait, cleanup — runs inside runAsync. Frames pump
+    // outside it (pumpAndSettle never observes the spinner stopping).
     testWidgets('renders the cached file', (tester) async {
-      final dir = await Directory.systemTemp.createTemp('sticker-widget-');
-      addTearDown(() => dir.delete(recursive: true));
-      // runAsync: the cache does real file IO, which never finishes under
-      // pumpAndSettle's fake clock while the spinner animates.
+      late Directory dir;
       await tester.runAsync(() async {
-        await tester.pumpWidget(MaterialApp(
-            home: StickerImage(
-                stickerId: 'luno-joy-003',
-                baseUrl: 'https://h.test',
-                size: 64,
-                dirForTest: dir.path,
-                fetchForTest: (_) async => http.Response.bytes(px, 200))));
-        await tester.pumpAndSettle();
+        dir = await Directory.systemTemp.createTemp('sticker-widget-');
+        await File('${dir.path}${Platform.pathSeparator}luno-joy-003.png')
+            .writeAsBytes(px, flush: true);
       });
+      addTearDown(() => tester.runAsync(() => dir.delete(recursive: true)));
+      var fetches = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: StickerImage(
+              stickerId: 'luno-joy-003',
+              baseUrl: 'https://h.test',
+              size: 64,
+              dirForTest: dir.path,
+              fetchForTest: (_) async {
+                fetches++;
+                return http.Response.bytes(px, 200);
+              })));
+      // Hit path (no write): the load drains fully under runAsync + pumps.
+      // The miss path (fetch + write) is covered by the disk-cache tests.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      });
+      await tester.pump();
       expect(find.byType(Image), findsOneWidget);
+      expect(fetches, 0, reason: 'cache hit fetches nothing');
     });
 
     testWidgets('shows the fallback glyph on failure', (tester) async {
-      final dir = await Directory.systemTemp.createTemp('sticker-widget-');
-      addTearDown(() => dir.delete(recursive: true));
+      late Directory dir;
       await tester.runAsync(() async {
-        await tester.pumpWidget(MaterialApp(
-            home: StickerImage(
-                stickerId: 'luno-joy-003',
-                baseUrl: 'https://h.test',
-                size: 64,
-                fallbackGlyph: 'FB',
-                dirForTest: dir.path,
-                fetchForTest: (_) async => http.Response('no', 404))));
-        await tester.pumpAndSettle();
+        dir = await Directory.systemTemp.createTemp('sticker-widget-');
       });
+      addTearDown(() => tester.runAsync(() => dir.delete(recursive: true)));
+      await tester.pumpWidget(MaterialApp(
+          home: StickerImage(
+              stickerId: 'luno-joy-003',
+              baseUrl: 'https://h.test',
+              size: 64,
+              fallbackGlyph: 'FB',
+              dirForTest: dir.path,
+              fetchForTest: (_) async => http.Response('no', 404))));
+      // No file ever lands on failure; give the failing load a bounded
+      // real-time window instead of an unbounded settle.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      });
+      await tester.pump();
       expect(find.text('FB'), findsOneWidget);
     });
   });
