@@ -445,6 +445,61 @@ class _DeckHeader extends StatelessWidget {
   }
 }
 
+/// True when [m] is drawn without the coloured chat bubble: a photo or
+/// video with its attachment, a file card, or a sticker. Unsent messages
+/// keep the bubble so the "message unsent" marker stays readable.
+bool bareMediaKind(Map m) {
+  if (m['unsent'] == true) return false;
+  final kind = m['kind'];
+  if (kind == 'sticker') return true;
+  if (kind == 'image' || kind == 'video' || kind == 'file') {
+    return attachmentIdOf(m) != null;
+  }
+  return false;
+}
+
+/// LINE-style file message: neutral card with a document icon, the file
+/// name and a save action, independent of the sender's bubble colour.
+class _FileCard extends StatelessWidget {
+  final String name;
+  final VoidCallback onSave;
+  const _FileCard({required this.name, required this.onSave});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF111827);
+    return Container(
+      width: 240,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: dark ? HarborDark.surface : Colors.white,
+        borderRadius: BorderRadius.circular(HarborRadius.card),
+        border: Border.all(
+            color: dark ? Colors.white24 : const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.insert_drive_file_outlined, size: 32, color: fg),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: fg, fontSize: HarborType.small)),
+          ),
+          TextButton.icon(
+            onPressed: onSave,
+            icon: Icon(Icons.download, size: 18, color: fg),
+            label: Text(context.l10n.mvSave,
+                style: TextStyle(color: fg, fontSize: HarborType.small)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ChatImage extends StatelessWidget {
   final String url;
   final String token;
@@ -454,7 +509,7 @@ class _ChatImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.zero,
       child: InkWell(
         onTap: () => showDialog(
           context: context,
@@ -466,10 +521,10 @@ class _ChatImage extends StatelessWidget {
           ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(HarborRadius.card),
           child: Image.network(url,
               headers: {'Authorization': 'Bearer $token'},
-              height: 180,
+              height: 200,
               fit: BoxFit.cover,
               loadingBuilder: (ctx, child, progress) => progress == null
                   ? child
@@ -754,16 +809,23 @@ class _SignalBubble extends StatelessWidget {
         height: LunoType.stampHeight,
         fontFeatures: const [LunoType.tabular],
         color: muted);
+    // Photos, videos, stickers and files render on their own (LINE style):
+    // no coloured bubble behind them and no file name under a photo.
+    final media = bareMediaKind(m);
     final bubbleBody = Container(
         constraints: BoxConstraints(maxWidth: maxW),
-        decoration: BoxDecoration(
-          color: bubble,
-          borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
-        ),
+        decoration: media
+            ? null
+            : BoxDecoration(
+                color: bubble,
+                borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
+              ),
         child: InkWell(
           onLongPress: () => _messageActions(context, m, mine, msgId),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: media
+                ? EdgeInsets.zero
+                : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Column(
               crossAxisAlignment:
                   mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -796,12 +858,10 @@ class _SignalBubble extends StatelessWidget {
                     foreground: ink,
                   ),
                 if (m['kind'] == 'file' && attachmentIdOf(m) != null)
-                  TextButton.icon(
-                    onPressed: () => session.downloadAttachment(
+                  _FileCard(
+                    name: '${m['body']}',
+                    onSave: () => session.downloadAttachment(
                         attachmentIdOf(m)!, '${m['body']}'),
-                    icon: Icon(Icons.download, size: 16, color: ink),
-                    label: Text(context.l10n.mvSave,
-                        style: TextStyle(color: ink, fontSize: HarborType.small)),
                   ),
                 if (m['kind'] == 'location')
                   _LocationCard(meta: m['metadata'], ink: ink, faint: faint),
@@ -851,7 +911,7 @@ class _SignalBubble extends StatelessWidget {
                     glyph: stickerGlyph(
                         body: '${m['body']}', stickerId: _stickerIdOf(m)),
                   )
-                else
+                else if (!media)
                   Text('${m['body']}',
                       style: TextStyle(
                           color: ink,

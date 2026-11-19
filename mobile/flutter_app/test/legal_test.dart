@@ -23,4 +23,21 @@ void main() {
     expect(RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day), isTrue);
     expect(ageOnDate('1990-01-01', day), isNotNull);
   });
+
+  test('birthdates typed in common phone formats are normalized', () {
+    for (final input in [
+      '19900505',
+      '1990.05.05',
+      '1990.5.5',
+      '1990/05/05',
+      '1990 05 05',
+      '1990-5-5',
+      ' 1990. 5. 5. ',
+      '1990-05-05',
+    ]) {
+      expect(normalizeBirthdate(input), '1990-05-05', reason: input);
+    }
+    expect(normalizeBirthdate('hello'), 'hello');
+    expect(ageOnDate(normalizeBirthdate('1990.5.5'), '2026-11-19'), 36);
+  });
 }

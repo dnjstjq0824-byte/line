@@ -121,6 +121,7 @@ class _MessengerAppState extends State<MessengerApp>
         supportedLocales: AppLocalizations.supportedLocales,
         routerConfig: _router,
         builder: (context, child) => Stack(
+          fit: StackFit.expand,
           children: [child!, const CallOverlay(), const GroupCallOverlay()],
         ),
       ),
