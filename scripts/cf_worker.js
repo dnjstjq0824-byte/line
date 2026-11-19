@@ -102,6 +102,8 @@ const TRANSLATE_MAX_CHARS = 5000;
 const TRANSLATE_PER_MINUTE = 60;
 const STT_MAX_B64 = 14_000_000;
 const STT_PER_MINUTE = 30;
+const TTS_MAX_CHARS = 2000;
+const TTS_PER_MINUTE = 30;
 const TRANSLATE_CHARS_PER_DAY = 50000;
 // F23: every money-adjacent cap (H2 quotas above, T1 guards above, L-09 bot
 // budgets below) lives in this one block. Product limits (group sizes,
@@ -1374,11 +1376,71 @@ registerSttProvider('fake', {
     return { text: `[${lang || 'auto'} transcript]`, lang: lang || 'auto', engine: 'fake' };
   },
 });
+// A13: whisper STT engine adapter (OpenAI-compatible /audio/transcriptions).
+// Selected with STT_PROVIDER=whisper. Requires WHISPER_API_KEY plus an
+// operator-configured WHISPER_BASE_URL (self-hosted or OpenAI-compatible
+// endpoint); without either, activeSttProvider stays null so ai/stt fails
+// closed with STT_NOT_CONFIGURED. No vendor URL is built in (L-15: the worker
+// cannot reach any LLM by construction). WHISPER_MODEL (default whisper-1)
+// is optional. Audio bytes and the key are never logged.
+// Tests inject a stub via env.WHISPER_FETCH.
+const WHISPER_AUDIO_EXT = { 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/webm': 'webm', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/ogg': 'ogg', 'audio/flac': 'flac' };
+registerSttProvider('whisper', {
+  languages: ['ko', 'en', 'ja', 'th'],
+  async transcribe(env, audioB64, mime, lang) {
+    sttProviderCalls.push({ bytes: audioB64.length, mime, lang });
+    const base = (typeof env.WHISPER_BASE_URL === 'string' && env.WHISPER_BASE_URL.replace(/\/+$/, '')) || '';
+    const model = (typeof env.WHISPER_MODEL === 'string' && env.WHISPER_MODEL.trim()) || 'whisper-1';
+    const bytes = Uint8Array.from(atob(audioB64), (c) => c.charCodeAt(0));
+    const ext = WHISPER_AUDIO_EXT[mime] || 'm4a';
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: mime || 'audio/mp4' }), `audio.${ext}`);
+    form.append('model', model);
+    if (lang && lang !== 'auto') form.append('language', String(lang).slice(0, 10));
+    const doFetch = typeof env.WHISPER_FETCH === 'function' ? env.WHISPER_FETCH : fetch;
+    const res = await doFetch(`${base}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.WHISPER_API_KEY}` },
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || typeof data.text !== 'string' || !data.text) {
+      const err = new Error('whisper upstream failed');
+      err.code = 'STT_UPSTREAM_ERROR';
+      err.status = 502;
+      throw err;
+    }
+    return { text: data.text, lang: lang || 'auto', engine: 'whisper' };
+  },
+});
 function activeSttProvider(env) {
   const name = env && env.STT_PROVIDER;
   if (!name) return null;
   if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
+  if (name === 'whisper' && !(typeof env.WHISPER_API_KEY === 'string' && env.WHISPER_API_KEY && typeof env.WHISPER_BASE_URL === 'string' && env.WHISPER_BASE_URL.trim())) return null;
   return sttProviders.get(name) || null;
+}
+// A14: text-to-speech provider interface, mirroring F14. synthesize(env,
+// text, voice, lang) resolves { audio_base64, mime_type, voice, engine }.
+// The fake provider answers canned bytes and is selectable only when
+// DEMO_MODE is on. Text is never logged.
+const ttsProviders = new Map();
+function registerTtsProvider(name, provider) {
+  ttsProviders.set(name, provider);
+}
+const ttsProviderCalls = [];
+registerTtsProvider('fake', {
+  voices: ['luno'],
+  async synthesize(env, text, voice, lang) {
+    ttsProviderCalls.push({ chars: text.length, voice, lang });
+    return { audio_base64: 'UklGRg==', mime_type: 'audio/wav', voice: voice || 'luno', engine: 'fake' };
+  },
+});
+function activeTtsProvider(env) {
+  const name = env && env.TTS_PROVIDER;
+  if (!name) return null;
+  if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
+  return ttsProviders.get(name) || null;
 }
 async function translateCacheGet(textHash, target) {
   const db = dbOf();
@@ -6839,11 +6901,38 @@ function entitled(u, feature) {
     if (!mime.startsWith('audio/')) return bad('오디오 파일만 인식할 수 있습니다');
     if (audio.length > STT_MAX_B64) return bad('오디오가 너무 깁니다', 413);
     const lang = typeof b.lang === 'string' ? b.lang.trim().toLowerCase().slice(0, 10) : 'auto';
-    const out = await provider.transcribe(CURRENT_ENV, audio, mime, lang);
+    let out;
+    try {
+      out = await provider.transcribe(CURRENT_ENV, audio, mime, lang);
+    } catch {
+      return json({ error: 'Speech transcription upstream failed', code: 'STT_UPSTREAM_ERROR' }, 502);
+    }
     return json({ text: out.text, lang: out.lang, engine: out.engine });
   }
 
   // ==========================================
+  if (p === 'ai/tts/voices' && method === 'GET') {
+    const provider = activeTtsProvider(CURRENT_ENV);
+    if (!provider) return json({ configured: false, voices: [] });
+    return json({ configured: true, engine: CURRENT_ENV.TTS_PROVIDER, voices: provider.voices || [] });
+  }
+  if (p === 'ai/tts' && method === 'POST') {
+    const provider = activeTtsProvider(CURRENT_ENV);
+    if (!provider) return json({ error: 'Speech synthesis requires a configured provider-backed API', code: 'TTS_NOT_CONFIGURED' }, 503);
+    if (!await rateLimit('rl:tts:' + myId, TTS_PER_MINUTE)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const rawBody = await request.text().catch(() => '');
+    if (rawBody.length > TTS_MAX_CHARS + 4096) return bad('텍스트가 너무 깁니다', 413);
+    let b = {};
+    try { const v = JSON.parse(rawBody || '{}'); if (v && typeof v === 'object') b = v; } catch { b = {}; }
+    const text = typeof b.text === 'string' ? b.text.trim() : '';
+    if (!text) return bad('읽을 텍스트가 필요합니다');
+    if (text.length > TTS_MAX_CHARS) return bad('텍스트가 너무 깁니다', 413);
+    const voice = typeof b.voice === 'string' ? b.voice.trim().slice(0, 32) : '';
+    const lang = typeof b.lang === 'string' ? b.lang.trim().toLowerCase().slice(0, 10) : 'auto';
+    const out = await provider.synthesize(CURRENT_ENV, text, voice, lang);
+    return json({ audio_base64: out.audio_base64, mime_type: out.mime_type, voice: out.voice, engine: out.engine });
+  }
+
   // PHASE 4: B2B Official Accounts & Webhooks
   // ==========================================
   if ((m = p.match(/^partner\/accounts\/([\w-]+)\/rich-menus$/))) {
