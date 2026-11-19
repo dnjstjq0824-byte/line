@@ -31,6 +31,7 @@ import '../util/feed_posts.dart';
 import '../util/official_accounts.dart';
 import '../util/photo_effects.dart';
 import '../util/poll_options.dart';
+import '../util/push_registrar.dart';
 import '../util/send_peer.dart';
 import '../util/sender_name.dart';
 import '../util/store_packs.dart';
@@ -206,6 +207,10 @@ class SessionController extends ChangeNotifier {
   bool notifyEnabled = true;
   bool isForeground = true;
   Future<void> Function(String route)? notifyTap;
+  // Closed-app push (FCM). push is the test seam; pushToken is the token this
+  // device last registered (empty when push is off or unsupported).
+  PushRegistrar push = ProdPushRegistrar();
+  String pushToken = '';
   // N2-L: 1:1 call media + state. mediaFactory is the test seam (fake media).
   CallMedia Function() mediaFactory = WebrtcCallMedia.new;
   CallMedia? callMedia;
@@ -309,6 +314,7 @@ class SessionController extends ChangeNotifier {
       await connect();
       await loadOutbox();
       await flushOutbox();
+      unawaited(registerPush());
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
         // M1: the Api client already spent the refresh token and failed (or
@@ -484,6 +490,7 @@ class SessionController extends ChangeNotifier {
       await connect();
       await loadOutbox();
       await flushOutbox();
+      unawaited(registerPush());
     });
   }
 
@@ -769,6 +776,43 @@ class SessionController extends ChangeNotifier {
           await notifyTap?.call(cid != null ? '/chats/$cid' : '/calls');
         }
       });
+    } catch (_) {}
+  }
+
+  /// Closed-app push: get this device's FCM token and register it with the
+  /// server (device-scoped). Never throws; push failing never blocks login.
+  Future<void> registerPush() async {
+    try {
+      final token = await push.start(
+        onRefresh: (t) => unawaited(_sendPushToken(t)),
+        onOpen: (cid) => unawaited(notifyTap?.call('/chats/$cid') ?? Future<void>.value()),
+      );
+      if (token != null && token.isNotEmpty) await _sendPushToken(token);
+    } catch (_) {}
+  }
+
+  Future<void> _sendPushToken(String token) async {
+    if (api.token == null) return;
+    try {
+      await api.call('/api/v1/push-tokens', method: 'POST', data: {
+        'token': token,
+        'platform': 'android',
+        'device_id': deviceId.isEmpty ? 'android' : deviceId,
+      });
+      pushToken = token;
+    } catch (_) {}
+  }
+
+  Future<void> _unregisterPush() async {
+    if (pushToken.isEmpty) return;
+    // Cleared first: a 401 here re-enters logout() via the refresh-failed hook.
+    pushToken = '';
+    try {
+      final id = Uri.encodeQueryComponent(deviceId.isEmpty ? 'android' : deviceId);
+      await api.call('/api/v1/push-tokens?device_id=$id', method: 'DELETE');
+    } catch (_) {}
+    try {
+      await push.stop();
     } catch (_) {}
   }
 
@@ -2858,6 +2902,8 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // While the access token is still valid: this device stops getting push.
+    await _unregisterPush();
     reconnectTimer?.cancel();
     reconnectTimer = null;
     _pingTimer?.cancel();
