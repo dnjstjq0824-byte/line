@@ -24,7 +24,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final name = session.selfName.isEmpty ? context.l10n.myProfile : session.selfName;
+    final name =
+        session.selfName.isEmpty ? context.l10n.myProfile : session.selfName;
     final status = session.selfStatusMessage.isEmpty
         ? context.l10n.homeStatusHint
         : session.selfStatusMessage;
@@ -39,6 +40,13 @@ class _HomePageState extends State<HomePage> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Add friend (search by name or ID), like LINE's person+ icon.
+                IconButton(
+                  key: const ValueKey('home-add-friend'),
+                  tooltip: context.l10n.qrAddFriend,
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  onPressed: () => context.go('/search'),
+                ),
                 IconButton(
                   tooltip: 'Keep',
                   icon: const Icon(Icons.bookmark_border),
@@ -127,7 +135,8 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 16),
-          Text(context.l10n.serviceWord, style: Theme.of(context).textTheme.titleMedium),
+          Text(context.l10n.serviceWord,
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           // F25: wrap so 200% text moves to a second line instead
           // of overflowing on a 360px phone.
@@ -145,9 +154,7 @@ class _HomePageState extends State<HomePage> {
                   label: context.l10n.officialChannels,
                   route: '/channels'),
               _ServiceButton(
-                  icon: Icons.bookmark_border,
-                  label: 'Keep',
-                  route: '/keep'),
+                  icon: Icons.bookmark_border, label: 'Keep', route: '/keep'),
               _ServiceButton(
                   icon: Icons.account_balance_wallet_outlined,
                   label: context.l10n.mvWallet,
@@ -162,8 +169,7 @@ class _HomePageState extends State<HomePage> {
               height: 44,
               decoration: const BoxDecoration(
                   color: LunoBrand.primary, shape: BoxShape.circle),
-              child:
-                  const Icon(Icons.verified_outlined, color: Colors.white),
+              child: const Icon(Icons.verified_outlined, color: Colors.white),
             ),
             title: Text(context.l10n.mvOfficialAccount,
                 style: TextStyle(fontWeight: FontWeight.w600)),
@@ -218,7 +224,8 @@ class _HomePageState extends State<HomePage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(context.l10n.homeFriendsCount(session.friends.length),
+                    child: Text(
+                        context.l10n.homeFriendsCount(session.friends.length),
                         style: Theme.of(context).textTheme.titleMedium),
                   ),
                   Icon(friendsOpen
@@ -234,12 +241,12 @@ class _HomePageState extends State<HomePage> {
                 contentPadding: EdgeInsets.zero,
                 leading: LineAvatar(
                   glyph: '${u['display_name'] ?? 'U'}',
-                  color: session.colorFromHex(
-                      u['peer_color']?.toString(),
+                  color: session.colorFromHex(u['peer_color']?.toString(),
                       dark ? HarborDark.harbor : HarborLight.harbor),
                   size: 44,
                 ),
-                title: Text('${u['is_favorite'] == true ? '★ ' : ''}${u['display_name']}${u['kind'] == 'bot' ? ' [BOT]' : ''}',
+                title: Text(
+                    '${u['is_favorite'] == true ? '★ ' : ''}${u['display_name']}${u['kind'] == 'bot' ? ' [BOT]' : ''}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(
                     '${u['status_message'] ?? '@${u['handle'] ?? ''}'}',
@@ -272,7 +279,8 @@ class _HomePageState extends State<HomePage> {
                             ? context.l10n.mvUnblock
                             : context.l10n.homeBlock)),
                     PopupMenuItem(
-                        value: 'report', child: Text(context.l10n.mvReportUser)),
+                        value: 'report',
+                        child: Text(context.l10n.mvReportUser)),
                   ],
                 ),
                 onTap: () async {
@@ -362,8 +370,8 @@ class _QrApproveDialogState extends State<_QrApproveDialog> {
           const SizedBox(height: 6),
           TextField(
               controller: token,
-              decoration: const InputDecoration(
-                  labelText: 'QR Token', isDense: true)),
+              decoration:
+                  const InputDecoration(labelText: 'QR Token', isDense: true)),
         ],
       ),
       actions: [
@@ -421,7 +429,8 @@ Future<void> reportUserSheet(BuildContext context, SessionController session,
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: category,
-              decoration: InputDecoration(labelText: context.l10n.reportCategory),
+              decoration:
+                  InputDecoration(labelText: context.l10n.reportCategory),
               items: [
                 for (final e in labels.entries)
                   DropdownMenuItem(value: e.key, child: Text(e.value)),

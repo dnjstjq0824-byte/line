@@ -11,6 +11,7 @@ import '../design/v3.dart';
 import '../state/session.dart';
 import '../util/app_permissions.dart';
 import '../util/app_l10n.dart';
+import '../util/call_tones.dart';
 
 String callDurationLabel(int seconds) {
   final m = seconds ~/ 60;
@@ -46,6 +47,40 @@ class _CallImmersiveState extends State<CallImmersive> {
   Widget build(BuildContext context) => SizedBox.expand(child: widget.child);
 }
 
+/// Keeps [CallTonePlayer] in step with the call: ringback for the caller,
+/// ringtone + vibration for the callee, silence once connected. Unmounting
+/// (the call ended and the overlay collapsed) always stops the sound.
+class CallToneDriver extends StatefulWidget {
+  const CallToneDriver({super.key, required this.mode});
+  final CallToneMode mode;
+
+  @override
+  State<CallToneDriver> createState() => _CallToneDriverState();
+}
+
+class _CallToneDriverState extends State<CallToneDriver> {
+  @override
+  void initState() {
+    super.initState();
+    CallTonePlayer.instance.play(widget.mode);
+  }
+
+  @override
+  void didUpdateWidget(CallToneDriver old) {
+    super.didUpdateWidget(old);
+    if (old.mode != widget.mode) CallTonePlayer.instance.play(widget.mode);
+  }
+
+  @override
+  void dispose() {
+    CallTonePlayer.instance.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
 class CallOverlay extends StatelessWidget {
   const CallOverlay({super.key});
 
@@ -67,6 +102,7 @@ class CallOverlay extends StatelessWidget {
         color: Colors.black,
         child: Stack(
           children: [
+            CallToneDriver(mode: callToneMode(call)),
             if (kind == 'video' && !incoming)
               Positioned.fill(child: _remoteView(session))
             else

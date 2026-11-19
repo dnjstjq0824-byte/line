@@ -40,14 +40,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   void _watchScroll() {
     if (!_scroll.hasClients) return;
-    final pos = _scroll.position;
-    final show = (pos.maxScrollExtent - pos.pixels) > 200;
+    // The list is reversed (newest at the bottom, offset 0 = latest), so the
+    // distance from the latest message is simply the scroll offset.
+    final show = _scroll.position.pixels > 200;
     if (show != _showJump && mounted) setState(() => _showJump = show);
   }
 
   void _jumpLatest() {
     if (!_scroll.hasClients) return;
-    _scroll.animateTo(_scroll.position.maxScrollExtent,
+    _scroll.animateTo(0,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
@@ -139,10 +140,17 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             child: loading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
+                    // Reversed: a room opens at the newest message (bottom)
+                    // like LINE, new messages stay pinned to the bottom and
+                    // late-loading photos grow upward instead of pushing the
+                    // view. Index 0 is the newest message.
+                    key: const ValueKey('chat-messages'),
                     controller: _scroll,
+                    reverse: true,
                     padding: const EdgeInsets.all(12),
                     itemCount: session.messages.length,
-                    itemBuilder: (_, i) {
+                    itemBuilder: (_, r) {
+                      final i = session.messages.length - 1 - r;
                       final msg = session.messages[i];
                       final prev = i > 0 ? session.messages[i - 1] : null;
                       final next = i + 1 < session.messages.length

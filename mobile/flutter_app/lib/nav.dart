@@ -53,20 +53,28 @@ abstract final class LunoNav {
   // (every other destination, one tap away).
   static const primary = <LunoDestination>[
     LunoDestination('/home', 'mvHome', Icons.home_outlined, Icons.home),
-    LunoDestination('/chats', 'tabChats', Icons.chat_bubble_outline, Icons.chat_bubble),
+    LunoDestination(
+        '/chats', 'tabChats', Icons.chat_bubble_outline, Icons.chat_bubble),
     LunoDestination('/calls', 'mvCall', Icons.phone_outlined, Icons.phone),
-    LunoDestination('/news', 'mvNews', Icons.newspaper_outlined, Icons.newspaper),
-    LunoDestination('/more', 'mvMoreActions', Icons.more_horiz, Icons.more_horiz),
+    LunoDestination(
+        '/news', 'mvNews', Icons.newspaper_outlined, Icons.newspaper),
+    LunoDestination(
+        '/more', 'mvMoreActions', Icons.more_horiz, Icons.more_horiz),
   ];
   static const secondary = <LunoDestination>[
-    LunoDestination('/wallet', 'mvWallet', Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
-    LunoDestination('/shop', 'mvRailShop', Icons.shopping_bag_outlined, Icons.shopping_bag),
+    LunoDestination('/wallet', 'mvWallet',
+        Icons.account_balance_wallet_outlined, Icons.account_balance_wallet),
+    LunoDestination(
+        '/shop', 'mvRailShop', Icons.shopping_bag_outlined, Icons.shopping_bag),
     LunoDestination('/apps', 'appWord', Icons.apps_outlined, Icons.apps),
-    LunoDestination('/feed', 'navFeed', Icons.play_circle_outline, Icons.play_circle),
+    LunoDestination(
+        '/feed', 'navFeed', Icons.play_circle_outline, Icons.play_circle),
     LunoDestination('/lounge', 'navLounge', Icons.forum_outlined, Icons.forum),
     LunoDestination('/keep', 'navKeep', Icons.bookmark_outline, Icons.bookmark),
-    LunoDestination('/settings', 'settingsTitle', Icons.settings_outlined, Icons.settings),
-    LunoDestination('/console', 'consoleTitle', Icons.radar_outlined, Icons.radar),
+    LunoDestination(
+        '/settings', 'settingsTitle', Icons.settings_outlined, Icons.settings),
+    LunoDestination(
+        '/console', 'consoleTitle', Icons.radar_outlined, Icons.radar),
   ];
   static const all = <LunoDestination>[...primary, ...secondary];
 
@@ -79,11 +87,30 @@ abstract final class LunoNav {
   /// Deep routes highlight their parent destination (/chats/9 -> /chats).
   static String parentOf(String location) {
     for (final d in all) {
-      if (location == d.route || location.startsWith('${d.route}/')) return d.route;
+      if (location == d.route || location.startsWith('${d.route}/')) {
+        return d.route;
+      }
     }
     if (location.startsWith('/stories') || location.startsWith('/channels')) {
       return '/home';
     }
     return location;
+  }
+
+  /// Where the Android back button goes from [location], or null to leave
+  /// the app. Every screen is reached with context.go (no stack), so without
+  /// this the first back press closed LUNO from anywhere.
+  /// /chats/1/pins -> /chats/1 -> /chats -> /home -> (exit).
+  static String? backTargetOf(String location) {
+    if (location == '/home' || location == '/login' || location == '/splash') {
+      return null;
+    }
+    final room = RegExp(r'^/chats/[^/]+').firstMatch(location);
+    if (room != null && room.group(0) != location) return room.group(0);
+    final parent = parentOf(location);
+    if (parent != location) return parent;
+    final console = RegExp(r'^/console/').hasMatch(location);
+    if (console) return '/console';
+    return '/home';
   }
 }
