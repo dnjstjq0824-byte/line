@@ -12,6 +12,7 @@ import SettingsModal from '../components/SettingsModal.vue'
 import ApprovalBox from '../components/ApprovalBox.vue'
 import GroupSettingsModal from '../components/GroupSettingsModal.vue'
 import { LUNO_STICKERS, type LunoSticker } from '../luno-stickers'
+import { imageStickerChar } from '../../../shared/sticker_catalog'
 import { parseStorePacks } from '../../../shared/shop'
 import { findDirectChatId } from '../../../shared/direct_chat'
 import { makeFriendQrSvg } from '../../../shared/friend_qr'
@@ -1669,7 +1670,7 @@ async function sendSticker(stickerId: string) {
       body: stickerId,
       metadata: {
         sticker_id: stickerId,
-        character: found?.character || 'Lumi',
+        character: found?.character || imageStickerChar(stickerId) || 'Lumi',
         label: found?.name || stickerId
       }
     })

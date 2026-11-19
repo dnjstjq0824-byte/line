@@ -973,6 +973,20 @@ import { activeTheme, darkMode, error, note, t } from './store/session'
   animation: stickerPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+.bubble-sticker-img img {
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+  display: block;
+  animation: stickerPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.sticker-img-mini {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
 @keyframes stickerPop {
   0% { transform: scale(0.6); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }

@@ -37,6 +37,18 @@ String stickerGlyph({required String body, String? stickerId}) {
   return body;
 }
 
+/// Image sticker (LUNO200) rules. Mirrors apps/shared/stickers.ts.
+const imageStickerPrefix = 'luno-';
+final _imageStickerId = RegExp(r'^[a-z0-9-]+$');
+
+bool isImageStickerId(String id) =>
+    id.startsWith(imageStickerPrefix) && _imageStickerId.hasMatch(id);
+
+String stickerImageUrl(String baseUrl, String id) =>
+    '$baseUrl/stickers/$id.png';
+
+String stickerCatalogUrl(String baseUrl) => '$baseUrl/stickers/catalog.json';
+
 /// Large sticker art with a pop-in effect on first appearance; tap replays.
 class StickerBubble extends StatefulWidget {
   final String glyph;

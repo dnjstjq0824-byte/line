@@ -1,0 +1,1263 @@
+{
+ "version": 1,
+ "pack": "luno200",
+ "count": 200,
+ "categories": [
+  {
+   "id": "greet",
+   "ko": "인사",
+   "en": "Greetings",
+   "items": [
+    {
+     "id": "luno-greet-001",
+     "char": "lumi",
+     "label": "안녕!",
+     "file": "luno-greet-001.png"
+    },
+    {
+     "id": "luno-greet-002",
+     "char": "nori",
+     "label": "하이!",
+     "file": "luno-greet-002.png"
+    },
+    {
+     "id": "luno-greet-003",
+     "char": "poko",
+     "label": "오랜만!",
+     "file": "luno-greet-003.png"
+    },
+    {
+     "id": "luno-greet-004",
+     "char": "luno",
+     "label": "반가워!",
+     "file": "luno-greet-004.png"
+    },
+    {
+     "id": "luno-greet-005",
+     "char": "comet",
+     "label": "안녕하세요!",
+     "file": "luno-greet-005.png"
+    },
+    {
+     "id": "luno-greet-006",
+     "char": "astro",
+     "label": "헬로!",
+     "file": "luno-greet-006.png"
+    },
+    {
+     "id": "luno-greet-007",
+     "char": "lumi",
+     "label": "초대할게",
+     "file": "luno-greet-007.png"
+    },
+    {
+     "id": "luno-greet-008",
+     "char": "nori",
+     "label": "왔다!",
+     "file": "luno-greet-008.png"
+    },
+    {
+     "id": "luno-greet-009",
+     "char": "poko",
+     "label": "처음뵙겠어요",
+     "file": "luno-greet-009.png"
+    },
+    {
+     "id": "luno-greet-010",
+     "char": "luno",
+     "label": "너 왔구나!",
+     "file": "luno-greet-010.png"
+    },
+    {
+     "id": "luno-greet-011",
+     "char": "comet",
+     "label": "어서와!",
+     "file": "luno-greet-011.png"
+    },
+    {
+     "id": "luno-greet-012",
+     "char": "astro",
+     "label": "출발!",
+     "file": "luno-greet-012.png"
+    },
+    {
+     "id": "luno-greet-013",
+     "char": "lumi",
+     "label": "커피 마셔",
+     "file": "luno-greet-013.png"
+    },
+    {
+     "id": "luno-greet-014",
+     "char": "nori",
+     "label": "파티야!",
+     "file": "luno-greet-014.png"
+    },
+    {
+     "id": "luno-greet-015",
+     "char": "poko",
+     "label": "노는중",
+     "file": "luno-greet-015.png"
+    },
+    {
+     "id": "luno-greet-016",
+     "char": "luno",
+     "label": "잘 부탁해",
+     "file": "luno-greet-016.png"
+    },
+    {
+     "id": "luno-greet-017",
+     "char": "comet",
+     "label": "너구나!",
+     "file": "luno-greet-017.png"
+    },
+    {
+     "id": "luno-greet-018",
+     "char": "astro",
+     "label": "만나서 반가워",
+     "file": "luno-greet-018.png"
+    },
+    {
+     "id": "luno-greet-019",
+     "char": "lumi",
+     "label": "환영해!",
+     "file": "luno-greet-019.png"
+    },
+    {
+     "id": "luno-greet-020",
+     "char": "nori",
+     "label": "누구세요?",
+     "file": "luno-greet-020.png"
+    },
+    {
+     "id": "luno-greet-021",
+     "char": "poko",
+     "label": "감동이야",
+     "file": "luno-greet-021.png"
+    },
+    {
+     "id": "luno-greet-022",
+     "char": "luno",
+     "label": "기다렸어!",
+     "file": "luno-greet-022.png"
+    },
+    {
+     "id": "luno-greet-023",
+     "char": "comet",
+     "label": "선물 줄게",
+     "file": "luno-greet-023.png"
+    },
+    {
+     "id": "luno-greet-024",
+     "char": "astro",
+     "label": "잘 지냈어?",
+     "file": "luno-greet-024.png"
+    },
+    {
+     "id": "luno-greet-025",
+     "char": "lumi",
+     "label": "굿모닝!",
+     "file": "luno-greet-025.png"
+    }
+   ]
+  },
+  {
+   "id": "joy",
+   "ko": "기쁨·축하",
+   "en": "Joy",
+   "items": [
+    {
+     "id": "luno-joy-001",
+     "char": "nori",
+     "label": "야호!",
+     "file": "luno-joy-001.png"
+    },
+    {
+     "id": "luno-joy-002",
+     "char": "luno",
+     "label": "우승!",
+     "file": "luno-joy-002.png"
+    },
+    {
+     "id": "luno-joy-003",
+     "char": "poko",
+     "label": "생일축하해",
+     "file": "luno-joy-003.png"
+    },
+    {
+     "id": "luno-joy-004",
+     "char": "comet",
+     "label": "대박",
+     "file": "luno-joy-004.png"
+    },
+    {
+     "id": "luno-joy-005",
+     "char": "astro",
+     "label": "신나!",
+     "file": "luno-joy-005.png"
+    },
+    {
+     "id": "luno-joy-006",
+     "char": "lumi",
+     "label": "꺄아!",
+     "file": "luno-joy-006.png"
+    },
+    {
+     "id": "luno-joy-007",
+     "char": "nori",
+     "label": "행복해",
+     "file": "luno-joy-007.png"
+    },
+    {
+     "id": "luno-joy-008",
+     "char": "poko",
+     "label": "랄랄라",
+     "file": "luno-joy-008.png"
+    },
+    {
+     "id": "luno-joy-009",
+     "char": "luno",
+     "label": "완벽해",
+     "file": "luno-joy-009.png"
+    },
+    {
+     "id": "luno-joy-010",
+     "char": "comet",
+     "label": "선물이다!",
+     "file": "luno-joy-010.png"
+    },
+    {
+     "id": "luno-joy-011",
+     "char": "astro",
+     "label": "멋져!",
+     "file": "luno-joy-011.png"
+    },
+    {
+     "id": "luno-joy-012",
+     "char": "lumi",
+     "label": "행운이야",
+     "file": "luno-joy-012.png"
+    },
+    {
+     "id": "luno-joy-013",
+     "char": "nori",
+     "label": "축하해!",
+     "file": "luno-joy-013.png"
+    },
+    {
+     "id": "luno-joy-014",
+     "char": "poko",
+     "label": "냠냠!",
+     "file": "luno-joy-014.png"
+    },
+    {
+     "id": "luno-joy-015",
+     "char": "luno",
+     "label": "좋아좋아",
+     "file": "luno-joy-015.png"
+    },
+    {
+     "id": "luno-joy-016",
+     "char": "comet",
+     "label": "나이스!",
+     "file": "luno-joy-016.png"
+    },
+    {
+     "id": "luno-joy-017",
+     "char": "astro",
+     "label": "만세!",
+     "file": "luno-joy-017.png"
+    },
+    {
+     "id": "luno-joy-018",
+     "char": "lumi",
+     "label": "반짝반짝",
+     "file": "luno-joy-018.png"
+    },
+    {
+     "id": "luno-joy-019",
+     "char": "nori",
+     "label": "와아!",
+     "file": "luno-joy-019.png"
+    },
+    {
+     "id": "luno-joy-020",
+     "char": "poko",
+     "label": "점프!",
+     "file": "luno-joy-020.png"
+    },
+    {
+     "id": "luno-joy-021",
+     "char": "luno",
+     "label": "너무 좋아",
+     "file": "luno-joy-021.png"
+    },
+    {
+     "id": "luno-joy-022",
+     "char": "comet",
+     "label": "파티타임",
+     "file": "luno-joy-022.png"
+    },
+    {
+     "id": "luno-joy-023",
+     "char": "astro",
+     "label": "1등!",
+     "file": "luno-joy-023.png"
+    },
+    {
+     "id": "luno-joy-024",
+     "char": "nori",
+     "label": "소원성취",
+     "file": "luno-joy-024.png"
+    },
+    {
+     "id": "luno-joy-025",
+     "char": "poko",
+     "label": "행복최고",
+     "file": "luno-joy-025.png"
+    }
+   ]
+  },
+  {
+   "id": "sad",
+   "ko": "슬픔·위로",
+   "en": "Sad",
+   "items": [
+    {
+     "id": "luno-sad-001",
+     "char": "lumi",
+     "label": "흐엉",
+     "file": "luno-sad-001.png"
+    },
+    {
+     "id": "luno-sad-002",
+     "char": "nori",
+     "label": "엉엉",
+     "file": "luno-sad-002.png"
+    },
+    {
+     "id": "luno-sad-003",
+     "char": "poko",
+     "label": "우울해",
+     "file": "luno-sad-003.png"
+    },
+    {
+     "id": "luno-sad-004",
+     "char": "luno",
+     "label": "시무룩",
+     "file": "luno-sad-004.png"
+    },
+    {
+     "id": "luno-sad-005",
+     "char": "comet",
+     "label": "펑펑",
+     "file": "luno-sad-005.png"
+    },
+    {
+     "id": "luno-sad-006",
+     "char": "astro",
+     "label": "외로워",
+     "file": "luno-sad-006.png"
+    },
+    {
+     "id": "luno-sad-007",
+     "char": "lumi",
+     "label": "안아줘",
+     "file": "luno-sad-007.png"
+    },
+    {
+     "id": "luno-sad-008",
+     "char": "nori",
+     "label": "불안해",
+     "file": "luno-sad-008.png"
+    },
+    {
+     "id": "luno-sad-009",
+     "char": "poko",
+     "label": "피곤해",
+     "file": "luno-sad-009.png"
+    },
+    {
+     "id": "luno-sad-010",
+     "char": "luno",
+     "label": "눈물나",
+     "file": "luno-sad-010.png"
+    },
+    {
+     "id": "luno-sad-011",
+     "char": "comet",
+     "label": "보고싶어",
+     "file": "luno-sad-011.png"
+    },
+    {
+     "id": "luno-sad-012",
+     "char": "astro",
+     "label": "흑흑",
+     "file": "luno-sad-012.png"
+    },
+    {
+     "id": "luno-sad-013",
+     "char": "lumi",
+     "label": "대성통곡",
+     "file": "luno-sad-013.png"
+    },
+    {
+     "id": "luno-sad-014",
+     "char": "nori",
+     "label": "아파",
+     "file": "luno-sad-014.png"
+    },
+    {
+     "id": "luno-sad-015",
+     "char": "poko",
+     "label": "왜...?",
+     "file": "luno-sad-015.png"
+    },
+    {
+     "id": "luno-sad-016",
+     "char": "luno",
+     "label": "잘래",
+     "file": "luno-sad-016.png"
+    },
+    {
+     "id": "luno-sad-017",
+     "char": "comet",
+     "label": "지쳤어",
+     "file": "luno-sad-017.png"
+    },
+    {
+     "id": "luno-sad-018",
+     "char": "astro",
+     "label": "덜덜",
+     "file": "luno-sad-018.png"
+    },
+    {
+     "id": "luno-sad-019",
+     "char": "lumi",
+     "label": "걱정돼",
+     "file": "luno-sad-019.png"
+    },
+    {
+     "id": "luno-sad-020",
+     "char": "nori",
+     "label": "엄마야!",
+     "file": "luno-sad-020.png"
+    },
+    {
+     "id": "luno-sad-021",
+     "char": "poko",
+     "label": "토닥토닥",
+     "file": "luno-sad-021.png"
+    },
+    {
+     "id": "luno-sad-022",
+     "char": "luno",
+     "label": "새벽감성",
+     "file": "luno-sad-022.png"
+    },
+    {
+     "id": "luno-sad-023",
+     "char": "comet",
+     "label": "깊은밤",
+     "file": "luno-sad-023.png"
+    },
+    {
+     "id": "luno-sad-024",
+     "char": "astro",
+     "label": "힘들어",
+     "file": "luno-sad-024.png"
+    },
+    {
+     "id": "luno-sad-025",
+     "char": "lumi",
+     "label": "괜찮아?",
+     "file": "luno-sad-025.png"
+    }
+   ]
+  },
+  {
+   "id": "angry",
+   "ko": "화남",
+   "en": "Angry",
+   "items": [
+    {
+     "id": "luno-angry-001",
+     "char": "luno",
+     "label": "화나!",
+     "file": "luno-angry-001.png"
+    },
+    {
+     "id": "luno-angry-002",
+     "char": "nori",
+     "label": "열받아!",
+     "file": "luno-angry-002.png"
+    },
+    {
+     "id": "luno-angry-003",
+     "char": "poko",
+     "label": "삐졌어",
+     "file": "luno-angry-003.png"
+    },
+    {
+     "id": "luno-angry-004",
+     "char": "comet",
+     "label": "으아아!",
+     "file": "luno-angry-004.png"
+    },
+    {
+     "id": "luno-angry-005",
+     "char": "astro",
+     "label": "두고봐",
+     "file": "luno-angry-005.png"
+    },
+    {
+     "id": "luno-angry-006",
+     "char": "lumi",
+     "label": "무시할거야",
+     "file": "luno-angry-006.png"
+    },
+    {
+     "id": "luno-angry-007",
+     "char": "nori",
+     "label": "아오!",
+     "file": "luno-angry-007.png"
+    },
+    {
+     "id": "luno-angry-008",
+     "char": "poko",
+     "label": "그만해!",
+     "file": "luno-angry-008.png"
+    },
+    {
+     "id": "luno-angry-009",
+     "char": "luno",
+     "label": "두고보자",
+     "file": "luno-angry-009.png"
+    },
+    {
+     "id": "luno-angry-010",
+     "char": "comet",
+     "label": "흥!",
+     "file": "luno-angry-010.png"
+    },
+    {
+     "id": "luno-angry-011",
+     "char": "astro",
+     "label": "조용히해!",
+     "file": "luno-angry-011.png"
+    },
+    {
+     "id": "luno-angry-012",
+     "char": "lumi",
+     "label": "폭발직전",
+     "file": "luno-angry-012.png"
+    },
+    {
+     "id": "luno-angry-013",
+     "char": "nori",
+     "label": "짱나!",
+     "file": "luno-angry-013.png"
+    },
+    {
+     "id": "luno-angry-014",
+     "char": "poko",
+     "label": "메롱!",
+     "file": "luno-angry-014.png"
+    },
+    {
+     "id": "luno-angry-015",
+     "char": "luno",
+     "label": "흥, 됐어",
+     "file": "luno-angry-015.png"
+    },
+    {
+     "id": "luno-angry-016",
+     "char": "comet",
+     "label": "됐거든!",
+     "file": "luno-angry-016.png"
+    },
+    {
+     "id": "luno-angry-017",
+     "char": "astro",
+     "label": "어쩌라고",
+     "file": "luno-angry-017.png"
+    },
+    {
+     "id": "luno-angry-018",
+     "char": "lumi",
+     "label": "빨리빨리!",
+     "file": "luno-angry-018.png"
+    },
+    {
+     "id": "luno-angry-019",
+     "char": "nori",
+     "label": "일어나!",
+     "file": "luno-angry-019.png"
+    },
+    {
+     "id": "luno-angry-020",
+     "char": "poko",
+     "label": "뿌엥",
+     "file": "luno-angry-020.png"
+    },
+    {
+     "id": "luno-angry-021",
+     "char": "luno",
+     "label": "운동간다!",
+     "file": "luno-angry-021.png"
+    },
+    {
+     "id": "luno-angry-022",
+     "char": "comet",
+     "label": "너야너!",
+     "file": "luno-angry-022.png"
+    },
+    {
+     "id": "luno-angry-023",
+     "char": "astro",
+     "label": "시끄러!",
+     "file": "luno-angry-023.png"
+    },
+    {
+     "id": "luno-angry-024",
+     "char": "nori",
+     "label": "짜증나!",
+     "file": "luno-angry-024.png"
+    },
+    {
+     "id": "luno-angry-025",
+     "char": "poko",
+     "label": "어지러워",
+     "file": "luno-angry-025.png"
+    }
+   ]
+  },
+  {
+   "id": "shock",
+   "ko": "놀람·당황",
+   "en": "Shock",
+   "items": [
+    {
+     "id": "luno-shock-001",
+     "char": "astro",
+     "label": "헉!",
+     "file": "luno-shock-001.png"
+    },
+    {
+     "id": "luno-shock-002",
+     "char": "lumi",
+     "label": "꺄악!",
+     "file": "luno-shock-002.png"
+    },
+    {
+     "id": "luno-shock-003",
+     "char": "nori",
+     "label": "어머나!",
+     "file": "luno-shock-003.png"
+    },
+    {
+     "id": "luno-shock-004",
+     "char": "poko",
+     "label": "이런!",
+     "file": "luno-shock-004.png"
+    },
+    {
+     "id": "luno-shock-005",
+     "char": "comet",
+     "label": "세상에!",
+     "file": "luno-shock-005.png"
+    },
+    {
+     "id": "luno-shock-006",
+     "char": "astro",
+     "label": "뭐야?",
+     "file": "luno-shock-006.png"
+    },
+    {
+     "id": "luno-shock-007",
+     "char": "lumi",
+     "label": "멘붕",
+     "file": "luno-shock-007.png"
+    },
+    {
+     "id": "luno-shock-008",
+     "char": "nori",
+     "label": "헉!",
+     "file": "luno-shock-008.png"
+    },
+    {
+     "id": "luno-shock-009",
+     "char": "poko",
+     "label": "앗!",
+     "file": "luno-shock-009.png"
+    },
+    {
+     "id": "luno-shock-010",
+     "char": "luno",
+     "label": "말도안돼",
+     "file": "luno-shock-010.png"
+    },
+    {
+     "id": "luno-shock-011",
+     "char": "comet",
+     "label": "진짜?",
+     "file": "luno-shock-011.png"
+    },
+    {
+     "id": "luno-shock-012",
+     "char": "astro",
+     "label": "어질어질",
+     "file": "luno-shock-012.png"
+    },
+    {
+     "id": "luno-shock-013",
+     "char": "lumi",
+     "label": "늦었다!",
+     "file": "luno-shock-013.png"
+    },
+    {
+     "id": "luno-shock-014",
+     "char": "nori",
+     "label": "꺄아아!",
+     "file": "luno-shock-014.png"
+    },
+    {
+     "id": "luno-shock-015",
+     "char": "poko",
+     "label": "그래?",
+     "file": "luno-shock-015.png"
+    },
+    {
+     "id": "luno-shock-016",
+     "char": "luno",
+     "label": "하하하...",
+     "file": "luno-shock-016.png"
+    },
+    {
+     "id": "luno-shock-017",
+     "char": "comet",
+     "label": "어머어머",
+     "file": "luno-shock-017.png"
+    },
+    {
+     "id": "luno-shock-018",
+     "char": "astro",
+     "label": "당황",
+     "file": "luno-shock-018.png"
+    },
+    {
+     "id": "luno-shock-019",
+     "char": "lumi",
+     "label": "뭐지?",
+     "file": "luno-shock-019.png"
+    },
+    {
+     "id": "luno-shock-020",
+     "char": "nori",
+     "label": "울뻔",
+     "file": "luno-shock-020.png"
+    },
+    {
+     "id": "luno-shock-021",
+     "char": "poko",
+     "label": "왜요왜요",
+     "file": "luno-shock-021.png"
+    },
+    {
+     "id": "luno-shock-022",
+     "char": "luno",
+     "label": "앗차!",
+     "file": "luno-shock-022.png"
+    },
+    {
+     "id": "luno-shock-023",
+     "char": "comet",
+     "label": "식은땀",
+     "file": "luno-shock-023.png"
+    },
+    {
+     "id": "luno-shock-024",
+     "char": "astro",
+     "label": "이게뭐야",
+     "file": "luno-shock-024.png"
+    },
+    {
+     "id": "luno-shock-025",
+     "char": "lumi",
+     "label": "오호!",
+     "file": "luno-shock-025.png"
+    }
+   ]
+  },
+  {
+   "id": "thanks",
+   "ko": "감사·사과",
+   "en": "Thanks",
+   "items": [
+    {
+     "id": "luno-thanks-001",
+     "char": "nori",
+     "label": "고마워",
+     "file": "luno-thanks-001.png"
+    },
+    {
+     "id": "luno-thanks-002",
+     "char": "lumi",
+     "label": "죄송합니다",
+     "file": "luno-thanks-002.png"
+    },
+    {
+     "id": "luno-thanks-003",
+     "char": "poko",
+     "label": "고마워요",
+     "file": "luno-thanks-003.png"
+    },
+    {
+     "id": "luno-thanks-004",
+     "char": "luno",
+     "label": "땡큐!",
+     "file": "luno-thanks-004.png"
+    },
+    {
+     "id": "luno-thanks-005",
+     "char": "comet",
+     "label": "받아주세요",
+     "file": "luno-thanks-005.png"
+    },
+    {
+     "id": "luno-thanks-006",
+     "char": "astro",
+     "label": "감사합니다",
+     "file": "luno-thanks-006.png"
+    },
+    {
+     "id": "luno-thanks-007",
+     "char": "lumi",
+     "label": "고맙다 친구",
+     "file": "luno-thanks-007.png"
+    },
+    {
+     "id": "luno-thanks-008",
+     "char": "nori",
+     "label": "진심으로 고마워",
+     "file": "luno-thanks-008.png"
+    },
+    {
+     "id": "luno-thanks-009",
+     "char": "poko",
+     "label": "미안해...",
+     "file": "luno-thanks-009.png"
+    },
+    {
+     "id": "luno-thanks-010",
+     "char": "luno",
+     "label": "잘못했어",
+     "file": "luno-thanks-010.png"
+    },
+    {
+     "id": "luno-thanks-011",
+     "char": "comet",
+     "label": "꽃 받아요",
+     "file": "luno-thanks-011.png"
+    },
+    {
+     "id": "luno-thanks-012",
+     "char": "astro",
+     "label": "커피 사줄게",
+     "file": "luno-thanks-012.png"
+    },
+    {
+     "id": "luno-thanks-013",
+     "char": "lumi",
+     "label": "너 최고야",
+     "file": "luno-thanks-013.png"
+    },
+    {
+     "id": "luno-thanks-014",
+     "char": "nori",
+     "label": "울컥해",
+     "file": "luno-thanks-014.png"
+    },
+    {
+     "id": "luno-thanks-015",
+     "char": "poko",
+     "label": "답장할게",
+     "file": "luno-thanks-015.png"
+    },
+    {
+     "id": "luno-thanks-016",
+     "char": "luno",
+     "label": "굿잡!",
+     "file": "luno-thanks-016.png"
+    },
+    {
+     "id": "luno-thanks-017",
+     "char": "comet",
+     "label": "고마워용",
+     "file": "luno-thanks-017.png"
+    },
+    {
+     "id": "luno-thanks-018",
+     "char": "astro",
+     "label": "용서해줘",
+     "file": "luno-thanks-018.png"
+    },
+    {
+     "id": "luno-thanks-019",
+     "char": "lumi",
+     "label": "안아줄게",
+     "file": "luno-thanks-019.png"
+    },
+    {
+     "id": "luno-thanks-020",
+     "char": "nori",
+     "label": "쿠키 줄게",
+     "file": "luno-thanks-020.png"
+    },
+    {
+     "id": "luno-thanks-021",
+     "char": "poko",
+     "label": "생일축하 고마워",
+     "file": "luno-thanks-021.png"
+    },
+    {
+     "id": "luno-thanks-022",
+     "char": "luno",
+     "label": "실수했어",
+     "file": "luno-thanks-022.png"
+    },
+    {
+     "id": "luno-thanks-023",
+     "char": "comet",
+     "label": "미안미안",
+     "file": "luno-thanks-023.png"
+    },
+    {
+     "id": "luno-thanks-024",
+     "char": "astro",
+     "label": "고마워요",
+     "file": "luno-thanks-024.png"
+    },
+    {
+     "id": "luno-thanks-025",
+     "char": "lumi",
+     "label": "덕분이야!",
+     "file": "luno-thanks-025.png"
+    }
+   ]
+  },
+  {
+   "id": "love",
+   "ko": "사랑",
+   "en": "Love",
+   "items": [
+    {
+     "id": "luno-love-001",
+     "char": "comet",
+     "label": "사랑해",
+     "file": "luno-love-001.png"
+    },
+    {
+     "id": "luno-love-002",
+     "char": "lumi",
+     "label": "좋아해",
+     "file": "luno-love-002.png"
+    },
+    {
+     "id": "luno-love-003",
+     "char": "nori",
+     "label": "보고싶어",
+     "file": "luno-love-003.png"
+    },
+    {
+     "id": "luno-love-004",
+     "char": "poko",
+     "label": "예쁘다",
+     "file": "luno-love-004.png"
+    },
+    {
+     "id": "luno-love-005",
+     "char": "luno",
+     "label": "두근두근",
+     "file": "luno-love-005.png"
+    },
+    {
+     "id": "luno-love-006",
+     "char": "astro",
+     "label": "안아줘",
+     "file": "luno-love-006.png"
+    },
+    {
+     "id": "luno-love-007",
+     "char": "lumi",
+     "label": "데이트가자",
+     "file": "luno-love-007.png"
+    },
+    {
+     "id": "luno-love-008",
+     "char": "nori",
+     "label": "뽀뽀",
+     "file": "luno-love-008.png"
+    },
+    {
+     "id": "luno-love-009",
+     "char": "poko",
+     "label": "꽃다발",
+     "file": "luno-love-009.png"
+    },
+    {
+     "id": "luno-love-010",
+     "char": "luno",
+     "label": "잘생겼지",
+     "file": "luno-love-010.png"
+    },
+    {
+     "id": "luno-love-011",
+     "char": "comet",
+     "label": "베프!",
+     "file": "luno-love-011.png"
+    },
+    {
+     "id": "luno-love-012",
+     "char": "astro",
+     "label": "편지야",
+     "file": "luno-love-012.png"
+    },
+    {
+     "id": "luno-love-013",
+     "char": "lumi",
+     "label": "곁에있을게",
+     "file": "luno-love-013.png"
+    },
+    {
+     "id": "luno-love-014",
+     "char": "nori",
+     "label": "사랑듬뿍",
+     "file": "luno-love-014.png"
+    },
+    {
+     "id": "luno-love-015",
+     "char": "poko",
+     "label": "츄츄",
+     "file": "luno-love-015.png"
+    },
+    {
+     "id": "luno-love-016",
+     "char": "luno",
+     "label": "너한테 줄게",
+     "file": "luno-love-016.png"
+    },
+    {
+     "id": "luno-love-017",
+     "char": "comet",
+     "label": "반했어",
+     "file": "luno-love-017.png"
+    },
+    {
+     "id": "luno-love-018",
+     "char": "astro",
+     "label": "따뜻해",
+     "file": "luno-love-018.png"
+    },
+    {
+     "id": "luno-love-019",
+     "char": "lumi",
+     "label": "잘자요",
+     "file": "luno-love-019.png"
+    },
+    {
+     "id": "luno-love-020",
+     "char": "nori",
+     "label": "소풍가자",
+     "file": "luno-love-020.png"
+    },
+    {
+     "id": "luno-love-021",
+     "char": "poko",
+     "label": "꼬옥",
+     "file": "luno-love-021.png"
+    },
+    {
+     "id": "luno-love-022",
+     "char": "luno",
+     "label": "커피 어때",
+     "file": "luno-love-022.png"
+    },
+    {
+     "id": "luno-love-023",
+     "char": "comet",
+     "label": "내가 있잖아",
+     "file": "luno-love-023.png"
+    },
+    {
+     "id": "luno-love-024",
+     "char": "astro",
+     "label": "넌 짱이야",
+     "file": "luno-love-024.png"
+    },
+    {
+     "id": "luno-love-025",
+     "char": "lumi",
+     "label": "세레나데",
+     "file": "luno-love-025.png"
+    }
+   ]
+  },
+  {
+   "id": "cheer",
+   "ko": "응원·액션",
+   "en": "Cheer",
+   "items": [
+    {
+     "id": "luno-cheer-001",
+     "char": "luno",
+     "label": "최고!",
+     "file": "luno-cheer-001.png"
+    },
+    {
+     "id": "luno-cheer-002",
+     "char": "nori",
+     "label": "화이팅!",
+     "file": "luno-cheer-002.png"
+    },
+    {
+     "id": "luno-cheer-003",
+     "char": "poko",
+     "label": "우승!",
+     "file": "luno-cheer-003.png"
+    },
+    {
+     "id": "luno-cheer-004",
+     "char": "comet",
+     "label": "가자!",
+     "file": "luno-cheer-004.png"
+    },
+    {
+     "id": "luno-cheer-005",
+     "char": "astro",
+     "label": "할수있어",
+     "file": "luno-cheer-005.png"
+    },
+    {
+     "id": "luno-cheer-006",
+     "char": "lumi",
+     "label": "너라면 돼",
+     "file": "luno-cheer-006.png"
+    },
+    {
+     "id": "luno-cheer-007",
+     "char": "nori",
+     "label": "멋져!",
+     "file": "luno-cheer-007.png"
+    },
+    {
+     "id": "luno-cheer-008",
+     "char": "poko",
+     "label": "으랏차!",
+     "file": "luno-cheer-008.png"
+    },
+    {
+     "id": "luno-cheer-009",
+     "char": "luno",
+     "label": "달려!",
+     "file": "luno-cheer-009.png"
+    },
+    {
+     "id": "luno-cheer-010",
+     "char": "comet",
+     "label": "1등!",
+     "file": "luno-cheer-010.png"
+    },
+    {
+     "id": "luno-cheer-011",
+     "char": "astro",
+     "label": "따라와",
+     "file": "luno-cheer-011.png"
+    },
+    {
+     "id": "luno-cheer-012",
+     "char": "lumi",
+     "label": "응원해!",
+     "file": "luno-cheer-012.png"
+    },
+    {
+     "id": "luno-cheer-013",
+     "char": "nori",
+     "label": "한곡할게",
+     "file": "luno-cheer-013.png"
+    },
+    {
+     "id": "luno-cheer-014",
+     "char": "poko",
+     "label": "행운을 빌어",
+     "file": "luno-cheer-014.png"
+    },
+    {
+     "id": "luno-cheer-015",
+     "char": "luno",
+     "label": "빨리빨리",
+     "file": "luno-cheer-015.png"
+    },
+    {
+     "id": "luno-cheer-016",
+     "char": "comet",
+     "label": "아자아자!",
+     "file": "luno-cheer-016.png"
+    },
+    {
+     "id": "luno-cheer-017",
+     "char": "astro",
+     "label": "챔피언",
+     "file": "luno-cheer-017.png"
+    },
+    {
+     "id": "luno-cheer-018",
+     "char": "lumi",
+     "label": "운동하자!",
+     "file": "luno-cheer-018.png"
+    },
+    {
+     "id": "luno-cheer-019",
+     "char": "nori",
+     "label": "집중!",
+     "file": "luno-cheer-019.png"
+    },
+    {
+     "id": "luno-cheer-020",
+     "char": "poko",
+     "label": "굿굿",
+     "file": "luno-cheer-020.png"
+    },
+    {
+     "id": "luno-cheer-021",
+     "char": "luno",
+     "label": "성공기원",
+     "file": "luno-cheer-021.png"
+    },
+    {
+     "id": "luno-cheer-022",
+     "char": "comet",
+     "label": "인정!",
+     "file": "luno-cheer-022.png"
+    },
+    {
+     "id": "luno-cheer-023",
+     "char": "astro",
+     "label": "고고!",
+     "file": "luno-cheer-023.png"
+    },
+    {
+     "id": "luno-cheer-024",
+     "char": "nori",
+     "label": "토닥토닥",
+     "file": "luno-cheer-024.png"
+    },
+    {
+     "id": "luno-cheer-025",
+     "char": "poko",
+     "label": "선물 도착!",
+     "file": "luno-cheer-025.png"
+    }
+   ]
+  }
+ ]
+}

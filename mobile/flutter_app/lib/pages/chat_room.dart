@@ -16,6 +16,7 @@ import '../util/app_permissions.dart';
 import '../util/attachments.dart';
 import '../util/voice_recorder.dart';
 import '../util/stickers.dart';
+import '../util/sticker_image.dart';
 import '../util/photo_effects.dart';
 import '../util/inapp_camera.dart';
 import '../util/video_bubble.dart';
@@ -846,7 +847,15 @@ class _SignalBubble extends StatelessWidget {
                     child: Text(proposalState == 'approved' ? context.l10n.apprApprovedState : context.l10n.apprRejectedState,
                         style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: faint)),
                   ),
-                if (m['kind'] == 'sticker')
+                if (m['kind'] == 'sticker' &&
+                    isImageStickerId('${_stickerIdOf(m) ?? m['body']}'))
+                  StickerImage(
+                    stickerId: '${_stickerIdOf(m) ?? m['body']}',
+                    baseUrl: session.api.baseUrl,
+                    fallbackGlyph: stickerGlyph(
+                        body: '${m['body']}', stickerId: _stickerIdOf(m)),
+                  )
+                else if (m['kind'] == 'sticker')
                   StickerBubble(
                     glyph: stickerGlyph(
                         body: '${m['body']}', stickerId: _stickerIdOf(m)),
@@ -1609,34 +1618,102 @@ Future<void> _passwordDialog(BuildContext context) async {
     );
 }
 
-class _StickerDeck extends StatelessWidget {
+class _StickerDeck extends StatefulWidget {
   const _StickerDeck();
 
   @override
+  State<_StickerDeck> createState() => _StickerDeckState();
+}
+
+class _StickerDeckState extends State<_StickerDeck> {
+  String _tab = '';
+
+  @override
   Widget build(BuildContext context) {
-    final session = SessionScope.of(context, listen: false);
+    final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final cats = session.stickerCategories;
+    final active = cats.any((c) => '${c['id']}' == _tab)
+        ? _tab
+        : (cats.isEmpty ? '' : '${cats[0]['id']}');
+    final items = [
+      for (final c in cats)
+        if ('${c['id']}' == active)
+          ...((c['items'] as List?) ?? []).whereType<Map<String, dynamic>>(),
+    ];
     return Container(
-      height: 86,
+      height: cats.isEmpty ? 86 : 336,
       color: dark ? HarborDark.surface : Colors.white,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
         children: [
-          for (final s in lunoOrbitCrewStickers)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: ActionChip(
-                backgroundColor: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
-                side: BorderSide.none,
-                label: Text("${s['emoji']} ${s['character']}"),
-                onPressed: () => session.send(
-                  kind: 'sticker',
-                  customBody: "${s['emoji']} [${s['character']}]",
-                ),
+          SizedBox(
+            height: 70,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              children: [
+                for (final s in lunoOrbitCrewStickers)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ActionChip(
+                      backgroundColor: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+                      side: BorderSide.none,
+                      label: Text("${s['emoji']} ${s['character']}"),
+                      onPressed: () => session.send(
+                          kind: 'sticker',
+                          customBody: "${s['emoji']} [${s['character']}]",
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (cats.isNotEmpty) ...[
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                children: [
+                  for (final c in cats)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: ChoiceChip(
+                        label: Text(session.stickerCategoryTitle(c)),
+                        selected: '${c['id']}' == active,
+                        onSelected: (_) =>
+                            setState(() => _tab = '${c['id']}'),
+                      ),
+                    ),
+                ],
               ),
             ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.all(8),
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8),
+                itemCount: items.length,
+                itemBuilder: (context, i) {
+                  final id = '${items[i]['id']}';
+                  return GestureDetector(
+                    onTap: () => session.send(kind: 'sticker', customBody: id,
+                        metadata: {'sticker_id': id}),
+                    child: StickerImage(
+                      stickerId: id,
+                      baseUrl: session.api.baseUrl,
+                      size: 64,
+                      fallbackGlyph: '${items[i]['label']}',
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );

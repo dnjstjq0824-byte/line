@@ -8,10 +8,12 @@ import { computed, nextTick, onMounted, ref, watch, type Ref } from 'vue'
 import type { Chat, Message, User } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
 import { senderDisplayName } from '../../../shared/sender_name'
+import { isImageStickerId, stickerImagePath, categoryTitle } from '../../../shared/stickers'
+import { loadStickerCatalog, type StickerCatalogCategory } from '../../../shared/sticker_catalog'
 import type { LunoSticker } from '../luno-stickers'
 import type { LunoLocale } from '../luno-i18n'
 import LinkPreview from './LinkPreview.vue'
-import { currentUser, t, token } from '../store/session'
+import { currentUser, t, token, currentLocale } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import MessageAttachment from './MessageAttachment.vue'
 import PcAgentBar from './PcAgentBar.vue'
@@ -143,6 +145,26 @@ const editingMessageBody = defineModel<string>('editingMessageBody', { required:
 const effectChoice = defineModel<'none' | 'gray' | 'sepia'>('effectChoice', { required: true })
 
 const pinnedExpanded = ref(false)
+const stickerImgFailed = ref<Record<string, boolean>>({})
+function stickerMsgId(msg: Message): string { return String((msg.metadata as any)?.sticker_id || msg.body || '') }
+function isImgSticker(msg: Message): boolean { return isImageStickerId(stickerMsgId(msg)) }
+function stickerImgSrc(msg: Message): string { return stickerImagePath(stickerMsgId(msg)) }
+const imgStickerCats = ref<StickerCatalogCategory[]>([])
+const activeImgCat = ref('')
+let imgCatalogLoading = false
+const imgCatItems = computed(() => imgStickerCats.value.find(c => c.id === activeImgCat.value)?.items || [])
+function imgCatTitle(c: StickerCatalogCategory): string { return categoryTitle(c, currentLocale.value) }
+watch(showStickerPicker, async (open) => {
+  if (!open || imgStickerCats.value.length || imgCatalogLoading) return
+  imgCatalogLoading = true
+  try {
+    const cat = await loadStickerCatalog()
+    if (cat) {
+      imgStickerCats.value = cat.categories || []
+      activeImgCat.value = cat.categories[0]?.id || ''
+    }
+  } finally { imgCatalogLoading = false }
+})
 // C1: header ⋯ menu and composer + panel are pane-local UI state.
 const showTopbarMenu = ref(false)
 const showAttachPanel = ref(false)
@@ -549,7 +571,10 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                     <button class="btn-secondary" style="padding:2px 8px;font-size:11px" @click="editingMessageId = ''">{{ t('mvCancel') }}</button>
                   </div>
                 </div>
-                <div v-else-if="msg.kind === 'sticker' && getStickerSvg(String(msg.metadata?.sticker_id || msg.body))" class="bubble-sticker-svg sticker-effect" :key="`sticker-${msg.id}-${stickerReplay[msg.id] || 0}`" @click="stickerReplay[msg.id] = (stickerReplay[msg.id] || 0) + 1" v-html="getStickerSvg(String(msg.metadata?.sticker_id || msg.body))"></div>
+                <div v-else-if="msg.kind === 'sticker' && isImgSticker(msg) && !stickerImgFailed[msg.id]" class="bubble-sticker-img sticker-effect" :key="`stimg-${msg.id}`">
+  <img :src="stickerImgSrc(msg)" alt="" loading="lazy" @error="stickerImgFailed[msg.id] = true" />
+</div>
+<div v-else-if="msg.kind === 'sticker' && getStickerSvg(String(msg.metadata?.sticker_id || msg.body))" class="bubble-sticker-svg sticker-effect" :key="`sticker-${msg.id}-${stickerReplay[msg.id] || 0}`" @click="stickerReplay[msg.id] = (stickerReplay[msg.id] || 0) + 1" v-html="getStickerSvg(String(msg.metadata?.sticker_id || msg.body))"></div>
                 <div v-else-if="msg.kind === 'location'" class="bubble-location-card">
                   <div class="loc-card-top">{{ t('mvShareLocation') }}</div>
                   <strong class="loc-card-label">{{ msg.metadata?.label || msg.body }}</strong>
@@ -658,6 +683,21 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           >
             <div class="sticker-svg-mini" v-html="st.svg"></div>
             <small>{{ st.name }}</small>
+          </button>
+        </div>
+        <div v-if="imgStickerCats.length" class="sticker-cat-tabs" style="margin-top:10px">
+          <button v-for="c in imgStickerCats" :key="c.id" :class="{ active: activeImgCat === c.id }" @click="activeImgCat = c.id">{{ imgCatTitle(c) }}</button>
+        </div>
+        <div v-if="imgStickerCats.length" class="sticker-grid-items">
+          <button
+            v-for="st in imgCatItems"
+            :key="st.id"
+            class="btn-sticker-cell"
+            :title="st.label"
+            :aria-label="st.label"
+            @click="emit('sticker', st.id)"
+          >
+            <img class="sticker-img-mini" :src="stickerImagePath(st.id)" :alt="st.label" loading="lazy" />
           </button>
         </div>
       </div>
