@@ -87,8 +87,9 @@ abstract final class LunoNav {
   /// Deep routes highlight their parent destination (/chats/9 -> /chats).
   static String parentOf(String location) {
     for (final d in all) {
-      if (location == d.route || location.startsWith('${d.route}/'))
+      if (location == d.route || location.startsWith('${d.route}/')) {
         return d.route;
+      }
     }
     if (location.startsWith('/stories') || location.startsWith('/channels')) {
       return '/home';
