@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "885496575720",
+    "project_id": "project-807cb089-58d7-4357-87e",
+    "storage_bucket": "project-807cb089-58d7-4357-87e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:885496575720:android:4d5a8b195782e9f4383b5d",
+        "android_client_info": {
+          "package_name": "com.bookingnetwork.messenger.global_messenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWdBhH1smIfwd1o11rwGOvlS8Cex4zq9E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

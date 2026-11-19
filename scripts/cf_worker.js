@@ -1354,10 +1354,41 @@ registerTranslateProvider('fake', {
     return { translated: `[${target}] ${text}`, source_lang: source || 'auto', engine: 'fake' };
   },
 });
+// Google Cloud Translation (v2, NMT — not an LLM, so L-15 does not apply).
+// Selected with TRANSLATE_PROVIDER=google; requires the GOOGLE_TRANSLATE_API_KEY
+// secret (an API key restricted to translate.googleapis.com). Without the key
+// activeTranslateProvider stays null and /translate fails closed with
+// TRANSLATE_NOT_CONFIGURED. The key and source text are never logged or
+// returned. Tests inject a stub via env.GOOGLE_TRANSLATE_FETCH.
+const GOOGLE_TRANSLATE_URL = 'https://translation.googleapis.com/language/translate/v2';
+registerTranslateProvider('google', {
+  languages: ['ko', 'en', 'ja', 'th'],
+  async translate(env, text, target, source) {
+    translateProviderCalls.push({ text, target, source });
+    const body = { q: text, target, format: 'text' };
+    if (source && source !== 'auto') body.source = source;
+    const doFetch = typeof env.GOOGLE_TRANSLATE_FETCH === 'function' ? env.GOOGLE_TRANSLATE_FETCH : fetch;
+    const res = await doFetch(GOOGLE_TRANSLATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': env.GOOGLE_TRANSLATE_API_KEY },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    const t = data && data.data && Array.isArray(data.data.translations) ? data.data.translations[0] : null;
+    if (!res.ok || !t || typeof t.translatedText !== 'string') {
+      const err = new Error('google translate upstream failed');
+      err.code = 'TRANSLATE_UPSTREAM_ERROR';
+      err.status = 502;
+      throw err;
+    }
+    return { translated: t.translatedText, source_lang: t.detectedSourceLanguage || source || 'auto', engine: 'google' };
+  },
+});
 function activeTranslateProvider(env) {
   const name = env.TRANSLATE_PROVIDER;
   if (!name) return null;
   if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
+  if (name === 'google' && !(typeof env.GOOGLE_TRANSLATE_API_KEY === 'string' && env.GOOGLE_TRANSLATE_API_KEY.trim())) return null;
   return translateProviders.get(name) || null;
 }
 // F14: speech-to-text provider interface, mirroring T1. transcribe(env,
@@ -3324,7 +3355,7 @@ async function enqueueBotJob({ botId, roomId, kind, payload, maxAttempts = 5 }) 
 // call.ringing) continues at the existing broadcast points, which connected
 // clients already consume; this funnel adds the filtered provider leg.
 // Providers: none (default) and log (D1 outbox for local verification).
-// No FCM driver — the registration slot below is where one plugs in later.
+// fcm: Firebase Cloud Messaging HTTP v1 (see the provider below).
 const pushProviders = new Map();
 function registerPushProvider(name, send) {
   pushProviders.set(name, send);
@@ -3332,8 +3363,111 @@ function registerPushProvider(name, send) {
 function activePushProvider(env) {
   const name = env && env.PUSH_PROVIDER;
   if (!name || name === 'none') return null;
+  if (name === 'fcm' && !fcmServiceAccount(env)) return null;
   return pushProviders.get(name) || null;
 }
+// FCM: PUSH_PROVIDER=fcm plus the FCM_SERVICE_ACCOUNT_JSON secret (a service
+// account key with the Firebase Cloud Messaging API Admin role). Without a
+// usable key the provider stays inactive (fail closed: no push, no error).
+// The worker signs an RS256 JWT, trades it for an OAuth token (cached until
+// shortly before expiry) and sends one message per android/ios token. Tokens
+// FCM reports as unregistered are deleted. Delivery runs after the response
+// via ctx.waitUntil when a request context exists. The key, tokens and
+// message bodies are never logged. Tests inject a stub via env.FCM_FETCH.
+const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+let fcmTokenCache = { key: '', token: '', exp: 0 };
+function fcmServiceAccount(env) {
+  const raw = env && env.FCM_SERVICE_ACCOUNT_JSON;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const sa = JSON.parse(raw);
+    if (sa && typeof sa.client_email === 'string' && typeof sa.private_key === 'string' && typeof sa.project_id === 'string') return sa;
+  } catch { /* malformed secret: treat as unconfigured */ }
+  return null;
+}
+function fcmB64url(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function fcmAccessToken(env, sa) {
+  const nowS = Math.floor(Date.now() / 1000);
+  if (fcmTokenCache.key === sa.client_email && fcmTokenCache.token && fcmTokenCache.exp - 300 > nowS) return fcmTokenCache.token;
+  const tokenUri = sa.token_uri || 'https://oauth2.googleapis.com/token';
+  const enc = new TextEncoder();
+  const header = fcmB64url(enc.encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
+  const claims = fcmB64url(enc.encode(JSON.stringify({ iss: sa.client_email, scope: FCM_SCOPE, aud: tokenUri, iat: nowS, exp: nowS + 3600 })));
+  const pem = sa.private_key.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey('pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, enc.encode(`${header}.${claims}`)));
+  const doFetch = typeof env.FCM_FETCH === 'function' ? env.FCM_FETCH : fetch;
+  const res = await doFetch(tokenUri, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${header}.${claims}.${fcmB64url(sig)}`,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || typeof data.access_token !== 'string') throw new Error('fcm oauth failed');
+  fcmTokenCache = { key: sa.client_email, token: data.access_token, exp: nowS + (Number(data.expires_in) || 3600) };
+  return data.access_token;
+}
+function fcmTokenGone(status, data) {
+  if (status === 404) return true;
+  const details = (data && data.error && Array.isArray(data.error.details)) ? data.error.details : [];
+  // Only UNREGISTERED: INVALID_ARGUMENT can also mean a malformed message,
+  // and deleting every token on our own bug would silently kill push.
+  return details.some((d) => d && d.errorCode === 'UNREGISTERED');
+}
+async function fcmDeliver(env, sa, targets, event) {
+  const db = dbOf();
+  if (!db) return { sent: 0 };
+  await ensureSchema();
+  const marks = targets.map(() => '?').join(',');
+  const rows = (await db.prepare(`SELECT user_id, device_id, token FROM push_tokens WHERE platform IN ('android','ios') AND user_id IN (${marks})`)
+    .bind(...targets).all().catch(() => ({ results: [] }))).results || [];
+  if (rows.length === 0) return { sent: 0 };
+  const access = await fcmAccessToken(env, sa);
+  const doFetch = typeof env.FCM_FETCH === 'function' ? env.FCM_FETCH : fetch;
+  const url = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(sa.project_id)}/messages:send`;
+  const cid = String(event.conversation_id || '');
+  const isCall = event.kind === 'call';
+  let sent = 0;
+  for (const row of rows) {
+    const preview = prefsOf(row.user_id).notification_preview !== false;
+    const message = {
+      token: row.token,
+      notification: { title: String(event.title || 'LUNO').slice(0, 100), body: preview ? String(event.body || '').slice(0, 200) : '새 알림' },
+      data: { kind: String(event.kind || 'message'), conversation_id: cid },
+      android: {
+        priority: 'high',
+        // Same (tag, id 0) identity the app's local notifier uses, so a socket
+        // notification and this push replace each other instead of stacking.
+        notification: { channel_id: isCall ? 'luno_calls' : 'luno_messages', tag: isCall ? 'luno-call' : `luno-room-${cid}` },
+      },
+    };
+    try {
+      const res = await doFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${access}` },
+        body: JSON.stringify({ message }),
+      });
+      if (res.ok) { sent++; continue; }
+      const data = await res.json().catch(() => ({}));
+      if (fcmTokenGone(res.status, data)) {
+        await db.prepare('DELETE FROM push_tokens WHERE user_id = ? AND device_id = ? AND token = ?').bind(row.user_id, row.device_id, row.token).run().catch(() => null);
+      }
+    } catch { /* one bad token never blocks the rest */ }
+  }
+  return { sent };
+}
+registerPushProvider('fcm', async (env, targets, event) => {
+  const sa = fcmServiceAccount(env);
+  if (!sa) return;
+  const task = fcmDeliver(env, sa, targets, event).catch(() => ({ sent: 0 }));
+  if (CURRENT_CTX && typeof CURRENT_CTX.waitUntil === 'function') { CURRENT_CTX.waitUntil(task); return; }
+  await task;
+});
 registerPushProvider('log', async (env, targets, event) => {
   const db = dbOf();
   if (!db) return;
@@ -6717,16 +6851,32 @@ function entitled(u, feature) {
       return json({ status: 'registered', id: entry.id }, 201);
     }
     if (method === 'DELETE') {
-      pushTokens.delete(myId);
+      // With a device_id only that device stops getting push (app logout);
+      // without one every token of the caller is cleared (legacy behaviour).
+      const b = await readJson(request);
+      const deviceId = clip(new URL(request.url).searchParams.get('device_id') || b.device_id || '', 100);
+      if (deviceId) {
+        pushTokens.set(myId, (pushTokens.get(myId) || []).filter((t) => t.device_id !== deviceId));
+      } else {
+        pushTokens.delete(myId);
+      }
       if (dbOf()) {
         await ensureSchema();
-        await dbOf().prepare('DELETE FROM push_tokens WHERE user_id = ?').bind(myId).run();
+        if (deviceId) await dbOf().prepare('DELETE FROM push_tokens WHERE user_id = ? AND device_id = ?').bind(myId, deviceId).run();
+        else await dbOf().prepare('DELETE FROM push_tokens WHERE user_id = ?').bind(myId).run();
       }
       return json({ status: 'cleared' });
     }
   }
   if (p === 'push-tokens/test' && method === 'POST') {
-    return json({ error: 'Push delivery requires a configured provider-backed API', code: 'PUSH_NOT_CONFIGURED' }, 503);
+    const env = notifyEnv();
+    if (env.PUSH_PROVIDER !== 'fcm' || !activePushProvider(env)) {
+      return json({ error: 'Push delivery requires a configured provider-backed API', code: 'PUSH_NOT_CONFIGURED' }, 503);
+    }
+    if (!await rateLimit('rl:pushtest:' + myId, 5)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    // Self-test: sender_id null so notify() does not filter the caller out.
+    const out = await notify(env, [myId], { kind: 'message', conversation_id: '', sender_id: null, title: 'LUNO', body: '푸시 알림 테스트입니다' });
+    return json({ status: 'queued', notified: out.notified.length });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/sync$/)) && method === 'GET') {
     const cid = resolveConversationId(m[1], myId);
@@ -7388,7 +7538,12 @@ const workerCore = {
       if (hit) return json({ translated: hit.translated, source_lang: hit.source_lang || source || 'auto', target_lang: target, engine: hit.engine || 'cache' });
       const day = await translateConsumeChars(auth.id, text.length);
       if (!day.ok) return json({ error: 'daily translation quota exceeded', code: 'QUOTA_EXCEEDED' }, 429);
-      const out = await provider.translate(env, text, target, source || 'auto');
+      let out;
+      try {
+        out = await provider.translate(env, text, target, source || 'auto');
+      } catch {
+        return json({ error: 'Translation upstream failed', code: 'TRANSLATE_UPSTREAM_ERROR' }, 502);
+      }
       await translateCachePut(hash, target, out.translated, out.source_lang, out.engine);
       return json({ translated: out.translated, source_lang: out.source_lang, target_lang: target, engine: out.engine });
     }

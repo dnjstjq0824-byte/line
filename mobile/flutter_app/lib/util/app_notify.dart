@@ -23,7 +23,9 @@ class ProdAppNotifier implements AppNotifier {
 
   final FlutterLocalNotificationsPlugin _plugin;
 
-  static const _callId = 9001;
+  // (luno-call, 0): the identity of the server's FCM call push.
+  static const _callId = 0;
+  static const _callTag = 'luno-call';
 
   @override
   Future<void> init(
@@ -60,14 +62,18 @@ class ProdAppNotifier implements AppNotifier {
       required String title,
       required String body,
       String locale = 'ko'}) {
+    // (tag, id 0) is the identity FCM uses for the server's push
+    // ("luno-room-<cid>"), so the two replace each other instead of stacking.
     return _plugin.show(
-      id: roomId.hashCode,
+      id: 0,
       title: title,
       body: body,
       notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
               'luno_messages', stringsFor(locale).messageWord,
-              importance: Importance.high, priority: Priority.high)),
+              importance: Importance.high,
+              priority: Priority.high,
+              tag: 'luno-room-$roomId')),
       payload: 'room:$roomId',
     );
   }
@@ -88,11 +94,13 @@ class ProdAppNotifier implements AppNotifier {
               importance: Importance.max,
               priority: Priority.max,
               ongoing: true,
-              autoCancel: false)),
+              autoCancel: false,
+              tag: _callTag)),
       payload: 'call:$callId',
     );
   }
 
+  // Also clears the server's closed-app call push (same tag, id 0).
   @override
-  Future<void> cancelCall() => _plugin.cancel(id: _callId);
+  Future<void> cancelCall() => _plugin.cancel(id: _callId, tag: _callTag);
 }
