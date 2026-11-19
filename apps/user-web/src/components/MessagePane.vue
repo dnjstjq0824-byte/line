@@ -5,7 +5,7 @@
 // a holder (template expressions would unwrap the bare bindings).
 import { computed, nextTick, onMounted, ref, watch, type Ref } from 'vue'
 
-import type { Chat, Message, User } from '../../../shared/api'
+import { API_URL, type Chat, type Message, type User } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
 import { senderDisplayName } from '../../../shared/sender_name'
 import { isImageStickerId, stickerImagePath, categoryTitle } from '../../../shared/stickers'
@@ -145,6 +145,80 @@ const editingMessageBody = defineModel<string>('editingMessageBody', { required:
 const effectChoice = defineModel<'none' | 'gray' | 'sepia'>('effectChoice', { required: true })
 
 const pinnedExpanded = ref(false)
+// A15: voice AI — STT for voice bubbles, TTS read-aloud for text bubbles.
+// 503/502 from ai/stt or ai/tts surfaces honest "engine getting ready"
+// guidance; anything else is a conversion failure.
+const voiceAiText = ref<Record<string, { loading: boolean; text: string; error: string }>>({})
+const ttsPlaying = ref<Record<string, boolean>>({})
+function voiceAiLang(): string {
+  const l = String(currentLocale.value || 'auto').toLowerCase()
+  return ['ko', 'en', 'th', 'ja'].includes(l) ? l : 'auto'
+}
+async function transcribeVoice(msg: Message) {
+  const id = String((msg.metadata as any)?.attachment_id || '')
+  if (!id || !token.value || voiceAiText.value[msg.id]?.loading) return
+  voiceAiText.value[msg.id] = { loading: true, text: '', error: '' }
+  try {
+    const dl = await fetch(`${API_URL}/api/v1/attachments/${encodeURIComponent(id)}/content`, {
+      headers: { Authorization: `Bearer ${token.value}` },
+      cache: 'no-store',
+    })
+    if (!dl.ok) throw new Error('voice download failed')
+    const mime = (dl.headers.get('content-type') || 'audio/mp4').split(';')[0].trim().toLowerCase() || 'audio/mp4'
+    const bytes = new Uint8Array(await dl.arrayBuffer())
+    let bin = ''
+    for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192))
+    const res = await fetch(`${API_URL}/api/v1/ai/stt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.value}` },
+      body: JSON.stringify({ audio_base64: btoa(bin), mime_type: mime, lang: voiceAiLang() }),
+    })
+    if (res.status === 503 || res.status === 502) {
+      voiceAiText.value[msg.id] = { loading: false, text: '', error: t('mvVoiceAiPending') }
+      return
+    }
+    if (!res.ok) throw new Error('stt failed')
+    const data = await res.json()
+    voiceAiText.value[msg.id] = { loading: false, text: String(data.text || ''), error: '' }
+  } catch {
+    voiceAiText.value[msg.id] = { loading: false, text: '', error: t('mvVoiceAiFailed') }
+  }
+}
+async function readAloud(msg: Message) {
+  if (!token.value || ttsPlaying.value[msg.id] || voiceAiText.value[msg.id]?.loading) return
+  voiceAiText.value[msg.id] = { loading: true, text: '', error: '' }
+  ttsPlaying.value[msg.id] = true
+  try {
+    const res = await fetch(`${API_URL}/api/v1/ai/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.value}` },
+      body: JSON.stringify({ text: msg.body, lang: voiceAiLang() }),
+    })
+    if (res.status === 503) {
+      voiceAiText.value[msg.id] = { loading: false, text: '', error: t('mvVoiceAiPending') }
+      ttsPlaying.value[msg.id] = false
+      return
+    }
+    if (!res.ok) throw new Error('tts failed')
+    const data = await res.json()
+    const raw = atob(String(data.audio_base64 || ''))
+    const arr = new Uint8Array(raw.length)
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
+    const blobUrl = URL.createObjectURL(new Blob([arr], { type: String(data.mime_type || 'audio/wav') }))
+    const audio = new Audio(blobUrl)
+    audio.onended = () => { URL.revokeObjectURL(blobUrl); ttsPlaying.value[msg.id] = false }
+    audio.onerror = () => {
+      URL.revokeObjectURL(blobUrl)
+      ttsPlaying.value[msg.id] = false
+      voiceAiText.value[msg.id] = { loading: false, text: '', error: t('mvVoiceAiFailed') }
+    }
+    voiceAiText.value[msg.id] = { loading: false, text: '', error: '' }
+    await audio.play()
+  } catch {
+    ttsPlaying.value[msg.id] = false
+    voiceAiText.value[msg.id] = { loading: false, text: '', error: t('mvVoiceAiFailed') }
+  }
+}
 const stickerImgFailed = ref<Record<string, boolean>>({})
 function stickerMsgId(msg: Message): string { return String((msg.metadata as any)?.sticker_id || msg.body || '') }
 function isImgSticker(msg: Message): boolean { return isImageStickerId(stickerMsgId(msg)) }
@@ -600,6 +674,13 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <div v-else class="bubble-text-content">{{ msg.body }}</div>
                 <LinkPreview v-if="msg.kind === 'text' && !msg.unsent" :text="msg.body" :enabled="linkPreviewsEnabled" />
 
+                <!-- A15: voice-AI result box (STT transcript, TTS/STT guidance) -->
+                <div v-if="voiceAiText[msg.id]" class="lx-voice-ai-box">
+                  <div v-if="voiceAiText[msg.id].loading" class="lx-voice-ai-loading" role="status">✨ {{ t('mvVoiceAiWorking') }}</div>
+                  <div v-else-if="voiceAiText[msg.id].error" class="lx-voice-ai-error" role="alert">⚠️ {{ voiceAiText[msg.id].error }}</div>
+                  <div v-else-if="voiceAiText[msg.id].text" class="lx-voice-ai-result">{{ voiceAiText[msg.id].text }}</div>
+                </div>
+
                 <!-- Reactions Display -->
                 <div v-if="msg.reactions && Object.keys(msg.reactions).length" class="bubble-reactions-row">
                   <span v-for="(cnt, emo) in msg.reactions" :key="emo" class="reaction-chip" @click="emit('react', msg.id, String(emo))">
@@ -635,6 +716,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <!-- Bubble Hover Floating Action Bar -->
             <div class="pc-bubble-toolbar">
               <button :title="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :aria-label="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :disabled="!translateConfigured" @click="emit('translate', msg)"><LunoIcon name="translate" :size="14" /></button>
+              <button v-if="msg.kind === 'voice' && !msg.unsent" :title="t('mvVoiceToText')" :aria-label="t('mvVoiceToText')" @click="transcribeVoice(msg)"><LunoIcon name="mic" :size="14" /></button>
+              <button v-if="msg.kind === 'text' && !msg.unsent" :title="t('mvReadAloud')" :aria-label="t('mvReadAloud')" :disabled="ttsPlaying[msg.id]" @click="readAloud(msg)"><LunoIcon name="megaphone" :size="14" /></button>
               <button :title="t('mvReactHeart')" :aria-label="t('mvReactHeart')" @click="emit('react', msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
               <button :title="t('mvReactLike')" :aria-label="t('mvReactLike')" @click="emit('react', msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
               <button :title="t('mvReply')" :aria-label="t('mvReply')" @click="emit('reply', msg)"><LunoIcon name="reply" :size="14" /></button>

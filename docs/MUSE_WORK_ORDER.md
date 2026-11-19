@@ -35,7 +35,7 @@
 - [x] **A12 원격 작업 — 웹 PC 작업실 상태 줄·명령 칩** — 웹 대화방이 봇 방이면 입력창 위에 러너 상태(준비됨/작업 중/오프라인, `conversations/:id/bots`)와 칩 `/status` `/git` `/check` `/continue` `/auto off`. 앱의 `pc_agent_bar.dart`와 같은 동작. 완료: 웹 테스트로 칩 5개와 상태 API 호출 핀, vue-tsc 통과. → 완료: scripts 594/594·flutter 381/381·vue-tsc 통과, PcAgentBar 신규(20초폴·5칩·일반전송), 라벨 10키×4로케일.
 - [x] **A13 STT whisper 엔진 — 서버** — `STT_PROVIDER=whisper` 어댑터(OpenAI 호환 `/audio/transcriptions`, multipart), 키·기준 URL env 필수(없으면 503 fail-closed, 벤더 URL 내장 없음), 오디오·키 무로그. 완료: 주입 fetch로 성공·상류 오류·미설정 테스트 통과. → 완료: stt_whisper 4/4·f14 3/3 회귀·L-15 무벤더핀 유지, 키+기준URL 필수·상류오류 502 (WHISPER_*는 대표설정 필요).
 - [x] **A14 TTS — 서버** — `ttsProviders` + fake(DEMO 전용), `POST ai/tts`(텍스트 상한·속도 제한) + `GET ai/tts/voices`, 미설정 503. 완료: F14 미러 테스트(미설정·fake 계약·입력 검증) 통과. → 완료: ai_tts 3/3·인벤토리 분류, fake(DEMO전용)+ai/tts+ai/tts/voices+상한/속도제한 (TTS_PROVIDER는 대표설정 필요).
-- [ ] **A15 웹 음성 연결** — 음성 버블 "텍스트로 보기"(ai/stt, 첨부 바이트), 텍스트 버블 "읽어주기"(ai/tts 재생), 503이면 4로케일 "엔진 준비 중" 안내. 완료: 호출·문구 핀 테스트 + vue-tsc 통과.
+- [x] **A15 웹 음성 연결** — 음성 버블 "텍스트로 보기"(ai/stt, 첨부 바이트), 텍스트 버블 "읽어주기"(ai/tts 재생), 503이면 4로케일 "엔진 준비 중" 안내. 완료: 호출·문구 핀 테스트 + vue-tsc 통과. → 완료: web_voice_ai 5/5·vue-tsc, 음성→ai/stt·텍스트→ai/tts+재생, 503 정직안내 5키×4로케일. 전체 scripts 630/630·flutter 390/390·gate GREEN.
 
 ## 이번 자동 진행에서 하지 않는 것
 

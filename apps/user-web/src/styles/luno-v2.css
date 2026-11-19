@@ -1286,3 +1286,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .lx-pcagent-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
 .lx-pcagent-chip { flex-shrink: 0; padding: 7px 14px; border-radius: 999px; border: none; background: var(--ln-accent-soft); color: var(--ln-accent); font-size: 13px; font-weight: 700; cursor: pointer; }
 .lx-pcagent-chip:disabled { opacity: 0.5; cursor: default; }
+
+/* A15: voice-AI result box under message bubbles (STT transcript, guidance). */
+.lx-voice-ai-box { margin-top: 6px; font-size: 13px; line-height: 1.5; }
+.lx-voice-ai-loading { color: var(--ln-muted); }
+.lx-voice-ai-error { color: var(--ln-warning, #b45309); }
+.lx-voice-ai-result { padding: 6px 10px; border-radius: 10px; background: var(--ln-accent-soft); color: var(--ln-text); overflow-wrap: anywhere; }
