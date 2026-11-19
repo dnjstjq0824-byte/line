@@ -70,17 +70,15 @@ Widget _wrap(SessionController session) {
 void main() {
   group('call bubble helpers', () {
     test('callBubbleTitle prefers the server body', () {
-      expect(
-          callBubbleTitle(_callMsg(id: 'a', sender: 'u2', body: '음성통화')),
+      expect(callBubbleTitle(_callMsg(id: 'a', sender: 'u2', body: '음성통화')),
           '음성통화');
-      expect(
-          callBubbleTitle(_callMsg(id: 'a', sender: 'u2', body: '부재중 전화')),
+      expect(callBubbleTitle(_callMsg(id: 'a', sender: 'u2', body: '부재중 전화')),
           '부재중 전화');
-      expect(callBubbleTitle(_callMsg(id: 'a', sender: 'u2', body: '')),
-          '음성통화');
       expect(
-          callBubbleTitle(_callMsg(
-              id: 'a', sender: 'u2', body: '', type: 'video')),
+          callBubbleTitle(_callMsg(id: 'a', sender: 'u2', body: '')), '음성통화');
+      expect(
+          callBubbleTitle(
+              _callMsg(id: 'a', sender: 'u2', body: '', type: 'video')),
           '영상통화');
     });
 
@@ -90,8 +88,8 @@ void main() {
               _callMsg(id: 'a', sender: 'u2', body: '음성통화', duration: 95)),
           '1:35');
       expect(
-          callBubbleDuration(_callMsg(
-              id: 'a', sender: 'u2', body: '음성통화', duration: '00:29')),
+          callBubbleDuration(
+              _callMsg(id: 'a', sender: 'u2', body: '음성통화', duration: '00:29')),
           '0:29');
       expect(
           callBubbleDuration(
@@ -155,15 +153,19 @@ void main() {
       ]);
       await tester.pumpWidget(_wrap(s));
       await tester.pumpAndSettle();
-      expect(
-          find.byKey(const ValueKey('jump-latest')), findsNothing);
-      await tester.drag(find.byType(ListView).first, const Offset(0, -800));
+      // A room opens at the newest message (the list is reversed).
+      expect(find.text('메시지 39'), findsOneWidget);
+      expect(find.text('메시지 0'), findsNothing);
+      expect(find.byKey(const ValueKey('jump-latest')), findsNothing);
+      // Finger moves down = reading older messages.
+      await tester.drag(
+          find.byKey(const ValueKey('chat-messages')), const Offset(0, 800));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('jump-latest')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('jump-latest')));
       await tester.pumpAndSettle();
-      expect(
-          find.byKey(const ValueKey('jump-latest')), findsNothing);
+      expect(find.byKey(const ValueKey('jump-latest')), findsNothing);
+      expect(find.text('메시지 39'), findsOneWidget);
     });
   });
 }

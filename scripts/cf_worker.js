@@ -2028,6 +2028,19 @@ async function hydrateCursors(userId) {
     if (r.sequence > (readCursors.get(key) || 0)) readCursors.set(key, r.sequence);
   }
 }
+// Read receipts: every member's cursor for one room. decorateMessage counts
+// the OTHER members' cursors, but hydrateCursors only loads the viewer's own,
+// so a peer who read on another isolate showed as unread ("읽음" vanished).
+async function hydrateRoomCursors(cid) {
+  const db = dbOf();
+  if (!db || !cid) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT user_id, sequence FROM luno_read_cursors WHERE conversation_id = ?').bind(cid).all().catch(() => ({ results: [] }));
+  for (const r of results || []) {
+    const key = `${cid}:${r.user_id}`;
+    if (r.sequence > (readCursors.get(key) || 0)) readCursors.set(key, r.sequence);
+  }
+}
 async function hydrateUserConversations(userId) {
   await hydrateDurableConversations(userId);
   const db = dbOf();
@@ -5257,6 +5270,7 @@ async function followedMap(userId) {
       if (userKind(me) === 'bot') await persistAudit(myId, 'bot.read', cid, { route: 'messages' });
       await hydrateConversation(cid);
       await hydrateCursors(myId);
+      await hydrateRoomCursors(cid);
       const before = intIn(url.searchParams.get('before_sequence') || 0, 0, 1e9) || 0;
       const limit = intIn(url.searchParams.get('limit') || 50, 1, 100) || 50;
       const hs = hiddenMsgs.get(myId);
@@ -7070,6 +7084,7 @@ function entitled(u, feature) {
     if (!conv || !conv.members.includes(myId)) return bad('대화방을 찾을 수 없습니다', 404);
     if (userKind(me) === 'bot' && !botScopeAllows(me, 'read', cid)) return json({ error: 'forbidden' }, 403);
     if (userKind(me) === 'bot') await persistAudit(myId, 'bot.read', cid, { route: 'sync' });
+    await hydrateRoomCursors(cid);
     const since = intIn(url.searchParams.get('since_sequence') || 0, 0, 1e9) || 0;
     const db = dbOf();
     let delta;
