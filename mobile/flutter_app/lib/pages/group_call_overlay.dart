@@ -10,7 +10,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../design/v3.dart';
 import '../state/session.dart';
-import 'call_overlay.dart' show callDurationLabel;
+import 'call_overlay.dart' show CallImmersive, callDurationLabel;
 import '../util/app_l10n.dart';
 
 int groupTileColumns(double width) {
@@ -32,8 +32,9 @@ class GroupCallOverlay extends StatelessWidget {
     final peers =
         List<Map<String, dynamic>>.from(call['participants'] ?? []);
     final width = MediaQuery.sizeOf(context).width;
-    return Material(
-      color: Colors.black87,
+    return CallImmersive(
+      child: Material(
+      color: const Color(0xFF020617),
       child: SafeArea(
         child: Column(
           children: [
@@ -82,6 +83,7 @@ class GroupCallOverlay extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -35,3 +35,23 @@ String todayUtc() {
   final dd = now.day.toString().padLeft(2, '0');
   return '${now.year}-$mm-$dd';
 }
+
+/// Accepts the shapes people actually type on a phone keyboard —
+/// 19900505, 1990.5.5, 1990/05/05, 1990 05 05, 1990-5-5 — and returns
+/// YYYY-MM-DD, or the trimmed input unchanged when it is not a date at all
+/// (ageOnDate then rejects it). Build 13 only took the exact hyphen form, so
+/// most real sign-ups stopped on the client with "enter your birthdate".
+String normalizeBirthdate(String input) {
+  final s = input.trim();
+  final compact = RegExp(r'^(\d{4})(\d{2})(\d{2})$').firstMatch(s);
+  if (compact != null) {
+    return '${compact.group(1)}-${compact.group(2)}-${compact.group(3)}';
+  }
+  final parts = RegExp(r'^(\d{4})\s*[-./\s]\s*(\d{1,2})\s*[-./\s]\s*(\d{1,2})\.?$')
+      .firstMatch(s);
+  if (parts != null) {
+    String two(String v) => v.padLeft(2, '0');
+    return '${parts.group(1)}-${two(parts.group(2)!)}-${two(parts.group(3)!)}';
+  }
+  return s;
+}

@@ -625,7 +625,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
               <!-- Speech Bubble -->
               <div
                 class="pc-speech-bubble"
-                :class="{ 'is-sticker': msg.kind === 'sticker' && !msg.unsent }"
+                :class="{ 'is-sticker': msg.kind === 'sticker' && !msg.unsent, 'is-media': (msg.kind === 'image' || msg.kind === 'video') && !!msg.metadata?.attachment_id && !msg.unsent }"
                 @contextmenu.prevent="emit('message-menu', $event, msg)"
                 @touchstart.passive="pressStart($event, msg)"
                 @touchmove.passive="pressCancel"

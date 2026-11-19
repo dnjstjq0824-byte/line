@@ -1292,3 +1292,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .lx-voice-ai-loading { color: var(--ln-muted); }
 .lx-voice-ai-error { color: var(--ln-warning, #b45309); }
 .lx-voice-ai-result { padding: 6px 10px; border-radius: 10px; background: var(--ln-accent-soft); color: var(--ln-text); overflow-wrap: anywhere; }
+
+/* Photos, videos and stickers sit on the chat background without the sender's
+   bubble (LINE style). Needs the room-row specificity to beat lines 223-225. */
+.luno-desktop-app .pc-msg-row .pc-speech-bubble.is-sticker,
+.luno-desktop-app .pc-msg-row .pc-speech-bubble.is-media,
+.luno-desktop-app .pc-msg-row.mine .pc-speech-bubble.is-sticker,
+.luno-desktop-app .pc-msg-row.mine .pc-speech-bubble.is-media,
+.luno-desktop-app .pc-msg-row:not(.mine) .pc-speech-bubble.is-sticker,
+.luno-desktop-app .pc-msg-row:not(.mine) .pc-speech-bubble.is-media{background:transparent!important;color:var(--ln-text)!important;border:0!important;box-shadow:none!important;padding:0!important}
+.pc-speech-bubble.is-media::after{display:none!important}
+.pc-speech-bubble.is-media img,.pc-speech-bubble.is-media video{border-radius:14px}

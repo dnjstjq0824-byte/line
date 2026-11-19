@@ -50,7 +50,8 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     final isOwner = myRole == 'owner';
     final title = '${room['title'] ?? session.selectedTitle}';
     final photo = profilePhotoImage(
-        session.api.baseUrl, '${room['avatar_url'] ?? ''}');
+        session.api.baseUrl, '${room['avatar_url'] ?? ''}',
+        token: session.api.token);
     final memberIds = members.map((m) => '${m['id']}').toSet();
     final invitable = session.friends
         .where((f) => !memberIds.contains('${f['id']}'))
@@ -229,7 +230,8 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     final canAct = !isSelf &&
         (isOwner || (myRole == 'admin' && role == 'member'));
     final img =
-        profilePhotoImage(session.api.baseUrl, '${m['avatar_url'] ?? ''}');
+        profilePhotoImage(session.api.baseUrl, '${m['avatar_url'] ?? ''}',
+            token: session.api.token);
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,

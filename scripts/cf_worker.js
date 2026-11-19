@@ -132,6 +132,18 @@ const STICKER_CATALOG = [
   { id: 'pack-2', title: '맛있는 하루', price_minor: 2500, stickers: ['🍕', '🍔', '🍣', '🍜', '🍰', '☕', '🍺', '🍓', '🍙', '🌮', '🍩', '🥐'] },
   { id: 'pack-3', title: '우주 탐험대', price_minor: 3500, stickers: ['🚀', '🌙', '⭐', '🪐', '👽', '🛸', '☄️', '🌍', '🔭', '🌌', '🌠', '🧑‍🚀'] }
 ];
+// Free built-in "Orbit Crew" chips of the Android app (lunoOrbitCrewStickers in
+// mobile/flutter_app/lib/legacy_tokens.dart). Shipped APKs (build <= 13) send
+// them as kind=sticker with body "<emoji> [<Character>]" and no metadata, so
+// the worker must accept exactly these bodies or every tap fails with 400.
+const ORBIT_CREW_STICKERS = new Map([
+  ['\u{1f6f8}\u{1f44b} [Lumi]', 'lumi_hi'],
+  ['\u{1fa90}\u{2764}\u{fe0f} [Nori]', 'nori_warm'],
+  ['\u{1f4ab}\u{2728} [Poko]', 'poko_love'],
+  ['\u{1f680}\u{1f525} [Luno]', 'luno_cheer'],
+  ['\u{2604}\u{fe0f}\u{1f602} [Comet]', 'comet_laugh'],
+  ['\u{1f468}\u{200d}\u{1f680}\u{1f647} [Astro]', 'astro_bow']
+]);
 const THEME_CATALOG = [
   { id: 'mint', title: '민트 브리즈', price_minor: 0 },
   { id: 'ocean', title: '오션 블루', price_minor: 0 },
@@ -1449,6 +1461,7 @@ function activeSttProvider(env) {
   if (!name) return null;
   if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
   if (name === 'whisper' && !(typeof env.WHISPER_API_KEY === 'string' && env.WHISPER_API_KEY && typeof env.WHISPER_BASE_URL === 'string' && env.WHISPER_BASE_URL.trim())) return null;
+  if (name === 'google' && !(googleAiKey(env) && typeof env.GOOGLE_CLOUD_PROJECT === 'string' && env.GOOGLE_CLOUD_PROJECT.trim())) return null;
   return sttProviders.get(name) || null;
 }
 // A14: text-to-speech provider interface, mirroring F14. synthesize(env,
@@ -1467,10 +1480,125 @@ registerTtsProvider('fake', {
     return { audio_base64: 'UklGRg==', mime_type: 'audio/wav', voice: voice || 'luno', engine: 'fake' };
   },
 });
+// ---------- Google Cloud AI (Speech-to-Text v2, Text-to-Speech, Vision) ----------
+// None of these are LLMs (L-15 does not apply). All three share one API key
+// secret, GOOGLE_AI_API_KEY, restricted in GCP to speech/texttospeech/vision.
+// Speech v2 also needs GOOGLE_CLOUD_PROJECT (the project id in its URL).
+// Without the key every provider stays inactive and the routes fail closed
+// (STT_NOT_CONFIGURED / TTS_NOT_CONFIGURED / OCR_NOT_CONFIGURED; moderation
+// simply does not run). Audio, text, image bytes and the key are never
+// logged. Tests inject a stub via env.GOOGLE_AI_FETCH.
+function googleAiKey(env) {
+  const k = env && env.GOOGLE_AI_API_KEY;
+  return typeof k === 'string' && k.trim() ? k.trim() : '';
+}
+function googleAiFetch(env) {
+  return env && typeof env.GOOGLE_AI_FETCH === 'function' ? env.GOOGLE_AI_FETCH : fetch;
+}
+async function googleAiPost(env, url, body, code) {
+  const res = await googleAiFetch(env)(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': googleAiKey(env) },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error('google ai upstream failed');
+    err.code = code;
+    err.status = 502;
+    throw err;
+  }
+  return data;
+}
+const GOOGLE_LANG_CODES = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', th: 'th-TH' };
+function googleLangFor(lang, text) {
+  if (lang && GOOGLE_LANG_CODES[lang]) return GOOGLE_LANG_CODES[lang];
+  const s = String(text || '');
+  if (/[가-힣]/.test(s)) return 'ko-KR';
+  if (/[぀-ヿ]/.test(s)) return 'ja-JP';
+  if (/[฀-๿]/.test(s)) return 'th-TH';
+  if (s && /[a-z]/i.test(s)) return 'en-US';
+  return 'ko-KR';
+}
+// Speech v2 auto-detects the container, so the app's AAC/m4a voice notes and
+// the web's WebM/Opus recordings both work without transcoding.
+registerSttProvider('google', {
+  languages: ['ko', 'en', 'ja', 'th'],
+  async transcribe(env, audioB64, mime, lang) {
+    sttProviderCalls.push({ bytes: audioB64.length, mime, lang });
+    const project = String(env.GOOGLE_CLOUD_PROJECT || '').trim();
+    const languageCode = googleLangFor(lang, '');
+    const data = await googleAiPost(env,
+      `https://speech.googleapis.com/v2/projects/${encodeURIComponent(project)}/locations/global/recognizers/_:recognize`,
+      { config: { autoDecodingConfig: {}, languageCodes: [languageCode], model: 'long', features: { enableAutomaticPunctuation: true } }, content: audioB64 },
+      'STT_UPSTREAM_ERROR');
+    const parts = (Array.isArray(data.results) ? data.results : [])
+      .map((r) => (r && Array.isArray(r.alternatives) && r.alternatives[0] && r.alternatives[0].transcript) || '')
+      .filter(Boolean);
+    return { text: parts.join(' ').trim(), lang: lang && lang !== 'auto' ? lang : languageCode.slice(0, 2), engine: 'google' };
+  },
+});
+const GOOGLE_TTS_VOICES = ['ko-KR-Neural2-A', 'ko-KR-Neural2-C', 'en-US-Neural2-F', 'en-US-Neural2-D', 'ja-JP-Neural2-B', 'ja-JP-Neural2-C', 'th-TH-Neural2-C'];
+registerTtsProvider('google', {
+  voices: GOOGLE_TTS_VOICES,
+  async synthesize(env, text, voice, lang) {
+    ttsProviderCalls.push({ chars: text.length, voice, lang });
+    const named = GOOGLE_TTS_VOICES.includes(voice) ? voice : '';
+    const languageCode = named ? named.slice(0, 5) : googleLangFor(lang, text);
+    const data = await googleAiPost(env, 'https://texttospeech.googleapis.com/v1/text:synthesize', {
+      input: { text },
+      voice: named ? { languageCode, name: named } : { languageCode },
+      audioConfig: { audioEncoding: 'MP3' },
+    }, 'TTS_UPSTREAM_ERROR');
+    if (typeof data.audioContent !== 'string' || !data.audioContent) {
+      const err = new Error('google tts empty');
+      err.code = 'TTS_UPSTREAM_ERROR';
+      err.status = 502;
+      throw err;
+    }
+    return { audio_base64: data.audioContent, mime_type: 'audio/mpeg', voice: named || languageCode, engine: 'google' };
+  },
+});
+// Vision: VISION_PROVIDER=google turns on SafeSearch upload screening and the
+// ai/ocr route. Screening blocks adult or violent images rated LIKELY or
+// VERY_LIKELY; on a Vision outage it fails open (uploads keep working) and
+// counts the miss in visionScreenMisses so ops can see it in tests/metrics.
+const VISION_URL = 'https://vision.googleapis.com/v1/images:annotate';
+const visionScreenStats = { checked: 0, blocked: 0, misses: 0 };
+function visionActive(env) {
+  return !!(env && env.VISION_PROVIDER === 'google' && googleAiKey(env));
+}
+async function visionAnnotate(env, contentB64, featureType) {
+  const data = await googleAiPost(env, VISION_URL, { requests: [{ image: { content: contentB64 }, features: [{ type: featureType }] }] }, 'VISION_UPSTREAM_ERROR');
+  const r = Array.isArray(data.responses) ? data.responses[0] || {} : {};
+  if (r.error) {
+    const err = new Error('vision response error');
+    err.code = 'VISION_UPSTREAM_ERROR';
+    err.status = 502;
+    throw err;
+  }
+  return r;
+}
+const VISION_UNSAFE = new Set(['LIKELY', 'VERY_LIKELY']);
+async function visionScreenImage(env, contentB64) {
+  if (!visionActive(env)) return { checked: false, unsafe: false };
+  try {
+    const r = await visionAnnotate(env, contentB64, 'SAFE_SEARCH_DETECTION');
+    const s = r.safeSearchAnnotation || {};
+    const reasons = ['adult', 'violence'].filter((k) => VISION_UNSAFE.has(s[k]));
+    visionScreenStats.checked++;
+    if (reasons.length) visionScreenStats.blocked++;
+    return { checked: true, unsafe: reasons.length > 0, reasons };
+  } catch {
+    visionScreenStats.misses++;
+    return { checked: false, unsafe: false };
+  }
+}
 function activeTtsProvider(env) {
   const name = env && env.TTS_PROVIDER;
   if (!name) return null;
   if (name === 'fake' && env.DEMO_MODE !== 'true') return null;
+  if (name === 'google' && !googleAiKey(env)) return null;
   return ttsProviders.get(name) || null;
 }
 async function translateCacheGet(textHash, target) {
@@ -3573,7 +3701,58 @@ async function storeProfilePhoto(userId, which, value) {
   if (!bucket) return value;
   const bytes = photoBytesFromDataUrl(value);
   await bucket.put(key, bytes, { httpMetadata: { contentType: photoContentTypeOf(bytes) } });
-  return profilePhotoPath(userId, which);
+  return `${profilePhotoPath(userId, which)}?v=${photoVersion()}`;
+}
+// Photo URLs carry a random version: a new upload gets a new URL (no stale
+// cached image in the app/web), and the version doubles as a capability so
+// <img src> / NetworkImage can load it without an Authorization header.
+// Paths stored before this change (no ?v=) keep requiring a bearer token.
+// Sign-up guard: well-known misspellings of big mail domains (a real user
+// signed up as ...@gamil.com and could not log in with gmail.com later).
+const EMAIL_DOMAIN_TYPOS = {
+  'gamil.com': 'gmail.com', 'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gmali.com': 'gmail.com', 'gmaill.com': 'gmail.com',
+  'gmail.co': 'gmail.com', 'gmail.cm': 'gmail.com', 'gmail.con': 'gmail.com', 'gmail.om': 'gmail.com', 'gmail.comm': 'gmail.com', 'gnail.com': 'gmail.com', 'gmeil.com': 'gmail.com', 'gmail.net': 'gmail.com',
+  'naver.co': 'naver.com', 'naver.con': 'naver.com', 'navr.com': 'naver.com', 'nave.com': 'naver.com', 'naer.com': 'naver.com', 'nvaer.com': 'naver.com', 'naver.cm': 'naver.com', 'naber.com': 'naver.com',
+  'daum.ner': 'daum.net', 'daum.nt': 'daum.net', 'daum.com': 'daum.net', 'duam.net': 'daum.net',
+  'hanmail.ent': 'hanmail.net', 'hanmail.com': 'hanmail.net', 'hanmial.net': 'hanmail.net', 'hamail.net': 'hanmail.net',
+  'hotmial.com': 'hotmail.com', 'hotmai.com': 'hotmail.com', 'yaho.com': 'yahoo.com', 'yahooo.com': 'yahoo.com',
+  'icloud.co': 'icloud.com', 'iclod.com': 'icloud.com', 'outlok.com': 'outlook.com', 'kakao.co': 'kakao.com',
+};
+function emailDomainTypo(email) {
+  const at = String(email || '').lastIndexOf('@');
+  if (at < 1) return '';
+  return EMAIL_DOMAIN_TYPOS[String(email).slice(at + 1).toLowerCase()] || '';
+}
+function photoVersion() {
+  return [...crypto.getRandomValues(new Uint8Array(12))].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function servePublicPhoto(p, url) {
+  const v = url.searchParams.get('v') || '';
+  if (!/^[0-9a-f]{24}$/.test(v)) return null;
+  let m;
+  if ((m = p.match(/^users\/([\w-]+)\/(avatar|cover)$/))) {
+    let u = usersById.get(m[1]);
+    if (!u && dbOf()) u = await loadUserFromD1(m[1], undefined).catch(() => null);
+    if (!u || u.state === 'suspended') return json({ error: 'not found' }, 404);
+    let stored = m[2] === 'cover' ? u.cover_url : u.avatar_url;
+    if (dbOf()) {
+      const row = await dbOf().prepare('SELECT avatar_url, cover_url FROM users WHERE id = ?').bind(m[1]).first().catch(() => null);
+      if (row) stored = m[2] === 'cover' ? row.cover_url : row.avatar_url;
+    }
+    if (stored !== `${profilePhotoPath(m[1], m[2])}?v=${v}`) return json({ error: 'not found' }, 404);
+    const res = await serveProfilePhoto(m[1], m[2]);
+    if (res.ok) res.headers.set('Cache-Control', 'private, max-age=31536000, immutable');
+    return res;
+  }
+  if ((m = p.match(/^conversations\/([\w-]+)\/avatar$/))) {
+    let conv = conversations.get(m[1]);
+    if (!conv && dbOf()) conv = await hydrateDurableConversation(m[1]).catch(() => null);
+    if (!conv || conv.avatar_url !== `/api/v1/conversations/${m[1]}/avatar?v=${v}`) return json({ error: 'not found' }, 404);
+    const res = await serveRoomPhoto(conv);
+    if (res.ok) res.headers.set('Cache-Control', 'private, max-age=31536000, immutable');
+    return res;
+  }
+  return null;
 }
 async function serveProfilePhoto(userId, which) {
   const bucket = mediaBucketOf();
@@ -3608,7 +3787,7 @@ async function storeRoomPhoto(cid, value) {
   if (!bucket) return value;
   const bytes = photoBytesFromDataUrl(value);
   await bucket.put(key, bytes, { httpMetadata: { contentType: photoContentTypeOf(bytes) } });
-  return `/api/v1/conversations/${cid}/avatar`;
+  return `/api/v1/conversations/${cid}/avatar?v=${photoVersion()}`;
 }
 async function serveRoomPhoto(conv) {
   const bucket = mediaBucketOf();
@@ -5153,6 +5332,8 @@ async function followedMap(userId) {
         if (meta.sticker_id) {
           metadata = { ...meta };
           body = body || meta.label || '스티커';
+        } else if (!meta.pack_id && ORBIT_CREW_STICKERS.has(body)) {
+          metadata = { crew_id: ORBIT_CREW_STICKERS.get(body) };
         } else {
           const pack = STICKER_CATALOG.find(pk => pk.id === meta.pack_id);
           if (!pack || !pack.stickers.includes(body)) return bad('올바르지 않은 스티커입니다');
@@ -5784,6 +5965,11 @@ async function deleteAttachmentEverywhere(attId) {
     await ensureSchema().catch(() => {});
     const blocked = await store.prepare('SELECT sha256 FROM luno_blocked_hashes WHERE sha256 = ?').bind(upHash).first().catch(() => null);
     if (blocked) return json({ error: '차단된 파일입니다', code: 'ATTACHMENT_BLOCKED' }, 403);
+    // GCP Vision SafeSearch: adult/violent photos never reach storage.
+    if (mime.startsWith('image/') && mime !== 'image/svg+xml') {
+      const screen = await visionScreenImage(CURRENT_ENV, b.content_base64);
+      if (screen.unsafe) return json({ error: '부적절한 이미지로 판단되어 보낼 수 없습니다', code: 'IMAGE_UNSAFE', reasons: screen.reasons }, 422);
+    }
     const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, bytes };
     await persistAttachmentR2(att);
     return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: bytes.length, quota: { uploads_today: quota.uploads, bytes_today: quota.bytes } }, 201);
@@ -6976,7 +7162,17 @@ function entitled(u, feature) {
     ];
     const turnEnv = (typeof CURRENT_ENV !== 'undefined' && CURRENT_ENV) ? CURRENT_ENV : {};
     const turnUrls = String(turnEnv.TURN_URLS || '').split(',').map(s => s.trim()).filter(Boolean);
-    if (turnUrls.length > 0 && turnEnv.TURN_USERNAME && turnEnv.TURN_CREDENTIAL) {
+    if (turnUrls.length > 0 && typeof turnEnv.TURN_SECRET === 'string' && turnEnv.TURN_SECRET.length >= 16) {
+      // coturn use-auth-secret (TURN REST API): per-user credentials valid for
+      // 12 hours; the shared secret itself never leaves the worker.
+      const username = `${Math.floor(Date.now() / 1000) + 12 * 3600}:${myId}`;
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(turnEnv.TURN_SECRET), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+      const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(username)));
+      let bin = '';
+      for (const x of sig) bin += String.fromCharCode(x);
+      const credential = btoa(bin);
+      for (const urls of turnUrls) servers.push({ urls, username, credential });
+    } else if (turnUrls.length > 0 && turnEnv.TURN_USERNAME && turnEnv.TURN_CREDENTIAL) {
       for (const urls of turnUrls) {
         servers.push({ urls, username: turnEnv.TURN_USERNAME, credential: turnEnv.TURN_CREDENTIAL });
       }
@@ -7079,8 +7275,45 @@ function entitled(u, feature) {
     if (text.length > TTS_MAX_CHARS) return bad('텍스트가 너무 깁니다', 413);
     const voice = typeof b.voice === 'string' ? b.voice.trim().slice(0, 32) : '';
     const lang = typeof b.lang === 'string' ? b.lang.trim().toLowerCase().slice(0, 10) : 'auto';
-    const out = await provider.synthesize(CURRENT_ENV, text, voice, lang);
+    let out;
+    try {
+      out = await provider.synthesize(CURRENT_ENV, text, voice, lang);
+    } catch {
+      return json({ error: 'Speech synthesis upstream failed', code: 'TTS_UPSTREAM_ERROR' }, 502);
+    }
     return json({ audio_base64: out.audio_base64, mime_type: out.mime_type, voice: out.voice, engine: out.engine });
+  }
+  // GCP Vision OCR: read the text in a photo the caller can see, optionally
+  // translated through the active translate provider.
+  if (p === 'ai/ocr' && method === 'POST') {
+    if (!visionActive(CURRENT_ENV)) return json({ error: 'Image text recognition requires a configured provider-backed API', code: 'OCR_NOT_CONFIGURED' }, 503);
+    if (!await rateLimit('rl:ocr:' + myId, STT_PER_MINUTE)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const b = await readJson(request);
+    const att = typeof b.attachment_id === 'string' ? await loadAttachment(b.attachment_id) : null;
+    if (!att || !conversations.get(att.conversation_id)?.members.includes(myId)) return bad('파일을 찾을 수 없습니다', 404);
+    if (!String(att.mime || '').startsWith('image/') || att.mime === 'image/svg+xml') return bad('사진에서만 글자를 읽을 수 있습니다');
+    let bin = '';
+    const raw = att.bytes instanceof Uint8Array ? att.bytes : new Uint8Array(att.bytes || []);
+    for (let i = 0; i < raw.length; i += 0x8000) bin += String.fromCharCode.apply(null, raw.subarray(i, i + 0x8000));
+    let text = '';
+    try {
+      const r = await visionAnnotate(CURRENT_ENV, btoa(bin), 'TEXT_DETECTION');
+      text = String((r.fullTextAnnotation && r.fullTextAnnotation.text) || '').trim();
+    } catch {
+      return json({ error: 'Image text recognition upstream failed', code: 'OCR_UPSTREAM_ERROR' }, 502);
+    }
+    const target = typeof b.target_lang === 'string' ? b.target_lang.trim().toLowerCase().slice(0, 10) : '';
+    const out = { text, engine: 'google' };
+    if (text && target) {
+      const tp = activeTranslateProvider(CURRENT_ENV);
+      if (tp) {
+        try {
+          const tr = await tp.translate(CURRENT_ENV, text.slice(0, 5000), target, 'auto');
+          Object.assign(out, { translated: tr.translated, target_lang: target, source_lang: tr.source_lang });
+        } catch { out.translate_error = 'TRANSLATE_UPSTREAM_ERROR'; }
+      } else out.translate_error = 'TRANSLATE_NOT_CONFIGURED';
+    }
+    return json(out);
   }
 
   // PHASE 4: B2B Official Accounts & Webhooks
@@ -7683,6 +7916,8 @@ const workerCore = {
         const body = await request.json().catch(() => ({}));
         const email = (body.email || '').toLowerCase().trim();
         if (!email || !body.password) return json({ error: 'invalid email or password' }, 400);
+        const typoFix = emailDomainTypo(email);
+        if (typoFix) return json({ error: `이메일 주소를 확인해 주세요. ${email.split('@')[1]} 대신 ${typoFix} 아닌가요?`, code: 'EMAIL_DOMAIN_TYPO', suggestion: `${email.split('@')[0]}@${typoFix}` }, 400);
         if (users.has(email)) return json({ error: 'account already exists' }, 409);
         if (env.DB) {
           await ensureSchema();
@@ -8247,6 +8482,12 @@ const workerCore = {
           return json({ status: 'authenticated', access_token: token, ...(qrRefresh ? { refresh_token: qrRefresh } : {}), user_id: u.id, role: u.role, device_id: qrDevice }, 200, qrRefresh ? { 'Set-Cookie': refreshCookie(qrRefresh, request, body.remember === false ? null : 30 * 86400) } : {});
         }
         return json({ status: 'pending' }, 202);
+      }
+
+      // Versioned profile/room photo URLs load without a bearer token.
+      if (request.method === 'GET') {
+        const photo = await servePublicPhoto(p, url);
+        if (photo) return photo;
       }
 
       // Protected routes check

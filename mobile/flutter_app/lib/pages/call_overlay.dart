@@ -3,6 +3,7 @@
 // web CallModal plus the speaker toggle: remote fills the screen, self is a
 // 25% PiP, bottom bar holds mic / camera / switch / speaker / red hangup.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -15,6 +16,34 @@ String callDurationLabel(int seconds) {
   final m = seconds ~/ 60;
   final s = seconds % 60;
   return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+/// Hides the status and navigation bars while a call screen is mounted and
+/// restores edge-to-edge when the call ends, so calls fill the whole display
+/// the way LINE's do (sticky immersive: a swipe shows the bars briefly).
+class CallImmersive extends StatefulWidget {
+  const CallImmersive({super.key, required this.child});
+  final Widget child;
+
+  @override
+  State<CallImmersive> createState() => _CallImmersiveState();
+}
+
+class _CallImmersiveState extends State<CallImmersive> {
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox.expand(child: widget.child);
 }
 
 class CallOverlay extends StatelessWidget {
@@ -30,9 +59,12 @@ class CallOverlay extends StatelessWidget {
     final incoming =
         '${call['direction'] ?? ''}' == 'incoming' && state == 'ringing';
     final title = '${call['title'] ?? context.l10n.mvCall}';
-    return Material(
-      color: Colors.black87,
-      child: SafeArea(
+    // Opaque and edge-to-edge: the remote video (or the voice backdrop) is
+    // drawn under the system bars; only the labels and buttons respect the
+    // safe area.
+    return CallImmersive(
+      child: Material(
+        color: Colors.black,
         child: Stack(
           children: [
             if (kind == 'video' && !incoming)
@@ -40,7 +72,13 @@ class CallOverlay extends StatelessWidget {
             else
               Positioned.fill(
                 child: Container(
-                  color: Colors.black87,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xFF1E293B), Color(0xFF020617)],
+                    ),
+                  ),
                   child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -62,7 +100,9 @@ class CallOverlay extends StatelessWidget {
                         Text(
                           state == 'connected'
                               ? callDurationLabel(session.callSeconds)
-                              : (incoming ? context.l10n.callIncoming : context.l10n.mvCalling),
+                              : (incoming
+                                  ? context.l10n.callIncoming
+                                  : context.l10n.mvCalling),
                           style: const TextStyle(
                               fontSize: 14, color: Colors.white70),
                         ),
@@ -71,57 +111,67 @@ class CallOverlay extends StatelessWidget {
                   ),
                 ),
               ),
-            if (kind == 'video' && !incoming)
-              Positioned(
-                right: 12,
-                bottom: 96,
-                child: SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.25,
-                  child: AspectRatio(
-                    aspectRatio: 3 / 4,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(HarborRadius.avatar),
-                      child: _localView(session),
-                    ),
-                  ),
-                ),
-              ),
-            if (kind == 'video' && !incoming)
-              Positioned(
-                top: 8,
-                left: 0,
-                right: 0,
-                child: Column(
+            Positioned.fill(
+              child: SafeArea(
+                child: Stack(
                   children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: HarborType.title,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(
-                                  blurRadius: 4, color: Colors.black54),
-                            ])),
-                    Text(
-                      state == 'connected'
-                          ? callDurationLabel(session.callSeconds)
-                          : context.l10n.mvCalling,
-                      style: const TextStyle(
-                          fontSize: 13, color: Colors.white70),
+                    if (kind == 'video' && !incoming)
+                      Positioned(
+                        right: 12,
+                        bottom: 96,
+                        child: SizedBox(
+                          width: MediaQuery.of(context).size.width * 0.25,
+                          child: AspectRatio(
+                            aspectRatio: 3 / 4,
+                            child: ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(HarborRadius.avatar),
+                              child: _localView(session),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (kind == 'video' && !incoming)
+                      Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: Column(
+                          children: [
+                            Text(title,
+                                style: const TextStyle(
+                                    fontSize: HarborType.title,
+                                    color: Colors.white,
+                                    shadows: [
+                                      Shadow(
+                                          blurRadius: 4, color: Colors.black54),
+                                    ])),
+                            Text(
+                              state == 'connected'
+                                  ? callDurationLabel(session.callSeconds)
+                                  : context.l10n.mvCalling,
+                              style: const TextStyle(
+                                  fontSize: 13, color: Colors.white70),
+                            ),
+                            if (session.callMediaIssue)
+                              Text(context.l10n.callNoMedia,
+                                  style: TextStyle(
+                                      fontSize: HarborType.small,
+                                      color: Colors.amber)),
+                          ],
+                        ),
+                      ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 20,
+                      child: incoming
+                          ? _incomingBar(context, session, kind)
+                          : _activeBar(context, session, kind),
                     ),
-                    if (session.callMediaIssue)
-                      Text(context.l10n.callNoMedia,
-                          style: TextStyle(
-                              fontSize: HarborType.small, color: Colors.amber)),
                   ],
                 ),
               ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 20,
-              child: incoming
-                  ? _incomingBar(context, session, kind)
-                  : _activeBar(context, session, kind),
             ),
           ],
         ),
@@ -134,8 +184,8 @@ class CallOverlay extends StatelessWidget {
     if (renderer == null) {
       return Container(color: const Color(0xFF0F172A));
     }
-    return RTCVideoView(renderer, objectFit:
-        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover);
+    return RTCVideoView(renderer,
+        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover);
   }
 
   Widget _localView(SessionController session) {
@@ -143,8 +193,8 @@ class CallOverlay extends StatelessWidget {
     if (renderer == null) {
       return Container(color: const Color(0xFF334155));
     }
-    return RTCVideoView(renderer, objectFit:
-        RTCVideoViewObjectFit.RTCVideoViewObjectFitCover);
+    return RTCVideoView(renderer,
+        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover);
   }
 
   Widget _incomingBar(
@@ -165,9 +215,17 @@ class CallOverlay extends StatelessWidget {
           onPressed: () => withPermissions(
             context,
             permissions: [
-              (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseCall),
+              (
+                Permission.microphone,
+                context.l10n.permMicTitle,
+                context.l10n.permMicUseCall
+              ),
               if (kind == 'video')
-                (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUseVideo),
+                (
+                  Permission.camera,
+                  context.l10n.permCamTitle,
+                  context.l10n.permCamUseVideo
+                ),
             ],
             action: () => session.acceptCall(),
           ),
@@ -182,7 +240,9 @@ class CallOverlay extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _roundButton(
-          tooltip: session.callMuted ? context.l10n.callUnmute : context.l10n.callMute,
+          tooltip: session.callMuted
+              ? context.l10n.callUnmute
+              : context.l10n.callMute,
           color: session.callMuted ? Colors.white24 : Colors.white24,
           icon: session.callMuted ? Icons.mic_off : Icons.mic,
           onPressed: () => session.setCallMuted(!session.callMuted),

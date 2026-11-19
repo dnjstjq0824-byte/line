@@ -17,7 +17,7 @@ import '../util/app_l10n.dart';
 
 // F5: avatar/cover arrive as an R2 serving path (/api/v1/users/...),
 // an absolute URL, or a legacy inline data: URL.
-ImageProvider? profilePhotoImage(String baseUrl, String url) {
+ImageProvider? profilePhotoImage(String baseUrl, String url, {String? token}) {
   if (url.startsWith('data:image/')) {
     final i = url.indexOf('base64,');
     if (i < 0) return null;
@@ -30,7 +30,14 @@ ImageProvider? profilePhotoImage(String baseUrl, String url) {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return NetworkImage(url);
   }
-  if (url.startsWith('/')) return NetworkImage('$baseUrl$url');
+  // Versioned paths (?v=) load without a token; older bare paths need the
+  // bearer header or the server answers 401 and the photo never shows.
+  if (url.startsWith('/')) {
+    return NetworkImage('$baseUrl$url',
+        headers: (token == null || token.isEmpty)
+            ? null
+            : {'Authorization': 'Bearer $token'});
+  }
   return null;
 }
 
@@ -46,7 +53,8 @@ class ProfilePage extends StatelessWidget {
         ? context.l10n.profileUnset
         : session.selfStatusMessage;
     final cover =
-        profilePhotoImage(session.api.baseUrl, session.selfCoverUrl);
+        profilePhotoImage(session.api.baseUrl, session.selfCoverUrl,
+            token: session.api.token);
     final searchable =
         session.myPrefs['searchable_by_id'] as bool? ?? true;
     final ink = dark ? LunoDark.textPrimary : LunoLight.textPrimary;
@@ -298,7 +306,8 @@ class _ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
-    final img = profilePhotoImage(session.api.baseUrl, session.selfAvatarUrl);
+    final img = profilePhotoImage(session.api.baseUrl, session.selfAvatarUrl,
+        token: session.api.token);
     if (img == null) {
       return LineAvatar(
         glyph: name,

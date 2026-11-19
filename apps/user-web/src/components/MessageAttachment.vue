@@ -44,7 +44,7 @@ onBeforeUnmount(() => { generation++; controller?.abort(); release() })
     <img v-if="url && mime.startsWith('image/') && media" :src="url" :alt="message.body" class="ln-attachment-image" @error="failed = true" />
     <audio v-else-if="url && mime.startsWith('audio/') && media" :src="url" controls preload="metadata" />
     <video v-else-if="url && mime.startsWith('video/') && media" :src="url" controls preload="metadata" playsinline />
-    <span class="ln-attachment-name">{{ message.body }}</span>
+    <span v-if="!(url && media && !failed && (mime.startsWith('image/') || mime.startsWith('video/')))" class="ln-attachment-name">{{ message.body }}</span>
     <span v-if="loading" role="status">{{ labels.loading }}</span>
     <span v-if="failed" role="alert">{{ labels.error }}</span>
     <button type="button" :disabled="loading" @click="failed && media ? load() : download()">{{ failed && media ? labels.retry : labels.download }}</button>

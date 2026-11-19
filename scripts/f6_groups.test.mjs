@@ -111,7 +111,7 @@ test('F6: room photo lives in R2, renames announce themselves', async () => {
     assert.equal((await api(`conversations/${room.id}`, 'PATCH', { avatar: 'not-a-photo' }, a.token)).status, 400);
     assert.equal((await api(`conversations/${room.id}`, 'PATCH', { avatar: pngDataUrl(11) }, a.token)).status, 200);
     const after = await (await api(`conversations/${room.id}`, 'GET', null, a.token)).json();
-    assert.equal(after.avatar_url, `/api/v1/conversations/${room.id}/avatar`);
+    assert.match(after.avatar_url, new RegExp(`^/api/v1/conversations/${room.id}/avatar[?]v=[0-9a-f]{24}$`));
     const stored = await bucket.get(`conv/${room.id}/avatar`);
     assert.deepEqual(Buffer.from(await stored.arrayBuffer()), Buffer.from([...PNG_MAGIC, 11]));
     const served = await api(`conversations/${room.id}/avatar`, 'GET', null, b.token);

@@ -63,6 +63,7 @@ class _LoginPageState extends State<LoginPage> {
         session.formError(context.l10n.consentRequiredErr);
         return;
       }
+      birthdate.text = normalizeBirthdate(birthdate.text);
       final age = ageOnDate(birthdate.text, todayUtc());
       if (birthdate.text.trim().isEmpty || age == null) {
         session.formError(context.l10n.birthdateRequiredErr);
@@ -410,6 +411,28 @@ class _GateForm extends StatelessWidget {
                 decoration: InputDecoration(
                   labelText: context.l10n.birthdateLabel,
                   hintText: '1990-01-01',
+                  suffixIcon: IconButton(
+                    tooltip: context.l10n.birthdateLabel,
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    onPressed: () async {
+                      final now = DateTime.now();
+                      final initial = DateTime.tryParse(
+                              normalizeBirthdate(birthdate.text)) ??
+                          DateTime(now.year - 20, 1, 1);
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: initial.isAfter(now) ? now : initial,
+                        firstDate: DateTime(1900),
+                        lastDate: now,
+                        initialEntryMode: DatePickerEntryMode.calendarOnly,
+                      );
+                      if (picked != null) {
+                        String two(int v) => v.toString().padLeft(2, '0');
+                        birthdate.text =
+                            '${picked.year}-${two(picked.month)}-${two(picked.day)}';
+                      }
+                    },
+                  ),
                 ),
                 keyboardType: TextInputType.datetime,
               ),

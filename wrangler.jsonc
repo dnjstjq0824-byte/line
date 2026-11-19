@@ -61,6 +61,21 @@
     // Mobile push via Firebase Cloud Messaging (same GCP project). Needs the
     // FCM_SERVICE_ACCOUNT_JSON secret (luno-fcm-sender key, FCM API Admin
     // role). Without the secret push stays off; nothing else changes.
-    "PUSH_PROVIDER": "fcm"
+    "PUSH_PROVIDER": "fcm",
+    // Google Cloud AI engines (not LLMs) in the same GCP project: voice-note
+    // transcription (Speech-to-Text v2), read-aloud (Text-to-Speech) and
+    // photo screening + text-in-photo (Vision). All need the GOOGLE_AI_API_KEY
+    // secret (key "luno-worker-ai", restricted to those three APIs); without
+    // it they fail closed (STT/TTS/OCR_NOT_CONFIGURED) and uploads are not
+    // screened.
+    "GOOGLE_CLOUD_PROJECT": "project-807cb089-58d7-4357-87e",
+    "STT_PROVIDER": "google",
+    "TTS_PROVIDER": "google",
+    "VISION_PROVIDER": "google",
+    // TURN relay for calls across LTE/5G and Wi-Fi: coturn VM "luno-turn"
+    // (GCP asia-northeast3-a, static IP 34.47.120.225). Credentials are minted
+    // per user from the TURN_SECRET secret (coturn use-auth-secret); without
+    // the secret only STUN is offered.
+    "TURN_URLS": "turn:34.47.120.225:3478?transport=udp,turn:34.47.120.225:3478?transport=tcp"
   }
 }

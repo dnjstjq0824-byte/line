@@ -45,12 +45,12 @@ test('F5: avatar upload stores bytes in R2 and serves them back', async () => {
     const patched = await api('me', 'PATCH', { avatar_url: photo }, s.access_token);
     assert.equal(patched.status, 200);
     const body = await patched.json();
-    assert.equal(body.avatar_url, `/api/v1/users/${me.id}/avatar`);
+    assert.match(body.avatar_url, new RegExp(`^/api/v1/users/${me.id}/avatar[?]v=[0-9a-f]{24}$`));
     const stored = await bucket.get(`profile/${me.id}/avatar`);
     assert.ok(stored, 'R2 object exists');
     assert.deepEqual(Buffer.from(await stored.arrayBuffer()), Buffer.from([...PNG_MAGIC, 1, 2, 3, 4]));
     const row = db.raw.prepare('SELECT avatar_url FROM users WHERE id = ?').get(me.id);
-    assert.equal(row.avatar_url, `/api/v1/users/${me.id}/avatar`);
+    assert.equal(row.avatar_url, body.avatar_url);
     const served = await api(`users/${me.id}/avatar`, 'GET', null, s.access_token);
     assert.equal(served.status, 200);
     assert.match(served.headers.get('content-type') || '', /^image\//);
@@ -124,7 +124,7 @@ test('F5: profile survives a cold isolate on another device', async () => {
     assert.equal(coldMe.status_message, '회의 중');
     assert.equal(coldMe.bio, 'hello');
     assert.equal(coldMe.avatar_color, '#123abc');
-    assert.equal(coldMe.avatar_url, `/api/v1/users/${me.id}/avatar`);
+    assert.match(coldMe.avatar_url, new RegExp(`^/api/v1/users/${me.id}/avatar[?]v=[0-9a-f]{24}$`));
     const photo = await coldApi(`users/${me.id}/avatar`, 'GET', null, t.access_token);
     assert.equal(photo.status, 200);
     assert.deepEqual(Buffer.from(await photo.arrayBuffer()), Buffer.from([...PNG_MAGIC, 3]));
