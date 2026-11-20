@@ -42,6 +42,23 @@ abstract class CallMedia {
 class WebrtcCallMedia implements CallMedia {
   RTCPeerConnection? _pc;
   MediaStream? _stream;
+  // Build 19: a candidate that arrives before the offer/answer it belongs to
+  // cannot be added yet (addCandidate fails without a remote description).
+  // Android dropped them, so phone-to-phone calls lost the direct (same
+  // Wi-Fi) route on both sides and never carried audio. Held here instead.
+  bool _remoteSet = false;
+  final List<RTCIceCandidate> _pendingCandidates = [];
+
+  Future<void> _remoteReady() async {
+    _remoteSet = true;
+    final held = List<RTCIceCandidate>.of(_pendingCandidates);
+    _pendingCandidates.clear();
+    for (final c in held) {
+      try {
+        await _pc!.addCandidate(c);
+      } catch (_) {}
+    }
+  }
   RTCVideoRenderer? _local;
   RTCVideoRenderer? _remote;
 
@@ -106,20 +123,29 @@ class WebrtcCallMedia implements CallMedia {
   Future<String> answerTo(String offerSdp) async {
     await _pc!.setRemoteDescription(
         RTCSessionDescription(offerSdp, 'offer'));
+    await _remoteReady();
     final answer = await _pc!.createAnswer();
     await _pc!.setLocalDescription(answer);
     return answer.sdp ?? '';
   }
 
   @override
-  Future<void> applyAnswer(String answerSdp) =>
-      _pc!.setRemoteDescription(
-          RTCSessionDescription(answerSdp, 'answer'));
+  Future<void> applyAnswer(String answerSdp) async {
+    await _pc!.setRemoteDescription(
+        RTCSessionDescription(answerSdp, 'answer'));
+    await _remoteReady();
+  }
 
   @override
-  Future<void> addIceCandidate(Map<String, dynamic> candidate) =>
-      _pc!.addCandidate(RTCIceCandidate(candidate['candidate'] as String?,
-          candidate['sdpMid'] as String?, candidate['sdpMLineIndex'] as int?));
+  Future<void> addIceCandidate(Map<String, dynamic> candidate) async {
+    final c = RTCIceCandidate(candidate['candidate'] as String?,
+        candidate['sdpMid'] as String?, (candidate['sdpMLineIndex'] as num?)?.toInt());
+    if (!_remoteSet) {
+      _pendingCandidates.add(c);
+      return;
+    }
+    await _pc!.addCandidate(c);
+  }
 
   @override
   void onIceCandidate(void Function(Map<String, dynamic>) emit) {
@@ -181,6 +207,8 @@ class WebrtcCallMedia implements CallMedia {
     } catch (_) {}
     _pc = null;
     _stream = null;
+    _remoteSet = false;
+    _pendingCandidates.clear();
     _local = null;
     _remote = null;
   }

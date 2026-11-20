@@ -39,6 +39,10 @@ import 'pages/stories.dart';
 import 'pages/wallet.dart';
 import 'state/session.dart';
 
+/// The app's root navigator. The call overlays sit beside it (above the
+/// router in MaterialApp.builder), so dialogs they open use this context.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 GoRouter buildRouter(SessionController session) {
   Page<void> harborPage(
           BuildContext context, GoRouterState state, Widget child) =>
@@ -60,6 +64,7 @@ GoRouter buildRouter(SessionController session) {
             );
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: session,
     redirect: (context, state) {

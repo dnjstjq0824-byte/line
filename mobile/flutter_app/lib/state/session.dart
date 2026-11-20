@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:package_info_plus/package_info_plus.dart';
@@ -70,6 +71,15 @@ List<dynamic> mergeDeltaMessages(List<dynamic> existing, List<dynamic> delta) {
   }
   out.sort((a, b) => ((a['sequence'] ?? 0) as num).compareTo((b['sequence'] ?? 0) as num));
   return out;
+}
+
+/// Asks for the call permissions with the system dialog (no app context
+/// needed, so it also works from the lock-screen ring). Android only.
+Future<bool> defaultCallPermissions(bool video) async {
+  if (!Platform.isAndroid) return true;
+  final wanted = [Permission.microphone, if (video) Permission.camera];
+  final statuses = await wanted.request();
+  return statuses.values.every((s) => s.isGranted);
 }
 
 class SessionController extends ChangeNotifier {
@@ -1247,6 +1257,21 @@ class SessionController extends ChangeNotifier {
         callMediaIssue = true;
       }
       callMedia = media;
+      // Build 19: candidates start the moment the offer is set locally,
+      // before the server has given this call an id. They used to be
+      // dropped (no handler yet); hold them until the offer is posted.
+      final earlyIce = <Map<String, dynamic>>[];
+      String? liveCallId;
+      if (media != null) {
+        media.onIceCandidate((cand) {
+          final id = liveCallId;
+          if (id == null) {
+            earlyIce.add(cand);
+          } else {
+            unawaited(postCallSignal(id, 'ice-candidate', candidate: jsonEncode(cand)));
+          }
+        });
+      }
       // The speaker button shows callSpeaker; make the route match it (the
       // ringback follows the call route too).
       if (media != null) {
@@ -1274,11 +1299,15 @@ class SessionController extends ChangeNotifier {
       };
       final callId = '${activeCall!['id']}';
       if (media != null && offerSdp.isNotEmpty) {
-        media.onIceCandidate(
-            (cand) => unawaited(postCallSignal(callId, 'ice-candidate',
-                candidate: jsonEncode(cand))));
         media.onRemoteStream(() => notifyListeners());
+        // Offer first, then the held candidates, so the callee never gets
+        // a candidate for an offer it has not seen.
         await postCallSignal(callId, 'offer', sdp: offerSdp);
+        for (final cand in earlyIce) {
+          await postCallSignal(callId, 'ice-candidate', candidate: jsonEncode(cand));
+        }
+        earlyIce.clear();
+        liveCallId = callId;
       }
       _armNoAnswerTimer(callId, true);
       _keepCallAlive();
@@ -1770,8 +1799,16 @@ class SessionController extends ChangeNotifier {
     ];
   }
 
+  /// Build 19: mic (and camera) before media opens. The lock-screen Accept
+  /// skipped the call screen's permission gate, so a phone that never
+  /// granted the mic connected silent. Tests replace it.
+  Future<bool> Function(bool video) ensureCallPermissions = defaultCallPermissions;
+
   Future<void> _ensureCallMedia(Map<String, dynamic> call) async {
     if (callMedia != null) return;
+    try {
+      await ensureCallPermissions(call['kind'] == 'video');
+    } catch (_) {}
     try {
       final media = mediaFactory();
       await media.open(

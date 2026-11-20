@@ -8,6 +8,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../design/v3.dart';
+import '../router.dart' show rootNavigatorKey;
 import '../state/session.dart';
 import '../util/app_permissions.dart';
 import '../util/app_l10n.dart';
@@ -258,8 +259,11 @@ class CallOverlay extends StatelessWidget {
           tooltip: context.l10n.callAccept,
           color: Colors.green,
           icon: Icons.call,
+          // The overlay sits above the router: a permission rationale dialog
+          // needs a context under the Navigator, or the gate fails silently
+          // ("pressed accept, nothing happened").
           onPressed: () => withPermissions(
-            context,
+            rootNavigatorKey.currentContext ?? context,
             permissions: [
               (
                 Permission.microphone,
