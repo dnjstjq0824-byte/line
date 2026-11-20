@@ -510,6 +510,16 @@ const LUNO_SCHEMA_PHASE1 = [
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'voice',
     state TEXT NOT NULL DEFAULT 'ringing', initiated_by TEXT, started_at TEXT NOT NULL,
     connected_at TEXT, ended_at TEXT, result TEXT)`,
+  // Build 18: signals kept until the call ends, so a callee woken by a push
+  // (socket closed while the offer went out) can replay them.
+  `CREATE TABLE IF NOT EXISTS luno_call_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, call_id TEXT NOT NULL, from_user_id TEXT NOT NULL,
+    signal_type TEXT NOT NULL, sdp TEXT, candidate TEXT, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_call_signals_call ON luno_call_signals(call_id, id)`,
+  // Build 18: lets the lock-screen "decline" button end a ringing call
+  // without a session (the notification's background isolate has none).
+  `CREATE TABLE IF NOT EXISTS luno_call_ring_tokens (
+    call_id TEXT PRIMARY KEY, token TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, object_key TEXT NOT NULL DEFAULT '',
     mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0,
@@ -637,7 +647,22 @@ async function ensurePhase1Columns(db) {
 
 let schemaReady = null;
 function dbOf() { return CURRENT_ENV && CURRENT_ENV.DB ? CURRENT_ENV.DB : null; }
+// A cached startup promise belongs to the request that created it. If that
+// request ended before it settled (client went away), Workers rejects every
+// later await of it ("created by a request that has since ended"), and the
+// isolate used to answer 500 to everything until it was recycled. A failed
+// await now drops the cache and redoes the work once in this request.
 async function ensureSchema() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await ensureSchemaOnce();
+    } catch (err) {
+      schemaReady = null;
+      if (attempt >= 1) throw err;
+    }
+  }
+}
+async function ensureSchemaOnce() {
   const db = dbOf();
   if (!db) return false;
   if (!schemaReady) {
@@ -2713,6 +2738,22 @@ function broadcastRecipients(payload) {
   return [];
 }
 
+async function announceProfileChange(userId) {
+  const ids = new Set();
+  const db = dbOf();
+  if (db) {
+    try {
+      const { results } = await db.prepare('SELECT user_id AS id FROM friends WHERE friend_id = ? UNION SELECT friend_id AS id FROM friends WHERE user_id = ? UNION SELECT m2.user_id AS id FROM luno_conversation_members m1 JOIN luno_conversation_members m2 ON m2.conversation_id = m1.conversation_id WHERE m1.user_id = ?').bind(userId, userId, userId).all();
+      for (const row of results || []) if (row.id) ids.add(row.id);
+    } catch {}
+  }
+  for (const id of friendIds(userId)) ids.add(id);
+  for (const conv of conversations.values()) if ((conv.members || []).includes(userId)) for (const m of conv.members) ids.add(m);
+  const payload = { type: 'profile.updated', user_id: userId };
+  for (const id of ids) notifyUser(id, payload);
+  if (!ids.has(userId)) notifyUser(userId, payload);
+}
+
 function notifyUser(userId, payload) {
   hubFanOut([userId], payload);
   const msg = JSON.stringify(payload);
@@ -2828,6 +2869,64 @@ function corsOrigin(request, env) {
   const list = String((env && env.ALLOWED_ORIGINS) || '').split(',').map(s => s.trim()).filter(Boolean);
   return list.includes(origin) ? origin : '';
 }
+// ---------- Front page language (lunotalk.com) ----------
+// Kept equal to apps/user-web/src/site-i18n.ts SITE_LANGS (scripts/site_lang.test.mjs).
+const SITE_LANGS = ['ko', 'en', 'ja', 'zh', 'zh-tw', 'th', 'vi', 'id', 'ms', 'hi', 'ar', 'es', 'pt', 'fr', 'de', 'it', 'ru', 'tr'];
+// Countries with one clear language. Multilingual or English-first markets
+// (IN, PH, SG, CA, CH, BE, LU, ...) are left out on purpose: the browser
+// language decides there.
+const COUNTRY_SITE_LANG = (() => {
+  const map = {};
+  const put = (lang, codes) => { for (const c of codes.split(' ')) map[c] = lang; };
+  put('ko', 'KR');
+  put('ja', 'JP');
+  put('zh', 'CN');
+  put('zh-tw', 'TW HK MO');
+  put('th', 'TH');
+  put('vi', 'VN');
+  put('id', 'ID');
+  put('ms', 'MY BN');
+  put('ar', 'SA AE EG QA KW BH OM JO LB IQ SY YE PS LY TN DZ MA SD MR');
+  put('es', 'ES MX AR CO CL PE VE EC GT CU BO DO HN PY SV NI CR PA UY PR GQ');
+  put('pt', 'BR PT AO MZ CV GW ST TL');
+  put('fr', 'FR MC SN CI CM ML BF NE TG BJ GA CG CD MG HT GN TD CF DJ KM');
+  put('de', 'DE AT LI');
+  put('it', 'IT SM VA');
+  put('ru', 'RU BY KZ KG TJ');
+  put('tr', 'TR');
+  put('en', 'US GB AU NZ IE ZA NG KE GH UG TZ ZW ZM JM TT');
+  return map;
+})();
+function siteLangFromTag(tag) {
+  const t = String(tag || '').toLowerCase().trim();
+  if (!t) return null;
+  if (t.startsWith('zh')) return /(tw|hk|mo|hant)/.test(t) ? 'zh-tw' : 'zh';
+  if (SITE_LANGS.includes(t)) return t;
+  const primary = t.split('-')[0];
+  if (primary === 'fil' || primary === 'tl') return 'en';
+  return SITE_LANGS.includes(primary) ? primary : null;
+}
+function siteLangFor(request) {
+  const saved = cookieValue(request, 'luno_lang');
+  if (saved && SITE_LANGS.includes(saved)) return saved;
+  // The lunotalk.com relay forwards the visitor's country (its own fetch to
+  // this worker would otherwise geolocate to the relay's data centre).
+  const country = String(request.headers.get('X-Luno-Country') || (request.cf && request.cf.country) || request.headers.get('CF-IPCountry') || '').toUpperCase();
+  if (COUNTRY_SITE_LANG[country]) return COUNTRY_SITE_LANG[country];
+  const accept = String(request.headers.get('Accept-Language') || '');
+  const tags = accept.split(',').map(part => { const [tag, q] = part.trim().split(';q='); return { tag, q: q === undefined ? 1 : Number(q) || 0 }; })
+    .filter(x => x.tag && x.q > 0).sort((a, b) => b.q - a.q);
+  for (const { tag } of tags) { const lang = siteLangFromTag(tag); if (lang) return lang; }
+  return 'en';
+}
+function siteLangRedirect(request) {
+  const url = new URL(request.url);
+  return new Response(null, {
+    status: 302,
+    headers: { Location: `/${siteLangFor(request)}${url.search}`, 'Cache-Control': 'no-store', Vary: 'Cookie, Accept-Language' },
+  });
+}
+
 function cookieValue(request, name) {
   const header = request.headers.get('Cookie') || '';
   for (const part of header.split(';')) {
@@ -3606,7 +3705,7 @@ async function fcmDeliver(env, sa, targets, event) {
   let sent = 0;
   for (const row of rows) {
     const preview = prefsOf(row.user_id).notification_preview !== false;
-    const message = {
+    const message = (event.kind === 'call' || event.kind === 'call_end') ? fcmCallMessage(row.token, event) : {
       token: row.token,
       notification: { title: String(event.title || 'LUNO').slice(0, 100), body: preview ? String(event.body || '').slice(0, 200) : '새 알림' },
       data: { kind: String(event.kind || 'message'), conversation_id: cid },
@@ -3632,6 +3731,24 @@ async function fcmDeliver(env, sa, targets, event) {
   }
   return { sent };
 }
+// Build 18: no "notification" block, so Android hands the push to the app,
+// which shows the full-screen incoming-call screen (accept / decline) or, for
+// call_end, removes it. A ring that arrives late is useless: short TTL.
+function fcmCallMessage(token, event) {
+  const ring = event.kind === 'call';
+  const data = {
+    kind: ring ? 'call' : 'call_end',
+    conversation_id: String(event.conversation_id || ''),
+    call_id: String(event.call_id || ''),
+    sent_at: String(Date.now()),
+  };
+  if (ring) {
+    data.call_kind = String(event.call_kind || 'voice');
+    data.caller_name = String(event.title || 'LUNO').slice(0, 100);
+    data.ring_token = String(event.ring_token || '');
+  }
+  return { token, data, android: { priority: 'high', ttl: ring ? '45s' : '60s' } };
+}
 registerPushProvider('fcm', async (env, targets, event) => {
   const sa = fcmServiceAccount(env);
   if (!sa) return;
@@ -3640,6 +3757,7 @@ registerPushProvider('fcm', async (env, targets, event) => {
   await task;
 });
 registerPushProvider('log', async (env, targets, event) => {
+  if (event.kind === 'call_end') return; // a dismissal, not a notification
   const db = dbOf();
   if (!db) return;
   await ensureSchema();
@@ -4000,6 +4118,80 @@ async function saveCallSession(call) {
   await ensureSchema();
   await db.prepare('INSERT OR REPLACE INTO luno_call_sessions (id, conversation_id, kind, state, initiated_by, started_at, connected_at, ended_at, result) VALUES (?,?,?,?,?,?,?,?,?)')
     .bind(call.id, call.conversation_id, call.kind || 'voice', call.state || 'ringing', call.initiated_by || null, call.started_at || now(), call.connected_at || null, call.ended_at || null, call.result || null).run();
+}
+// Build 18: a ring older than this is stale (the caller's own no-answer
+// timer ends it at 45 s; this also covers a caller whose app died).
+const CALL_RING_WINDOW_MS = 60 * 1000;
+const CALL_SIGNAL_CAP = 300;
+async function storeCallSignal(callId, fromUserId, body) {
+  const db = dbOf();
+  if (!db) return;
+  const type = String(body.signal_type || '');
+  if (!['offer', 'answer', 'ice-candidate'].includes(type)) return;
+  await ensureSchema();
+  const count = await db.prepare('SELECT COUNT(*) AS n FROM luno_call_signals WHERE call_id = ?').bind(callId).first().catch(() => null);
+  if (count && Number(count.n) >= CALL_SIGNAL_CAP) return;
+  const cand = body.candidate === undefined || body.candidate === null ? null
+    : (typeof body.candidate === 'string' ? body.candidate : JSON.stringify(body.candidate));
+  await db.prepare('INSERT INTO luno_call_signals (call_id, from_user_id, signal_type, sdp, candidate, created_at) VALUES (?,?,?,?,?,?)')
+    .bind(callId, fromUserId, type, typeof body.sdp === 'string' ? body.sdp.slice(0, 20000) : null, cand ? cand.slice(0, 4000) : null, now()).run().catch(() => null);
+}
+async function forgetCallScratch(callId) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('DELETE FROM luno_call_signals WHERE call_id = ?').bind(callId).run().catch(() => null);
+  await db.prepare('DELETE FROM luno_call_ring_tokens WHERE call_id = ?').bind(callId).run().catch(() => null);
+  // Leftovers from calls that never reached an end state.
+  const stale = new Date(Date.now() - 3600 * 1000).toISOString();
+  await db.prepare('DELETE FROM luno_call_signals WHERE created_at < ?').bind(stale).run().catch(() => null);
+  await db.prepare('DELETE FROM luno_call_ring_tokens WHERE created_at < ?').bind(stale).run().catch(() => null);
+}
+async function issueRingToken(callId) {
+  const token = (uid() + uid()).replace(/-/g, '');
+  const db = dbOf();
+  if (db) {
+    await ensureSchema();
+    await db.prepare('INSERT OR REPLACE INTO luno_call_ring_tokens (call_id, token, created_at) VALUES (?,?,?)').bind(callId, token, now()).run().catch(() => null);
+  }
+  return token;
+}
+async function ringTokenMatches(callId, token) {
+  const db = dbOf();
+  if (!db || typeof token !== 'string' || token.length < 32) return false;
+  await ensureSchema();
+  const row = await db.prepare('SELECT token FROM luno_call_ring_tokens WHERE call_id = ?').bind(callId).first().catch(() => null);
+  if (!row || typeof row.token !== 'string' || row.token.length !== token.length) return false;
+  let diff = 0;
+  for (let i = 0; i < token.length; i++) diff |= row.token.charCodeAt(i) ^ token.charCodeAt(i);
+  return diff === 0;
+}
+// Ends a call once: ledger row, call_status bubble, live state event, and the
+// push that clears the ring on devices that never connected.
+async function endCallSession(call, requested, actorId) {
+  call.ended_at = now();
+  call.state = 'ended';
+  const duration = call.connected_at ? Math.round((Date.parse(call.ended_at) - Date.parse(call.connected_at)) / 1000) : 0;
+  call.result = call.connected_at ? 'completed' : (requested === 'declined' ? 'declined' : (call.initiated_by === actorId ? 'canceled' : 'missed'));
+  await saveCallSession(call);
+  if (dbOf()) {
+    await ensureSchema();
+    await dbOf().prepare('INSERT OR IGNORE INTO call_logs (id, conversation_id, caller_id, kind, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(call.id, call.conversation_id, call.initiated_by, call.kind, call.started_at, call.ended_at, call.result).run();
+  }
+  // A-5/A-14: the server mints the call_status bubble itself (clients are
+  // forbidden from forging system kinds). Shape matches the /calls ledger.
+  // D5: persisted so the call ledger survives new isolates.
+  const durText = Math.floor(duration / 60) + ':' + String(duration % 60).padStart(2, '0');
+  await pushPersistent(call.conversation_id, call.initiated_by, { kind: 'call_status', body: (call.kind === 'video' ? '영상통화' : '음성통화') + (duration > 0 ? ' ' + durText : ''), metadata: { call_id: call.id, call_type: call.kind, call_kind: call.kind, duration: durText, call_status: call.result, status: call.result } });
+  broadcast({ type: 'call.state', call_id: call.id, conversation_id: call.conversation_id, state: 'ended', result: call.result });
+  await announceCallEnd(call);
+  await forgetCallScratch(call.id);
+  return { result: call.result, duration };
+}
+async function announceCallEnd(call) {
+  const conv = conversations.get(call.conversation_id) || await hydrateDurableConversation(call.conversation_id).catch(() => null);
+  if (!conv) return;
+  await notify(notifyEnv(), conv.members, { kind: 'call_end', conversation_id: call.conversation_id, call_id: call.id, sender_id: null }).catch(() => null);
 }
 async function hydrateDurableConversations(userId) {
   if (!durableConversationsEnabled()) return;
@@ -4658,6 +4850,8 @@ async function extended(p, request, url, me, token) {
       if (dbOf()) await dbOf().prepare("UPDATE users SET display_name = ?, bio = ?, status_message = ?, avatar_url = ?, cover_url = ?, avatar_color = ?, handle = ?, birthday = ?, updated_at = ? WHERE id = ?").bind(me.display_name, me.bio || '', me.status_message || '', b.avatar_url === undefined ? (me.avatar_url || '') : b.avatar_url, b.cover_url === undefined ? (me.cover_url || '') : b.cover_url, me.avatar_color || '#4F7CFF', me.handle || '', me.birthday || '', now(), myId).run();
       if (b.avatar_url !== undefined) me.avatar_url = b.avatar_url;
       if (b.cover_url !== undefined) me.cover_url = b.cover_url;
+      // build 17: friends and chat partners refresh this profile at once.
+      await announceProfileChange(myId);
       return json({ ...publicUser(me), email: me.email, role: me.role });
     }
     if (method === 'DELETE') {
@@ -6078,6 +6272,7 @@ async function deleteAttachmentEverywhere(attId) {
     const call = { id: uid(), conversation_id: conv.id, kind: b.kind || 'voice', state: 'ringing', initiated_by: myId, started_at: now(), connected_at: null, ended_at: null };
     callSessions.set(call.id, call);
     await saveCallSession(call);
+    const ringToken = await issueRingToken(call.id);
     const peerId = conv.members.find(x => x !== myId);
     const callkitPayload = {
       type: 'call.ringing',
@@ -6089,6 +6284,7 @@ async function deleteAttachmentEverywhere(attId) {
       caller_avatar_color: me.avatar_color,
       kind: call.kind,
       has_video: call.kind === 'video',
+      ring_token: ringToken,
       callkit: {
         uuid: call.id,
         handle: me.handle || me.display_name,
@@ -6104,6 +6300,9 @@ async function deleteAttachmentEverywhere(attId) {
       sender_id: myId,
       title: me.display_name || me.handle || 'LUNO',
       body: call.kind === 'video' ? '영상 전화가 왔습니다' : '음성 전화가 왔습니다',
+      call_id: call.id,
+      call_kind: call.kind,
+      ring_token: ringToken,
     });
     return json({ id: call.id, state: 'ringing', kind: call.kind, callkit: callkitPayload.callkit }, 201);
   }
@@ -6166,24 +6365,53 @@ async function deleteAttachmentEverywhere(attId) {
       call.connected_at = call.connected_at || now();
       await saveCallSession(call);
       broadcast({ type: 'call.state', call_id: call.id, conversation_id: call.conversation_id, state: 'connected' });
+      // Build 18: the callee's other devices stop ringing.
+      await announceCallEnd(call);
       return json({ status: 'connected' });
     }
-    call.ended_at = now();
-    call.state = 'ended';
-    const duration = call.connected_at ? Math.round((Date.parse(call.ended_at) - Date.parse(call.connected_at)) / 1000) : 0;
-    call.result = call.connected_at ? 'completed' : (b.state === 'declined' ? 'declined' : (call.initiated_by === myId ? 'canceled' : 'missed'));
-    await saveCallSession(call);
-    if (dbOf()) {
+    const ended = await endCallSession(call, b.state, myId);
+    return json({ status: 'ended', result: ended.result, duration: ended.duration });
+  }
+  // Build 18: the signals the other side sent (replayed by a callee whose
+  // socket was closed when they went out). Membership is checked upstream.
+  if ((m = p.match(/^calls\/([\w-]+)\/signals$/)) && method === 'GET') {
+    const db = dbOf();
+    if (!db) return json({ signals: [] });
+    await ensureSchema();
+    const after = Number(url.searchParams.get('after') || 0) || 0;
+    const { results } = await db.prepare('SELECT id, signal_type, sdp, candidate, from_user_id FROM luno_call_signals WHERE call_id = ? AND from_user_id != ? AND id > ? ORDER BY id LIMIT 300')
+      .bind(m[1], myId, after).all().catch(() => ({ results: [] }));
+    return json({ signals: (results || []).map(r => ({ id: r.id, call_id: m[1], signal_type: r.signal_type, sdp: r.sdp || undefined, candidate: r.candidate || undefined, from_user_id: r.from_user_id })) });
+  }
+  // Build 18: the call ringing for me right now (a cold-started app asks this
+  // after the push woke it; the invite went out while its socket was closed).
+  if (p === 'calls/incoming' && method === 'GET') {
+    const db = dbOf();
+    let call = null;
+    const since = new Date(Date.now() - CALL_RING_WINDOW_MS).toISOString();
+    if (db) {
       await ensureSchema();
-      await dbOf().prepare('INSERT OR IGNORE INTO call_logs (id, conversation_id, caller_id, kind, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(call.id, call.conversation_id, call.initiated_by, call.kind, call.started_at, call.ended_at, call.result).run();
+      const row = await db.prepare("SELECT s.* FROM luno_call_sessions s JOIN luno_conversation_members m ON m.conversation_id = s.conversation_id WHERE m.user_id = ? AND s.state = 'ringing' AND s.ended_at IS NULL AND s.initiated_by IS NOT NULL AND s.initiated_by != ? AND s.started_at > ? ORDER BY s.started_at DESC LIMIT 1")
+        .bind(myId, myId, since).first().catch(() => null);
+      if (row) call = { id: row.id, conversation_id: row.conversation_id, kind: row.kind, initiated_by: row.initiated_by, started_at: row.started_at };
     }
-    // A-5/A-14: the server mints the call_status bubble itself (clients are
-    // forbidden from forging system kinds). Shape matches the /calls ledger.
-    // D5: persisted so the call ledger survives new isolates.
-    const durText = Math.floor(duration / 60) + ':' + String(duration % 60).padStart(2, '0');
-    await pushPersistent(call.conversation_id, call.initiated_by, { kind: 'call_status', body: (call.kind === 'video' ? '영상통화' : '음성통화') + (duration > 0 ? ' ' + durText : ''), metadata: { call_id: call.id, call_type: call.kind, call_kind: call.kind, duration: durText, call_status: call.result, status: call.result } });
-    broadcast({ type: 'call.state', call_id: call.id, conversation_id: call.conversation_id, state: 'ended', result: call.result });
-    return json({ status: 'ended', result: call.result, duration });
+    if (!call) {
+      for (const c of callSessions.values()) {
+        if (c.state !== 'ringing' || c.ended_at || !c.initiated_by || c.initiated_by === myId || !(c.started_at > since)) continue;
+        if (!(conversations.get(c.conversation_id)?.members || []).includes(myId)) continue;
+        call = c;
+        break;
+      }
+    }
+    if (!call) return json({ call: null });
+    await hydrateUsersByIds([call.initiated_by]);
+    const caller = usersById.get(call.initiated_by) || {};
+    const tok = db ? await db.prepare('SELECT token FROM luno_call_ring_tokens WHERE call_id = ?').bind(call.id).first().catch(() => null) : null;
+    return json({ call: {
+      type: 'call.ringing', call_id: call.id, conversation_id: call.conversation_id, initiated_by: call.initiated_by,
+      caller_name: caller.display_name || '', caller_handle: caller.handle || '', kind: call.kind || 'voice',
+      has_video: call.kind === 'video', started_at: call.started_at, ...(tok ? { ring_token: tok.token } : {}),
+    } });
   }
 
   // ---------- Timeline, stories, VOOM (D4: D1-backed, response shapes unchanged) ----------
@@ -7664,12 +7892,12 @@ async function downloadPage(env, url) {
 const LATEST_ANDROID_BUILD = {
   platform: 'android',
   version: '2.0.0',
-  build: 16,
+  build: 19,
   package: 'com.bookingnetwork.messenger.global_messenger',
   assets: [
-    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44084010, sha256: 'CC0FF742DD69F409F5C445C7D67910CB957F727906860CBB6CF73220BECACCC5', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build16/luno-messenger-arm64.apk' },
-    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35087774, sha256: '608DEAEF1E3CCF7F41EB19DB4A42999FD750DAF16D165D8C03FC461748FF3C2A', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build16/luno-messenger-arm32.apk' },
-    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50539298, sha256: '73DFE98027B54BDFDBDA95884DF342F5BE79876A783B22A487A2FB8262B608FF', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build16/luno-messenger-x86_64.apk' },
+    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44084234, sha256: '4D7784CFAA6F5B68B99A747909CDA1A02DB5C71D67D068EB756978C2A16D451C', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build19/luno-messenger-arm64.apk' },
+    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35087998, sha256: '8285AA0E45FCAF5284C98B2FDB48EE6C6652C567BEB23504D224F4A79C317165', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build19/luno-messenger-arm32.apk' },
+    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50605058, sha256: '73121CDDBA3C6E94528A15BDECFE51B470A2F6B3E8C37690E337DC73463804A6', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build19/luno-messenger-x86_64.apk' },
   ],
 };
 
@@ -7677,7 +7905,7 @@ const READY_TABLES = ['users', 'wallets', 'luno_sessions', 'luno_messages', 'att
 let booted = null;
 function boot(env) {
   if (!booted) {
-    booted = (async () => {
+    const run = (async () => {
       ensureSeed(env);
       seedExtras();
       await hashPendingPasswords();
@@ -7688,8 +7916,20 @@ function boot(env) {
         if (env.DEMO_MODE === 'true') await seedDemoRoom(env.DB);
       }
     })();
+    booted = run;
+    // A failed boot is retried by the next request instead of poisoning the isolate.
+    run.catch(() => { if (booted === run) booted = null; });
   }
   return booted;
+}
+// See ensureSchema: the boot promise may belong to a request that ended.
+async function bootInRequest(env) {
+  try {
+    await boot(env);
+  } catch {
+    booted = null;
+    await boot(env);
+  }
 }
 
 // Gateway routing shared by the export wrapper (transparent proxy) and
@@ -7720,6 +7960,8 @@ const workerCore = {
 	}
     // Route the complete API to one persistent backend; never mix its identities
     // with the isolate-local demo or fall back to demo data on upstream failure.
+    // lunotalk.com front page: the bare root picks the visitor's language.
+    if (url.pathname === '/' && (request.method === 'GET' || request.method === 'HEAD')) return siteLangRedirect(request);
     const backendRoute = url.pathname.startsWith('/api/') || ['/healthz', '/readyz', '/metrics'].includes(url.pathname);
     // Valid origins are proxied transparently by the export wrapper (no edge
     // header rewrites); only a misconfigured origin fails closed here.
@@ -7779,7 +8021,7 @@ const workerCore = {
         return json({ status: 'not_ready', checks: { database: 'unavailable' } }, 503);
       }
     }
-    await boot(env);
+    await bootInRequest(env);
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
@@ -8554,6 +8796,23 @@ const workerCore = {
         return json({ status: 'pending' }, 202);
       }
 
+      // Build 18: "decline" on the lock-screen ring. The notification's
+      // background isolate has no session; the per-call ring token (sent
+      // only to the room's members) stands in for it, and only for this.
+      const ringDecline = p.match(/^calls\/([\w-]+)\/ring-decline$/);
+      if (ringDecline && request.method === 'POST') {
+        if (!await rateLimit('rl:ringdecline:' + (request.headers.get('CF-Connecting-IP') || 'unknown'), 30)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+        const body = await request.json().catch(() => ({}));
+        if (!await ringTokenMatches(ringDecline[1], body.token)) return json({ error: 'call not found' }, 404);
+        const call = await loadCallSession(ringDecline[1]);
+        if (!call) return json({ error: 'call not found' }, 404);
+        if (call.ended_at || call.state !== 'ringing') return json({ status: call.state });
+        const conv = conversations.get(call.conversation_id) || await hydrateDurableConversation(call.conversation_id).catch(() => null);
+        const callee = (conv?.members || []).find(x => x !== call.initiated_by) || '';
+        const ended = await endCallSession(call, 'declined', callee);
+        return json({ status: 'ended', result: ended.result });
+      }
+
       // Versioned profile/room photo URLs load without a bearer token.
       if (request.method === 'GET') {
         const photo = await servePublicPhoto(p, url);
@@ -8645,7 +8904,7 @@ const workerCore = {
       // inside extended(): join requires conversation membership, signal
       // requires both ends in the same live call room, leave fans out only
       // for participants. ice-servers stays public by design.
-      if (callPath && !['ice-servers', 'group'].includes(callPath[1])) {
+      if (callPath && !['ice-servers', 'group', 'incoming'].includes(callPath[1])) {
         const call = await loadCallSession(callPath[1]);
         // A-12: member check falls back to D1 so a durable room hydrated on
         // another isolate still authorizes signaling, state and quality posts.
@@ -8919,6 +9178,7 @@ const workerCore = {
           // without this only offer/answer SDP ever arrived.
           candidate: body.candidate
         });
+        await storeCallSignal(callSigMatch[1], authUser.id, body);
         return json({ status: 'signaled' });
       }
       const callStateMatch = p.match(/^calls\/([a-zA-Z0-9_-]+)\/state$/);

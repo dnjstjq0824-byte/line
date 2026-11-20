@@ -108,10 +108,23 @@ test('fcm sends a signed-token push to the peer android device only', async () =
     assert.equal(msg.android.notification.channel_id, 'luno_messages');
     assert.equal(msg.android.notification.tag, `luno-room-${cid}`);
 
-    // Calls go to the call channel; the cached OAuth token is reused.
-    assert.equal((await api('calls', 'POST', { conversation_id: cid, kind: 'voice' }, a.token)).status, 201);
+    // Build 18: calls are data-only (the app draws the full-screen ring with
+    // accept / decline); the cached OAuth token is reused.
+    const created = await api('calls', 'POST', { conversation_id: cid, kind: 'voice' }, a.token);
+    assert.equal(created.status, 201);
+    const callId = (await created.json()).id;
     const call = JSON.parse(rec.sends()[1].opts.body).message;
-    assert.equal(call.android.notification.channel_id, 'luno_calls');
+    assert.equal(call.token, 'tok-b');
+    assert.equal(call.notification, undefined, 'no system notification: the app rings');
+    assert.equal(call.android.priority, 'high');
+    assert.equal(call.android.ttl, '45s');
+    assert.equal(call.data.kind, 'call');
+    assert.equal(call.data.call_id, callId);
+    assert.equal(call.data.call_kind, 'voice');
+    assert.equal(call.data.caller_name, 'fcm1_a');
+    assert.equal(call.data.conversation_id, cid);
+    assert.match(call.data.ring_token, /^[0-9a-f]{64}$/);
+    for (const v of Object.values(call.data)) assert.equal(typeof v, 'string', 'FCM data values are strings');
     assert.equal(rec.calls.filter((x) => x.url.startsWith('https://oauth2')).length, 1);
   } finally { db.raw.close(); }
 });

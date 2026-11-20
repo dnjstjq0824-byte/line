@@ -20,6 +20,11 @@ export default {
     const forwarded = new Request(target, request);
     forwarded.headers.set('X-Forwarded-Host', url.hostname);
     forwarded.headers.set('X-Forwarded-Proto', 'https');
+    // The server picks the front-page language by country; its own view of
+    // this subrequest would geolocate to the relay's data centre.
+    const country = request.cf && request.cf.country
+    if (country) forwarded.headers.set('X-Luno-Country', String(country))
+    else forwarded.headers.delete('X-Luno-Country')
     return fetch(forwarded, { redirect: 'manual' });
   },
 };

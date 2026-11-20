@@ -30,6 +30,7 @@ const STATIC = new Set([
   'F22_SECRET_CONTAINS', 'F22_SECRET_EXACT', 'F22_BODY_EXACT', 'F22_EMAIL_EXACT', // F22: frozen mask vocabulary
   'SUPPORT_TICKET_CATEGORIES', // F30: frozen ticket vocabulary
   'REPORT_CATEGORIES', 'HIDE_TARGET_TYPES', // F29: frozen report + hide vocabularies
+  'SITE_LANGS', // build 17: frozen front-page language list (mirrors apps/user-web/src/site-i18n.ts)
 ]);
 const EPHEMERAL = new Set([
   'activeSockets', 'AUTH_CTX', 'groupCallRooms',

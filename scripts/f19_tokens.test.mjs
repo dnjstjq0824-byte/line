@@ -92,7 +92,9 @@ test('F19: served HTML carries CSP, frame-ancestors and referrer policy', async 
       DB: db,
       ASSETS: { fetch: async () => new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }) },
     };
-    const res = await mod.default.fetch(new Request('https://localhost/', { method: 'GET' }), env);
+    // '/' itself redirects to the visitor's language page (/ko, /en, ...);
+    // the page those land on is what must carry the headers.
+    const res = await mod.default.fetch(new Request('https://localhost/ko', { method: 'GET' }), env);
     assert.equal(res.status, 200);
     const csp = res.headers.get('content-security-policy') || '';
     assert.ok(csp.includes("frame-ancestors 'none'"), 'no framing');

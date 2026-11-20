@@ -54,3 +54,41 @@ test('a profile change on one isolate reaches a peer served by another', async (
     assert.equal(peer.avatar_url, meA.avatar_url);
   } finally { db.raw.close(); }
 });
+
+test('a profile change is pushed at once to friends and chat partners', async () => {
+  const db = makeD1();
+  const pushed = [];
+  const hub = {
+    idFromName: (name) => name,
+    get: (id) => ({ fetch: async (_url, init) => { pushed.push({ to: id, body: JSON.parse(init.body) }); return new Response('{}', { status: 200 }); } }),
+  };
+  try {
+    const mod = await import(`./cf_worker.js?profpush=${Date.now()}`);
+    const env = { DB: db, DURABLE_CONVERSATIONS: 'true', MEDIA_BUCKET: makeBucket(), USER_HUB: hub };
+    const call = (path, method = 'GET', body = null, token = null) => mod.default.fetch(new Request(`https://localhost/api/v1/${path}`, {
+      method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body === null ? undefined : JSON.stringify(body),
+    }), env, { waitUntil: () => {} });
+    const reg = async (email, handle) => {
+      const r = await call('auth/register', 'POST', { ...F24_CONSENT, email, password: PW, display_name: handle, handle });
+      assert.equal(r.status, 201);
+      const id = (await r.json()).id;
+      const token = (await (await call('auth/login', 'POST', { email, password: PW })).json()).access_token;
+      return { id, token };
+    };
+    const a = await reg('pp-a@luno-test.local', 'ppa_user');
+    const b = await reg('pp-b@luno-test.local', 'ppb_user');
+    const c = await reg('pp-c@luno-test.local', 'ppc_user');
+    // B added A (one-way); C only shares a chat with A.
+    assert.equal((await call('friends', 'POST', { handle: 'ppa_user' }, b.token)).status < 300, true);
+    await call('conversations', 'POST', { kind: 'direct', member_ids: [c.id] }, a.token);
+    pushed.length = 0;
+    const r = await call('me', 'PATCH', { status_message: 'new me' }, a.token);
+    assert.equal(r.status, 200);
+    await new Promise((res) => setTimeout(res, 20));
+    const got = (id) => pushed.some((p) => p.to === id && p.body.type === 'profile.updated' && p.body.user_id === a.id);
+    assert.ok(got(b.id), 'one-way friend told');
+    assert.ok(got(c.id), 'chat partner told');
+    assert.ok(got(a.id), 'my other devices told');
+  } finally { db.raw.close(); }
+});
