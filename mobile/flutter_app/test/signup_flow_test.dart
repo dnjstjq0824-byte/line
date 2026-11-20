@@ -82,4 +82,66 @@ void main() {
       (tester) async {
     await _signUp(tester, const Size(884, 1104));
   });
+
+  // Build 14 field report: "the button did nothing, no message". The form
+  // refused (no consent) but its error strip sat under the status bar.
+  testWidgets('refused sign-up shows its error below the status bar',
+      (tester) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 40);
+    addTearDown(tester.view.reset);
+    final fake = _FakeHttp();
+    final s = SessionController(httpClient: fake);
+    addTearDown(s.disposeAll);
+    await tester.pumpWidget(SessionScope(
+      notifier: s,
+      child: MaterialApp(
+          theme: LunoHarbor.theme(Brightness.light), home: const LoginPage()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('새 LUNO 계정 만들기'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '이메일'), 'new@x.test');
+    await tester.enterText(
+        find.widgetWithText(TextField, '생년월일 (YYYY-MM-DD)'), '1990-05-05');
+    final submit = find.widgetWithText(FilledButton, '가입');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(s.error, isNotEmpty);
+    expect(fake.paths, isNot(contains('POST /api/v1/auth/register')));
+    // Inline line next to the button.
+    expect(find.byKey(const Key('gate-form-error')), findsOneWidget);
+    // Every copy of the message is drawn below the 40px status bar.
+    for (final e in find.text(s.error).evaluate()) {
+      final box = e.renderObject! as RenderBox;
+      expect(box.localToGlobal(Offset.zero).dy, greaterThanOrEqualTo(40));
+    }
+  });
+
+  testWidgets('tapping the consent sentence ticks the box', (tester) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final s = SessionController(httpClient: _FakeHttp());
+    addTearDown(s.disposeAll);
+    await tester.pumpWidget(SessionScope(
+      notifier: s,
+      child: MaterialApp(
+          theme: LunoHarbor.theme(Brightness.light), home: const LoginPage()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('새 LUNO 계정 만들기'));
+    await tester.pumpAndSettle();
+    final first = find.byType(Checkbox).first;
+    expect(tester.widget<Checkbox>(first).value, isFalse);
+    final sentence = find.descendant(
+        of: find.ancestor(of: first, matching: find.byType(Row)).first,
+        matching: find.byType(InkWell));
+    await tester.ensureVisible(sentence.first);
+    await tester.tap(sentence.first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue);
+  });
 }
