@@ -12,9 +12,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- F26: find-by-contacts reads names + numbers (uploads are E.164 only). -->
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
-    <!-- C4: no telephony stack (no TelecomManager/ConnectionService anywhere),
-         so MANAGE_OWN_CALLS, READ_PHONE_STATE and the typed
-         FOREGROUND_SERVICE_* permissions stay out (decision 12). -->
+    <!-- C4: still no telephony stack (no TelecomManager/ConnectionService),
+         so MANAGE_OWN_CALLS and READ_PHONE_STATE stay out.
+         Build 18 (real calls, replaces decision 12): the ring shows full
+         screen over the lock screen, and a live call keeps its microphone
+         and camera off screen through a typed foreground service. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
 
     <application
         android:label="LUNO"
@@ -73,6 +78,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Build 18: the ring's Decline button (runs without opening the app). -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+        <!-- Build 18: keeps a live call's mic / camera running off screen. -->
+        <service
+            android:name="com.dexterous.flutterlocalnotifications.ForegroundService"
+            android:exported="false"
+            android:stopWithTask="true"
+            android:foregroundServiceType="microphone|camera" />
     </application>
     <queries>
         <intent>

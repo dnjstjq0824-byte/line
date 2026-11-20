@@ -2,6 +2,7 @@
 // nickname, posts, likes. Room titles come from the server `name` key.
 import 'package:flutter/material.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -21,7 +22,7 @@ class LoungePage extends StatelessWidget {
           : '${room.first['name'] ?? context.l10n.navLounge}';
       return _RoomPostsView(roomId: session.roomId, roomName: name);
     }
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

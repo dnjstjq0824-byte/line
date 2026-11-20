@@ -2034,4 +2034,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get walletNoTx => '取引履歴はありません。';
+
+  @override
+  String get callDeclineAction => '拒否';
+
+  @override
+  String get callOngoingTitle => '通話中';
+
+  @override
+  String get callOngoingBody => 'タップして通話に戻る';
+
+  @override
+  String get callAlreadyEnded => 'この通話はすでに終了しています';
 }

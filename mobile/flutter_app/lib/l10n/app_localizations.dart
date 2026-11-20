@@ -3917,6 +3917,30 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'거래 내역이 없습니다.'**
   String get walletNoTx;
+
+  /// callDeclineAction (build 18 real calls)
+  ///
+  /// In ko, this message translates to:
+  /// **'거절'**
+  String get callDeclineAction;
+
+  /// callOngoingTitle (build 18 real calls)
+  ///
+  /// In ko, this message translates to:
+  /// **'통화 중'**
+  String get callOngoingTitle;
+
+  /// callOngoingBody (build 18 real calls)
+  ///
+  /// In ko, this message translates to:
+  /// **'눌러서 통화 화면으로 돌아가기'**
+  String get callOngoingBody;
+
+  /// callAlreadyEnded (build 18 real calls)
+  ///
+  /// In ko, this message translates to:
+  /// **'이미 끝난 통화입니다'**
+  String get callAlreadyEnded;
 }
 
 class _AppLocalizationsDelegate

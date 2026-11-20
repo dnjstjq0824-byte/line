@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -45,7 +46,7 @@ class _WalletPageState extends State<WalletPage> {
         );
     const sectionTitle =
         TextStyle(fontSize: HarborType.body, fontWeight: FontWeight.w800);
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

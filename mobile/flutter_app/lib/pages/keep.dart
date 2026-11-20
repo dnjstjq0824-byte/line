@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 
 import '../state/session.dart';
@@ -15,7 +16,7 @@ class KeepPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

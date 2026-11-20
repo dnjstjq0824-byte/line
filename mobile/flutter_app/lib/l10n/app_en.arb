@@ -635,5 +635,9 @@
   "pcQuickCheck": "Run analysis & build checks",
   "pcQuickContinue": "Continue with Muse Spark 1.3",
   "walletShortcuts": "Shortcuts",
-  "walletNoTx": "No transactions yet."
+  "walletNoTx": "No transactions yet.",
+  "callDeclineAction": "Decline",
+  "callOngoingTitle": "In a call",
+  "callOngoingBody": "Tap to return to the call",
+  "callAlreadyEnded": "This call has already ended"
 }

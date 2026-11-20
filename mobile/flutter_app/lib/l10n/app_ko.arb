@@ -2812,5 +2812,21 @@
     "description": "pcQuickContinue (PC agent)"
   },
   "walletShortcuts": "바로가기",
-  "walletNoTx": "거래 내역이 없습니다."
+  "walletNoTx": "거래 내역이 없습니다.",
+  "callDeclineAction": "거절",
+  "@callDeclineAction": {
+    "description": "callDeclineAction (build 18 real calls)"
+  },
+  "callOngoingTitle": "통화 중",
+  "@callOngoingTitle": {
+    "description": "callOngoingTitle (build 18 real calls)"
+  },
+  "callOngoingBody": "눌러서 통화 화면으로 돌아가기",
+  "@callOngoingBody": {
+    "description": "callOngoingBody (build 18 real calls)"
+  },
+  "callAlreadyEnded": "이미 끝난 통화입니다",
+  "@callAlreadyEnded": {
+    "description": "callAlreadyEnded (build 18 real calls)"
+  }
 }

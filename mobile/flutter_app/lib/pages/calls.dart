@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -22,7 +23,7 @@ class CallsPage extends StatelessWidget {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final groups = groupCalls(session.callHistory);
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

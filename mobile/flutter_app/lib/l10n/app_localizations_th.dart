@@ -2044,4 +2044,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get walletNoTx => 'ยังไม่มีรายการ';
+
+  @override
+  String get callDeclineAction => 'ปฏิเสธ';
+
+  @override
+  String get callOngoingTitle => 'กำลังโทร';
+
+  @override
+  String get callOngoingBody => 'แตะเพื่อกลับไปที่การโทร';
+
+  @override
+  String get callAlreadyEnded => 'การโทรนี้สิ้นสุดแล้ว';
 }

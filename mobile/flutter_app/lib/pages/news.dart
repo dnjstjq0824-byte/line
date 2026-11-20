@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -88,7 +89,7 @@ class _NewsPageState extends State<NewsPage> {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     if (session.newsHero.isEmpty && session.newsPopular.isEmpty) {
-      return RefreshIndicator(
+      return NoPullRefresh(
         onRefresh: session.reload,
         child: ListView(
           children: [
@@ -115,7 +116,7 @@ class _NewsPageState extends State<NewsPage> {
     final heroes =
         session.newsHero.whereType<Map<String, dynamic>>().toList();
     final line = dark ? HarborDark.channel : HarborLight.channel;
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

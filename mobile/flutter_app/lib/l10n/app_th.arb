@@ -635,5 +635,9 @@
   "pcQuickCheck": "ตรวจ static analysis และ build",
   "pcQuickContinue": "ให้ Muse Spark 1.3 ทำต่อ",
   "walletShortcuts": "ทางลัด",
-  "walletNoTx": "ยังไม่มีรายการ"
+  "walletNoTx": "ยังไม่มีรายการ",
+  "callDeclineAction": "ปฏิเสธ",
+  "callOngoingTitle": "กำลังโทร",
+  "callOngoingBody": "แตะเพื่อกลับไปที่การโทร",
+  "callAlreadyEnded": "การโทรนี้สิ้นสุดแล้ว"
 }

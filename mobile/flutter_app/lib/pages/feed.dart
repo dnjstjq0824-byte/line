@@ -1,6 +1,7 @@
 // Route: /feed — VOOM logbook. Composer + posts, nothing else.
 import 'package:flutter/material.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -27,7 +28,7 @@ class _FeedPageState extends State<FeedPage> {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final line = dark ? HarborDark.channel : HarborLight.channel;
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

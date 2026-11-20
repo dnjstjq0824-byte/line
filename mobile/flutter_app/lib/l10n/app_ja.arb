@@ -635,5 +635,9 @@
   "pcQuickCheck": "静的解析・ビルド点検",
   "pcQuickContinue": "Muse Spark 1.3 で続行",
   "walletShortcuts": "ショートカット",
-  "walletNoTx": "取引履歴はありません。"
+  "walletNoTx": "取引履歴はありません。",
+  "callDeclineAction": "拒否",
+  "callOngoingTitle": "通話中",
+  "callOngoingBody": "タップして通話に戻る",
+  "callAlreadyEnded": "この通話はすでに終了しています"
 }

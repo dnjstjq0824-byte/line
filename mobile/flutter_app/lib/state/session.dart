@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:package_info_plus/package_info_plus.dart';
@@ -23,6 +24,7 @@ import '../legacy_tokens.dart';
 import '../util/app_notify.dart';
 import '../util/app_update.dart';
 import '../util/call_media.dart';
+import '../util/call_push.dart';
 import '../util/album_photos.dart';
 import '../util/app_l10n.dart';
 import '../util/attachments.dart';
@@ -69,6 +71,15 @@ List<dynamic> mergeDeltaMessages(List<dynamic> existing, List<dynamic> delta) {
   }
   out.sort((a, b) => ((a['sequence'] ?? 0) as num).compareTo((b['sequence'] ?? 0) as num));
   return out;
+}
+
+/// Asks for the call permissions with the system dialog (no app context
+/// needed, so it also works from the lock-screen ring). Android only.
+Future<bool> defaultCallPermissions(bool video) async {
+  if (!Platform.isAndroid) return true;
+  final wanted = [Permission.microphone, if (video) Permission.camera];
+  final statuses = await wanted.request();
+  return statuses.values.every((s) => s.isGranted);
 }
 
 class SessionController extends ChangeNotifier {
@@ -212,6 +223,10 @@ class SessionController extends ChangeNotifier {
   // device last registered (empty when push is off or unsupported).
   PushRegistrar push = ProdPushRegistrar();
   String pushToken = '';
+  // Build 18: the phone side of a live call (foreground service, lock
+  // screen, proximity, ring cleanup, launch-by-ring). main.dart installs the
+  // Android one; tests and other platforms keep the no-op.
+  CallSystem callSystem = const NoCallSystem();
   // N2-L: 1:1 call media + state. mediaFactory is the test seam (fake media).
   CallMedia Function() mediaFactory = WebrtcCallMedia.new;
   CallMedia? callMedia;
@@ -321,6 +336,7 @@ class SessionController extends ChangeNotifier {
       await loadOutbox();
       await flushOutbox();
       unawaited(registerPush());
+      unawaited(_pickUpOnLaunch());
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
         // M1: the Api client already spent the refresh token and failed (or
@@ -511,6 +527,7 @@ class SessionController extends ChangeNotifier {
       await loadOutbox();
       await flushOutbox();
       unawaited(registerPush());
+      unawaited(_pickUpOnLaunch());
     });
   }
 
@@ -633,6 +650,8 @@ class SessionController extends ChangeNotifier {
             unawaited(_handleCallSignal(data));
           } else if (data['type'] == 'call.state') {
             _handleCallState(data);
+          } else if (data['type'] == 'profile.updated') {
+            applyProfileUpdated(data);
           } else if (data['type'] == 'call.group.user_joined') {
             _handleGroupUserJoined(data);
           } else if (data['type'] == 'call.group.user_left') {
@@ -689,6 +708,8 @@ class SessionController extends ChangeNotifier {
       await connect();
       await deltaResync();
     }
+    // Build 18: a ring that went out while the socket was down.
+    await pickUpIncomingCall();
     if (roomBotsFor.isNotEmpty) await loadRoomBots(roomBotsFor);
   }
 
@@ -798,7 +819,13 @@ class SessionController extends ChangeNotifier {
         if (payload == null) return;
         if (payload.startsWith('room:')) {
           await notifyTap?.call('/chats/${payload.substring(5)}');
+        } else if (payload.startsWith('accept:call:')) {
+          // Build 18: Accept on the ring (the app came forward for it).
+          final ring = parseRingPayload(payload.substring(7));
+          await pickUpIncomingCall(accept: true, callId: ring?.callId ?? '');
         } else if (payload.startsWith('call:')) {
+          final ring = parseRingPayload(payload);
+          await pickUpIncomingCall(callId: ring?.callId ?? '');
           final cid = activeCall?['conversation_id'];
           await notifyTap?.call(cid != null ? '/chats/$cid' : '/calls');
         }
@@ -847,6 +874,11 @@ class SessionController extends ChangeNotifier {
     final was = isForeground;
     isForeground = value;
     if (value && !was) {
+      // Build 18: the in-app call screen rings now; drop the notification
+      // ring (its looping ringtone would play on top).
+      if (activeCall != null) {
+        unawaited(notifier.cancelCall().catchError((_) {}));
+      }
       unawaited(resumeConnection());
       // Back on screen with a room open: what arrived meanwhile is now read.
       if (selectedId.isNotEmpty && messages.isNotEmpty) {
@@ -940,6 +972,32 @@ class SessionController extends ChangeNotifier {
       }
     }
     if (changed) notifyListeners();
+  }
+
+  /// Build 17: someone changed their name / photo / cover / status. Refetch
+  /// the two lists that show people (debounced: a photo + cover save is two
+  /// events). Pull-to-refresh is gone, so this is how changes appear live.
+  Timer? _peopleTimer;
+  void applyProfileUpdated(dynamic data) {
+    final who = '${data is Map ? data['user_id'] ?? '' : ''}';
+    _peopleTimer?.cancel();
+    _peopleTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final res = await Future.wait([
+          api.call('/api/v1/conversations'),
+          api.call('/api/v1/friends'),
+          if (who == selfId) api.call('/api/v1/me'),
+        ]);
+        chats = res[0]['conversations'] ?? chats;
+        friends = res[1]['friends'] ?? friends;
+        if (res.length > 2) {
+          final me = res[2];
+          selfAvatarUrl = me['avatar_url'] ?? selfAvatarUrl;
+          selfCoverUrl = me['cover_url'] ?? selfCoverUrl;
+        }
+        notifyListeners();
+      } catch (_) {}
+    });
   }
 
   Timer? _readTimer;
@@ -1199,6 +1257,21 @@ class SessionController extends ChangeNotifier {
         callMediaIssue = true;
       }
       callMedia = media;
+      // Build 19: candidates start the moment the offer is set locally,
+      // before the server has given this call an id. They used to be
+      // dropped (no handler yet); hold them until the offer is posted.
+      final earlyIce = <Map<String, dynamic>>[];
+      String? liveCallId;
+      if (media != null) {
+        media.onIceCandidate((cand) {
+          final id = liveCallId;
+          if (id == null) {
+            earlyIce.add(cand);
+          } else {
+            unawaited(postCallSignal(id, 'ice-candidate', candidate: jsonEncode(cand)));
+          }
+        });
+      }
       // The speaker button shows callSpeaker; make the route match it (the
       // ringback follows the call route too).
       if (media != null) {
@@ -1226,13 +1299,18 @@ class SessionController extends ChangeNotifier {
       };
       final callId = '${activeCall!['id']}';
       if (media != null && offerSdp.isNotEmpty) {
-        media.onIceCandidate(
-            (cand) => unawaited(postCallSignal(callId, 'ice-candidate',
-                candidate: jsonEncode(cand))));
         media.onRemoteStream(() => notifyListeners());
+        // Offer first, then the held candidates, so the callee never gets
+        // a candidate for an offer it has not seen.
         await postCallSignal(callId, 'offer', sdp: offerSdp);
+        for (final cand in earlyIce) {
+          await postCallSignal(callId, 'ice-candidate', candidate: jsonEncode(cand));
+        }
+        earlyIce.clear();
+        liveCallId = callId;
       }
       _armNoAnswerTimer(callId, true);
+      _keepCallAlive();
       notifyListeners();
     });
   }
@@ -1283,6 +1361,8 @@ class SessionController extends ChangeNotifier {
       activeCall = {...call, 'state': 'connected'};
       _cancelNoAnswerTimer();
       _startCallTimer();
+      unawaited(notifier.cancelCall().catchError((_) {}));
+      _keepCallAlive();
       final held = List<Map<String, dynamic>>.of(_ringingSignals);
       _ringingSignals.clear();
       for (final signal in held) {
@@ -1320,11 +1400,116 @@ class SessionController extends ChangeNotifier {
     });
   }
 
-  /// N2-L: backgrounding ends the call and tells the peer (no bg hold).
-  void onAppBackgrounded() {
-    if (activeCall != null) unawaited(endCall());
-    // F15: same rule for the group mesh (server WS-close cleanup is the backstop).
-    if (groupCall != null) unawaited(leaveGroupCall());
+  /// Build 18: leaving the app or turning the screen off keeps the call
+  /// (N2-L used to hang up here). The foreground service started by
+  /// [_keepCallAlive] keeps the mic and camera running off screen.
+  void onAppBackgrounded() {}
+
+  /// Build 18: a 1:1 or group call is live: survive off screen, show over
+  /// the lock screen, and blank the screen at the ear on the earpiece.
+  void _keepCallAlive() {
+    final call = activeCall ?? groupCall;
+    if (call == null) return;
+    final video = '${call['kind'] ?? 'voice'}' == 'video';
+    final title = '${call['title'] ?? ''}';
+    unawaited(callSystem.startOngoing(video: video, title: title));
+    unawaited(callSystem.setLockScreen(true));
+    _syncProximity();
+  }
+
+  void _syncProximity() {
+    final call = activeCall;
+    final earpiece = call != null &&
+        '${call['kind'] ?? 'voice'}' != 'video' &&
+        !callSpeaker;
+    unawaited(callSystem.setProximity(earpiece));
+  }
+
+  void _releaseCallAlive() {
+    if (activeCall != null || groupCall != null) return;
+    unawaited(callSystem.stopOngoing());
+    unawaited(callSystem.setLockScreen(false));
+    unawaited(callSystem.setProximity(false));
+  }
+
+  Future<void> _pickUpOnLaunch() async {
+    unawaited(callSystem.ensureRingPermission());
+    final launch = await callSystem.takeLaunchResponse();
+    if (launch != null && launch.startsWith('accept:call:')) {
+      final ring = parseRingPayload(launch.substring(7));
+      await pickUpIncomingCall(accept: true, callId: ring?.callId ?? '');
+    } else {
+      await pickUpIncomingCall();
+    }
+  }
+
+  @visibleForTesting
+  Future<void> debugPickUpOnLaunch() => _pickUpOnLaunch();
+
+  bool _pickingUp = false;
+
+  /// Build 18: the app was closed (or its socket down) when the call came:
+  /// the push woke the phone, so ask the server for the ring, replay the
+  /// offer / ICE that went out meanwhile, and accept right away when the
+  /// user already pressed Accept on the ring.
+  Future<void> pickUpIncomingCall({bool accept = false, String callId = ''}) async {
+    if (api.token == null || selfId.isEmpty || _pickingUp) return;
+    final current = activeCall;
+    if (current != null) {
+      final id = '${current['id'] ?? current['call_id']}';
+      if (accept &&
+          (callId.isEmpty || callId == id) &&
+          current['direction'] == 'incoming' &&
+          current['state'] == 'ringing') {
+        await acceptCall();
+      }
+      return;
+    }
+    if (groupCall != null) return;
+    _pickingUp = true;
+    try {
+      Map<String, dynamic> res;
+      try {
+        res = await api.call('/api/v1/calls/incoming');
+      } catch (_) {
+        return;
+      }
+      final ring = res['call'];
+      if (ring is! Map || activeCall != null) {
+        if (ring is! Map && (accept || callId.isNotEmpty)) {
+          // Pressed the ring of a call that already ended.
+          unawaited(notifier.cancelCall().catchError((_) {}));
+          if (accept) {
+            notice = strings.callAlreadyEnded;
+            notifyListeners();
+          }
+        }
+        return;
+      }
+      final data = Map<String, dynamic>.from(ring);
+      final id = '${data['call_id']}';
+      _handleIncomingRing(data);
+      if ('${activeCall?['id']}' != id) return;
+      try {
+        final sig = await api.call('/api/v1/calls/$id/signals');
+        final heldOffer = _ringingSignals.any((x) => x['signal_type'] == 'offer');
+        final seen = _ringingSignals.map((x) => '${x['candidate']}').toSet();
+        for (final raw in (sig['signals'] as List?) ?? const []) {
+          if (raw is! Map) continue;
+          final x = Map<String, dynamic>.from(raw);
+          if (x['signal_type'] == 'offer' && heldOffer) continue;
+          if (x['signal_type'] == 'ice-candidate' &&
+              seen.contains('${x['candidate']}')) {
+            continue;
+          }
+          await _handleCallSignal(x);
+        }
+      } catch (_) {}
+      if (isForeground) unawaited(notifier.cancelCall().catchError((_) {}));
+      if (accept) await acceptCall();
+    } finally {
+      _pickingUp = false;
+    }
   }
 
   Future<void> postCallSignal(String callId, String type,
@@ -1399,6 +1584,7 @@ class SessionController extends ChangeNotifier {
       groupCallSeconds = 0;
       _groupCallTimer =
           Timer.periodic(const Duration(seconds: 1), (_) => groupCallSeconds++);
+      _keepCallAlive();
       notifyListeners();
     });
   }
@@ -1461,6 +1647,7 @@ class SessionController extends ChangeNotifier {
     groupCall = null;
     groupMediaIssue = false;
     groupCallSeconds = 0;
+    _releaseCallAlive();
     notifyListeners();
   }
 
@@ -1592,6 +1779,7 @@ class SessionController extends ChangeNotifier {
     try {
       await callMedia?.setSpeaker(on);
     } catch (_) {}
+    _syncProximity();
     notifyListeners();
   }
 
@@ -1611,8 +1799,16 @@ class SessionController extends ChangeNotifier {
     ];
   }
 
+  /// Build 19: mic (and camera) before media opens. The lock-screen Accept
+  /// skipped the call screen's permission gate, so a phone that never
+  /// granted the mic connected silent. Tests replace it.
+  Future<bool> Function(bool video) ensureCallPermissions = defaultCallPermissions;
+
   Future<void> _ensureCallMedia(Map<String, dynamic> call) async {
     if (callMedia != null) return;
+    try {
+      await ensureCallPermissions(call['kind'] == 'video');
+    } catch (_) {}
     try {
       final media = mediaFactory();
       await media.open(
@@ -1671,14 +1867,19 @@ class SessionController extends ChangeNotifier {
       'state': 'ringing',
       'direction': 'incoming',
       'title': callerTitle,
+      if (data['ring_token'] != null) 'ring_token': '${data['ring_token']}',
     };
+    // Build 18: the ring may have to show over the lock screen.
+    unawaited(callSystem.setLockScreen(true));
     if (notifyEnabled && !isForeground) {
       unawaited(notifier
           .showIncomingCall(
               callId: incomingId,
               title: callerTitle,
               body: callKind == 'video' ? strings.mvIncomingVideo : strings.mvIncomingVoice,
-              locale: locale)
+              locale: locale,
+              kind: callKind,
+              ringToken: '${data['ring_token'] ?? ''}')
           .catchError((_) {}));
     }
     _armNoAnswerTimer(incomingId, false);
@@ -1781,6 +1982,7 @@ class SessionController extends ChangeNotifier {
     callMediaIssue = false;
     callError = '';
     callSeconds = 0;
+    _releaseCallAlive();
     notifyListeners();
   }
 
