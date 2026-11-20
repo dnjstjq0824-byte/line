@@ -322,6 +322,8 @@ class _ProfileRow extends StatelessWidget {
               glyph: name,
               color: dark ? HarborDark.harbor : LunoBrand.deep,
               size: 48,
+              photo: SessionScope.of(context).photoOf(
+                  SessionScope.of(context).selfAvatarUrl),
             ),
             const SizedBox(width: 12),
             Expanded(

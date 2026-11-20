@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
+import 'friend_profile.dart';
 import '../util/app_l10n.dart';
 
 class HomePage extends StatefulWidget {
@@ -85,6 +86,8 @@ class _HomePageState extends State<HomePage> {
                     glyph: name,
                     color: dark ? HarborDark.harbor : HarborLight.harbor,
                     size: 56,
+                    photo: SessionScope.of(context).photoOf(
+                        SessionScope.of(context).selfAvatarUrl),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -244,6 +247,7 @@ class _HomePageState extends State<HomePage> {
                   color: session.colorFromHex(u['peer_color']?.toString(),
                       dark ? HarborDark.harbor : HarborLight.harbor),
                   size: 44,
+                  photo: session.photoOf(u['avatar_url']),
                 ),
                 title: Text(
                     '${u['is_favorite'] == true ? '★ ' : ''}${u['display_name']}${u['kind'] == 'bot' ? ' [BOT]' : ''}',
@@ -283,13 +287,8 @@ class _HomePageState extends State<HomePage> {
                         child: Text(context.l10n.mvReportUser)),
                   ],
                 ),
-                onTap: () async {
-                  final id =
-                      await session.startChat(u['id'], u['display_name']);
-                  if (id != null && context.mounted) {
-                    context.go('/chats/$id');
-                  }
-                },
+                onTap: () => showFriendProfile(
+                    context, Map<String, dynamic>.from(u as Map)),
               ),
         ],
       ),

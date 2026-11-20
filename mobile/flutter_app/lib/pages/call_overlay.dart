@@ -194,6 +194,16 @@ class CallOverlay extends StatelessWidget {
                                   style: TextStyle(
                                       fontSize: HarborType.small,
                                       color: Colors.amber)),
+                            if (session.callError.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(session.callError,
+                                    key: const Key('call-error'),
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        fontSize: HarborType.small,
+                                        color: Colors.amber)),
+                              ),
                           ],
                         ),
                       ),

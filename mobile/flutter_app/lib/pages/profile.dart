@@ -2,7 +2,6 @@
 // Cover + avatar with camera shortcuts, then honest rows: every row either
 // edits a real server field or opens a working sheet. No phone row: the user
 // model carries no verified phone number, so there is nothing true to show.
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,32 +13,9 @@ import '../design/v3.dart';
 import '../state/session.dart';
 import '../theme/luno_theme.dart';
 import '../util/app_l10n.dart';
+import '../util/profile_photo.dart';
 
-// F5: avatar/cover arrive as an R2 serving path (/api/v1/users/...),
-// an absolute URL, or a legacy inline data: URL.
-ImageProvider? profilePhotoImage(String baseUrl, String url, {String? token}) {
-  if (url.startsWith('data:image/')) {
-    final i = url.indexOf('base64,');
-    if (i < 0) return null;
-    try {
-      return MemoryImage(base64Decode(url.substring(i + 7)));
-    } catch (_) {
-      return null;
-    }
-  }
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return NetworkImage(url);
-  }
-  // Versioned paths (?v=) load without a token; older bare paths need the
-  // bearer header or the server answers 401 and the photo never shows.
-  if (url.startsWith('/')) {
-    return NetworkImage('$baseUrl$url',
-        headers: (token == null || token.isEmpty)
-            ? null
-            : {'Authorization': 'Bearer $token'});
-  }
-  return null;
-}
+export '../util/profile_photo.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});

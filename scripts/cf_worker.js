@@ -506,6 +506,10 @@ const LUNO_SCHEMA_PHASE1 = [
     kind TEXT NOT NULL DEFAULT 'voice', started_at TEXT NOT NULL,
     ended_at TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'ended')`,
   `CREATE INDEX IF NOT EXISTS idx_call_logs_conv ON call_logs(conversation_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_call_sessions (
+    id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'voice',
+    state TEXT NOT NULL DEFAULT 'ringing', initiated_by TEXT, started_at TEXT NOT NULL,
+    connected_at TEXT, ended_at TEXT, result TEXT)`,
   `CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, object_key TEXT NOT NULL DEFAULT '',
     mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0,
@@ -2957,12 +2961,38 @@ async function loadUserFromD1(id, knownRole) {
   return u;
 }
 // D7: batch-cache user rows by id (room members, message senders, authors).
+const profileFreshAt = new Map();
+async function refreshCachedProfiles(ids) {
+  const db = dbOf();
+  if (!db) return;
+  const env = typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null;
+  const ttl = Number(env && env.PROFILE_REFRESH_MS !== undefined ? env.PROFILE_REFRESH_MS : 15000);
+  const at = Date.now();
+  const stale = [...new Set(ids || [])].filter(id => id && usersById.has(id) && !officialAccounts.has(id) && !(at - (profileFreshAt.get(id) || 0) < ttl));
+  if (!stale.length) return;
+  for (const id of stale) profileFreshAt.set(id, at);
+  const ph = stale.map(() => '?').join(',');
+  const r = await db.prepare(`SELECT id, display_name, handle, bio, status_message, avatar_url, cover_url, avatar_color FROM users WHERE id IN (${ph})`).bind(...stale).all().catch(() => null);
+  for (const row of (r && r.results) || []) {
+    const u = usersById.get(row.id);
+    if (!u) continue;
+    if (row.display_name) u.display_name = row.display_name;
+    u.handle = row.handle || '';
+    u.bio = row.bio || '';
+    u.status_message = row.status_message || '';
+    u.avatar_url = row.avatar_url || '';
+    u.cover_url = row.cover_url || '';
+    u.avatar_color = row.avatar_color || '#4F7CFF';
+  }
+}
 async function hydrateUsersByIds(ids) {
   const missing = [...new Set(ids || [])].filter(id => id && !usersById.has(id) && !officialAccounts.has(id));
-  if (!missing.length) return;
+  if (!missing.length) { await refreshCachedProfiles(ids); return; }
   const db = dbOf();
   if (!db) return;
   await ensureSchema();
+  await refreshCachedProfiles(ids);
+  for (const id of missing) profileFreshAt.set(id, Date.now());
   const ph = missing.map(() => '?').join(',');
   let rows = null;
   if (!rolesTableAbsent) {
@@ -3950,6 +3980,27 @@ async function hydrateDurableConversation(cid) {
   await hydrateUsersByIds(conv.members);
   return conv;
 }
+// Calls across isolates: callSessions was the only record, so an accept,
+// hang-up or SDP/ICE signal that landed on another isolate got 404 and the
+// peer kept ringing. D1 is now authoritative; memory is a cache.
+async function loadCallSession(id) {
+  const db = dbOf();
+  if (!db) return callSessions.get(id) || null;
+  await ensureSchema();
+  const row = await db.prepare('SELECT * FROM luno_call_sessions WHERE id = ?').bind(id).first().catch(() => null);
+  if (!row) return callSessions.get(id) || null;
+  const call = { id: row.id, conversation_id: row.conversation_id, kind: row.kind, state: row.state, initiated_by: row.initiated_by, started_at: row.started_at, connected_at: row.connected_at || null, ended_at: row.ended_at || null };
+  if (row.result) call.result = row.result;
+  callSessions.set(id, call);
+  return call;
+}
+async function saveCallSession(call) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT OR REPLACE INTO luno_call_sessions (id, conversation_id, kind, state, initiated_by, started_at, connected_at, ended_at, result) VALUES (?,?,?,?,?,?,?,?,?)')
+    .bind(call.id, call.conversation_id, call.kind || 'voice', call.state || 'ringing', call.initiated_by || null, call.started_at || now(), call.connected_at || null, call.ended_at || null, call.result || null).run();
+}
 async function hydrateDurableConversations(userId) {
   if (!durableConversationsEnabled()) return;
   const { results } = await dbOf().prepare('SELECT conversation_id FROM luno_conversation_members WHERE user_id = ?').bind(userId).all();
@@ -4845,6 +4896,7 @@ async function fetchLinkPreview(target) {
   if (p === 'friends') {
     await hydrateSocialGraph(myId);
     if (method === 'GET') {
+      await refreshCachedProfiles(friendIds(myId));
       const today = now().slice(5, 10);
       const list = friendIds(myId).map(id => {
         const u = usersById.get(id);
@@ -6025,6 +6077,7 @@ async function deleteAttachmentEverywhere(attId) {
     }
     const call = { id: uid(), conversation_id: conv.id, kind: b.kind || 'voice', state: 'ringing', initiated_by: myId, started_at: now(), connected_at: null, ended_at: null };
     callSessions.set(call.id, call);
+    await saveCallSession(call);
     const peerId = conv.members.find(x => x !== myId);
     const callkitPayload = {
       type: 'call.ringing',
@@ -6097,7 +6150,7 @@ async function deleteAttachmentEverywhere(attId) {
     });
   }
   if ((m = p.match(/^calls\/([\w-]+)\/state$/)) && method === 'POST') {
-    const call = callSessions.get(m[1]);
+    const call = await loadCallSession(m[1]);
     if (!call) return bad('통화를 찾을 수 없습니다', 404);
     let stateConv = conversations.get(call.conversation_id);
     if (!stateConv || !stateConv.members.includes(myId)) {
@@ -6111,13 +6164,15 @@ async function deleteAttachmentEverywhere(attId) {
     if (b.state === 'connected') {
       call.state = 'connected';
       call.connected_at = call.connected_at || now();
-      broadcast({ type: 'call.state', call_id: call.id, state: 'connected' });
+      await saveCallSession(call);
+      broadcast({ type: 'call.state', call_id: call.id, conversation_id: call.conversation_id, state: 'connected' });
       return json({ status: 'connected' });
     }
     call.ended_at = now();
     call.state = 'ended';
     const duration = call.connected_at ? Math.round((Date.parse(call.ended_at) - Date.parse(call.connected_at)) / 1000) : 0;
     call.result = call.connected_at ? 'completed' : (b.state === 'declined' ? 'declined' : (call.initiated_by === myId ? 'canceled' : 'missed'));
+    await saveCallSession(call);
     if (dbOf()) {
       await ensureSchema();
       await dbOf().prepare('INSERT OR IGNORE INTO call_logs (id, conversation_id, caller_id, kind, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(call.id, call.conversation_id, call.initiated_by, call.kind, call.started_at, call.ended_at, call.result).run();
@@ -6127,7 +6182,7 @@ async function deleteAttachmentEverywhere(attId) {
     // D5: persisted so the call ledger survives new isolates.
     const durText = Math.floor(duration / 60) + ':' + String(duration % 60).padStart(2, '0');
     await pushPersistent(call.conversation_id, call.initiated_by, { kind: 'call_status', body: (call.kind === 'video' ? '영상통화' : '음성통화') + (duration > 0 ? ' ' + durText : ''), metadata: { call_id: call.id, call_type: call.kind, call_kind: call.kind, duration: durText, call_status: call.result, status: call.result } });
-    broadcast({ type: 'call.state', call_id: call.id, state: 'ended', result: call.result });
+    broadcast({ type: 'call.state', call_id: call.id, conversation_id: call.conversation_id, state: 'ended', result: call.result });
     return json({ status: 'ended', result: call.result, duration });
   }
 
@@ -7609,12 +7664,12 @@ async function downloadPage(env, url) {
 const LATEST_ANDROID_BUILD = {
   platform: 'android',
   version: '2.0.0',
-  build: 15,
+  build: 16,
   package: 'com.bookingnetwork.messenger.global_messenger',
   assets: [
-    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44083934, sha256: '517EADCC1A6085C387C49334EA5407065C6E811ACFFED5BC14AD8204864A7951', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build15/luno-messenger-arm64.apk' },
-    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35038546, sha256: '3E91D88B1E7431597A3BC82733A29428D6544EB8394F42F338E12F4F5816AFDF', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build15/luno-messenger-arm32.apk' },
-    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50539222, sha256: 'D5840B77D80626D503A3E1639C8B167240B8EACF5D1C7FAA71A44F09A91E1BAA', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build15/luno-messenger-x86_64.apk' },
+    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44084010, sha256: 'CC0FF742DD69F409F5C445C7D67910CB957F727906860CBB6CF73220BECACCC5', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build16/luno-messenger-arm64.apk' },
+    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35087774, sha256: '608DEAEF1E3CCF7F41EB19DB4A42999FD750DAF16D165D8C03FC461748FF3C2A', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build16/luno-messenger-arm32.apk' },
+    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50539298, sha256: '73DFE98027B54BDFDBDA95884DF342F5BE79876A783B22A487A2FB8262B608FF', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build16/luno-messenger-x86_64.apk' },
   ],
 };
 
@@ -8591,7 +8646,7 @@ const workerCore = {
       // requires both ends in the same live call room, leave fans out only
       // for participants. ice-servers stays public by design.
       if (callPath && !['ice-servers', 'group'].includes(callPath[1])) {
-        const call = callSessions.get(callPath[1]);
+        const call = await loadCallSession(callPath[1]);
         // A-12: member check falls back to D1 so a durable room hydrated on
         // another isolate still authorizes signaling, state and quality posts.
         let callConv = call ? conversations.get(call.conversation_id) : null;
@@ -8856,6 +8911,7 @@ const workerCore = {
         broadcast({
           type: 'call.signal',
           call_id: callSigMatch[1],
+          conversation_id: callSessions.get(callSigMatch[1])?.conversation_id,
           from_user_id: authUser.id,
           signal_type: body.signal_type,
           sdp: body.sdp,

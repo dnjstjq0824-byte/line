@@ -32,7 +32,7 @@ const STATIC = new Set([
   'REPORT_CATEGORIES', 'HIDE_TARGET_TYPES', // F29: frozen report + hide vocabularies
 ]);
 const EPHEMERAL = new Set([
-  'activeSockets', 'AUTH_CTX', 'callSessions', 'groupCallRooms',
+  'activeSockets', 'AUTH_CTX', 'groupCallRooms',
   'qrChallenges', 'phoneVerificationCodes', 'passkeyChallenges',
   'recoveryChallenges', 'recoveryMailOutbox', 'verificationMailOutbox', 'smsOutbox',
   'translateProviderCalls', // T1: per-isolate provider-call probe for tests
@@ -41,6 +41,8 @@ const EPHEMERAL = new Set([
   'f22Requests', 'f22Errors', // F22: per-isolate request/error counters (reset on evict, /metrics-labeled)
 ]);
 const CACHE = new Set([
+  'callSessions', // build 16: D1 write-through (luno_call_sessions); every /calls/:id request re-reads it
+  'profileFreshAt', // build 16: per-isolate TTL stamps for re-reading peers' public profile from D1
   'users', 'usersById', 'sessions', 'revokedTokens', 'wsTickets',
   'friendships', 'friendMeta', 'conversations', 'messages', 'readCursors',
   'reactionStore', 'noteStore', 'eventStore', 'polls', 'pollVotes',

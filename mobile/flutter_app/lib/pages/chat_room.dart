@@ -24,6 +24,7 @@ import '../util/chat_time.dart';
 import '../util/call_groups.dart';
 import '../util/app_l10n.dart';
 import '../widgets/pc_agent_bar.dart';
+import 'friend_profile.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String conversationId;
@@ -80,8 +81,19 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     }
   }
 
+  SessionController? _session;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _session = SessionScope.of(context, listen: false);
+  }
+
   @override
   void dispose() {
+    // Leaving the room: drop the selection (unless another room already
+    // took over) so unread counts and read receipts work again.
+    _session?.closeChatIfOpen(widget.conversationId);
     _scroll.dispose();
     message.dispose();
     super.dispose();
@@ -1077,20 +1089,20 @@ class _SignalBubble extends StatelessWidget {
         ),
       ),
     );
+    final sender = mine
+        ? null
+        : session.memberOf(session.selectedId, '${m['sender_id']}');
     final avatar = !mine && groupLead
-        ? Container(
-            width: LunoBubble.avatarSize,
-            height: LunoBubble.avatarSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
+        ? GestureDetector(
+            onTap: sender == null
+                ? null
+                : () => showFriendProfile(context, sender),
+            child: LineAvatar(
+              glyph: peerName,
               color: dark ? HarborDark.harbor : HarborLight.harbor,
+              size: LunoBubble.avatarSize,
+              photo: session.photoOf(sender?['avatar_url']),
             ),
-            child: Text(peerName.isEmpty ? '?' : peerName.characters.first,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700)),
           )
         : const SizedBox(width: LunoBubble.continuedIndent);
     return Align(
@@ -1177,20 +1189,20 @@ class _CallBubble extends StatelessWidget {
     final meta = m['metadata'];
     final video = meta is Map && meta['call_type'] == 'video';
     final duration = callBubbleDuration(m);
+    final sender = mine
+        ? null
+        : session.memberOf(session.selectedId, '${m['sender_id']}');
     final avatar = !mine && groupLead
-        ? Container(
-            width: LunoBubble.avatarSize,
-            height: LunoBubble.avatarSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
+        ? GestureDetector(
+            onTap: sender == null
+                ? null
+                : () => showFriendProfile(context, sender),
+            child: LineAvatar(
+              glyph: peerName,
               color: dark ? HarborDark.harbor : HarborLight.harbor,
+              size: LunoBubble.avatarSize,
+              photo: session.photoOf(sender?['avatar_url']),
             ),
-            child: Text(peerName.isEmpty ? '?' : peerName.characters.first,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700)),
           )
         : const SizedBox(width: LunoBubble.continuedIndent);
     return Align(
