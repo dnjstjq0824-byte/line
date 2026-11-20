@@ -15,6 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private lateinit var linkChannel: MethodChannel
     private var pendingShare: Map<String, Any?>? = null
+    private var callTones: CallTones? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -30,6 +31,29 @@ class MainActivity : FlutterActivity() {
             }
         })
         collectShareIntent(intent, true)
+
+        // Build 15: call ringback/ringtone (see CallTones).
+        val tones = CallTones(applicationContext)
+        callTones = tones
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "luno.tones")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        tones.start(call.argument<String>("mode") ?: "")
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        tones.stop()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    override fun onDestroy() {
+        callTones?.stop()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

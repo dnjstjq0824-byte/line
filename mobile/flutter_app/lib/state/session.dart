@@ -221,6 +221,11 @@ class SessionController extends ChangeNotifier {
   int callSeconds = 0;
   Timer? _noAnswerTimer;
   Timer? _callTimer;
+  // Signals (offer, ICE) that reach the callee while the call still rings.
+  // Opening WebRTC then would put Android in call audio mode, which mutes
+  // the ringtone and opens the mic before the user said yes; they are
+  // replayed once the call is accepted.
+  final List<Map<String, dynamic>> _ringingSignals = [];
   // F15: group call mesh. groupCall holds room_id/title/kind/participants
   // (userBrief maps); one peer CallMedia per remote seat shares the uplink
   // opened on groupLocalMedia. Same joiner-offers rule as the web.
@@ -393,6 +398,12 @@ class SessionController extends ChangeNotifier {
     await run(() async {
       if (registerMode) {
         Map<String, dynamic> reg;
+        // The versions load when the login page opens; if that request
+        // failed, ticking both boxes would still send empty consent and the
+        // server would refuse. Load them now instead.
+        if (legalTermsVersion.isEmpty || legalPrivacyVersion.isEmpty) {
+          await loadLegalVersions();
+        }
         try {
           reg = await api.call('/api/v1/auth/register', method: 'POST', data: {
             'email': email.trim(),
@@ -405,8 +416,16 @@ class SessionController extends ChangeNotifier {
             },
           });
         } on ApiException catch (e) {
+          // Build 15: these used to leave no trace, so a refused signup was
+          // invisible in telemetry.
+          if (e.code == 'CONSENT_REQUIRED' ||
+              e.code == 'BIRTHDATE_REQUIRED' ||
+              e.code == 'UNDERAGE') {
+            reportError(e);
+          }
           // F24: consent failures stay on the form with a localized message.
           if (e.code == 'CONSENT_REQUIRED') {
+            unawaited(loadLegalVersions());
             error = strings.consentRequiredErr;
             notifyListeners();
             return;
@@ -1080,6 +1099,13 @@ class SessionController extends ChangeNotifier {
         callMediaIssue = true;
       }
       callMedia = media;
+      // The speaker button shows callSpeaker; make the route match it (the
+      // ringback follows the call route too).
+      if (media != null) {
+        try {
+          await media.setSpeaker(callSpeaker);
+        } catch (_) {}
+      }
       var offerSdp = '';
       if (media != null) {
         try {
@@ -1122,6 +1148,11 @@ class SessionController extends ChangeNotifier {
       activeCall = {...call, 'state': 'connected'};
       _cancelNoAnswerTimer();
       _startCallTimer();
+      final held = List<Map<String, dynamic>>.of(_ringingSignals);
+      _ringingSignals.clear();
+      for (final signal in held) {
+        await _handleCallSignal(signal);
+      }
       notifyListeners();
     });
   }
@@ -1455,6 +1486,9 @@ class SessionController extends ChangeNotifier {
           postCallSignal(callId, 'ice-candidate', candidate: jsonEncode(cand))));
       media.onRemoteStream(() => notifyListeners());
       callMedia = media;
+      try {
+        await media.setSpeaker(callSpeaker);
+      } catch (_) {}
     } catch (_) {
       callMediaIssue = true;
     }
@@ -1521,6 +1555,11 @@ class SessionController extends ChangeNotifier {
     if (data['from_user_id'] == selfId) return;
     final callId = '${call['id'] ?? call['call_id']}';
     if (data['call_id'] != null && '${data['call_id']}' != callId) return;
+    if (call['direction'] == 'incoming' &&
+        '${call['state'] ?? 'ringing'}' == 'ringing') {
+      _ringingSignals.add(data);
+      return;
+    }
     await _ensureCallMedia(call);
     final media = callMedia;
     if (media == null) return;
@@ -1594,6 +1633,7 @@ class SessionController extends ChangeNotifier {
   }
 
   void _clearCallLocal() {
+    _ringingSignals.clear();
     _cancelNoAnswerTimer();
     _callTimer?.cancel();
     _callTimer = null;

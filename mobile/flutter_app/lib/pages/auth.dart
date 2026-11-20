@@ -88,8 +88,11 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
+    // Build 15: SafeArea — edge-to-edge drew the error strip under the
+    // status bar, so a refused signup looked like a dead button.
     return Scaffold(
-      body: Column(
+      body: SafeArea(
+        child: Column(
         children: [
           const StatusStrip(),
           Expanded(
@@ -201,6 +204,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -459,6 +463,19 @@ class _GateForm extends StatelessWidget {
               onSubmitted: (_) => onSubmit(),
             ),
             const SizedBox(height: 16),
+            // The form's own error line, right above the button, so a
+            // refused submit is never silent.
+            if (session.error.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  session.error,
+                  key: const Key('gate-form-error'),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: dark ? HarborDark.danger : HarborLight.danger),
+                ),
+              ),
             FilledButton(
               onPressed: session.busy ? null : onSubmit,
               child: Text(register ? context.l10n.authSignUp : context.l10n.signInBtn),
@@ -498,8 +515,16 @@ class _ConsentRow extends StatelessWidget {
           value: value,
           onChanged: (v) => onChanged(v ?? false),
         ),
+        // Tapping the sentence ticks the box too (only the 18px box did).
         Expanded(
-          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          child: InkWell(
+            onTap: () => onChanged(!value),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child:
+                  Text(label, style: Theme.of(context).textTheme.bodySmall),
+            ),
+          ),
         ),
         TextButton(
           onPressed: onOpenLink,
