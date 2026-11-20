@@ -45,6 +45,8 @@ class MorePage extends StatelessWidget {
                         glyph: name,
                         color: dark ? HarborDark.harbor : HarborLight.harbor,
                         size: 48,
+                        photo: SessionScope.of(context).photoOf(
+                            SessionScope.of(context).selfAvatarUrl),
                       ),
                       const SizedBox(width: 12),
                       Expanded(

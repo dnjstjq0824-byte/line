@@ -30,6 +30,7 @@ import '../util/channel_slot.dart';
 import '../util/feed_posts.dart';
 import '../util/official_accounts.dart';
 import '../util/photo_effects.dart';
+import '../util/profile_photo.dart';
 import '../util/poll_options.dart';
 import '../util/push_registrar.dart';
 import '../util/send_peer.dart';
@@ -766,6 +767,13 @@ class SessionController extends ChangeNotifier {
       if (autoTranslate && !mine && item['kind'] == 'text') {
         translateMessage(item['id'], item['body']);
       }
+      // Build 16: the room is open and on screen, so this message is read.
+      // Before, read was only posted when the room was opened, so a sender
+      // never saw "읽음" for anything that arrived while the peer was in it.
+      if (!mine && isForeground) {
+        final seq = (item['sequence'] as num?)?.toInt() ?? 0;
+        _scheduleRead(cid, seq);
+      }
     }
     final idx = chats.indexWhere((c) => '${c['id']}' == cid);
     if (idx >= 0) {
@@ -838,7 +846,16 @@ class SessionController extends ChangeNotifier {
   void setForeground(bool value) {
     final was = isForeground;
     isForeground = value;
-    if (value && !was) unawaited(resumeConnection());
+    if (value && !was) {
+      unawaited(resumeConnection());
+      // Back on screen with a room open: what arrived meanwhile is now read.
+      if (selectedId.isNotEmpty && messages.isNotEmpty) {
+        final last = messages.last;
+        if (last is Map && '${last['sender_id']}' != selfId) {
+          _scheduleRead(selectedId, (last['sequence'] as num?)?.toInt() ?? 0);
+        }
+      }
+    }
   }
 
   void setNotifyEnabled(bool value) {
@@ -886,6 +903,13 @@ class SessionController extends ChangeNotifier {
   /// A-23: apply a conversation.read event in place — zero one row's unread.
   void applyConversationRead(dynamic data) {
     final cid = '${data['conversation_id']}';
+    final reader = '${data['user_id'] ?? ''}';
+    // A peer read: light up "읽음" on my messages in the open room now
+    // (it used to appear only after leaving and re-entering the room).
+    if (reader.isNotEmpty && reader != selfId) {
+      if (cid == selectedId) _applyPeerRead(cid, reader, data['sequence']);
+      return;
+    }
     final idx = chats.indexWhere((c) => '${c['id']}' == cid);
     if (idx >= 0) {
       final row = Map<String, dynamic>.from(chats[idx] as Map);
@@ -893,6 +917,82 @@ class SessionController extends ChangeNotifier {
       chats[idx] = row;
       notifyListeners();
     }
+  }
+
+  void _applyPeerRead(String cid, String reader, dynamic rawSeq) {
+    final seq = (rawSeq as num?)?.toInt() ?? 0;
+    if (seq <= 0) return;
+    final row = chats.firstWhere((c) => c is Map && '${c['id']}' == cid,
+        orElse: () => const <String, dynamic>{});
+    final direct = row is Map && '${row['kind'] ?? ''}' == 'direct';
+    if (!direct) {
+      // Groups count distinct readers; ask the server instead of guessing.
+      _scheduleReadCountRefresh(cid);
+      return;
+    }
+    var changed = false;
+    for (final m in messages) {
+      if (m is! Map || '${m['sender_id']}' != selfId) continue;
+      final s = (m['sequence'] as num?)?.toInt() ?? 0;
+      if (s > 0 && s <= seq && ((m['read_count'] as num?)?.toInt() ?? 0) < 1) {
+        m['read_count'] = 1;
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  Timer? _readTimer;
+  int _pendingReadSeq = 0;
+  String _pendingReadCid = '';
+
+  void _scheduleRead(String cid, int seq) {
+    if (seq <= 0) return;
+    if (_pendingReadCid != cid) _pendingReadSeq = 0;
+    _pendingReadCid = cid;
+    if (seq > _pendingReadSeq) _pendingReadSeq = seq;
+    _readTimer?.cancel();
+    _readTimer = Timer(const Duration(milliseconds: 400), () async {
+      final s = _pendingReadSeq;
+      _pendingReadSeq = 0;
+      if (selectedId != cid || !isForeground) return;
+      try {
+        await api.call('/api/v1/conversations/$cid/read',
+            method: 'POST', data: {'sequence': s});
+      } catch (_) {}
+    });
+  }
+
+  Timer? _readCountTimer;
+  void _scheduleReadCountRefresh(String cid) {
+    _readCountTimer?.cancel();
+    _readCountTimer = Timer(const Duration(milliseconds: 600), () async {
+      if (selectedId != cid) return;
+      try {
+        final res = await api.call('/api/v1/conversations/$cid/messages');
+        if (selectedId != cid) return;
+        final counts = <String, dynamic>{};
+        for (final m in List<dynamic>.from(res['messages'] ?? [])) {
+          if (m is Map) counts['${m['id']}'] = m['read_count'];
+        }
+        for (final m in messages) {
+          if (m is Map && counts.containsKey('${m['id']}')) {
+            m['read_count'] = counts['${m['id']}'];
+          }
+        }
+        notifyListeners();
+      } catch (_) {}
+    });
+  }
+
+  /// The room page left the screen. Forget the selection so new messages
+  /// count as unread again, and re-entering reloads and marks read. (The
+  /// selection used to stick forever: closeChat had no caller.)
+  void closeChatIfOpen(String conversationId) {
+    if (selectedId != conversationId) return;
+    _readTimer?.cancel();
+    _readCountTimer?.cancel();
+    closeChat();
   }
 
   /// Tapped search entities (friend/chat/user), newest first, cap 20.
@@ -1137,14 +1237,49 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  bool _callActing = false;
+
+  /// Shown on the call screen itself (the global error strip is hidden
+  /// under the full-screen call UI).
+  String callError = '';
+
+  /// Call buttons bypass run(): its global busy gate silently dropped an
+  /// accept or hang-up whenever any other action (room load, send) was in
+  /// flight — "pressed accept, nothing happened".
+  Future<void> _callAction(Future<void> Function() action) async {
+    if (_callActing) return;
+    _callActing = true;
+    callError = '';
+    notifyListeners();
+    try {
+      await action();
+    } catch (e) {
+      callError = e.toString().replaceFirst('Exception: ', '');
+      reportError(e);
+    } finally {
+      _callActing = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> acceptCall() {
     final call = activeCall;
     if (call == null) return Future.value();
-    return run(() async {
+    return _callAction(() async {
       await _ensureCallMedia(call);
       final callId = '${call['id'] ?? call['call_id']}';
-      await api.call('/api/v1/calls/$callId/state',
-          method: 'POST', data: {'state': 'connected'});
+      try {
+        await api.call('/api/v1/calls/$callId/state',
+            method: 'POST', data: {'state': 'connected'});
+      } on ApiException catch (e) {
+        // The call is gone (caller hung up first): stop ringing here too.
+        if (e.statusCode == 404) {
+          _clearCallLocal();
+          return;
+        }
+        rethrow;
+      }
+      if (activeCall == null) return; // ended while we were connecting
       activeCall = {...call, 'state': 'connected'};
       _cancelNoAnswerTimer();
       _startCallTimer();
@@ -1160,7 +1295,7 @@ class SessionController extends ChangeNotifier {
   Future<void> declineCall() {
     final call = activeCall;
     if (call == null) return Future.value();
-    return run(() async {
+    return _callAction(() async {
       final callId = '${call['id'] ?? call['call_id']}';
       try {
         await api.call('/api/v1/calls/$callId/state',
@@ -1172,7 +1307,8 @@ class SessionController extends ChangeNotifier {
 
   Future<void> endCall() {
     if (activeCall == null) return Future.value();
-    return run(() async {
+    // Stop the local sound and screen first; the server call is best effort.
+    return _callAction(() async {
       final callId = activeCall!['id'] ?? activeCall!['call_id'];
       try {
         await api.call('/api/v1/calls/$callId/state',
@@ -1643,6 +1779,7 @@ class SessionController extends ChangeNotifier {
     if (media != null) unawaited(media.dispose().catchError((_) {}));
     activeCall = null;
     callMediaIssue = false;
+    callError = '';
     callSeconds = 0;
     notifyListeners();
   }
@@ -3179,6 +3316,40 @@ class SessionController extends ChangeNotifier {
     if (min < 60) return strings.relMinutesAgo(min);
     if (min < 60 * 24) return strings.relHoursAgo((min / 60).round());
     return strings.relDaysAgo((min / 1440).round());
+  }
+
+  /// Someone's profile photo / cover as an image, or null (initials then).
+  ImageProvider? photoOf(dynamic url) {
+    final u = url == null ? '' : '$url'.trim();
+    if (u.isEmpty) return null;
+    return profilePhotoImage(api.baseUrl, u, token: api.token);
+  }
+
+  /// The member brief for [userId] in a room (avatar, name), if loaded.
+  Map<String, dynamic>? memberOf(String conversationId, String userId) {
+    for (final c in chats) {
+      if (c is! Map || '${c['id']}' != conversationId) continue;
+      final ms = c['members'];
+      if (ms is! List) return null;
+      for (final m in ms) {
+        if (m is Map && '${m['id']}' == userId) {
+          return Map<String, dynamic>.from(m);
+        }
+      }
+    }
+    return null;
+  }
+
+  /// The other person in a 1:1 room.
+  Map<String, dynamic>? peerOf(Map room) {
+    final ms = room['members'];
+    if (ms is! List) return null;
+    for (final m in ms) {
+      if (m is Map && '${m['id']}' != selfId) {
+        return Map<String, dynamic>.from(m);
+      }
+    }
+    return null;
   }
 
   // Server colours arrive as #RRGGBB. Anything else falls back.

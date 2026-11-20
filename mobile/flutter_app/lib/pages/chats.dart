@@ -352,6 +352,9 @@ class _TalkRow extends StatelessWidget {
                 color: session.colorFromHex(
                     c['peer_color']?.toString(),
                     dark ? HarborDark.harbor : HarborLight.harbor),
+                photo: session.photoOf(c['kind'] == 'direct'
+                    ? (session.peerOf(c) ?? const {})['avatar_url']
+                    : c['avatar_url']),
               ),
               const SizedBox(width: 12),
               Expanded(

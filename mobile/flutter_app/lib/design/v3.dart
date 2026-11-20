@@ -258,12 +258,15 @@ class IdentityTile extends StatelessWidget {
   final String glyph;
   final Color color;
   final double size;
-  const IdentityTile({super.key, required this.glyph, required this.color, this.size = 40});
+  /// Build 16: the person's real photo when they set one (initials before
+  /// it loads or if it fails).
+  final ImageProvider? photo;
+  const IdentityTile({super.key, required this.glyph, required this.color, this.size = 40, this.photo});
 
   @override
   Widget build(BuildContext context) {
     final ch = glyph.isEmpty ? '?' : glyph.characters.first;
-    return Container(
+    final initials = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
@@ -276,6 +279,20 @@ class IdentityTile extends StatelessWidget {
               color: Colors.white,
               fontWeight: FontWeight.w800,
               fontSize: size * 0.42)),
+    );
+    if (photo == null) return initials;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(HarborRadius.avatar),
+      child: Image(
+        image: photo!,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => initials,
+        frameBuilder: (_, child, frame, sync) =>
+            sync || frame != null ? child : initials,
+      ),
     );
   }
 }
@@ -292,12 +309,14 @@ class LineAvatar extends StatelessWidget {
   final String glyph;
   final Color color;
   final double size;
-  const LineAvatar({super.key, required this.glyph, required this.color, this.size = 48});
+  /// Build 16: the person's real photo when they set one.
+  final ImageProvider? photo;
+  const LineAvatar({super.key, required this.glyph, required this.color, this.size = 48, this.photo});
 
   @override
   Widget build(BuildContext context) {
     final ch = glyph.isEmpty ? '?' : glyph.characters.first;
-    return Container(
+    final initials = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
@@ -307,6 +326,19 @@ class LineAvatar extends StatelessWidget {
               color: Colors.white,
               fontWeight: FontWeight.w800,
               fontSize: size * 0.4)),
+    );
+    if (photo == null) return initials;
+    return ClipOval(
+      child: Image(
+        image: photo!,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => initials,
+        frameBuilder: (_, child, frame, sync) =>
+            sync || frame != null ? child : initials,
+      ),
     );
   }
 }

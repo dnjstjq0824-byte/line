@@ -24,8 +24,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '가입'));
     await tester.pumpAndSettle();
+    // Shown in the top strip and again right above the button (build 15).
     expect(find.text('이용약관과 개인정보 처리방침에 모두 동의해 주세요.'),
-        findsOneWidget);
+        findsNWidgets(2));
 
     // Agree + under-14 birthdate: blocked on-device.
     await tester.tap(find.byType(Checkbox).at(0));
@@ -37,6 +38,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '가입'));
     await tester.pumpAndSettle();
-    expect(find.text('만 14세 이상만 가입할 수 있습니다.'), findsOneWidget);
+    expect(find.text('만 14세 이상만 가입할 수 있습니다.'), findsNWidgets(2));
   });
 }
