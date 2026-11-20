@@ -388,7 +388,9 @@ void main() {
       expect(media.disposed, isTrue);
     });
 
-    test('backgrounding ends the call and tells the peer', () async {
+    // Build 18: a call is a phone call now: leaving the app or turning the
+    // screen off keeps it (a foreground service holds the mic).
+    test('backgrounding keeps the call', () async {
       final fake = FakeHttp();
       final media = FakeCallMedia();
       fake.handler = (req, body) async {
@@ -402,12 +404,9 @@ void main() {
       s.onAppBackgrounded();
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
-      expect(s.activeCall, isNull);
-      expect(
-          fake.calls.any((c) =>
-              c.contains('/api/v1/calls/call-1/state') &&
-              c.contains('"state":"ended"')),
-          isTrue);
+      expect(s.activeCall, isNotNull);
+      expect(fake.calls.any((c) => c.contains('/api/v1/calls/call-1/state')),
+          isFalse);
     });
   });
 }

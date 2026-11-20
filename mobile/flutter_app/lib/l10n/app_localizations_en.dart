@@ -2055,4 +2055,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get walletNoTx => 'No transactions yet.';
+
+  @override
+  String get callDeclineAction => 'Decline';
+
+  @override
+  String get callOngoingTitle => 'In a call';
+
+  @override
+  String get callOngoingBody => 'Tap to return to the call';
+
+  @override
+  String get callAlreadyEnded => 'This call has already ended';
 }

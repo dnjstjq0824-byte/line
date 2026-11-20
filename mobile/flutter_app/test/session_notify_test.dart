@@ -58,8 +58,10 @@ class FakeNotifier implements AppNotifier {
       {required String callId,
       required String title,
       required String body,
-      String locale = 'ko'}) async {
-    calls.add({'callId': callId, 'title': title, 'body': body});
+      String locale = 'ko',
+      String kind = 'voice',
+      String ringToken = ''}) async {
+    calls.add({'callId': callId, 'title': title, 'body': body, 'kind': kind, 'ringToken': ringToken});
   }
 
   @override

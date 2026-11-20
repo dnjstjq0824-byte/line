@@ -481,7 +481,7 @@ void main() {
           isTrue);
     });
 
-    test('backgrounding leaves the group call', () async {
+    test('backgrounding keeps the group call', () async {
       final fake = FakeGroupHttp();
       final created = <FakeGroupMedia>[];
       fake.handler = (req, body) async {
@@ -500,10 +500,11 @@ void main() {
       s.onAppBackgrounded();
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
-      expect(s.groupCall, isNull);
+      // Build 18: the group call survives the screen going off.
+      expect(s.groupCall, isNotNull);
       expect(
           fake.calls.any((c) => c.contains('/api/v1/calls/group/leave')),
-          isTrue);
+          isFalse);
     });
   });
 }

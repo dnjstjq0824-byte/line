@@ -7,13 +7,21 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'app_l10n.dart';
+import 'call_push.dart';
 
 abstract class AppNotifier {
   Future<void> init({Future<void> Function(String? payload)? onTap, String locale = 'ko'});
   Future<void> showMessage(
       {required String roomId, required String title, required String body, String locale = 'ko'});
+  /// Build 18: [kind] picks the voice/video wording; [ringToken] lets the
+  /// lock-screen Decline button end the call without opening the app.
   Future<void> showIncomingCall(
-      {required String callId, required String title, required String body, String locale = 'ko'});
+      {required String callId,
+      required String title,
+      required String body,
+      String locale = 'ko',
+      String kind = 'voice',
+      String ringToken = ''});
   Future<void> cancelCall();
 }
 
@@ -23,10 +31,6 @@ class ProdAppNotifier implements AppNotifier {
 
   final FlutterLocalNotificationsPlugin _plugin;
 
-  // (luno-call, 0): the identity of the server's FCM call push.
-  static const _callId = 0;
-  static const _callTag = 'luno-call';
-
   @override
   Future<void> init(
       {Future<void> Function(String? payload)? onTap,
@@ -35,8 +39,11 @@ class ProdAppNotifier implements AppNotifier {
         InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher'));
     await _plugin.initialize(
       settings: settings,
+      // Build 18: the ring's Accept button arrives as "accept:<payload>";
+      // Decline never reaches here (it runs in a background isolate).
       onDidReceiveNotificationResponse: (response) =>
-          onTap?.call(response.payload),
+          onTap?.call(encodeResponse(response.payload, response.actionId)),
+      onDidReceiveBackgroundNotificationResponse: lunoNotificationBackground,
     );
     final android =
         _plugin.resolvePlatformSpecificImplementation<
@@ -78,29 +85,24 @@ class ProdAppNotifier implements AppNotifier {
     );
   }
 
+  // Build 18: the same full-screen ring the closed-app push draws.
   @override
   Future<void> showIncomingCall(
       {required String callId,
       required String title,
       required String body,
-      String locale = 'ko'}) {
-    return _plugin.show(
-      id: _callId,
-      title: title,
-      body: body,
-      notificationDetails: NotificationDetails(
-          android: AndroidNotificationDetails(
-              'luno_calls', stringsFor(locale).notifCallChannel,
-              importance: Importance.max,
-              priority: Priority.max,
-              ongoing: true,
-              autoCancel: false,
-              tag: _callTag)),
-      payload: 'call:$callId',
-    );
+      String locale = 'ko',
+      String kind = 'voice',
+      String ringToken = ''}) {
+    return showRing(_plugin,
+        callId: callId,
+        ringToken: ringToken,
+        callerName: title,
+        kind: kind,
+        locale: locale);
   }
 
   // Also clears the server's closed-app call push (same tag, id 0).
   @override
-  Future<void> cancelCall() => _plugin.cancel(id: _callId, tag: _callTag);
+  Future<void> cancelCall() => clearRing(_plugin);
 }

@@ -14,6 +14,7 @@ import 'pages/call_overlay.dart';
 import 'pages/group_call_overlay.dart';
 import 'router.dart';
 import 'state/session.dart';
+import 'util/call_push.dart';
 import 'util/deep_links.dart';
 import 'util/error_report.dart';
 
@@ -31,6 +32,8 @@ void main() {
     reportError(error, {'surface': 'app', 'source': 'async'});
     return true;
   };
+  // Build 18: rings while the app is closed (data-only call push).
+  registerCallPushHandler();
   runApp(const MessengerApp());
 }
 
@@ -52,6 +55,7 @@ class _MessengerAppState extends State<MessengerApp>
   void initState() {
     super.initState();
     _session = SessionController();
+    _session.callSystem = ProdCallSystem(locale: () => _session.locale);
     _session.addListener(_syncLocale);
     _router = buildRouter(_session);
     // F21: warm links + shares (cold VIEW links ride the engine route).
@@ -93,7 +97,7 @@ class _MessengerAppState extends State<MessengerApp>
     super.dispose();
   }
 
-  // N2-L: backgrounding ends any live call (no background hold).
+  // Build 18: backgrounding keeps a live call (foreground service).
   // N1-L: track foreground for notifications; resync on return.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

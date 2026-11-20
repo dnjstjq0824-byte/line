@@ -2034,4 +2034,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get walletNoTx => '거래 내역이 없습니다.';
+
+  @override
+  String get callDeclineAction => '거절';
+
+  @override
+  String get callOngoingTitle => '통화 중';
+
+  @override
+  String get callOngoingBody => '눌러서 통화 화면으로 돌아가기';
+
+  @override
+  String get callAlreadyEnded => '이미 끝난 통화입니다';
 }
