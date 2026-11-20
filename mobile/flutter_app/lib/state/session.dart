@@ -398,6 +398,12 @@ class SessionController extends ChangeNotifier {
     await run(() async {
       if (registerMode) {
         Map<String, dynamic> reg;
+        // The versions load when the login page opens; if that request
+        // failed, ticking both boxes would still send empty consent and the
+        // server would refuse. Load them now instead.
+        if (legalTermsVersion.isEmpty || legalPrivacyVersion.isEmpty) {
+          await loadLegalVersions();
+        }
         try {
           reg = await api.call('/api/v1/auth/register', method: 'POST', data: {
             'email': email.trim(),
@@ -410,8 +416,16 @@ class SessionController extends ChangeNotifier {
             },
           });
         } on ApiException catch (e) {
+          // Build 15: these used to leave no trace, so a refused signup was
+          // invisible in telemetry.
+          if (e.code == 'CONSENT_REQUIRED' ||
+              e.code == 'BIRTHDATE_REQUIRED' ||
+              e.code == 'UNDERAGE') {
+            reportError(e);
+          }
           // F24: consent failures stay on the form with a localized message.
           if (e.code == 'CONSENT_REQUIRED') {
+            unawaited(loadLegalVersions());
             error = strings.consentRequiredErr;
             notifyListeners();
             return;
