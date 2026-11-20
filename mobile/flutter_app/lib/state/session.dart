@@ -221,6 +221,11 @@ class SessionController extends ChangeNotifier {
   int callSeconds = 0;
   Timer? _noAnswerTimer;
   Timer? _callTimer;
+  // Signals (offer, ICE) that reach the callee while the call still rings.
+  // Opening WebRTC then would put Android in call audio mode, which mutes
+  // the ringtone and opens the mic before the user said yes; they are
+  // replayed once the call is accepted.
+  final List<Map<String, dynamic>> _ringingSignals = [];
   // F15: group call mesh. groupCall holds room_id/title/kind/participants
   // (userBrief maps); one peer CallMedia per remote seat shares the uplink
   // opened on groupLocalMedia. Same joiner-offers rule as the web.
@@ -1080,6 +1085,13 @@ class SessionController extends ChangeNotifier {
         callMediaIssue = true;
       }
       callMedia = media;
+      // The speaker button shows callSpeaker; make the route match it (the
+      // ringback follows the call route too).
+      if (media != null) {
+        try {
+          await media.setSpeaker(callSpeaker);
+        } catch (_) {}
+      }
       var offerSdp = '';
       if (media != null) {
         try {
@@ -1122,6 +1134,11 @@ class SessionController extends ChangeNotifier {
       activeCall = {...call, 'state': 'connected'};
       _cancelNoAnswerTimer();
       _startCallTimer();
+      final held = List<Map<String, dynamic>>.of(_ringingSignals);
+      _ringingSignals.clear();
+      for (final signal in held) {
+        await _handleCallSignal(signal);
+      }
       notifyListeners();
     });
   }
@@ -1455,6 +1472,9 @@ class SessionController extends ChangeNotifier {
           postCallSignal(callId, 'ice-candidate', candidate: jsonEncode(cand))));
       media.onRemoteStream(() => notifyListeners());
       callMedia = media;
+      try {
+        await media.setSpeaker(callSpeaker);
+      } catch (_) {}
     } catch (_) {
       callMediaIssue = true;
     }
@@ -1521,6 +1541,11 @@ class SessionController extends ChangeNotifier {
     if (data['from_user_id'] == selfId) return;
     final callId = '${call['id'] ?? call['call_id']}';
     if (data['call_id'] != null && '${data['call_id']}' != callId) return;
+    if (call['direction'] == 'incoming' &&
+        '${call['state'] ?? 'ringing'}' == 'ringing') {
+      _ringingSignals.add(data);
+      return;
+    }
     await _ensureCallMedia(call);
     final media = callMedia;
     if (media == null) return;
@@ -1594,6 +1619,7 @@ class SessionController extends ChangeNotifier {
   }
 
   void _clearCallLocal() {
+    _ringingSignals.clear();
     _cancelNoAnswerTimer();
     _callTimer?.cancel();
     _callTimer = null;
@@ -1659,6 +1685,7 @@ class SessionController extends ChangeNotifier {
               'body': '${item['body'] ?? ''}',
               if ('${item['reply_to'] ?? ''}'.isNotEmpty)
                 'reply_to': '${item['reply_to']}',
+              if (item['metadata'] is Map) 'metadata': item['metadata'],
             });
         outbox.removeAt(0);
         sent++;
@@ -1688,7 +1715,7 @@ class SessionController extends ChangeNotifier {
   /// True when the text is safe (sent or queued) and the composer may
   /// clear; false when nothing was kept (empty input, rejection, no room).
   Future<bool> send(
-      {String kind = 'text', String? customBody, String text = ''}) async {
+      {String kind = 'text', String? customBody, String text = '', Map<String, dynamic>? metadata}) async {
     if (selectedId.isEmpty) return false;
     final body = customBody ?? text.trim();
     if (body.isEmpty) return false;
@@ -1722,6 +1749,7 @@ class SessionController extends ChangeNotifier {
           'kind': kind,
           'body': body,
           if (reply.isNotEmpty) 'reply_to': reply,
+          if (metadata != null) 'metadata': metadata,
         });
         if (!messages.any((m) => m['id'] == x['message']['id'])) {
           messages.add(x['message']);
@@ -1739,6 +1767,7 @@ class SessionController extends ChangeNotifier {
           'kind': kind,
           'body': body,
           if (reply.isNotEmpty) 'reply_to': reply,
+          if (metadata != null) 'metadata': metadata,
         });
         await _saveOutbox();
         notice = strings.msgQueuedOffline;
@@ -3009,8 +3038,52 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// LUNO200 catalog (memory cache; loaded when the sticker picker opens).
+  List<Map<String, dynamic>> stickerCategories = [];
+  bool stickerCatalogLoading = false;
+  Future<void> loadStickerCatalog() async {
+    if (stickerCategories.isNotEmpty || stickerCatalogLoading) return;
+    stickerCatalogLoading = true;
+    try {
+      final x = await api.call('/stickers/catalog.json');
+      final cats = x['categories'];
+      if (cats is List) {
+        stickerCategories = [
+          for (final c in cats)
+            if (c is Map)
+              {
+                'id': '${c['id']}',
+                'ko': '${c['ko'] ?? ''}',
+                'en': '${c['en'] ?? ''}',
+                'items': [
+                  for (final i in (c['items'] as List? ?? []))
+                    if (i is Map)
+                      {
+                        'id': '${i['id']}',
+                        'char': '${i['char'] ?? ''}',
+                        'label': '${i['label'] ?? ''}'
+                      }
+                ],
+              }
+        ];
+        notifyListeners();
+      }
+    } catch (_) {
+      // Stickers stay unavailable until the next open; nothing else breaks.
+    } finally {
+      stickerCatalogLoading = false;
+    }
+  }
+
+  String stickerCategoryTitle(Map<String, dynamic> c) {
+    if (locale.startsWith('ko') && '${c['ko']}'.isNotEmpty) return '${c['ko']}';
+    if ('${c['en']}'.isNotEmpty) return '${c['en']}';
+    return '${c['ko'] ?? c['id']}';
+  }
+
   void toggleStickerPicker() {
     showStickerPicker = !showStickerPicker;
+    if (showStickerPicker) loadStickerCatalog();
     notifyListeners();
   }
 

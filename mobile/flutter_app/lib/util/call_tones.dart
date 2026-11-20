@@ -4,9 +4,9 @@
 // looped through audioplayers; the callee also gets a vibration pulse.
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 enum CallToneMode { none, ringback, ringtone }
@@ -97,11 +97,27 @@ class CallTonePlayer {
   Timer? _buzz;
   CallToneMode current = CallToneMode.none;
 
+  // Android: native dialer-style tones (MainActivity "luno.tones"). Build 14
+  // played the WAV through audioplayers there and it stayed silent — it
+  // paused on audio-focus loss when WebRTC opened and its audio context
+  // rewrote the global audio mode. Other platforms keep the WAV path.
+  static const _native = MethodChannel('luno.tones');
+  bool get _useNative =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   Future<void> play(CallToneMode mode) async {
     if (mode == current) return;
     await stop();
     current = mode;
     if (mode == CallToneMode.none) return;
+    if (_useNative) {
+      try {
+        await _native.invokeMethod<void>('start', {'mode': mode.name});
+        return;
+      } catch (_) {
+        // Fall through to the WAV path if the channel is missing.
+      }
+    }
     try {
       final player = _player ??= AudioPlayer();
       await player.setReleaseMode(ReleaseMode.loop);
@@ -121,6 +137,11 @@ class CallTonePlayer {
     current = CallToneMode.none;
     _buzz?.cancel();
     _buzz = null;
+    if (_useNative) {
+      try {
+        await _native.invokeMethod<void>('stop');
+      } catch (_) {}
+    }
     try {
       await _player?.stop();
     } catch (_) {}

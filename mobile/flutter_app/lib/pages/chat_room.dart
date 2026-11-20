@@ -16,6 +16,7 @@ import '../util/app_permissions.dart';
 import '../util/attachments.dart';
 import '../util/voice_recorder.dart';
 import '../util/stickers.dart';
+import '../util/sticker_image.dart';
 import '../util/photo_effects.dart';
 import '../util/inapp_camera.dart';
 import '../util/video_bubble.dart';
@@ -914,7 +915,15 @@ class _SignalBubble extends StatelessWidget {
                     child: Text(proposalState == 'approved' ? context.l10n.apprApprovedState : context.l10n.apprRejectedState,
                         style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: faint)),
                   ),
-                if (m['kind'] == 'sticker')
+                if (m['kind'] == 'sticker' &&
+                    isImageStickerId('${_stickerIdOf(m) ?? m['body']}'))
+                  StickerImage(
+                    stickerId: '${_stickerIdOf(m) ?? m['body']}',
+                    baseUrl: session.api.baseUrl,
+                    fallbackGlyph: stickerGlyph(
+                        body: '${m['body']}', stickerId: _stickerIdOf(m)),
+                  )
+                else if (m['kind'] == 'sticker')
                   StickerBubble(
                     glyph: stickerGlyph(
                         body: '${m['body']}', stickerId: _stickerIdOf(m)),
@@ -1677,36 +1686,159 @@ Future<void> _passwordDialog(BuildContext context) async {
     );
 }
 
-class _StickerDeck extends StatelessWidget {
+class _StickerDeck extends StatefulWidget {
   const _StickerDeck();
 
   @override
+  State<_StickerDeck> createState() => _StickerDeckState();
+}
+
+class _StickerDeckState extends State<_StickerDeck> {
+  String _tab = '';
+  // LINE-style: the first tap previews a sticker large above the grid, a tap
+  // on the preview (or its send button) sends it, x cancels.
+  String _preview = '';
+
+  void _send(SessionController session, String id) {
+    setState(() => _preview = '');
+    session.send(kind: 'sticker', customBody: id, metadata: {'sticker_id': id});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final session = SessionScope.of(context, listen: false);
+    final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final cats = session.stickerCategories;
+    final active = cats.any((c) => '${c['id']}' == _tab)
+        ? _tab
+        : (cats.isEmpty ? '' : '${cats[0]['id']}');
+    final items = [
+      for (final c in cats)
+        if ('${c['id']}' == active)
+          ...((c['items'] as List?) ?? []).whereType<Map<String, dynamic>>(),
+    ];
+    final surface = dark ? HarborDark.surface : Colors.white;
     return Container(
-      height: 86,
-      color: dark ? HarborDark.surface : Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        children: [
-          for (final s in lunoOrbitCrewStickers)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: ActionChip(
-                backgroundColor: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
-                side: BorderSide.none,
-                label: Text("${s['emoji']} ${s['character']}"),
-                onPressed: () => session.send(
-                  kind: 'sticker',
-                  customBody: "${s['emoji']} [${s['character']}]",
+      key: const ValueKey('sticker-deck'),
+      height: 320,
+      color: surface,
+      child: cats.isEmpty
+          ? Center(
+              child: session.stickerCatalogLoading
+                  ? const CircularProgressIndicator()
+                  : TextButton.icon(
+                      onPressed: session.loadStickerCatalog,
+                      icon: const Icon(Icons.refresh),
+                      label: Text(context.l10n.retryWord),
+                    ),
+            )
+          : Column(
+              children: [
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    children: [
+                      for (final c in cats)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: ChoiceChip(
+                            label: Text(session.stickerCategoryTitle(c)),
+                            selected: '${c['id']}' == active,
+                            onSelected: (_) => setState(() {
+                              _tab = '${c['id']}';
+                              _preview = '';
+                            }),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      GridView.builder(
+                        padding: const EdgeInsets.all(8),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 4,
+                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 8),
+                        itemCount: items.length,
+                        itemBuilder: (context, i) {
+                          final id = '${items[i]['id']}';
+                          return GestureDetector(
+                            key: ValueKey('sticker-$id'),
+                            onTap: () => setState(() => _preview = id),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: _preview == id
+                                    ? (dark
+                                        ? HarborDark.seaGlass
+                                        : HarborLight.seaGlass)
+                                    : null,
+                                borderRadius:
+                                    BorderRadius.circular(HarborRadius.control),
+                              ),
+                              child: StickerImage(
+                                stickerId: id,
+                                baseUrl: session.api.baseUrl,
+                                size: 64,
+                                fallbackGlyph: '${items[i]['label']}',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      if (_preview.isNotEmpty)
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _preview = ''),
+                            child: Container(
+                              color: surface.withValues(alpha: 0.88),
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: IconButton(
+                                      key: const ValueKey('sticker-preview-close'),
+                                      tooltip: context.l10n.mvCancel,
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () =>
+                                          setState(() => _preview = ''),
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    key: const ValueKey('sticker-preview'),
+                                    onTap: () => _send(session, _preview),
+                                    child: StickerImage(
+                                      stickerId: _preview,
+                                      baseUrl: session.api.baseUrl,
+                                      size: 140,
+                                      fallbackGlyph: '',
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  FilledButton.icon(
+                                    key: const ValueKey('sticker-preview-send'),
+                                    onPressed: () => _send(session, _preview),
+                                    icon: const Icon(Icons.send, size: 18),
+                                    label: Text(context.l10n.sendBtn),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }

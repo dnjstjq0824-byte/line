@@ -332,6 +332,12 @@ void main() {
         'signal_type': 'offer',
         'sdp': 'remote-offer',
       });
+      // Still ringing: the offer is held, no media/answer yet (keeps the
+      // ringtone audible and the mic closed until the user accepts).
+      expect(
+          fake.calls.any((c) => c.contains('"signal_type":"answer"')),
+          isFalse);
+      await s.acceptCall();
       expect(
           fake.calls.any((c) =>
               c.contains('/api/v1/calls/call-5/signal') &&
