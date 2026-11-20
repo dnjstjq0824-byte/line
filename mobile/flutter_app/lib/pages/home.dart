@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -30,7 +31,7 @@ class _HomePageState extends State<HomePage> {
     final status = session.selfStatusMessage.isEmpty
         ? context.l10n.homeStatusHint
         : session.selfStatusMessage;
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),

@@ -1,6 +1,7 @@
 // Route: /channels — official accounts, own page (was inside home).
 import 'package:flutter/material.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -13,7 +14,7 @@ class ChannelsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

@@ -1,6 +1,7 @@
 // Route: /stories — 24-hour stories, own page (was a strip inside home).
 import 'package:flutter/material.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -20,7 +21,7 @@ class StoriesPage extends StatelessWidget {
       DeviceKind.mobile => 2,
       DeviceKind.compactApp => 1,
     };
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.reload,
       child: ListView(
         children: [

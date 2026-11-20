@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -119,7 +120,7 @@ class ConsoleUsersPage extends StatelessWidget {
     final session = SessionScope.of(context);
     _loadOnce(context, SessionScope.of(context, listen: false).loadAdminUsers);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.loadAdminUsers,
       child: ListView(
         children: [
@@ -163,7 +164,7 @@ class ConsoleReportsPage extends StatelessWidget {
     final session = SessionScope.of(context);
     _loadOnce(context, SessionScope.of(context, listen: false).loadAdminReports);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.loadAdminReports,
       child: ListView(
         children: [
@@ -281,7 +282,7 @@ class ConsoleFlagsPage extends StatelessWidget {
     final session = SessionScope.of(context);
     _loadOnce(context, SessionScope.of(context, listen: false).loadFeatureFlags);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.loadFeatureFlags,
       child: ListView(
         children: [
@@ -340,7 +341,7 @@ class ConsoleAuditPage extends StatelessWidget {
     final session = SessionScope.of(context);
     _loadOnce(
         context, SessionScope.of(context, listen: false).loadAdminAuditLogs);
-    return RefreshIndicator(
+    return NoPullRefresh(
       onRefresh: session.loadAdminAuditLogs,
       child: ListView(
         children: [

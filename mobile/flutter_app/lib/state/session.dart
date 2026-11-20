@@ -633,6 +633,8 @@ class SessionController extends ChangeNotifier {
             unawaited(_handleCallSignal(data));
           } else if (data['type'] == 'call.state') {
             _handleCallState(data);
+          } else if (data['type'] == 'profile.updated') {
+            applyProfileUpdated(data);
           } else if (data['type'] == 'call.group.user_joined') {
             _handleGroupUserJoined(data);
           } else if (data['type'] == 'call.group.user_left') {
@@ -940,6 +942,32 @@ class SessionController extends ChangeNotifier {
       }
     }
     if (changed) notifyListeners();
+  }
+
+  /// Build 17: someone changed their name / photo / cover / status. Refetch
+  /// the two lists that show people (debounced: a photo + cover save is two
+  /// events). Pull-to-refresh is gone, so this is how changes appear live.
+  Timer? _peopleTimer;
+  void applyProfileUpdated(dynamic data) {
+    final who = '${data is Map ? data['user_id'] ?? '' : ''}';
+    _peopleTimer?.cancel();
+    _peopleTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final res = await Future.wait([
+          api.call('/api/v1/conversations'),
+          api.call('/api/v1/friends'),
+          if (who == selfId) api.call('/api/v1/me'),
+        ]);
+        chats = res[0]['conversations'] ?? chats;
+        friends = res[1]['friends'] ?? friends;
+        if (res.length > 2) {
+          final me = res[2];
+          selfAvatarUrl = me['avatar_url'] ?? selfAvatarUrl;
+          selfCoverUrl = me['cover_url'] ?? selfCoverUrl;
+        }
+        notifyListeners();
+      } catch (_) {}
+    });
   }
 
   Timer? _readTimer;
