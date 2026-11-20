@@ -5,7 +5,19 @@
 import { ref } from 'vue'
 import type { Chat } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
-import { t } from '../store/session'
+import { currentUser, t } from '../store/session'
+
+// 1:1 rows show the other person's photo; groups show the room photo.
+function rowPhoto(c: Chat): string {
+  if (c.kind === 'group') return (c as any).avatar_url || ''
+  const me = currentUser.value?.id
+  const peer = ((c as any).members || []).find((m: any) => m && m.id !== me)
+  return (peer && peer.avatar_url) || ''
+}
+function hideBroken(ev: Event) {
+  const img = ev.target as HTMLElement | null
+  if (img) img.style.display = 'none'
+}
 import LunoIcon from './LunoIcon.vue'
 
 export type ChatFilter = 'all' | 'direct' | 'group' | 'unread'
@@ -98,7 +110,7 @@ const showListMenu = ref(false)
         <span class="lx-avatar s48" :class="{ group: c.kind === 'group' }" :style="{ background: c.kind === 'group' ? 'var(--ln-info)' : c.official ? '#4F7CFF' : 'var(--ln-accent)' }">
           <LunoIcon v-if="c.official" name="shield" :size="22" />
           <span v-else>{{ initialOf(c.title, 'L') }}</span>
-          <img v-if="c.kind === 'group' && c.avatar_url" :src="c.avatar_url" alt="" class="ln-profile-photo" />
+          <img v-if="!c.official && rowPhoto(c)" :src="rowPhoto(c)" alt="" class="ln-profile-photo" @error="hideBroken" />
         </span>
         <span class="lx-row-main">
           <span class="lx-row-line">

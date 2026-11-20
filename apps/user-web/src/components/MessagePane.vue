@@ -150,6 +150,9 @@ const pinnedExpanded = ref(false)
 // guidance; anything else is a conversion failure.
 const voiceAiText = ref<Record<string, { loading: boolean; text: string; error: string }>>({})
 const ttsPlaying = ref<Record<string, boolean>>({})
+// The production server has no ai/tts yet (STT is live): keep the read-aloud
+// button hidden until it ships, so it never answers with an error.
+const TTS_ENABLED = false
 function voiceAiLang(): string {
   const l = String(currentLocale.value || 'auto').toLowerCase()
   return ['ko', 'en', 'th', 'ja'].includes(l) ? l : 'auto'
@@ -319,6 +322,42 @@ const latestLiveText = computed(() => {
   if (!m || (m as any).unsent) return ''
   return String(m.body || '').slice(0, 200)
 })
+// The sender's photo for bubble avatars, the peer's / room's for the header.
+function memberPhoto(userId: string | undefined): string {
+  const m = (props.selectedChat.members || []).find((x: any) => x && x.id === userId) as any
+  return (m && m.avatar_url) || ''
+}
+function senderPhoto(msg: Message): string { return memberPhoto(msg.sender_id) }
+const roomPhoto = computed(() => {
+  const chat = props.selectedChat as any
+  if (chat.kind === 'group') return chat.avatar_url || ''
+  const peer = (chat.members || []).find((x: any) => x && x.id !== currentUser.value?.id)
+  return (peer && peer.avatar_url) || ''
+})
+function hideBrokenPhoto(ev: Event) {
+  const img = ev.target as HTMLElement | null
+  if (img) img.style.display = 'none'
+}
+// Links in text bubbles open in a new tab. Built as text/link parts (never
+// v-html), so message text can never inject markup.
+const URL_RE = /\b(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi
+function linkParts(body: string | null | undefined): { text: string; href?: string }[] {
+  const text = String(body || '')
+  const out: { text: string; href?: string }[] = []
+  let last = 0
+  for (const m of text.matchAll(URL_RE)) {
+    let url = m[0]
+    // trailing punctuation belongs to the sentence, not the link
+    const trail = /[.,!?;:)\]]+$/.exec(url)
+    if (trail) url = url.slice(0, -trail[0].length)
+    const at = m.index ?? 0
+    if (at > last) out.push({ text: text.slice(last, at) })
+    out.push({ text: url, href: url.startsWith('www.') ? 'https://' + url : url })
+    last = at + url.length
+  }
+  if (last < text.length) out.push({ text: text.slice(last) })
+  return out
+}
 // Group rooms show the sender; direct rooms keep the (nickname-aware) title.
 function headerName(msg: Message): string {
   if (props.selectedChat.kind === 'group') return senderDisplayName(msg, props.selectedChat.members || [])
@@ -336,7 +375,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
         <LunoIcon name="back" :size="20" />
       </button>
       <span class="lx-avatar s36" :style="{ background: selectedChat.kind === 'group' ? 'var(--ln-info)' : selectedChat.official ? '#4F7CFF' : 'var(--ln-accent)' }">
-        {{ selectedChat.official ? 'L' : initialOf(selectedChat.title, 'L') }}
+        <span>{{ selectedChat.official ? 'L' : initialOf(selectedChat.title, 'L') }}</span>
+        <img v-if="!selectedChat.official && roomPhoto" :src="roomPhoto" alt="" class="ln-profile-photo" @error="hideBrokenPhoto" />
       </span>
       <div class="lx-room-title">
         <div class="lx-room-name">
@@ -569,7 +609,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index), 'searched-flash': flashedMessageId === msg.id }"
           >
             <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
-              {{ initialOf(headerName(msg), 'U') }}
+              <span>{{ initialOf(headerName(msg), 'U') }}</span>
+              <img v-if="senderPhoto(msg)" :src="senderPhoto(msg)" alt="" class="ln-profile-photo" @error="hideBrokenPhoto" />
             </div>
             <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
             <div class="pc-msg-bubble-group">
@@ -612,7 +653,8 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
           >
             <!-- Other User Avatar (group lead only; continuations keep a 44px indent) -->
             <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
-              {{ initialOf(headerName(msg), 'U') }}
+              <span>{{ initialOf(headerName(msg), 'U') }}</span>
+              <img v-if="senderPhoto(msg)" :src="senderPhoto(msg)" alt="" class="ln-profile-photo" @error="hideBrokenPhoto" />
             </div>
             <div v-else-if="msg.sender_id !== currentUser?.id" class="pc-continued-indent" aria-hidden="true"></div>
 
@@ -671,7 +713,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <div v-else-if="msg.kind === 'proposal' && proposalState(msg) !== 'pending'" class="bubble-decided-mark">
                   {{ proposalState(msg) === 'approved' ? t('apprApprovedState') : t('apprRejectedState') }}
                 </div>
-                <div v-else class="bubble-text-content">{{ msg.body }}</div>
+                <div v-else class="bubble-text-content"><template v-for="(part, pi) in linkParts(msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></div>
                 <LinkPreview v-if="msg.kind === 'text' && !msg.unsent" :text="msg.body" :enabled="linkPreviewsEnabled" />
 
                 <!-- A15: voice-AI result box (STT transcript, TTS/STT guidance) -->
@@ -717,7 +759,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <div class="pc-bubble-toolbar">
               <button :title="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :aria-label="translateConfigured ? t('translateBtn') : t('mvTranslatePending')" :disabled="!translateConfigured" @click="emit('translate', msg)"><LunoIcon name="translate" :size="14" /></button>
               <button v-if="msg.kind === 'voice' && !msg.unsent" :title="t('mvVoiceToText')" :aria-label="t('mvVoiceToText')" @click="transcribeVoice(msg)"><LunoIcon name="mic" :size="14" /></button>
-              <button v-if="msg.kind === 'text' && !msg.unsent" :title="t('mvReadAloud')" :aria-label="t('mvReadAloud')" :disabled="ttsPlaying[msg.id]" @click="readAloud(msg)"><LunoIcon name="megaphone" :size="14" /></button>
+              <button v-if="TTS_ENABLED && msg.kind === 'text' && !msg.unsent" :title="t('mvReadAloud')" :aria-label="t('mvReadAloud')" :disabled="ttsPlaying[msg.id]" @click="readAloud(msg)"><LunoIcon name="megaphone" :size="14" /></button>
               <button :title="t('mvReactHeart')" :aria-label="t('mvReactHeart')" @click="emit('react', msg.id, '❤️')"><LunoIcon name="heart" :size="14" /></button>
               <button :title="t('mvReactLike')" :aria-label="t('mvReactLike')" @click="emit('react', msg.id, '👍')"><LunoIcon name="thumbsup" :size="14" /></button>
               <button :title="t('mvReply')" :aria-label="t('mvReply')" @click="emit('reply', msg)"><LunoIcon name="reply" :size="14" /></button>

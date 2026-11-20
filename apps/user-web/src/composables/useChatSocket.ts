@@ -32,6 +32,8 @@ export interface ChatSocketDeps {
   handleGroupUserJoined?: (data: any) => void
   handleGroupUserLeft?: (data: any) => void
   handleGroupSignal?: (data: any) => Promise<void>
+  // build 17: someone's name/photo/cover changed — refetch people lists.
+  onProfileUpdated?: (userId: string) => void
 }
 
 export function useChatSocket(deps: ChatSocketDeps) {
@@ -40,7 +42,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
     autoTranslateEnabled, handleTranslateMessage, loadChats, loadPolls,
     loadKeep, chatTitleOf, onAuthExpired, activeCall, handleIncomingCallSignal,
     handleIncomingRing, endCallLocally, startCallTimer, clearNoAnswerTimer,
-    handleGroupUserJoined, handleGroupUserLeft, handleGroupSignal,
+    handleGroupUserJoined, handleGroupUserLeft, handleGroupSignal, onProfileUpdated,
   } = deps
 
   // --- Realtime WebSocket ---
@@ -141,6 +143,8 @@ export function useChatSocket(deps: ChatSocketDeps) {
           } else if (data.type === 'message.reaction') {
             const target = messages.value.find(m => m.id === data.message_id)
             if (target) target.reactions = data.reactions
+          } else if (data.type === 'profile.updated') {
+            onProfileUpdated?.(String(data.user_id || ''))
           } else if (data.type === 'conversation.read') {
             void loadChats()
             if (data.conversation_id === selectedChatId.value) {

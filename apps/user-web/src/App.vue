@@ -28,7 +28,7 @@ import { activeTheme, darkMode, error, note, t } from './store/session'
   display: flex;
   height: 100vh;
   height: 100dvh;
-  width: 100vw;
+  width: 100%;
   overflow: hidden;
   background: var(--ln-surface);
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", "Noto Sans KR", sans-serif);
@@ -75,7 +75,7 @@ import { activeTheme, darkMode, error, note, t } from './store/session'
   background: radial-gradient(circle at 50% 30%, #1e293b, #0b1020);
   height: 100vh;
   height: 100dvh;
-  width: 100vw;
+  width: 100%;
   padding: 20px;
   box-sizing: border-box;
 }

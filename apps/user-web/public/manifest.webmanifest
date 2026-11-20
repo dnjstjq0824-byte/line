@@ -4,7 +4,7 @@
   "description": "LUNO Global Messenger — chat, calls and groups on web, desktop and Android.",
   "lang": "ko",
   "dir": "ltr",
-  "start_url": "./",
+  "start_url": "./chats",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

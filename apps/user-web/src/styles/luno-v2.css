@@ -1303,3 +1303,111 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .luno-desktop-app .pc-msg-row:not(.mine) .pc-speech-bubble.is-media{background:transparent!important;color:var(--ln-text)!important;border:0!important;box-shadow:none!important;padding:0!important}
 .pc-speech-bubble.is-media::after{display:none!important}
 .pc-speech-bubble.is-media img,.pc-speech-bubble.is-media video{border-radius:14px}
+
+/* ==========================================================================
+   Page stability (product rule, build 17): on phones the page must never
+   pull-to-refresh, rubber-band, zoom on input focus, or drift sideways —
+   including while a popup is open. The document itself never scrolls; every
+   pane scrolls inside its own container and stops at its edges.
+   ========================================================================== */
+html, body {
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#app { height: 100%; width: 100%; overflow: hidden; }
+.luno-desktop-app {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  max-width: 100%;
+  overscroll-behavior: none;
+}
+/* Scroll chaining stops at each pane: reaching the top of a list never
+   hands the gesture to the page (that is what triggers pull-to-refresh). */
+.luno-desktop-app * { overscroll-behavior: contain; }
+/* Popups: pinned to the viewport, never wider than it, vertical panning
+   only on the backdrop so a sideways swipe cannot drag the screen. */
+.modal-backdrop, .pc-modal-backdrop, .fx-modal-backdrop, .call-overlay-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: pan-y pinch-zoom;
+}
+.standard-modal-box, .fx-modal, .modal-card, .pc-modal-card, .profile-modal-card,
+.settings-modal, .call-dialog-box {
+  max-width: calc(100% - 24px) !important;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+/* Long words, links and codes wrap instead of widening a popup or bubble. */
+.standard-modal-box, .fx-modal, .modal-card, .pc-modal-card { overflow-wrap: anywhere; }
+/* Avatars layer a photo over the initial; the circle clips it. */
+.lx-avatar, .pc-avatar, .avatar-circle { position: relative; overflow: hidden; }
+.lx-avatar > .ln-profile-photo, .pc-avatar > .ln-profile-photo, .avatar-circle > .ln-profile-photo { position: absolute; inset: 0; border-radius: inherit; }
+/* Bubbles: avatar sits at the top of a burst; Korean wraps at word
+   boundaries while long links and codes still break anywhere. */
+.pc-msg-row.other { align-items: flex-start; }
+.pc-msg-row.other > .other-avatar { align-self: flex-start; }
+.bubble-text-content { word-break: keep-all; overflow-wrap: anywhere; }
+.bubble-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.pc-msg-row.other .bubble-link { color: var(--ln-accent); }
+
+/* ==========================================================================
+   Design polish (build 19 web)
+   - room avatars use the same rounded square as every list (were circles)
+   - the time / read mark sits beside the bubble's foot, LINE-style, instead
+     of on its own line under every bubble
+   - bubbles stay readable on wide screens; softer date pill
+   - quiet illustrated empty states
+   ========================================================================== */
+.luno-desktop-app .pc-msg-row .other-avatar.pc-avatar { border-radius: 38% !important; overflow: hidden; position: relative; }
+.luno-desktop-app .pc-msg-row .other-avatar .ln-profile-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
+
+.luno-desktop-app .pc-msg-row .pc-msg-bubble-group {
+  display: grid !important;
+  grid-template-columns: minmax(0, max-content) max-content;
+  grid-auto-flow: row dense;
+  align-items: end;
+  column-gap: 6px;
+}
+.luno-desktop-app .pc-msg-row .pc-msg-bubble-group > * { grid-column: 1; min-width: 0; }
+.luno-desktop-app .pc-msg-row .pc-msg-bubble-group > .pc-sender-header { grid-column: 1 / -1; }
+.luno-desktop-app .pc-msg-row .pc-msg-bubble-group > .pc-msg-meta {
+  grid-column: 2;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0;
+  margin: 0 0 1px;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+.luno-desktop-app .pc-msg-row.mine .pc-msg-bubble-group { grid-template-columns: max-content minmax(0, max-content); }
+.luno-desktop-app .pc-msg-row.mine .pc-msg-bubble-group > * { grid-column: 2; }
+.luno-desktop-app .pc-msg-row.mine .pc-msg-bubble-group > .pc-msg-meta { grid-column: 1; align-items: flex-end; }
+.luno-desktop-app .pc-msg-row .pc-msg-bubble-group > .pc-speech-bubble { max-width: 100% !important; }
+.luno-desktop-app .pc-msg-row { max-width: min(78%, 620px) !important; }
+@media (max-width: 699px) {
+  .luno-desktop-app .pc-msg-row { max-width: 86% !important; }
+}
+
+.luno-desktop-app .pc-date-divider-pill {
+  background: color-mix(in srgb, var(--ln-text) 8%, transparent) !important;
+  color: var(--ln-muted) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  font-weight: 600 !important;
+}
+
+.lx-empty-illustrated { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 56px !important; }
+.lx-empty-illustrated p { margin: 0 !important; }
+.lx-empty-icon {
+  width: 64px; height: 64px; border-radius: 38%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--ln-accent) 10%, transparent);
+  color: var(--ln-accent);
+}

@@ -147,7 +147,7 @@ function hideBrokenAvatar(ev: Event) {
             @dblclick="emit('direct-chat', fav)"
             @contextmenu.prevent="emit('friend-menu', $event, fav)"
           >
-            <span class="lx-avatar s44" :style="{ background: fav.avatar_color || 'var(--ln-accent)' }">{{ initialOf(fav.display_name) }}</span>
+            <span class="lx-avatar s44" :style="{ background: fav.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(fav.display_name) }}</span><img v-if="fav.avatar_url" :src="fav.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
             <span class="lx-row-main">
               <span class="lx-row-title">
                 <span class="lx-row-name">{{ fav.display_name }}</span>
@@ -241,7 +241,7 @@ function hideBrokenAvatar(ev: Event) {
             @dblclick="emit('direct-chat', f)"
             @contextmenu.prevent="emit('friend-menu', $event, f)"
           >
-            <span class="lx-avatar s44" :style="{ background: f.avatar_color || 'var(--ln-accent)' }">{{ initialOf(f.display_name) }}</span>
+            <span class="lx-avatar s44" :style="{ background: f.avatar_color || 'var(--ln-accent)' }"><span>{{ initialOf(f.display_name) }}</span><img v-if="f.avatar_url" :src="f.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
             <span class="lx-row-main">
               <span class="lx-row-title">
                 <span class="lx-row-name">{{ f.display_name }}</span>

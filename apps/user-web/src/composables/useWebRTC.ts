@@ -1,7 +1,7 @@
 // I-4: WebRTC calling state machine, extracted verbatim from MessengerView.vue.
 // Owns the peer connection, media streams, call timer and recording. The view
 // injects only the chat list a call starts from and the history it logs to.
-import { ref, type ComputedRef, type Ref } from 'vue'
+import { ref, watch, type ComputedRef, type Ref } from 'vue'
 
 import { api, currentUser, note, t, token, wrap } from '../store/session'
 import { request, type Chat } from '../../../shared/api'
@@ -60,6 +60,19 @@ export function useWebRTC(deps: WebRTCDeps) {
   let callTimer: ReturnType<typeof setInterval> | null = null
   let noAnswerTimer: ReturnType<typeof setTimeout> | null = null
   let callRemoteStream: MediaStream | null = null
+  // The remote track can land before the call screen mounts its player
+  // (ontrack only assigns when the element exists): attach it on mount.
+  watch(remoteVideoRef, (el) => {
+    if (el && callRemoteStream && el.srcObject !== callRemoteStream) attachRemote(callRemoteStream)
+  })
+  // iOS Safari does not always start a late-assigned stream on its own.
+  function attachRemote(stream: MediaStream) {
+    callRemoteStream = stream
+    const el = remoteVideoRef.value
+    if (!el) return
+    el.srcObject = stream
+    void el.play?.()?.catch(() => {})
+  }
   let callRecorder: { mr: MediaRecorder; ctx: AudioContext; chunks: BlobPart[]; callId: string } | null = null
 
   // --- Calling (Voice & Video WebRTC) ---
@@ -81,8 +94,7 @@ export function useWebRTC(deps: WebRTCDeps) {
     }
     pc.ontrack = (ev) => {
       if (ev.streams[0]) {
-        callRemoteStream = ev.streams[0]
-        if (remoteVideoRef.value) remoteVideoRef.value.srcObject = ev.streams[0]
+        attachRemote(ev.streams[0])
       }
     }
     pc.onicecandidate = (ev) => {
@@ -134,8 +146,7 @@ export function useWebRTC(deps: WebRTCDeps) {
       if (localVideoRef.value) localVideoRef.value.srcObject = webrtc.stream
       webrtc.pc.ontrack = (ev) => {
         if (ev.streams[0]) {
-          callRemoteStream = ev.streams[0]
-          if (remoteVideoRef.value) remoteVideoRef.value.srcObject = ev.streams[0]
+          attachRemote(ev.streams[0])
         }
       }
       webrtc.pc.onicecandidate = (ev) => {

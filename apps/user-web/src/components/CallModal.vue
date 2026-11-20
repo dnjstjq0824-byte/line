@@ -47,15 +47,19 @@ const callSubtitles = ref(t('mvLiveCaptionsOn'))
 <template>
   <div class="call-overlay-modal">
     <div class="call-dialog-box call-stage">
-      <!-- Remote fills the viewport; self is a 25% PiP docked bottom-right. -->
+      <!-- Remote fills the viewport; self is a 25% PiP docked bottom-right.
+           Voice calls keep this element, visually hidden (not display:none,
+           which iOS Safari may not play): it is what plays the other side's
+           voice. With v-if a voice call had no player at all, so the web
+           never heard the phone (video calls worked: <video> plays audio). -->
       <video
-        v-if="activeCall.kind === 'video'"
+        :class="{ 'call-remote-audio-only': activeCall.kind !== 'video' }"
         :ref="remoteVideoRef"
         autoplay
         playsinline
         class="call-remote-video"
       ></video>
-      <div v-else class="call-avatar-pulse call-avatar-stage">
+      <div v-if="activeCall.kind !== 'video'" class="call-avatar-pulse call-avatar-stage">
         <div class="avatar-circle lg" style="background:#315BCD">{{ initialOf(activeCall.title) }}</div>
       </div>
       <video
@@ -149,6 +153,13 @@ const callSubtitles = ref(t('mvLiveCaptionsOn'))
   position: relative;
   overflow: hidden;
   min-height: min(78vh, 640px);
+}
+.call-remote-audio-only {
+  inset: auto;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 .call-remote-video {
   position: absolute;

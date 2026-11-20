@@ -1223,6 +1223,7 @@ async function handleRoomCall(kind: 'voice' | 'video') {
   }
 }
 
+let profileRefreshTimer: ReturnType<typeof setTimeout> | null = null
 async function loadFriends() {
   try {
     const res = await api<{ friends: User[] }>('/api/v1/friends')
@@ -2504,6 +2505,17 @@ const {
   stopMessageSyncLoop,
   resetReconnect,
 } = useChatSocket({
+  onProfileUpdated: (userId: string) => {
+    // Debounced: a photo + cover save arrives as two events.
+    if (profileRefreshTimer) clearTimeout(profileRefreshTimer)
+    profileRefreshTimer = setTimeout(() => {
+      void loadChats()
+      void loadFriends()
+      if (userId && userId === currentUser.value?.id) {
+        void api<User>('/api/v1/me').then((me) => { if (me) currentUser.value = { ...currentUser.value, ...me } as User }).catch(() => {})
+      }
+    }, 300)
+  },
   selectedChatId,
   messages,
   messagesCanvasRef,
@@ -2901,9 +2913,11 @@ onBeforeUnmount(() => {
             <button type="button" class="lx-chip" :class="{ active: callFilter === 'missed' }" @click="callFilter = 'missed'">{{ t('mvMissed') }}</button>
           </div>
           <div class="lx-scroll">
-            <div v-if="!filteredCallHistory.length" class="lx-list-empty">
+            <div v-if="!filteredCallHistory.length" class="lx-list-empty lx-empty-illustrated">
+              <!-- One "new call" action lives in the header; the empty state
+                   shows a quiet icon instead of a second copy of it. -->
+              <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="calls" :size="28" /></span>
               <p>{{ t('lxNoCalls') }}</p>
-              <button type="button" class="lx-text-btn" @click="showNewCallModal = true">{{ t('mvNewCall') }}</button>
             </div>
             <div
               v-for="log in filteredCallHistory"
@@ -3487,7 +3501,7 @@ onBeforeUnmount(() => {
     <!-- PROFILE MODAL (Full LUNO User Profile View) -->
     <div v-if="activeProfileUser" class="modal-backdrop" @click.self="activeProfileUser = null">
       <div class="profile-modal-card" role="dialog" aria-modal="true" :aria-label="t('profileTitle')">
-        <div class="profile-cover-header" :style="{ background: activeProfileUser.avatar_color || 'var(--ln-accent)' }">
+        <div class="profile-cover-header" data-testid="profile-cover" :style="(activeProfileUser as any).cover_url ? { backgroundImage: `url(${(activeProfileUser as any).cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background: activeProfileUser.avatar_color || 'var(--ln-accent)' }">
           <button class="btn-modal-close" @click="activeProfileUser = null" :aria-label="t('mvClose')">✕</button>
         </div>
         <div class="profile-avatar-center">
