@@ -102,6 +102,35 @@ test('with the assets binding the landing page is served in place, never looped'
   }
 });
 
+test('wrangler.nobuild.jsonc stays in sync with wrangler.jsonc (deploy-from-main)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const wrangler = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+  const nobuild = await readFile(new URL('../wrangler.nobuild.jsonc', import.meta.url), 'utf8');
+  // The nobuild config ships the already-stamped dist_* without rebuilding.
+  assert.ok(!/"build"\s*:\s*\{/.test(nobuild), 'wrangler.nobuild.jsonc must not have a build block');
+  assert.ok(/"build"\s*:\s*\{/.test(wrangler), 'wrangler.jsonc must keep its build block');
+  // Everything else that selects the worker, routes and bindings must match,
+  // or a deploy from main silently diverges from local wrangler dev.
+  const listed = JSON.parse(/"run_worker_first"\s*:\s*(\[[^\]]*\])/.exec(wrangler)[1]);
+  const listedNoBuild = JSON.parse(/"run_worker_first"\s*:\s*(\[[^\]]*\])/.exec(nobuild)[1]);
+  assert.deepEqual(listedNoBuild, listed, 'run_worker_first must be identical in both configs');
+  for (const [pattern, label] of [
+    [/"main"\s*:\s*"([^"]+)"/, 'main'],
+    [/"workers_dev"\s*:\s*(true|false)/, 'workers_dev'],
+    [/"database_id"\s*:\s*"([^"]+)"/, 'database_id'],
+    [/"triggers"\s*:\s*(\{[^}]*\})/, 'triggers'],
+  ]) {
+    const a = pattern.exec(wrangler);
+    const b = pattern.exec(nobuild);
+    assert.ok(a && b, `${label} must exist in both configs`);
+    assert.equal(b[1], a[1], `${label} must be identical in both configs`);
+  }
+  // 6-8: vars (feature flags like DURABLE_BUSINESS) must match too, or a
+  // deploy silently runs different behavior than local wrangler dev.
+  const varsOf = (text) => text.slice(text.indexOf('"vars"')).replace(/\s+/g, '');
+  assert.equal(varsOf(nobuild), varsOf(wrangler), 'vars must be identical in both configs');
+});
+
 test('GET /app, /mobile and /apk redirect to the static download page', async () => {
   const { api } = await isolate();
   for (const p of ['/app', '/mobile', '/apk']) {
