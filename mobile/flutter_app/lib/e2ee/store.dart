@@ -193,6 +193,26 @@ class E2eeStore {
 
   Future<void> _saveSession(String peerUser, String peerDevice, _SessionRecord rec) async {
     await kv.set(_k(['sess', peerUser, peerDevice]), jsonEncode(rec.toJson()));
+    await _addIdx('sessIdx', jsonEncode([peerUser, peerDevice]));
+  }
+
+  // E9: explicit indexes (the KV has no listing) drive backup export
+  // and complete logout wipes.
+  Future<List<String>> _loadIdx(String name) async {
+    try {
+      final v = jsonDecode(await kv.get(_k([name])) ?? '[]') as List;
+      return v.whereType<String>().toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _addIdx(String name, String entry) async {
+    final cur = await _loadIdx(name);
+    if (!cur.contains(entry)) {
+      cur.add(entry);
+      await kv.set(_k([name]), jsonEncode(cur));
+    }
   }
 
   Future<List<Map<String, dynamic>>> _fetchBundles(String uid) async {
@@ -372,6 +392,7 @@ class E2eeStore {
   Future<void> _saveOwnSenderKey(
       String roomId, Map<String, dynamic> rec) async {
     await kv.set(_k(['skown', roomId]), jsonEncode(rec));
+    await _addIdx('skownIdx', roomId);
   }
 
   Future<Map<String, dynamic>?> _loadPeerSenderKey(
@@ -384,6 +405,7 @@ class E2eeStore {
       Map<String, dynamic> rec) async {
     await kv.set(_k(['skin', roomId, senderId, '$gen']),
         jsonEncode({...rec, 'gen': gen}));
+    await _addIdx('skinIdx', jsonEncode([roomId, senderId, gen]));
   }
 
   Future<Map<String, dynamic>> _ensureSenderKey(RoomRef room) async {
@@ -604,10 +626,199 @@ class E2eeStore {
     try {
       await api('devices/$deviceId/keys', 'DELETE');
     } catch (_) { /* already gone */ }
-    for (final k in ['identity', 'spks', 'opks', 'opkUsed']) {
+    // E9: sessions, sender keys and verified marks go too.
+    for (final e in await _loadIdx('sessIdx')) {
+      try {
+        final pair = jsonDecode(e) as List;
+        await kv.del(
+            _k(['sess', pair[0] as String, pair[1] as String]));
+      } catch (_) { /* ignore */ }
+    }
+    for (final room in await _loadIdx('skownIdx')) {
+      await kv.del(_k(['skown', room]));
+    }
+    for (final e in await _loadIdx('skinIdx')) {
+      try {
+        final t = jsonDecode(e) as List;
+        await kv.del(_k([
+          'skin',
+          t[0] as String,
+          t[1] as String,
+          '${t[2]}'
+        ]));
+      } catch (_) { /* ignore */ }
+    }
+    for (final e in await _loadIdx('vfyIdx')) {
+      try {
+        final pair = jsonDecode(e) as List;
+        await kv.del(_k(['vfy', pair[0] as String, pair[1] as String]));
+      } catch (_) { /* ignore */ }
+    }
+    for (final k in [
+      'identity',
+      'spks',
+      'opks',
+      'opkUsed',
+      'sessIdx',
+      'skownIdx',
+      'skinIdx',
+      'vfyIdx'
+    ]) {
       await kv.del(_k([k]));
     }
     _ready = false;
     _identity = null;
+    _spks = [];
+    _opkPrivs = {};
+    _opkUsedSincePut = 0;
   }
+
+  /// E9: dotted own identity (x.ed b64u) for the safety screen.
+  String? myIdentity() =>
+      _identity == null ? null : encodeIdentity(_identity!);
+
+  /// E9: safety numbers for every device of a user.
+  Future<List<SafetyNumber>> safetyNumbers(String uid) async {
+    await ready();
+    final id = _identity;
+    if (id == null) return [];
+    final res =
+        await api('users/$uid/e2ee-devices') as Map<String, dynamic>;
+    final out = <SafetyNumber>[];
+    for (final d
+        in ((res['devices'] ?? []) as List).cast<Map<String, dynamic>>()) {
+      final parsed = parseIdentity(d['identity_key'] as String? ?? '');
+      if (parsed == null) continue;
+      final peerEd = b64uEncode(parsed.ed);
+      final digits = await safetyNumberDigits(id.edPub, parsed.ed);
+      final vfy = await kv.get(_k(['vfy', uid, d['device_id'] as String]));
+      out.add(SafetyNumber(
+        device: d['device_id'] as String,
+        edPub: peerEd,
+        number: digits,
+        lines: formatSafetyNumber(digits),
+        verified: vfy == peerEd,
+        changed: vfy != null && vfy != peerEd,
+      ));
+    }
+    return out;
+  }
+
+  /// E9: mark a peer device identity as compared-and-correct.
+  Future<void> setVerified(
+      String uid, String device, String edPub) async {
+    await kv.set(_k(['vfy', uid, device]), edPub);
+    await _addIdx('vfyIdx', jsonEncode([uid, device]));
+  }
+
+  /// E9: export keys + sessions + sender keys for backup.
+  Future<Map<String, dynamic>> exportState() async {
+    await ready();
+    final sessions = <String, dynamic>{};
+    for (final e in await _loadIdx('sessIdx')) {
+      try {
+        final pair = jsonDecode(e) as List;
+        final raw = await kv.get(
+            _k(['sess', pair[0] as String, pair[1] as String]));
+        if (raw != null) {
+          sessions['${pair[0]}\n${pair[1]}'] = jsonDecode(raw);
+        }
+      } catch (_) { /* ignore */ }
+    }
+    final skown = <String, dynamic>{};
+    for (final room in await _loadIdx('skownIdx')) {
+      final raw = await kv.get(_k(['skown', room]));
+      if (raw != null) skown[room] = jsonDecode(raw);
+    }
+    final skin = <String, dynamic>{};
+    for (final e in await _loadIdx('skinIdx')) {
+      try {
+        final t = jsonDecode(e) as List;
+        final raw = await kv.get(_k(
+            ['skin', t[0] as String, t[1] as String, '${t[2]}']));
+        if (raw != null) skin['${t[0]}\n${t[1]}\n${t[2]}'] = jsonDecode(raw);
+      } catch (_) { /* ignore */ }
+    }
+    return {
+      'v': 1,
+      'userId': userId,
+      'fromDevice': deviceId,
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'identity': jsonDecode(await kv.get(_k(['identity'])) ?? 'null'),
+      'spks': jsonDecode(await kv.get(_k(['spks'])) ?? '[]'),
+      'opks': jsonDecode(await kv.get(_k(['opks'])) ?? '{}'),
+      'sessions': sessions,
+      'skown': skown,
+      'skin': skin,
+    };
+  }
+
+  /// E9: install an exported state (same user; any device).
+  Future<void> importState(Map<String, dynamic> payload) async {
+    if (payload['v'] != 1 || payload['userId'] != userId) {
+      throw StateError('backup is not for this user');
+    }
+    if (payload['identity'] is! Map) {
+      throw StateError('backup has no identity');
+    }
+    await kv.set(_k(['identity']), jsonEncode(payload['identity']));
+    await kv.set(_k(['spks']), jsonEncode(payload['spks'] ?? []));
+    await kv.set(_k(['opks']), jsonEncode(payload['opks'] ?? {}));
+    await kv.set(_k(['opkUsed']), '0');
+    // Sessions and sender keys are bound to the exporting device: a new
+    // device re-handshakes and re-deals instead of forking live chains.
+    // Same-device reinstalls keep them for uninterrupted decryption.
+    if (payload['fromDevice'] != deviceId) {
+      _ready = false;
+      _identity = null;
+      await ready();
+      // A new device id has no server bundle yet: register it now.
+      await publishBundle();
+      return;
+    }
+    final sessions = (payload['sessions'] ?? {}) as Map;
+    for (final entry in sessions.entries) {
+      final parts = '${entry.key}'.split('\n');
+      if (parts.length != 2) continue;
+      await kv.set(
+          _k(['sess', parts[0], parts[1]]), jsonEncode(entry.value));
+      await _addIdx('sessIdx', jsonEncode(parts));
+    }
+    final skown = (payload['skown'] ?? {}) as Map;
+    for (final entry in skown.entries) {
+      await kv.set(_k(['skown', '${entry.key}']), jsonEncode(entry.value));
+      await _addIdx('skownIdx', '${entry.key}');
+    }
+    final skin = (payload['skin'] ?? {}) as Map;
+    for (final entry in skin.entries) {
+      final parts = '${entry.key}'.split('\n');
+      if (parts.length != 3) continue;
+      await kv.set(
+          _k(['skin', parts[0], parts[1], parts[2]]),
+          jsonEncode(entry.value));
+      await _addIdx(
+          'skinIdx', jsonEncode([parts[0], parts[1], int.tryParse(parts[2]) ?? 0]));
+    }
+    // Re-register the restored identity under this device id.
+    _ready = false;
+    _identity = null;
+    await ready();
+  }
+}
+
+/// E9: one peer device safety number.
+class SafetyNumber {
+  final String device;
+  final String edPub;
+  final String number;
+  final List<String> lines;
+  final bool verified;
+  final bool changed;
+  const SafetyNumber(
+      {required this.device,
+      required this.edPub,
+      required this.number,
+      required this.lines,
+      required this.verified,
+      required this.changed});
 }

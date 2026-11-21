@@ -20,6 +20,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../api/client.dart';
+import '../e2ee/backup.dart' as e2eebk;
 import '../e2ee/codec.dart';
 import '../e2ee/files.dart';
 import '../e2ee/store.dart' as e2ee;
@@ -1344,6 +1345,18 @@ class SessionController extends ChangeNotifier {
       ]);
       messages = withoutUnsent(List<dynamic>.from(resultsList[0]['messages'] ?? []));
       await decryptMessages(messages);
+      // E9: restored backup rows fill history the fresh chains cannot open.
+      final restored = restoredHistory[id];
+      if (restored != null && restored.isNotEmpty) {
+        final have = <String>{for (final m in messages) '${m['id']}'};
+        final extra =
+            restored.where((m) => !have.contains('${m['id']}')).toList();
+        if (extra.isNotEmpty) {
+          messages = [...extra, ...messages];
+          messages.sort(((a, b) => ((a['sequence'] ?? 0) as num)
+              .compareTo((b['sequence'] ?? 0) as num)));
+        }
+      }
       pins = resultsList[1]['pins'] ?? [];
       notes = resultsList[2]['notes'] ?? [];
       events = resultsList[3]['events'] ?? [];
@@ -2765,6 +2778,173 @@ class SessionController extends ChangeNotifier {
     return file.path;
   }
 
+  // --- E9: E2EE devices, passphrase backup, safety numbers ---
+
+  List<dynamic> e2eeDevices = [];
+
+  Future<void> loadE2eeDevices() async {
+    try {
+      final res = await api.call('/api/v1/me/e2ee-devices');
+      e2eeDevices = (res['devices'] as List?) ?? [];
+    } catch (_) {
+      e2eeDevices = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> revokeE2eeDevice(String id) {
+    return run(() async {
+      await api.call('/api/v1/devices/$id/keys', method: 'DELETE');
+      notice = strings.e2eeDevRevoked;
+      await loadE2eeDevices();
+    });
+  }
+
+  bool e2eeBackupBusy = false;
+  Map<String, dynamic>? e2eeBackupStatus;
+  Map<String, List<dynamic>> restoredHistory = {};
+
+  Future<void> loadBackupStatus() async {
+    try {
+      final res = await api.call('/api/v1/e2ee/backup');
+      e2eeBackupStatus = res['backup'] == null
+          ? null
+          : {
+              'updated_at': '${res['updated_at'] ?? ''}',
+              'byte_len': (res['byte_len'] as num?)?.toInt() ?? 0,
+            };
+    } catch (_) {
+      e2eeBackupStatus = null;
+    }
+    notifyListeners();
+  }
+
+  /// Keys come from the store export; history is a fresh decrypt of each
+  /// sealed room (latest 200 per room, 8 MB total).
+  Future<void> backupE2eeNow(String passphrase) async {
+    final client = e2eeClient;
+    if (client == null) return;
+    e2eeBackupBusy = true;
+    notifyListeners();
+    try {
+      final state = await client.exportState();
+      final history = <String, dynamic>{};
+      var total = 0;
+      for (final c in chats) {
+        if (c is! Map || c['e2ee'] != true) continue;
+        final rid = '${c['id']}';
+        try {
+          final res = await api
+              .call('/api/v1/conversations/$rid/messages?limit=200');
+          final list =
+              List<dynamic>.from((res['messages'] as List?) ?? []);
+          await decryptMessages(list);
+          final rows = <Map<String, dynamic>>[];
+          for (final m in list) {
+            if (m is! Map ||
+                m['kind'] == 'ciphertext' ||
+                m['_e2eeError'] == true ||
+                m['unsent'] == true) {
+              continue;
+            }
+            final body = '${m['body'] ?? ''}';
+            rows.add({
+              'id': '${m['id']}',
+              'conversation_id': rid,
+              'sender_id': '${m['sender_id']}',
+              'created_at': '${m['created_at']}',
+              'sequence': (m['sequence'] as num?)?.toInt() ?? 0,
+              'kind': '${m['kind']}',
+              'body': body.length > 4000 ? body.substring(0, 4000) : body,
+              'sealed': true,
+              '_restored': true,
+            });
+          }
+          final size = jsonEncode(rows).length;
+          if (total + size > 8 * 1024 * 1024) break;
+          total += size;
+          history[rid] = rows;
+        } catch (_) {
+          // One room must not block the rest.
+        }
+      }
+      final blob = await e2eebk.encryptBackup(
+          passphrase, jsonEncode({'v': 1, 'state': state, 'history': history}));
+      await api.call('/api/v1/e2ee/backup', method: 'PUT', data: {
+        'blob': {
+          'v': blob.v,
+          'salt': blob.salt,
+          'iv': blob.iv,
+          'ct': blob.ct,
+        }
+      });
+      notice = strings.e2eeBkDone;
+      await loadBackupStatus();
+    } catch (_) {
+      notice = strings.e2eeBkFail;
+    } finally {
+      e2eeBackupBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> restoreE2eeNow(String passphrase) async {
+    final client = e2eeClient;
+    if (client == null) return;
+    e2eeBackupBusy = true;
+    notifyListeners();
+    try {
+      final res = await api.call('/api/v1/e2ee/backup');
+      if (res['backup'] == null) throw StateError('empty');
+      final blob = e2eebk.BackupBlob.fromJson(
+          (res['backup'] as Map).cast<String, dynamic>());
+      final payload =
+          jsonDecode(await e2eebk.decryptBackup(passphrase, blob)) as Map;
+      if (payload['v'] != 1 || payload['state'] is! Map) {
+        throw StateError('shape');
+      }
+      await client
+          .importState((payload['state'] as Map).cast<String, dynamic>());
+      restoredHistory = {
+        for (final e in ((payload['history'] ?? {}) as Map).entries)
+          '${e.key}': List<dynamic>.from(e.value as List)
+      };
+      notice = strings.e2eeBkRestored;
+      if (selectedId.isNotEmpty) await _loadRoomData(selectedId);
+    } catch (_) {
+      // Restore failures never distinguish wrong passphrase from corruption.
+      notice = strings.e2eeBkRestoreFail;
+    } finally {
+      e2eeBackupBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteE2eeBackup() {
+    return run(() async {
+      await api.call('/api/v1/e2ee/backup', method: 'DELETE');
+      notice = strings.e2eeBkDeleted;
+      await loadBackupStatus();
+    });
+  }
+
+  Future<List<e2ee.SafetyNumber>> safetyNumbersFor(String uid) async {
+    final client = e2eeClient;
+    if (client == null) return [];
+    try {
+      return await client.safetyNumbers(uid);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> verifySafetyDevice(String uid, String dev, String ed) async {
+    await e2eeClient?.setVerified(uid, dev, ed);
+    notifyListeners();
+  }
+
+  String? mySafetyIdentity() => e2eeClient?.myIdentity();
+
   /// F30: customer support tickets. My filings with admin answers.
   List<dynamic> supportTickets = [];
 
@@ -3745,8 +3925,10 @@ class SessionController extends ChangeNotifier {
 
   Future<void> logout() async {
     // E5: our key bundle dies with the session (re-login mints fresh keys).
+    // E9: wipe through the getter so even a never-initialized client still
+    // deletes its server bundle.
     try {
-      await _e2ee?.wipe();
+      await e2eeClient?.wipe();
     } catch (_) {}
     _e2ee = null;
     // While the access token is still valid: this device stops getting push.

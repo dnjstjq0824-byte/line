@@ -488,6 +488,9 @@ const LUNO_SCHEMA_PHASE1 = [
     user_id TEXT NOT NULL, device_id TEXT NOT NULL, identity_key TEXT NOT NULL DEFAULT '',
     signed_prekey TEXT NOT NULL DEFAULT '', prekeys_json TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT NOT NULL, PRIMARY KEY (user_id, device_id))`,
+  `CREATE TABLE IF NOT EXISTS e2ee_backups (
+    user_id TEXT PRIMARY KEY, blob_json TEXT NOT NULL DEFAULT '',
+    byte_len INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS push_tokens (
     user_id TEXT NOT NULL, device_id TEXT NOT NULL, platform TEXT NOT NULL DEFAULT '',
     token TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, device_id))`,
@@ -2771,17 +2774,19 @@ async function e2eeEnsureIntroNotice(cid, conv) {
     else pushMessage(cid, 'system', { kind: 'system', body: E2EE_INTRO_BODY });
   } catch { /* the marker must never break sending */ }
 }
-async function e2eeAnnounceKeyChange(userId, deviceId) {
+async function e2eeAnnounceKeyChange(userId, deviceId, action = 'changed') {
   try { await hydrateDurableConversations(userId); } catch { /* memory only */ }
+  const bodies = { changed: '보안 키가 변경되었습니다', added: '새 기기가 추가되었습니다', removed: '기기가 삭제되었습니다' };
   const rooms = Array.from(conversations.values()).filter(c => (c.members || []).includes(userId) && e2eeRoomTargeted(c));
   for (const room of rooms) {
-    const fields = { kind: 'security_notice', body: '보안 키가 변경되었습니다', metadata: { user_id: userId, device_id: deviceId } };
+    const fields = { kind: 'security_notice', body: bodies[action] || bodies.changed, metadata: { user_id: userId, device_id: deviceId, e2ee_action: action } };
     try {
       if (room._durable) await pushPersistent(room.id, userId, fields);
       else pushMessage(room.id, userId, fields);
     } catch { /* one room must not block the rest */ }
   }
-  try { await persistAudit(userId, 'e2ee.key_change', userId, { device_id: deviceId }); } catch { /* audit never blocks */ }
+  const auditAction = action === 'changed' ? 'e2ee.key_change' : `e2ee.device_${action}`;
+  try { await persistAudit(userId, auditAction, userId, { device_id: deviceId }); } catch { /* audit never blocks */ }
 }
 
 // =====================================================================
@@ -4371,6 +4376,19 @@ const pushTokens = new Map();
 const deviceKeys = new Map();
 const userKeys = new Map();
 const skParcels = []; // E6: no-DB fallback; D1 luno_sk_parcels is the store.
+const e2eeBackupBlobs = new Map(); // E9: no-DB fallback {blob, byteLen, updatedAt}.
+
+// E9: passphrase-encrypted key/history backup. The server stores the blob
+// and never sees the passphrase. R2 holds the bytes when a bucket exists,
+// D1 carries small blobs, memory covers the no-DB path.
+const E2EE_BACKUP_MAX_BYTES = 20 * 1024 * 1024;
+const E2EE_BACKUP_D1_MAX_BYTES = 256 * 1024;
+function e2eeBackupValid(b) {
+  return !!b && typeof b === 'object' && b.v === 1 &&
+    typeof b.salt === 'string' && b.salt.length > 0 &&
+    typeof b.iv === 'string' && b.iv.length > 0 &&
+    typeof b.ct === 'string' && b.ct.length > 0;
+}
 const groupCallRooms = new Map();
 // S6: maximum live participants per group-call room.
 // F6: maximum members per group room (create + invite + join).
@@ -7609,7 +7627,9 @@ function entitled(u, feature) {
         await kdb.prepare('INSERT INTO e2ee_keys (user_id, device_id, identity_key, signed_prekey, prekey_sig, prekeys_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, device_id) DO UPDATE SET identity_key=excluded.identity_key, signed_prekey=excluded.signed_prekey, prekey_sig=excluded.prekey_sig, prekeys_json=excluded.prekeys_json, updated_at=excluded.updated_at')
           .bind(myId, m[1], bundle.identity_key, bundle.signed_prekey, bundle.prekey_sig, JSON.stringify(otks), bundle.updated_at).run();
       }
-      if (prevIdentity && prevIdentity !== b.identity_key) await e2eeAnnounceKeyChange(myId, m[1]);
+      // E9: first registration announces the new device too.
+      if (prevIdentity && prevIdentity !== b.identity_key) await e2eeAnnounceKeyChange(myId, m[1], 'changed');
+      else if (!prevIdentity) await e2eeAnnounceKeyChange(myId, m[1], 'added');
       return json({ status: 'keys_registered', device_id: m[1] });
     }
     if (method === 'DELETE') {
@@ -7629,6 +7649,8 @@ function entitled(u, feature) {
         if (userKeys.get(myId)?.device_id === m[1]) userKeys.delete(myId);
       }
       if (deviceKeys.get(m[1])?.user_id === myId) deviceKeys.delete(m[1]);
+      // E9: device removal notifies the owner's E2EE rooms.
+      await e2eeAnnounceKeyChange(myId, m[1], 'removed');
       return json({ status: 'keys_deleted', device_id: m[1] });
     }
   }
@@ -7686,6 +7708,25 @@ function entitled(u, feature) {
       one_time_prekey: otk
     });
   }
+  // E9: device lists without consuming one-time prekeys — for the safety
+  // number screen and my-devices management. Own list or any user's list;
+  // identity keys are public by design.
+  if (((m = p.match(/^users\/([\w-]+)\/e2ee-devices$/)) || p === 'me/e2ee-devices') && method === 'GET') {
+    if (!await rateLimit('rl:e2ee-devs:' + myId, 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const targetId = m ? m[1] : myId;
+    const kdb = dbOf();
+    if (kdb) {
+      await ensureSchema();
+      const { results } = await kdb.prepare('SELECT device_id, identity_key, updated_at FROM e2ee_keys WHERE user_id = ? ORDER BY updated_at DESC').bind(targetId).all().catch(() => ({ results: [] }));
+      return json({ user_id: targetId, devices: (results || []).map(r => ({ device_id: r.device_id, identity_key: r.identity_key, updated_at: r.updated_at })) });
+    }
+    const devices = [];
+    for (const [did, b] of deviceKeys) {
+      if (!b || b.user_id !== targetId) continue;
+      devices.push({ device_id: did, identity_key: b.identity_key, updated_at: b.updated_at });
+    }
+    return json({ user_id: targetId, devices });
+  }
   // E6: sender-key parcels. Opaque relay for group E2EE: the dealer seals
   // one envelope per recipient device over 1:1 sessions; the server only
   // checks that both ends share the room.
@@ -7742,6 +7783,66 @@ function entitled(u, feature) {
     if (at < 0) return json({ error: 'not found' }, 404);
     skParcels.splice(at, 1);
     return json({ status: 'parcel_deleted' });
+  }
+  if (p === 'e2ee/backup' && (method === 'PUT' || method === 'GET' || method === 'DELETE')) {
+    if (!await rateLimit('rl:e2ee-backup:' + myId, 30)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    const bdb = dbOf();
+    const bucket = mediaBucketOf();
+    const r2key = `e2ee-backup/${myId}`;
+    if (method === 'PUT') {
+      const b = await readJson(request);
+      const blob = b && b.blob;
+      if (!e2eeBackupValid(blob)) return bad('blob {v:1, salt, iv, ct} required');
+      const raw = JSON.stringify(blob);
+      const byteLen = new TextEncoder().encode(raw).length;
+      if (byteLen > E2EE_BACKUP_MAX_BYTES) return json({ error: 'backup too large (max 20MB)', code: 'BACKUP_TOO_LARGE' }, 413);
+      if (!bucket && byteLen > E2EE_BACKUP_D1_MAX_BYTES) return json({ error: 'backup needs object storage for this size', code: 'BACKUP_TOO_LARGE' }, 413);
+      const at = now();
+      if (bucket) await bucket.put(r2key, raw, { httpMetadata: { contentType: 'application/json' } });
+      if (bdb) {
+        await ensureSchema();
+        await bdb.prepare('INSERT INTO e2ee_backups (user_id, blob_json, byte_len, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET blob_json = excluded.blob_json, byte_len = excluded.byte_len, updated_at = excluded.updated_at')
+          .bind(myId, bucket || byteLen > E2EE_BACKUP_D1_MAX_BYTES ? '' : raw, byteLen, at).run();
+      } else {
+        e2eeBackupBlobs.set(myId, { blob, byteLen, updatedAt: at });
+      }
+      await persistAudit(myId, 'e2ee.backup.store', myId, { bytes: byteLen });
+      return json({ status: 'backup_stored', byte_len: byteLen, updated_at: at });
+    }
+    if (method === 'DELETE') {
+      if (bucket) await bucket.delete(r2key).catch(() => {});
+      if (bdb) {
+        await ensureSchema();
+        await bdb.prepare('DELETE FROM e2ee_backups WHERE user_id = ?').bind(myId).run();
+      } else {
+        e2eeBackupBlobs.delete(myId);
+      }
+      await persistAudit(myId, 'e2ee.backup.delete', myId);
+      return json({ status: 'backup_deleted' });
+    }
+    // GET: own blob only; absent reads {backup: null}, never 404.
+    if (bucket) {
+      const obj = await bucket.get(r2key).catch(() => null);
+      if (obj) {
+        const raw = await obj.text();
+        try {
+          const blob = JSON.parse(raw);
+          return json({ backup: blob, byte_len: new TextEncoder().encode(raw).length, updated_at: '' });
+        } catch { return json({ backup: null }); }
+      }
+      return json({ backup: null });
+    }
+    if (bdb) {
+      await ensureSchema();
+      const row = await bdb.prepare('SELECT blob_json, byte_len, updated_at FROM e2ee_backups WHERE user_id = ?').bind(myId).first().catch(() => null);
+      if (!row || !row.blob_json) return json({ backup: null });
+      try {
+        return json({ backup: JSON.parse(row.blob_json), byte_len: Number(row.byte_len) || 0, updated_at: row.updated_at || '' });
+      } catch { return json({ backup: null }); }
+    }
+    const mem = e2eeBackupBlobs.get(myId);
+    if (!mem) return json({ backup: null });
+    return json({ backup: mem.blob, byte_len: mem.byteLen, updated_at: mem.updatedAt });
   }
   if (p === 'calls/ice-servers' && method === 'GET') {
     // N2-L: STUN always; TURN entries appear only when the operator sets the

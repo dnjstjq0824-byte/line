@@ -524,6 +524,11 @@ class _DeckHeader extends StatelessWidget {
                       value: 'export',
                       child: _MenuRow(Icons.download_outlined,
                           context.l10n.roomExportDevice)),
+                  if (session.kindOf(conversationId) == 'direct')
+                    PopupMenuItem(
+                        value: 'safety',
+                        child: _MenuRow(Icons.verified_user_outlined,
+                            context.l10n.mvSafetyCode)),
                   if (session.kindOf(conversationId) == 'group')
                     PopupMenuItem(
                         value: 'settings',

@@ -1994,6 +1994,142 @@
   "@e2eeAiNoticeBody": {
     "description": "e2eeAiNoticeBody (E8)"
   },
+  "e2eeDevTitle": "내 기기 (암호화 키)",
+  "@e2eeDevTitle": {
+    "description": "e2eeDevTitle (E9)"
+  },
+  "e2eeDevThis": "이 기기",
+  "@e2eeDevThis": {
+    "description": "e2eeDevThis (E9)"
+  },
+  "e2eeDevRevoke": "키 삭제",
+  "@e2eeDevRevoke": {
+    "description": "e2eeDevRevoke (E9)"
+  },
+  "e2eeDevRevoked": "기기의 암호화 키를 삭제했습니다.",
+  "@e2eeDevRevoked": {
+    "description": "e2eeDevRevoked (E9)"
+  },
+  "e2eeDevEmpty": "등록된 기기가 없습니다.",
+  "@e2eeDevEmpty": {
+    "description": "e2eeDevEmpty (E9)"
+  },
+  "e2eeDevRevokeConfirm": "이 기기의 암호화 키를 삭제할까요? 해당 기기는 더 이상 암호화 대화를 주고받을 수 없습니다.",
+  "@e2eeDevRevokeConfirm": {
+    "description": "e2eeDevRevokeConfirm (E9)"
+  },
+  "e2eeBkTitle": "암호화 백업 (복원 문구)",
+  "@e2eeBkTitle": {
+    "description": "e2eeBkTitle (E9)"
+  },
+  "e2eeBkNone": "저장된 백업이 없습니다.",
+  "@e2eeBkNone": {
+    "description": "e2eeBkNone (E9)"
+  },
+  "e2eeBkStatus": "최근 백업: {date} ({size})",
+  "@e2eeBkStatus": {
+    "description": "e2eeBkStatus (E9)",
+    "placeholders": {
+      "date": {"type": "String"},
+      "size": {"type": "String"}
+    }
+  },
+  "e2eeBkPassPh": "복원 문구 (8자 이상)",
+  "@e2eeBkPassPh": {
+    "description": "e2eeBkPassPh (E9)"
+  },
+  "e2eeBkWeak": "약함",
+  "@e2eeBkWeak": {
+    "description": "e2eeBkWeak (E9)"
+  },
+  "e2eeBkFair": "보통",
+  "@e2eeBkFair": {
+    "description": "e2eeBkFair (E9)"
+  },
+  "e2eeBkStrong": "강함",
+  "@e2eeBkStrong": {
+    "description": "e2eeBkStrong (E9)"
+  },
+  "e2eeBkNow": "지금 백업",
+  "@e2eeBkNow": {
+    "description": "e2eeBkNow (E9)"
+  },
+  "e2eeBkBusy": "백업 중…",
+  "@e2eeBkBusy": {
+    "description": "e2eeBkBusy (E9)"
+  },
+  "e2eeBkDone": "백업을 저장했습니다.",
+  "@e2eeBkDone": {
+    "description": "e2eeBkDone (E9)"
+  },
+  "e2eeBkFail": "백업에 실패했습니다.",
+  "@e2eeBkFail": {
+    "description": "e2eeBkFail (E9)"
+  },
+  "e2eeBkRestore": "복원하기",
+  "@e2eeBkRestore": {
+    "description": "e2eeBkRestore (E9)"
+  },
+  "e2eeBkRestoring": "복원 중…",
+  "@e2eeBkRestoring": {
+    "description": "e2eeBkRestoring (E9)"
+  },
+  "e2eeBkRestored": "백업을 복원했습니다. 새 메시지는 계속 주고받을 수 있습니다.",
+  "@e2eeBkRestored": {
+    "description": "e2eeBkRestored (E9)"
+  },
+  "e2eeBkRestoreFail": "복원에 실패했습니다. 문구를 확인해 주세요.",
+  "@e2eeBkRestoreFail": {
+    "description": "e2eeBkRestoreFail (E9)"
+  },
+  "e2eeBkDelete": "백업 삭제",
+  "@e2eeBkDelete": {
+    "description": "e2eeBkDelete (E9)"
+  },
+  "e2eeBkDeleted": "백업을 삭제했습니다.",
+  "@e2eeBkDeleted": {
+    "description": "e2eeBkDeleted (E9)"
+  },
+  "e2eeSfTitle": "보안 코드",
+  "@e2eeSfTitle": {
+    "description": "e2eeSfTitle (E9)"
+  },
+  "e2eeSfHow": "서로 화면의 숫자가 같으면 중간에서 도청할 수 없습니다. 직접 만나거나 신뢰하는 통화로 확인한 뒤 인증을 눌러 주세요.",
+  "@e2eeSfHow": {
+    "description": "e2eeSfHow (E9)"
+  },
+  "e2eeSfVerify": "인증하기",
+  "@e2eeSfVerify": {
+    "description": "e2eeSfVerify (E9)"
+  },
+  "e2eeSfVerified": "인증됨",
+  "@e2eeSfVerified": {
+    "description": "e2eeSfVerified (E9)"
+  },
+  "e2eeSfChanged": "키가 변경됨 — 다시 확인해 주세요",
+  "@e2eeSfChanged": {
+    "description": "e2eeSfChanged (E9)"
+  },
+  "e2eeSfNone": "상대 기기 정보가 없습니다.",
+  "@e2eeSfNone": {
+    "description": "e2eeSfNone (E9)"
+  },
+  "e2eeSfMyCode": "내 기기 코드",
+  "@e2eeSfMyCode": {
+    "description": "e2eeSfMyCode (E9)"
+  },
+  "settingsEncryption": "종단 간 암호화",
+  "@settingsEncryption": {
+    "description": "settingsEncryption (E9)"
+  },
+  "settingsEncryptionDesc": "내 기기, 보안 백업",
+  "@settingsEncryptionDesc": {
+    "description": "settingsEncryptionDesc (E9)"
+  },
+  "mvSafetyCode": "보안 코드 확인",
+  "@mvSafetyCode": {
+    "description": "mvSafetyCode (E9)"
+  },
   "msgQueuedOffline": "오프라인 — 메시지를 대기열에 저장했습니다.",
   "@msgQueuedOffline": {
     "description": "msgQueuedOffline (F20)"

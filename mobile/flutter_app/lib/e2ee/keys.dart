@@ -28,6 +28,46 @@ Future<Uint8List> sha256Hash(Uint8List data) async {
   return Uint8List.fromList((await Sha256().hash(data)).bytes);
 }
 
+// E9: safety number — both Ed25519 identity pubs sorted, SHA-256, the
+// first 30 bytes as 60 decimal digits, rendered 20 per line.
+Future<String> safetyNumberDigits(Uint8List edA, Uint8List edB) async {
+  var cmp = 0;
+  final n = edA.length < edB.length ? edA.length : edB.length;
+  for (var i = 0; i < n; i++) {
+    if (edA[i] != edB[i]) {
+      cmp = edA[i] < edB[i] ? -1 : 1;
+      break;
+    }
+  }
+  if (cmp == 0) cmp = edA.length <= edB.length ? -1 : 1;
+  final cat = Uint8List(edA.length + edB.length);
+  final first = cmp <= 0 ? edA : edB;
+  final second = cmp <= 0 ? edB : edA;
+  cat.setAll(0, first);
+  cat.setAll(first.length, second);
+  final h = await sha256Hash(cat);
+  final out = StringBuffer();
+  for (var i = 0; i < 30; i++) {
+    out.write((h[i] % 100).toString().padLeft(2, '0'));
+  }
+  return out.toString();
+}
+
+List<String> formatSafetyNumber(String digits) {
+  final lines = <String>[];
+  for (var i = 0; i < 3; i++) {
+    final seg = digits.length >= (i + 1) * 20
+        ? digits.substring(i * 20, (i + 1) * 20)
+        : digits.substring(i * 20);
+    final groups = <String>[];
+    for (var o = 0; o < seg.length; o += 4) {
+      groups.add(seg.substring(o, o + 4 <= seg.length ? o + 4 : seg.length));
+    }
+    lines.add(groups.join(' '));
+  }
+  return lines;
+}
+
 Future<Uint8List> hkdfSha256(
     Uint8List ikm, Uint8List salt, Object info, int length) async {
   final infoBytes =

@@ -1500,6 +1500,109 @@ class AppLocalizationsKo extends AppLocalizations {
   String get e2eeAiNoticeBody => '암호화 대화 내용입니다. 이 메시지를 서버 AI(번역)에 보내시겠습니까?';
 
   @override
+  String get e2eeDevTitle => '내 기기 (암호화 키)';
+
+  @override
+  String get e2eeDevThis => '이 기기';
+
+  @override
+  String get e2eeDevRevoke => '키 삭제';
+
+  @override
+  String get e2eeDevRevoked => '기기의 암호화 키를 삭제했습니다.';
+
+  @override
+  String get e2eeDevEmpty => '등록된 기기가 없습니다.';
+
+  @override
+  String get e2eeDevRevokeConfirm =>
+      '이 기기의 암호화 키를 삭제할까요? 해당 기기는 더 이상 암호화 대화를 주고받을 수 없습니다.';
+
+  @override
+  String get e2eeBkTitle => '암호화 백업 (복원 문구)';
+
+  @override
+  String get e2eeBkNone => '저장된 백업이 없습니다.';
+
+  @override
+  String e2eeBkStatus(String date, String size) {
+    return '최근 백업: $date ($size)';
+  }
+
+  @override
+  String get e2eeBkPassPh => '복원 문구 (8자 이상)';
+
+  @override
+  String get e2eeBkWeak => '약함';
+
+  @override
+  String get e2eeBkFair => '보통';
+
+  @override
+  String get e2eeBkStrong => '강함';
+
+  @override
+  String get e2eeBkNow => '지금 백업';
+
+  @override
+  String get e2eeBkBusy => '백업 중…';
+
+  @override
+  String get e2eeBkDone => '백업을 저장했습니다.';
+
+  @override
+  String get e2eeBkFail => '백업에 실패했습니다.';
+
+  @override
+  String get e2eeBkRestore => '복원하기';
+
+  @override
+  String get e2eeBkRestoring => '복원 중…';
+
+  @override
+  String get e2eeBkRestored => '백업을 복원했습니다. 새 메시지는 계속 주고받을 수 있습니다.';
+
+  @override
+  String get e2eeBkRestoreFail => '복원에 실패했습니다. 문구를 확인해 주세요.';
+
+  @override
+  String get e2eeBkDelete => '백업 삭제';
+
+  @override
+  String get e2eeBkDeleted => '백업을 삭제했습니다.';
+
+  @override
+  String get e2eeSfTitle => '보안 코드';
+
+  @override
+  String get e2eeSfHow =>
+      '서로 화면의 숫자가 같으면 중간에서 도청할 수 없습니다. 직접 만나거나 신뢰하는 통화로 확인한 뒤 인증을 눌러 주세요.';
+
+  @override
+  String get e2eeSfVerify => '인증하기';
+
+  @override
+  String get e2eeSfVerified => '인증됨';
+
+  @override
+  String get e2eeSfChanged => '키가 변경됨 — 다시 확인해 주세요';
+
+  @override
+  String get e2eeSfNone => '상대 기기 정보가 없습니다.';
+
+  @override
+  String get e2eeSfMyCode => '내 기기 코드';
+
+  @override
+  String get settingsEncryption => '종단 간 암호화';
+
+  @override
+  String get settingsEncryptionDesc => '내 기기, 보안 백업';
+
+  @override
+  String get mvSafetyCode => '보안 코드 확인';
+
+  @override
   String get msgQueuedOffline => '오프라인 — 메시지를 대기열에 저장했습니다.';
 
   @override

@@ -103,6 +103,7 @@ const emit = defineEmits<{
   unsend: [msgId: string]
   forward: [msg: Message]
   'export-device': []
+  'safety-code': []
   hide: [msgId: string]
   decide: [msg: Message, decision: 'approved' | 'rejected']
   approvals: []
@@ -433,6 +434,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <button class="chat-topbar-menu-item" @click="emit('approvals'); showTopbarMenu = false"><LunoIcon name="check" :size="18" /><span>{{ t('apprTitle') }}</span></button>
             <button v-if="selectedChat?.kind === 'group'" class="chat-topbar-menu-item" @click="emit('group-settings'); showTopbarMenu = false"><LunoIcon name="friends" :size="18" /><span>{{ t('gsMenuSettings') }}</span></button>
             <button class="chat-topbar-menu-item" @click="emit('export-device'); showTopbarMenu = false"><LunoIcon name="download" :size="18" /><span>{{ t('mvExportDeviceChat') }}</span></button>
+            <button v-if="selectedChat?.e2ee && selectedChat?.kind === 'direct'" class="chat-topbar-menu-item" @click="emit('safety-code'); showTopbarMenu = false"><LunoIcon name="eye" :size="18" /><span>{{ t('mvSafetyCode') }}</span></button>
           </div>
         </div>
       </div>

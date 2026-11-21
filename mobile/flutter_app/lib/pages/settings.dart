@@ -108,6 +108,17 @@ class SettingsPage extends StatelessWidget {
                   chevron: true,
                   onTap: () => context.go('/support'),
                 ),
+                const _RowDivider(),
+                _ActionRow(
+                  icon: Icons.lock_outline,
+                  title: context.l10n.settingsEncryption,
+                  subtitle: context.l10n.settingsEncryptionDesc,
+                  ink: ink,
+                  sub: sub,
+                  dark: dark,
+                  chevron: true,
+                  onTap: () => context.go('/e2ee'),
+                ),
               ],
             ),
             _Section(

@@ -5,6 +5,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import type { User } from '../../../shared/api'
+import E2eeSettings from './E2eeSettings.vue'
 import { SUPPORTED_LOCALES, type LunoLocale } from '../luno-i18n'
 import { requestWebNotifyPermission, webNotifyEnabled } from '../web_notify'
 import {
@@ -61,7 +62,11 @@ const emit = defineEmits<{
   export: []
   delete: []
   'revoke-device': [deviceId: string]
+  'e2ee-backup': [passphrase: string]
+  'e2ee-restore': [passphrase: string]
 }>()
+
+const e2eeBusy = defineModel<boolean>('e2eeBusy', { default: false })
 
 const targetTranslateLang = defineModel<LunoLocale>('targetTranslateLang', { required: true })
 const deletePasswordInput = defineModel<string>('deletePasswordInput', { required: true })
@@ -400,11 +405,8 @@ onMounted(() => {
             <span v-else class="muted">{{ t('mvNotifyBlocked') }}</span>
           </div>
 
-          <!-- Phase 2: E2EE Key Management -->
-          <div class="setting-toggle-row">
-            <span>{{ t('mvKeyMgmt') }}</span>
-            <span class="muted">{{ t('e2ee_preparing') }}</span>
-          </div>
+          <!-- E9: E2EE devices + passphrase backup -->
+          <E2eeSettings :busy="e2eeBusy" @backup="emit('e2ee-backup', $event)" @restore="emit('e2ee-restore', $event)" />
         </div>
 
         <!-- 5b. Passkey registration -->

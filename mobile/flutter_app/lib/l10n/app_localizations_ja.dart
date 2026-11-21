@@ -1500,6 +1500,109 @@ class AppLocalizationsJa extends AppLocalizations {
   String get e2eeAiNoticeBody => '暗号化されたメッセージです。このメッセージをサーバーAI（翻訳）に送信しますか？';
 
   @override
+  String get e2eeDevTitle => '自分の端末（暗号化キー）';
+
+  @override
+  String get e2eeDevThis => 'この端末';
+
+  @override
+  String get e2eeDevRevoke => 'キーを削除';
+
+  @override
+  String get e2eeDevRevoked => '端末の暗号化キーを削除しました';
+
+  @override
+  String get e2eeDevEmpty => '登録された端末がありません';
+
+  @override
+  String get e2eeDevRevokeConfirm =>
+      'この端末の暗号化キーを削除しますか？その端末は暗号化トークを送受信できなくなります。';
+
+  @override
+  String get e2eeBkTitle => '暗号化バックアップ（復元フレーズ）';
+
+  @override
+  String get e2eeBkNone => '保存されたバックアップがありません';
+
+  @override
+  String e2eeBkStatus(String date, String size) {
+    return '最新のバックアップ：$date（$size）';
+  }
+
+  @override
+  String get e2eeBkPassPh => '復元フレーズ（8文字以上）';
+
+  @override
+  String get e2eeBkWeak => '弱い';
+
+  @override
+  String get e2eeBkFair => '普通';
+
+  @override
+  String get e2eeBkStrong => '強い';
+
+  @override
+  String get e2eeBkNow => '今すぐバックアップ';
+
+  @override
+  String get e2eeBkBusy => 'バックアップ中…';
+
+  @override
+  String get e2eeBkDone => 'バックアップを保存しました';
+
+  @override
+  String get e2eeBkFail => 'バックアップに失敗しました';
+
+  @override
+  String get e2eeBkRestore => '復元する';
+
+  @override
+  String get e2eeBkRestoring => '復元中…';
+
+  @override
+  String get e2eeBkRestored => 'バックアップを復元しました。新しいメッセージの送受信を続けられます。';
+
+  @override
+  String get e2eeBkRestoreFail => '復元に失敗しました。フレーズを確認してください。';
+
+  @override
+  String get e2eeBkDelete => 'バックアップを削除';
+
+  @override
+  String get e2eeBkDeleted => 'バックアップを削除しました';
+
+  @override
+  String get e2eeSfTitle => 'セーフティ番号';
+
+  @override
+  String get e2eeSfHow =>
+      '両方の画面の数字が一致すれば、途中で盗聴されることはありません。対面または信頼できる通話で確認してから「確認する」を押してください。';
+
+  @override
+  String get e2eeSfVerify => '確認する';
+
+  @override
+  String get e2eeSfVerified => '確認済み';
+
+  @override
+  String get e2eeSfChanged => 'キーが変更されました — もう一度確認してください';
+
+  @override
+  String get e2eeSfNone => '相手の端末情報がありません';
+
+  @override
+  String get e2eeSfMyCode => '自分の端末コード';
+
+  @override
+  String get settingsEncryption => 'エンドツーエンド暗号化';
+
+  @override
+  String get settingsEncryptionDesc => '自分の端末、安全なバックアップ';
+
+  @override
+  String get mvSafetyCode => 'セーフティ番号を確認';
+
+  @override
   String get msgQueuedOffline => 'オフライン — メッセージを待機列に保存しました。';
 
   @override

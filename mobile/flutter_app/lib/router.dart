@@ -16,6 +16,7 @@ import 'pages/chat_archive.dart';
 import 'pages/chat_room.dart';
 import 'pages/chats.dart';
 import 'pages/contact_find.dart';
+import 'pages/e2ee_settings.dart';
 import 'pages/group_settings.dart';
 import 'pages/console.dart';
 import 'pages/feed.dart';
@@ -31,6 +32,7 @@ import 'pages/profile.dart';
 import 'pages/qr_scan.dart';
 import 'pages/reports.dart';
 import 'pages/support.dart';
+import 'pages/safety_number.dart';
 import 'pages/search.dart';
 import 'pages/settings.dart';
 import 'pages/shop.dart';
@@ -156,6 +158,13 @@ GoRouter buildRouter(SessionController session) {
                           conversationId: s.pathParameters['cid']!,
                           kind: ChatArchiveKind.albums))),
               GoRoute(
+                  path: 'safety',
+                  pageBuilder: (c, s) => harborPage(
+                      c,
+                      s,
+                      SafetyNumberPage(
+                          conversationId: s.pathParameters['cid']!))),
+              GoRoute(
                   path: 'settings',
                   pageBuilder: (c, s) => harborPage(
                       c,
@@ -212,6 +221,9 @@ GoRouter buildRouter(SessionController session) {
           GoRoute(
               path: '/reports',
               pageBuilder: (c, s) => harborPage(c, s, const ReportsPage())),
+          GoRoute(
+              path: '/e2ee',
+              pageBuilder: (c, s) => harborPage(c, s, const E2eeSettingsPage())),
           GoRoute(
               path: '/support',
               pageBuilder: (c, s) => harborPage(c, s, const SupportPage())),

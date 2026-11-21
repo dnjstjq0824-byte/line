@@ -2994,6 +2994,204 @@ abstract class AppLocalizations {
   /// **'암호화 대화 내용입니다. 이 메시지를 서버 AI(번역)에 보내시겠습니까?'**
   String get e2eeAiNoticeBody;
 
+  /// e2eeDevTitle (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'내 기기 (암호화 키)'**
+  String get e2eeDevTitle;
+
+  /// e2eeDevThis (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기'**
+  String get e2eeDevThis;
+
+  /// e2eeDevRevoke (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'키 삭제'**
+  String get e2eeDevRevoke;
+
+  /// e2eeDevRevoked (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'기기의 암호화 키를 삭제했습니다.'**
+  String get e2eeDevRevoked;
+
+  /// e2eeDevEmpty (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'등록된 기기가 없습니다.'**
+  String get e2eeDevEmpty;
+
+  /// e2eeDevRevokeConfirm (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기의 암호화 키를 삭제할까요? 해당 기기는 더 이상 암호화 대화를 주고받을 수 없습니다.'**
+  String get e2eeDevRevokeConfirm;
+
+  /// e2eeBkTitle (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'암호화 백업 (복원 문구)'**
+  String get e2eeBkTitle;
+
+  /// e2eeBkNone (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'저장된 백업이 없습니다.'**
+  String get e2eeBkNone;
+
+  /// e2eeBkStatus (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'최근 백업: {date} ({size})'**
+  String e2eeBkStatus(String date, String size);
+
+  /// e2eeBkPassPh (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'복원 문구 (8자 이상)'**
+  String get e2eeBkPassPh;
+
+  /// e2eeBkWeak (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'약함'**
+  String get e2eeBkWeak;
+
+  /// e2eeBkFair (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'보통'**
+  String get e2eeBkFair;
+
+  /// e2eeBkStrong (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'강함'**
+  String get e2eeBkStrong;
+
+  /// e2eeBkNow (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'지금 백업'**
+  String get e2eeBkNow;
+
+  /// e2eeBkBusy (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 중…'**
+  String get e2eeBkBusy;
+
+  /// e2eeBkDone (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'백업을 저장했습니다.'**
+  String get e2eeBkDone;
+
+  /// e2eeBkFail (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'백업에 실패했습니다.'**
+  String get e2eeBkFail;
+
+  /// e2eeBkRestore (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'복원하기'**
+  String get e2eeBkRestore;
+
+  /// e2eeBkRestoring (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'복원 중…'**
+  String get e2eeBkRestoring;
+
+  /// e2eeBkRestored (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'백업을 복원했습니다. 새 메시지는 계속 주고받을 수 있습니다.'**
+  String get e2eeBkRestored;
+
+  /// e2eeBkRestoreFail (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'복원에 실패했습니다. 문구를 확인해 주세요.'**
+  String get e2eeBkRestoreFail;
+
+  /// e2eeBkDelete (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'백업 삭제'**
+  String get e2eeBkDelete;
+
+  /// e2eeBkDeleted (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'백업을 삭제했습니다.'**
+  String get e2eeBkDeleted;
+
+  /// e2eeSfTitle (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'보안 코드'**
+  String get e2eeSfTitle;
+
+  /// e2eeSfHow (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'서로 화면의 숫자가 같으면 중간에서 도청할 수 없습니다. 직접 만나거나 신뢰하는 통화로 확인한 뒤 인증을 눌러 주세요.'**
+  String get e2eeSfHow;
+
+  /// e2eeSfVerify (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'인증하기'**
+  String get e2eeSfVerify;
+
+  /// e2eeSfVerified (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'인증됨'**
+  String get e2eeSfVerified;
+
+  /// e2eeSfChanged (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'키가 변경됨 — 다시 확인해 주세요'**
+  String get e2eeSfChanged;
+
+  /// e2eeSfNone (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'상대 기기 정보가 없습니다.'**
+  String get e2eeSfNone;
+
+  /// e2eeSfMyCode (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'내 기기 코드'**
+  String get e2eeSfMyCode;
+
+  /// settingsEncryption (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'종단 간 암호화'**
+  String get settingsEncryption;
+
+  /// settingsEncryptionDesc (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'내 기기, 보안 백업'**
+  String get settingsEncryptionDesc;
+
+  /// mvSafetyCode (E9)
+  ///
+  /// In ko, this message translates to:
+  /// **'보안 코드 확인'**
+  String get mvSafetyCode;
+
   /// msgQueuedOffline (F20)
   ///
   /// In ko, this message translates to:

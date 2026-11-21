@@ -1519,6 +1519,110 @@ class AppLocalizationsEn extends AppLocalizations {
       'This is an encrypted message. Send it to the server AI (translate)?';
 
   @override
+  String get e2eeDevTitle => 'My devices (encryption keys)';
+
+  @override
+  String get e2eeDevThis => 'This device';
+
+  @override
+  String get e2eeDevRevoke => 'Remove keys';
+
+  @override
+  String get e2eeDevRevoked => 'Removed the device’s encryption keys.';
+
+  @override
+  String get e2eeDevEmpty => 'No registered devices.';
+
+  @override
+  String get e2eeDevRevokeConfirm =>
+      'Remove this device’s encryption keys? It will no longer send or receive encrypted chats.';
+
+  @override
+  String get e2eeBkTitle => 'Encrypted backup (recovery passphrase)';
+
+  @override
+  String get e2eeBkNone => 'No backup stored.';
+
+  @override
+  String e2eeBkStatus(String date, String size) {
+    return 'Latest backup: $date ($size)';
+  }
+
+  @override
+  String get e2eeBkPassPh => 'Recovery passphrase (8+ characters)';
+
+  @override
+  String get e2eeBkWeak => 'Weak';
+
+  @override
+  String get e2eeBkFair => 'Fair';
+
+  @override
+  String get e2eeBkStrong => 'Strong';
+
+  @override
+  String get e2eeBkNow => 'Back up now';
+
+  @override
+  String get e2eeBkBusy => 'Backing up…';
+
+  @override
+  String get e2eeBkDone => 'Backup stored.';
+
+  @override
+  String get e2eeBkFail => 'Backup failed.';
+
+  @override
+  String get e2eeBkRestore => 'Restore';
+
+  @override
+  String get e2eeBkRestoring => 'Restoring…';
+
+  @override
+  String get e2eeBkRestored =>
+      'Backup restored. You can keep exchanging new messages.';
+
+  @override
+  String get e2eeBkRestoreFail => 'Restore failed. Check your passphrase.';
+
+  @override
+  String get e2eeBkDelete => 'Delete backup';
+
+  @override
+  String get e2eeBkDeleted => 'Backup deleted.';
+
+  @override
+  String get e2eeSfTitle => 'Safety number';
+
+  @override
+  String get e2eeSfHow =>
+      'If the numbers on both screens match, nobody in the middle can listen in. Compare in person or over a trusted call, then tap Verify.';
+
+  @override
+  String get e2eeSfVerify => 'Verify';
+
+  @override
+  String get e2eeSfVerified => 'Verified';
+
+  @override
+  String get e2eeSfChanged => 'Keys changed — compare again';
+
+  @override
+  String get e2eeSfNone => 'No peer device info.';
+
+  @override
+  String get e2eeSfMyCode => 'My device code';
+
+  @override
+  String get settingsEncryption => 'End-to-end encryption';
+
+  @override
+  String get settingsEncryptionDesc => 'My devices, secure backup';
+
+  @override
+  String get mvSafetyCode => 'Check safety number';
+
+  @override
   String get msgQueuedOffline => 'Offline — message queued.';
 
   @override

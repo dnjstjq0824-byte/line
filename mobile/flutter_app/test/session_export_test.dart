@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:luno_messenger/e2ee/store.dart';
 import 'package:luno_messenger/state/session.dart';
 
 class FakeHttp extends http.BaseClient {
@@ -127,6 +128,90 @@ void main() {
       expect(posted.containsKey('message_id'), isFalse);
       expect(posted.containsKey('e2ee_text'), isFalse);
       expect(posted.containsKey('plaintext_consent'), isFalse);
+    });
+  });
+
+  group('passphrase backup', () {
+    SessionController makeE2ee(FakeHttp fake) {
+      final s = SessionController(httpClient: fake);
+      addTearDown(s.disposeAll);
+      s.selfId = 'me';
+      s.deviceId = 't1';
+      s.e2eeKvForTests = MemoryKV();
+      return s;
+    }
+
+    test('backup stores an opaque blob, restore reinstalls identity',
+        () async {
+      final fake = FakeHttp();
+      Map<String, dynamic>? stored;
+      fake.handler = (req, body) async {
+        if (req.url.path == '/api/v1/e2ee/backup') {
+          if (req.method == 'PUT') {
+            stored = jsonDecode(body) as Map<String, dynamic>;
+            return jsonRes({'status': 'backup_stored'}, 200);
+          }
+          return jsonRes(
+              {'backup': stored?['blob'], 'byte_len': 10, 'updated_at': 'x'},
+              200);
+        }
+        return jsonRes({}, 200);
+      };
+      final s = makeE2ee(fake);
+      await s.backupE2eeNow('correct horse 999');
+      expect(s.notice, s.strings.e2eeBkDone);
+      final blob = stored?['blob'] as Map<String, dynamic>?;
+      expect(blob?['v'], 1);
+      expect(jsonEncode(blob), isNot(contains('xPriv')));
+      final before = s.mySafetyIdentity();
+      expect(before, isNotNull);
+      await s.restoreE2eeNow('correct horse 999');
+      expect(s.notice, s.strings.e2eeBkRestored);
+      expect(s.mySafetyIdentity(), before);
+    });
+
+    test('wrong passphrase fails closed with one message', () async {
+      final fake = FakeHttp();
+      Map<String, dynamic>? stored;
+      fake.handler = (req, body) async {
+        if (req.url.path == '/api/v1/e2ee/backup') {
+          if (req.method == 'PUT') {
+            stored = jsonDecode(body) as Map<String, dynamic>;
+            return jsonRes({'status': 'backup_stored'}, 200);
+          }
+          return jsonRes(
+              {'backup': stored?['blob'], 'byte_len': 10, 'updated_at': 'x'},
+              200);
+        }
+        return jsonRes({}, 200);
+      };
+      final s = makeE2ee(fake);
+      await s.backupE2eeNow('correct horse 999');
+      await s.restoreE2eeNow('totally wrong passphrase!!');
+      expect(s.notice, s.strings.e2eeBkRestoreFail);
+    });
+
+    test('devices load and revoke by id', () async {
+      final fake = FakeHttp();
+      final paths = <String>[];
+      fake.handler = (req, body) async {
+        paths.add('${req.method} ${req.url.path}');
+        if (req.url.path == '/api/v1/me/e2ee-devices') {
+          return jsonRes({
+            'devices': [
+              {'device_id': 't1', 'identity_key': 'x.y', 'updated_at': 't'}
+            ]
+          }, 200);
+        }
+        return jsonRes({}, 200);
+      };
+      final s = makeE2ee(fake);
+      await s.loadE2eeDevices();
+      expect(s.e2eeDevices, hasLength(1));
+      await s.revokeE2eeDevice('t9');
+      expect(
+          paths.any((p) => p == 'DELETE /api/v1/devices/t9/keys'), isTrue);
+      expect(s.notice, s.strings.e2eeDevRevoked);
     });
   });
 }

@@ -1511,6 +1511,109 @@ class AppLocalizationsTh extends AppLocalizations {
       'นี่คือข้อความเข้ารหัส ส่งข้อความนี้ไปยัง AI เซิร์ฟเวอร์ (แปล) หรือไม่?';
 
   @override
+  String get e2eeDevTitle => 'อุปกรณ์ของฉัน (คีย์เข้ารหัส)';
+
+  @override
+  String get e2eeDevThis => 'อุปกรณ์นี้';
+
+  @override
+  String get e2eeDevRevoke => 'ลบคีย์';
+
+  @override
+  String get e2eeDevRevoked => 'ลบคีย์เข้ารหัสของอุปกรณ์แล้ว';
+
+  @override
+  String get e2eeDevEmpty => 'ไม่มีอุปกรณ์ที่ลงทะเบียน';
+
+  @override
+  String get e2eeDevRevokeConfirm =>
+      'ลบคีย์เข้ารหัสของอุปกรณ์นี้หรือไม่? อุปกรณ์นั้นจะส่ง/รับแชทเข้ารหัสไม่ได้อีก';
+
+  @override
+  String get e2eeBkTitle => 'ข้อมูลสำรองเข้ารหัส (วลีกู้คืน)';
+
+  @override
+  String get e2eeBkNone => 'ไม่มีข้อมูลสำรอง';
+
+  @override
+  String e2eeBkStatus(String date, String size) {
+    return 'สำรองล่าสุด: $date ($size)';
+  }
+
+  @override
+  String get e2eeBkPassPh => 'วลีกู้คืน (8 ตัวอักษรขึ้นไป)';
+
+  @override
+  String get e2eeBkWeak => 'อ่อน';
+
+  @override
+  String get e2eeBkFair => 'ปานกลาง';
+
+  @override
+  String get e2eeBkStrong => 'แข็งแรง';
+
+  @override
+  String get e2eeBkNow => 'สำรองตอนนี้';
+
+  @override
+  String get e2eeBkBusy => 'กำลังสำรอง…';
+
+  @override
+  String get e2eeBkDone => 'บันทึกข้อมูลสำรองแล้ว';
+
+  @override
+  String get e2eeBkFail => 'สำรองไม่สำเร็จ';
+
+  @override
+  String get e2eeBkRestore => 'กู้คืน';
+
+  @override
+  String get e2eeBkRestoring => 'กำลังกู้คืน…';
+
+  @override
+  String get e2eeBkRestored => 'กู้คืนข้อมูลสำรองแล้ว ส่งข้อความใหม่ต่อได้';
+
+  @override
+  String get e2eeBkRestoreFail => 'กู้คืนไม่สำเร็จ ตรวจสอบวลีของคุณ';
+
+  @override
+  String get e2eeBkDelete => 'ลบข้อมูลสำรอง';
+
+  @override
+  String get e2eeBkDeleted => 'ลบข้อมูลสำรองแล้ว';
+
+  @override
+  String get e2eeSfTitle => 'หมายเลขความปลอดภัย';
+
+  @override
+  String get e2eeSfHow =>
+      'ถ้าตัวเลขทั้งสองหน้าจอตรงกัน จะไม่มีคนกลางแอบฟังได้ เทียบกันต่อหน้าหรือผ่านสายที่ไว้ใจได้ แล้วกดยืนยัน';
+
+  @override
+  String get e2eeSfVerify => 'ยืนยัน';
+
+  @override
+  String get e2eeSfVerified => 'ยืนยันแล้ว';
+
+  @override
+  String get e2eeSfChanged => 'คีย์เปลี่ยนไป — เทียบอีกครั้ง';
+
+  @override
+  String get e2eeSfNone => 'ไม่มีข้อมูลอุปกรณ์ปลายทาง';
+
+  @override
+  String get e2eeSfMyCode => 'รหัสอุปกรณ์ของฉัน';
+
+  @override
+  String get settingsEncryption => 'การเข้ารหัสต้นทางถึงปลายทาง';
+
+  @override
+  String get settingsEncryptionDesc => 'อุปกรณ์ของฉัน ข้อมูลสำรองปลอดภัย';
+
+  @override
+  String get mvSafetyCode => 'ตรวจหมายเลขความปลอดภัย';
+
+  @override
   String get msgQueuedOffline => 'ออฟไลน์ — เก็บข้อความเข้าคิวแล้ว';
 
   @override

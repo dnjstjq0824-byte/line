@@ -92,6 +92,7 @@ export type Message = {
   read_count?: number
   _e2ee?: boolean
   _e2eeError?: boolean
+  _restored?: boolean
   reactions?: Record<string, number>
   my_reactions?: string[]
   reply_preview?: {

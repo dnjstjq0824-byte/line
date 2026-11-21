@@ -6,10 +6,12 @@ import type {
 } from '../../../shared/e2ee/keys.ts';
 import {
   encodeIdentity,
+  formatSafetyNumber,
   generateIdentity,
   generateSignedPrekey,
   parseIdentity,
   randomBytes,
+  safetyNumberDigits,
   verifyPrekeySig,
   x25519Public,
 } from '../../../shared/e2ee/keys.ts';
@@ -154,6 +156,11 @@ export class E2eeStore {
     await this.kv.set(this.k('opkUsed'), String(this.opkUsedSincePut));
   }
 
+  /** E9: force (re-)registration of this device's bundle. */
+  async republish(): Promise<void> {
+    await this.publishBundle();
+  }
+
   private async publishBundle(): Promise<void> {
     const id = this.identity!;
     let spk = this.spks.length ? this.spks[this.spks.length - 1] : null;
@@ -190,6 +197,26 @@ export class E2eeStore {
 
   private async saveSession(peerUser: string, peerDevice: string, rec: SessionRecord): Promise<void> {
     await this.kv.set(this.k('sess', peerUser, peerDevice), JSON.stringify(rec));
+    await this.addIdx('sessIdx', JSON.stringify([peerUser, peerDevice]));
+  }
+
+  // E9: explicit indexes (the KV has no listing) drive backup export
+  // and complete logout wipes.
+  private async loadIdx(name: string): Promise<string[]> {
+    try {
+      const v = JSON.parse((await this.kv.get(this.k(name))) || '[]');
+      return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async addIdx(name: string, entry: string): Promise<void> {
+    const cur = await this.loadIdx(name);
+    if (!cur.includes(entry)) {
+      cur.push(entry);
+      await this.kv.set(this.k(name), JSON.stringify(cur));
+    }
   }
 
   private async fetchBundles(userId: string): Promise<DeviceBundle[]> {
@@ -280,6 +307,7 @@ export class E2eeStore {
 
   private async saveOwnSenderKey(roomId: string, rec: { gen: number; chain: string; signPriv: string; signPub: string; n: number; dealt: Record<string, number>; members: string[] }): Promise<void> {
     await this.kv.set(this.k('skown', roomId), JSON.stringify(rec));
+    await this.addIdx('skownIdx', roomId);
   }
 
   private async loadPeerSenderKey(roomId: string, senderId: string, gen: number): Promise<{ gen: number; chain: string; signPub: string; n: number; skipped: Array<{ n: number; mk: string }> } | null> {
@@ -289,6 +317,7 @@ export class E2eeStore {
 
   private async savePeerSenderKey(roomId: string, senderId: string, gen: number, rec: { chain: string; signPub: string; n: number; skipped: Array<{ n: number; mk: string }> }): Promise<void> {
     await this.kv.set(this.k('skin', roomId, senderId, String(gen)), JSON.stringify({ ...rec, gen }));
+    await this.addIdx('skinIdx', JSON.stringify([roomId, senderId, gen]));
   }
 
   /** Ensure our sender key for the room, rotate on member exit, deal to newcomers. */
@@ -521,10 +550,158 @@ export class E2eeStore {
     try {
       await this.api('devices/' + this.deviceId + '/keys', 'DELETE');
     } catch { /* already gone */ }
-    for (const k of ['identity', 'spks', 'opks', 'opkUsed']) {
+    // E9: sessions, sender keys and verified marks go too — logout
+    // leaves no key material behind (pre-E9 orphans excepted).
+    for (const e of await this.loadIdx('sessIdx')) {
+      try {
+        const [u, d] = JSON.parse(e);
+        await this.kv.del(this.k('sess', u, d));
+      } catch { /* ignore */ }
+    }
+    for (const room of await this.loadIdx('skownIdx')) {
+      await this.kv.del(this.k('skown', room));
+    }
+    for (const e of await this.loadIdx('skinIdx')) {
+      try {
+        const [r, s, g] = JSON.parse(e);
+        await this.kv.del(this.k('skin', r, s, String(g)));
+      } catch { /* ignore */ }
+    }
+    for (const e of await this.loadIdx('vfyIdx')) {
+      try {
+        const [u, d] = JSON.parse(e);
+        await this.kv.del(this.k('vfy', u, d));
+      } catch { /* ignore */ }
+    }
+    for (const k of ['identity', 'spks', 'opks', 'opkUsed', 'sessIdx', 'skownIdx', 'skinIdx', 'vfyIdx']) {
       await this.kv.del(this.k(k));
     }
     this.readyDone = false;
     this.identity = null;
+    this.spks = [];
+    this.opkPrivs = {};
+    this.opkUsedSincePut = 0;
+  }
+
+  /** E9: dotted own identity (x.ed b64u) for the safety screen. */
+  myIdentity(): string | null {
+    return this.identity ? encodeIdentity(this.identity) : null;
+  }
+
+  /** E9: safety numbers for every device of a user. */
+  async safetyNumbers(userId: string): Promise<Array<{ device: string; edPub: string; number: string; lines: string[]; verified: boolean; changed: boolean }>> {
+    await this.ready();
+    if (!this.identity) return [];
+    const res = await this.api<{ devices?: Array<{ device_id: string; identity_key: string }> }>(
+      `users/${userId}/e2ee-devices`, 'GET');
+    const out: Array<{ device: string; edPub: string; number: string; lines: string[]; verified: boolean; changed: boolean }> = [];
+    for (const d of res.devices || []) {
+      const id = parseIdentity(d.identity_key);
+      if (!id) continue;
+      const peerEd = b64uEncode(id.ed);
+      const digits = safetyNumberDigits(this.identity.edPub, id.ed);
+      const vfy = await this.kv.get(this.k('vfy', userId, d.device_id));
+      out.push({
+        device: d.device_id,
+        edPub: peerEd,
+        number: digits,
+        lines: formatSafetyNumber(digits),
+        verified: vfy === peerEd,
+        changed: vfy != null && vfy !== peerEd,
+      });
+    }
+    return out;
+  }
+
+  /** E9: mark a peer device identity as compared-and-correct. */
+  async setVerified(userId: string, deviceId: string, edPub: string): Promise<void> {
+    await this.kv.set(this.k('vfy', userId, deviceId), edPub);
+    await this.addIdx('vfyIdx', JSON.stringify([userId, deviceId]));
+  }
+
+  /** E9: export keys + sessions + sender keys for backup. */
+  async exportState(): Promise<Record<string, unknown>> {
+    await this.ready();
+    const sessions: Record<string, unknown> = {};
+    for (const e of await this.loadIdx('sessIdx')) {
+      try {
+        const [u, d] = JSON.parse(e);
+        const raw = await this.kv.get(this.k('sess', u, d));
+        if (raw) sessions[`${u}\n${d}`] = JSON.parse(raw);
+      } catch { /* ignore */ }
+    }
+    const skown: Record<string, unknown> = {};
+    for (const room of await this.loadIdx('skownIdx')) {
+      const raw = await this.kv.get(this.k('skown', room));
+      if (raw) skown[room] = JSON.parse(raw);
+    }
+    const skin: Record<string, unknown> = {};
+    for (const e of await this.loadIdx('skinIdx')) {
+      try {
+        const [r, s, g] = JSON.parse(e);
+        const raw = await this.kv.get(this.k('skin', r, s, String(g)));
+        if (raw) skin[`${r}\n${s}\n${g}`] = JSON.parse(raw);
+      } catch { /* ignore */ }
+    }
+    return {
+      v: 1,
+      userId: this.userId,
+      fromDevice: this.deviceId,
+      exportedAt: new Date().toISOString(),
+      identity: JSON.parse((await this.kv.get(this.k('identity'))) || 'null'),
+      spks: JSON.parse((await this.kv.get(this.k('spks'))) || '[]'),
+      opks: JSON.parse((await this.kv.get(this.k('opks'))) || '{}'),
+      sessions,
+      skown,
+      skin,
+    };
+  }
+
+  /** E9: install an exported state (same user; any device). */
+  async importState(payload: Record<string, unknown>): Promise<void> {
+    if (!payload || payload.v !== 1 || payload.userId !== this.userId) {
+      throw new Error('backup is not for this user');
+    }
+    if (!payload.identity || typeof payload.identity !== 'object') {
+      throw new Error('backup has no identity');
+    }
+    await this.kv.set(this.k('identity'), JSON.stringify(payload.identity));
+    await this.kv.set(this.k('spks'), JSON.stringify(payload.spks || []));
+    await this.kv.set(this.k('opks'), JSON.stringify(payload.opks || {}));
+    await this.kv.set(this.k('opkUsed'), '0');
+    // Sessions and sender keys are bound to the exporting device: a new
+    // device re-handshakes and re-deals instead of forking live chains.
+    // Same-device reinstalls keep them for uninterrupted decryption.
+    if (payload.fromDevice !== this.deviceId) {
+      this.readyDone = false;
+      this.identity = null;
+      await this.ready();
+      // A new device id has no server bundle yet: register it now.
+      await this.republish();
+      return;
+    }
+    const sessions = (payload.sessions || {}) as Record<string, unknown>;
+    for (const [key, rec] of Object.entries(sessions)) {
+      const [u, d] = key.split('\n');
+      if (!u || !d) continue;
+      await this.kv.set(this.k('sess', u, d), JSON.stringify(rec));
+      await this.addIdx('sessIdx', JSON.stringify([u, d]));
+    }
+    const skown = (payload.skown || {}) as Record<string, unknown>;
+    for (const [room, rec] of Object.entries(skown)) {
+      await this.kv.set(this.k('skown', room), JSON.stringify(rec));
+      await this.addIdx('skownIdx', room);
+    }
+    const skin = (payload.skin || {}) as Record<string, unknown>;
+    for (const [key, rec] of Object.entries(skin)) {
+      const [r, s, g] = key.split('\n');
+      if (!r || !s || g === undefined) continue;
+      await this.kv.set(this.k('skin', r, s, g), JSON.stringify(rec));
+      await this.addIdx('skinIdx', JSON.stringify([r, s, Number(g)]));
+    }
+    // Re-register the restored identity under this device id.
+    this.readyDone = false;
+    this.identity = null;
+    await this.ready();
   }
 }

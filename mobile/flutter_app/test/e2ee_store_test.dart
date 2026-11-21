@@ -1,7 +1,10 @@
 // E5: Dart E2EE store through a fake key directory with the same
 // semantics as the server (bundle store, one-time-prekey consume,
 // ownership on delete). Live-server flows are covered node-side.
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:luno_messenger/e2ee/keys.dart';
 import 'package:luno_messenger/e2ee/store.dart';
 
 class FakeDirectory {
@@ -72,6 +75,23 @@ class FakeDirectory {
         'signed_prekey': devs[did]!['signed_prekey'],
         'prekey_sig': devs[did]!['prekey_sig'],
         'one_time_prekey': consume(did),
+      };
+    }
+    final devs =
+        RegExp(r'^users/([\w-]+)/e2ee-devices$').firstMatch(path);
+    if (devs != null && method == 'GET') {
+      final uid = devs.group(1)!;
+      final ds = bundles[uid] ?? {};
+      return {
+        'user_id': uid,
+        'devices': [
+          for (final e in ds.entries)
+            {
+              'device_id': e.key,
+              'identity_key': e.value['identity_key'],
+              'updated_at': '2026-11-21T00:00:00Z',
+            }
+        ],
       };
     }
     if (path == 'e2ee/sk' && method == 'POST') {
@@ -189,5 +209,80 @@ void main() {
     await bob.ready();
     expect(await bob.decryptBody('alice', 'not-json'), isNull);
     expect(await bob.decryptBody('alice', '{"v":1,"msgs":{}}'), isNull);
+  });
+
+  test('E9 app: safety numbers match both ways, verify sticks', () async {
+    final dir = FakeDirectory();
+    final alice = E2eeStore(kv: MemoryKV(), api: dir.as('alice'), userId: 'alice', deviceId: 'a1');
+    final bob = E2eeStore(kv: MemoryKV(), api: dir.as('bob'), userId: 'bob', deviceId: 'b1');
+    await alice.ready();
+    await bob.ready();
+    final ab = await alice.safetyNumbers('bob');
+    expect(ab, hasLength(1));
+    expect(ab.single.number, matches(RegExp(r'^[0-9]{60}$')));
+    expect(ab.single.lines, hasLength(3));
+    expect(ab.single.verified, isFalse);
+    expect(ab.single.changed, isFalse);
+    final ba = await bob.safetyNumbers('alice');
+    expect(ba.single.number, ab.single.number);
+    await alice.setVerified('bob', 'b1', ab.single.edPub);
+    expect((await alice.safetyNumbers('bob')).single.verified, isTrue);
+  });
+
+  test('E9 app: export/import restores same-device sessions only', () async {
+    final dir = FakeDirectory();
+    E2eeStore mk(String uid, String did, [KeyValue? kv]) => E2eeStore(
+        kv: kv ?? MemoryKV(), api: dir.as(uid), userId: uid, deviceId: did);
+    final alice = mk('alice', 'a1');
+    final bob = mk('bob', 'b1');
+    await alice.ready();
+    await bob.ready();
+    const room = RoomRef(id: 'r1', kind: 'direct', memberIds: ['alice', 'bob'], e2ee: true);
+    final ct1 = await alice.encryptRoom(room, const InnerMessage(kind: 'text', body: 'before'));
+    expect((await bob.decryptBody('alice', ct1))?.body, 'before');
+    final held = await bob.encryptRoom(room, const InnerMessage(kind: 'text', body: 'held'));
+    final snap = await alice.exportState();
+    expect(snap['v'], 1);
+    expect((snap['sessions'] as Map), isNotEmpty);
+    final reinstall = mk('alice', 'a1');
+    await reinstall.importState(snap);
+    expect((await reinstall.decryptBody('bob', held))?.body, 'held');
+    final moved = mk('alice', 'a2');
+    await moved.importState(snap);
+    expect(moved.myIdentity(), alice.myIdentity());
+    expect(await moved.decryptBody('bob', held), isNull);
+    final ct2 = await moved.encryptRoom(room, const InnerMessage(kind: 'text', body: 'fresh'));
+    expect((await bob.decryptBody('alice', ct2))?.body, 'fresh');
+    final mallory = mk('bob', 'x9');
+    expect(() => mallory.importState(snap), throwsStateError);
+  });
+
+  test('E9 app: wipe clears keys, sessions and indexes', () async {
+    final dir = FakeDirectory();
+    final kv = MemoryKV();
+    final alice = E2eeStore(kv: kv, api: dir.as('alice'), userId: 'alice', deviceId: 'a1');
+    final bob = E2eeStore(kv: MemoryKV(), api: dir.as('bob'), userId: 'bob', deviceId: 'b1');
+    await alice.ready();
+    await bob.ready();
+    final before = alice.myIdentity();
+    const room = RoomRef(id: 'r1', kind: 'direct', memberIds: ['alice', 'bob'], e2ee: true);
+    await alice.encryptRoom(room, const InnerMessage(kind: 'text', body: 'x'));
+    await alice.setVerified('bob', 'b1', 'ed-test');
+    await alice.wipe();
+    expect(await kv.get('e2ee:alice:a1:identity'), isNull);
+    expect(await kv.get('e2ee:alice:a1:sessIdx'), isNull);
+    expect(await kv.get('e2ee:alice:a1:vfyIdx'), isNull);
+    final fresh = E2eeStore(kv: kv, api: dir.as('alice'), userId: 'alice', deviceId: 'a1');
+    await fresh.ready();
+    expect(fresh.myIdentity(), isNot(before));
+  });
+
+  test('E9 app: digits are order-independent and line-split', () async {
+    final x = Uint8List.fromList(List.generate(32, (i) => i));
+    final y = Uint8List.fromList(List.generate(32, (i) => 255 - i));
+    expect(await safetyNumberDigits(x, y), await safetyNumberDigits(y, x));
+    expect(await safetyNumberDigits(x, y), matches(RegExp(r'^[0-9]{60}$')));
+    expect(formatSafetyNumber('0123456789' * 6).map((l) => l.replaceAll(' ', '')),
+        ['01234567890123456789', '01234567890123456789', '01234567890123456789']);
   });
 }

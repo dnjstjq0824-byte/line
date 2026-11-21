@@ -1389,6 +1389,15 @@ async function selectChat(convId: string) {
       if (received.has(message.id) || (message.sequence || 0) > maxFreshSeq) received.set(message.id, message)
     }
     messages.value = [...received.values()].sort((a, b) => a.sequence - b.sequence)
+    // E9: restored backup rows fill history the fresh chains cannot open.
+    const restored = restoredHistory.value[convId]
+    if (restored && restored.length) {
+      const have = new Set(messages.value.map((m) => m.id))
+      const extra = restored.filter((m) => !have.has(m.id))
+      if (extra.length) {
+        messages.value = [...extra, ...messages.value].sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+      }
+    }
     roomMessageCache.set(convId, messages.value.slice(-50))
     if (roomMessageCache.size > 20) roomMessageCache.delete(roomMessageCache.keys().next().value as string)
     hasEarlierMessages.value = fresh.length === 50
@@ -2323,6 +2332,115 @@ async function openApprovalBox() {
     approvalProposals.value = res.proposals || []
     showApprovalBox.value = true
   })
+}
+// E9: passphrase backup + restore. Keys come from the store export;
+// history is a fresh decrypt of each sealed room (latest 200 per room,
+// 8 MB total). Restored rows merge under live server messages.
+const e2eeBackupBusy = ref(false)
+const restoredHistory = ref<Record<string, Message[]>>({})
+async function backupE2eeNow(passphrase: string) {
+  const c = e2eeClient()
+  if (!c) return
+  e2eeBackupBusy.value = true
+  try {
+    const state = await c.store.exportState()
+    const history: Record<string, Array<Record<string, unknown>>> = {}
+    let total = 0
+    for (const room of chats.value) {
+      if (!room.e2ee) continue
+      try {
+        const res = await api<{ messages: Message[] }>(`/api/v1/conversations/${room.id}/messages?limit=200`)
+        const list = res.messages || []
+        await c.decryptInto(room.id, list)
+        const rows = list
+          .filter((m) => m.kind !== 'ciphertext' && !m._e2eeError && !m.unsent && typeof m.body === 'string')
+          .map((m) => ({
+            id: m.id,
+            sender_id: m.sender_id,
+            created_at: m.created_at,
+            sequence: m.sequence || 0,
+            kind: m.kind,
+            body: m.body.slice(0, 4000),
+            sealed: true,
+            _restored: true,
+          }))
+        const size = JSON.stringify(rows).length
+        if (total + size > 8 * 1024 * 1024) break
+        total += size
+        history[room.id] = rows
+      } catch { /* one room must not block the rest */ }
+    }
+    const { encryptBackup } = await import('../../../shared/e2ee/backup.ts')
+    const blob = await encryptBackup(passphrase, JSON.stringify({ v: 1, state, history }))
+    await api('/api/v1/e2ee/backup', 'PUT', { blob })
+    note.value = t('e2eeBkDone')
+  } catch {
+    note.value = t('e2eeBkFail')
+  } finally {
+    e2eeBackupBusy.value = false
+  }
+}
+async function restoreE2eeNow(passphrase: string) {
+  const c = e2eeClient()
+  if (!c) return
+  e2eeBackupBusy.value = true
+  try {
+    const res = await api<{ backup: { v: number; salt: string; iv: string; ct: string } | null }>('/api/v1/e2ee/backup')
+    if (!res.backup) throw new Error('empty')
+    const { decryptBackup } = await import('../../../shared/e2ee/backup.ts')
+    const payload = JSON.parse(await decryptBackup(passphrase, res.backup))
+    if (!payload || payload.v !== 1 || !payload.state) throw new Error('shape')
+    await c.store.importState(payload.state)
+    restoredHistory.value = (payload.history || {}) as Record<string, Message[]>
+    note.value = t('e2eeBkRestored')
+    if (selectedChatId.value) await selectChat(selectedChatId.value)
+  } catch {
+    // Restore failures never distinguish wrong passphrase from corruption.
+    note.value = t('e2eeBkRestoreFail')
+  } finally {
+    e2eeBackupBusy.value = false
+  }
+}
+// E9: safety-number modal for 1:1 sealed rooms.
+const showSafetyModal = ref(false)
+const safetyRows = ref<Array<{ device: string; edPub: string; number: string; lines: string[]; verified: boolean; changed: boolean }>>([])
+const safetyLoading = ref(false)
+const safetyPeerId = ref('')
+const safetyMyCode = ref('')
+async function openSafetyModal() {
+  const room = chats.value.find((c) => c.id === selectedChatId.value)
+  const peer = (room?.members || []).map((m: any) => m.id).find((id: string) => id && id !== currentUser.value?.id)
+  const c = e2eeClient()
+  if (!peer || !c) return
+  safetyPeerId.value = peer
+  safetyRows.value = []
+  safetyMyCode.value = ''
+  safetyLoading.value = true
+  showSafetyModal.value = true
+  try {
+    safetyRows.value = await c.store.safetyNumbers(peer)
+    safetyMyCode.value = c.store.myIdentity() || ''
+  } catch {
+    safetyRows.value = []
+  } finally {
+    safetyLoading.value = false
+  }
+}
+async function verifySafetyDevice(device: string, edPub: string) {
+  const c = e2eeClient()
+  if (!c || !safetyPeerId.value) return
+  await c.store.setVerified(safetyPeerId.value, device, edPub)
+  await openSafetyModalRefresh()
+}
+async function openSafetyModalRefresh() {
+  const c = e2eeClient()
+  if (!c || !safetyPeerId.value) return
+  safetyLoading.value = true
+  try {
+    safetyRows.value = await c.store.safetyNumbers(safetyPeerId.value)
+  } catch { /* keep old rows */ } finally {
+    safetyLoading.value = false
+  }
 }
 // E8: "export this device's chats" — decrypted on-device cache to a
 // JSON file. Sealed-but-unreadable rows export as a marker, never raw
@@ -3632,6 +3750,7 @@ onBeforeUnmount(() => {
         @unsend="unsendMessage"
         @forward="openForwardPicker"
         @export-device="exportDeviceChat"
+        @safety-code="openSafetyModal"
         @hide="hideMessage"
         @decide="decideProposal"
         @approvals="openApprovalBox"
@@ -4056,6 +4175,31 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+    <div v-if="showSafetyModal" class="modal-backdrop" @click.self="showSafetyModal = false">
+      <div class="standard-modal-box" role="dialog" :aria-label="t('e2eeSfTitle')">
+        <div class="modal-header">
+          <h3>{{ t('e2eeSfTitle') }}</h3>
+          <button class="btn-modal-close" @click="showSafetyModal = false" :aria-label="t('mvClose')">✕</button>
+        </div>
+        <div class="modal-body-form">
+          <p class="muted" style="font-size: 12px; margin: 0">{{ t('e2eeSfHow') }}</p>
+          <div v-if="safetyLoading" class="muted" style="font-size: 12px">…</div>
+          <div v-else-if="!safetyRows.length" class="muted" style="font-size: 12px">{{ t('e2eeSfNone') }}</div>
+          <div v-for="row in safetyRows" :key="row.device" style="border: 1px solid rgb(0 0 0 / 10%); border-radius: 8px; padding: 8px 10px">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+              <code style="font-size: 12px">{{ row.device }}</code>
+              <span v-if="row.verified" class="badge-status-on" style="font-size: 11px">{{ t('e2eeSfVerified') }}</span>
+              <button v-else class="btn-secondary" style="font-size: 11px; padding: 3px 8px" @click="verifySafetyDevice(row.device, row.edPub)">
+                {{ t('e2eeSfVerify') }}
+              </button>
+            </div>
+            <pre style="font-size: 13px; line-height: 1.7; margin: 6px 0 0; white-space: pre-wrap; font-family: ui-monospace, monospace;">{{ row.lines.join('\n') }}</pre>
+            <div v-if="row.changed" style="font-size: 11px; color: #b3261e; margin-top: 4px">⚠️ {{ t('e2eeSfChanged') }}</div>
+          </div>
+          <p v-if="safetyMyCode" class="muted" style="font-size: 11px; margin: 0; word-break: break-all">{{ t('e2eeSfMyCode') }}: <code>{{ safetyMyCode }}</code></p>
+        </div>
+      </div>
+    </div>
     <ApprovalBox
       v-if="showApprovalBox && selectedChat"
       :proposals="approvalProposals"
@@ -4083,10 +4227,13 @@ onBeforeUnmount(() => {
       v-model:delete-password-input="deletePasswordInput"
       v-model:delete-reason-input="deleteReasonInput"
       v-model:delete-confirm-input="deleteConfirmInput"
+      v-model:e2ee-busy="e2eeBackupBusy"
       @close="showSettingsModal = false"
       @export="exportUserDataArchive"
       @delete="deleteUserAccount"
       @revoke-device="revokeDevice"
+      @e2ee-backup="backupE2eeNow"
+      @e2ee-restore="restoreE2eeNow"
     />
 
     <div v-if="showContactPicker" class="modal-backdrop" @click.self="showContactPicker = false">

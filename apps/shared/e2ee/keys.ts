@@ -28,6 +28,29 @@ export function sha256Hash(data: Uint8Array): Uint8Array {
   return sha256(data);
 }
 
+// E9: safety number — both Ed25519 identity pubs sorted, SHA-256, the
+// first 30 bytes as 60 decimal digits, rendered 20 per line.
+export function safetyNumberDigits(edA: Uint8Array, edB: Uint8Array): string {
+  let cmp = 0;
+  for (let i = 0; i < Math.min(edA.length, edB.length); i++) {
+    if (edA[i] !== edB[i]) { cmp = edA[i] < edB[i] ? -1 : 1; break; }
+  }
+  if (cmp === 0) cmp = edA.length <= edB.length ? -1 : 1;
+  const h = sha256(cmp <= 0 ? concat(edA, edB) : concat(edB, edA));
+  let out = '';
+  for (let i = 0; i < 30; i++) out += String(h[i] % 100).padStart(2, '0');
+  return out;
+}
+
+export function formatSafetyNumber(digits: string): string[] {
+  const lines: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const seg = digits.slice(i * 20, i * 20 + 20);
+    lines.push([0, 4, 8, 12, 16].map((o) => seg.slice(o, o + 4)).join(' '));
+  }
+  return lines;
+}
+
 // HKDF-SHA256 via noble: same bytes in every runtime (SubtleCrypto HKDF is
 // equivalent but noble keeps one dependency for all KDF steps).
 export function hkdfSha256(ikm: Uint8Array, salt: Uint8Array, info: string | Uint8Array, length: number): Uint8Array {
