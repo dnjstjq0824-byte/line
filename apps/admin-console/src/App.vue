@@ -389,6 +389,7 @@ async function setKill(stopped: boolean) {
 
       <section class="panel">
         <h2>{{ t('admin.reports') }}</h2>
+        <p class="e2ee-sealed-note">{{ t('admin.e2eeSealedNote') }}</p>
         <form @submit.prevent="blindTarget(false)" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
           <strong style="font-size:13px">{{ t('admin.hideTitle') }}</strong>
           <label style="font-size:12px;color:#64748b">{{ t('admin.hideType') }}</label>
@@ -406,7 +407,7 @@ async function setKill(stopped: boolean) {
         <BaseEmpty v-if="!reports.length" :title="t('admin.reportsEmptyT')" :hint="t('admin.reportsEmptyH')" />
         <div v-for="r in sortedReports" :key="r.id" class="report-item">
           <div>
-            <strong>[{{ r.category }}]</strong> {{ t('admin.reportState') }} <span class="badge">{{ r.state }}</span> — {{ r.details }}
+            <strong>[{{ r.category }}]</strong> {{ t('admin.reportState') }} <span class="badge">{{ r.state }}</span> <span v-if="r.e2ee_disclosed" class="badge badge-e2ee">{{ t('admin.e2eeDisclosed') }}</span> — {{ r.details }}
           </div>
           <div v-if="r.state === 'open'" style="display:flex;gap:6px">
             <button style="background:#d9534f;font-size:12px;padding:4px 8px" @click="takeAction(r.subject_user_id || '', 'suspend', r.id)">{{ t('admin.reporterSuspend') }}</button>
@@ -494,5 +495,5 @@ async function setKill(stopped: boolean) {
 </template>
 
 <style>
-body{margin:0;background:#f2f5fa;color:#15243a;font:15px system-ui,sans-serif}.page{max-width:1150px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;align-items:center;gap:20px}header span{color:#5b6b80}.panel{padding:23px;background:white;margin:18px 0;border:1px solid #dce4f0;border-radius:12px}input,button{padding:10px;border:1px solid #b6c5d5;border-radius:8px;margin:4px}button{background:#225bd6;color:white;cursor:pointer}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.metrics .panel{display:grid;gap:8px}.metrics strong{font-size:30px}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;text-align:left}th,td{padding:9px;border-bottom:1px solid #eef1f5}.report-item,.item-line{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f4f8}.badge{padding:3px 8px;border-radius:6px;font-size:12px;background:#e2e8f0}.badge-on{background:#d4edda;color:#155724}.badge-off{background:#f8d7da;color:#721c24}.status.active{color:#28a745;font-weight:bold}.status.suspended{color:#dc3545;font-weight:bold}.muted{color:#6c757d}.error{color:#bc2626;background:#fde8e8;padding:10px;border-radius:8px}.note{color:#155724;background:#d4edda;padding:10px;border-radius:8px}
+body{margin:0;background:#f2f5fa;color:#15243a;font:15px system-ui,sans-serif}.page{max-width:1150px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;align-items:center;gap:20px}header span{color:#5b6b80}.panel{padding:23px;background:white;margin:18px 0;border:1px solid #dce4f0;border-radius:12px}input,button{padding:10px;border:1px solid #b6c5d5;border-radius:8px;margin:4px}button{background:#225bd6;color:white;cursor:pointer}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.metrics .panel{display:grid;gap:8px}.metrics strong{font-size:30px}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;text-align:left}th,td{padding:9px;border-bottom:1px solid #eef1f5}.report-item,.item-line{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f4f8}.badge{padding:3px 8px;border-radius:6px;font-size:12px;background:#e2e8f0}.badge-e2ee{background:#fff3cd;color:#856404}.e2ee-sealed-note{font-size:13px;color:#5b6b80;background:#f8fafc;border:1px solid #dce4f0;border-radius:8px;padding:8px 10px}.badge-on{background:#d4edda;color:#155724}.badge-off{background:#f8d7da;color:#721c24}.status.active{color:#28a745;font-weight:bold}.status.suspended{color:#dc3545;font-weight:bold}.muted{color:#6c757d}.error{color:#bc2626;background:#fde8e8;padding:10px;border-radius:8px}.note{color:#155724;background:#d4edda;padding:10px;border-radius:8px}
 </style>

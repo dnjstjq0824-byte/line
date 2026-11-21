@@ -305,6 +305,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reportSubmit => 'ส่งรายงาน';
 
   @override
+  String get reportE2eeConsent =>
+      'แนบข้อความที่ถอดรหัสแล้วกับรายงานนี้ (เซิร์ฟเวอร์และผู้ตรวจสอบอ่านได้)';
+
+  @override
   String get gsLeave => 'ออกจากกลุ่ม';
 
   @override
@@ -806,6 +810,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get roomOfflineSync => 'ซิงก์ออฟไลน์';
+
+  @override
+  String get roomExportDevice => 'ส่งออกแชทของอุปกรณ์นี้';
+
+  @override
+  String get roomExportDone => 'บันทึกแชทของอุปกรณ์นี้เป็นไฟล์แล้ว';
+
+  @override
+  String get roomExportEmpty => 'ไม่มีข้อความให้ส่งออก';
 
   @override
   String get roomImageFail => 'โหลดรูปไม่ได้';
@@ -1489,6 +1502,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get e2eeUnreadable => 'ไม่สามารถถอดรหัสข้อความนี้ได้';
+
+  @override
+  String get e2eeAiNoticeTitle => 'ส่งไปยัง AI เซิร์ฟเวอร์';
+
+  @override
+  String get e2eeAiNoticeBody =>
+      'นี่คือข้อความเข้ารหัส ส่งข้อความนี้ไปยัง AI เซิร์ฟเวอร์ (แปล) หรือไม่?';
 
   @override
   String get msgQueuedOffline => 'ออฟไลน์ — เก็บข้อความเข้าคิวแล้ว';

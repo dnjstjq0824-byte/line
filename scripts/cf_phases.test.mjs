@@ -149,7 +149,7 @@ test('LUNO Phase 6: Compliance & GDPR Data Portability', async () => {
   const exportRes = await api('me/export-data', token);
   assert.equal(exportRes.status, 200);
   const exportData = await exportRes.json();
-  assert.equal(exportData.export_version, '1.1');
+  assert.equal(exportData.export_version, '1.2');
   assert.ok(exportData.user?.id);
   assert.ok(Array.isArray(exportData.friends));
 });

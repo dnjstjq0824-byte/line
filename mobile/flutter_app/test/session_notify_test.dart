@@ -5,8 +5,22 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:luno_messenger/e2ee/store.dart';
 import 'package:luno_messenger/state/session.dart';
 import 'package:luno_messenger/util/app_notify.dart';
+
+class CannedE2ee extends E2eeStore {
+  CannedE2ee(this.open)
+      : super(
+            kv: MemoryKV(),
+            api: (_, [__, ___]) async => {},
+            userId: 'me',
+            deviceId: 't1');
+  final InnerMessage? open;
+
+  @override
+  Future<InnerMessage?> decryptBody(String senderId, String body) async => open;
+}
 
 class FakeHttp extends http.BaseClient {
   Future<http.Response> Function(http.BaseRequest request, String body)? handler;
@@ -159,6 +173,55 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(note.messages.single['body'], '[사진]');
       expect(note.messages.single['title'], '새 메시지');
+    });
+
+    test('E8: sealed tray line decrypts on-device', () async {
+      final fake = FakeHttp();
+      final note = FakeNotifier();
+      fake.handler = (req, body) async => jsonRes({}, 200);
+      final s = makeSession(fake, note);
+      s.e2eeStoreForTests = CannedE2ee(
+          const InnerMessage(kind: 'text', body: 'decrypted hello'));
+      s.chats = [
+        {'id': 'c1', 'title': 'Sealed Room'}
+      ];
+      s.setForeground(false);
+      s.maybeNotifyMessage({
+        'type': 'message.created',
+        'message': {
+          'id': 'm9',
+          'conversation_id': 'c1',
+          'sender_id': 'peer',
+          'kind': 'ciphertext',
+          'body': '{"v":1,"secret_bytes":"must-not-show"}'
+        }
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(note.messages, hasLength(1));
+      expect(note.messages.single['title'], 'Sealed Room');
+      expect(note.messages.single['body'], 'decrypted hello');
+    });
+
+    test('E8: undecryptable sealed line stays generic', () async {
+      final fake = FakeHttp();
+      final note = FakeNotifier();
+      fake.handler = (req, body) async => jsonRes({}, 200);
+      final s = makeSession(fake, note);
+      s.setForeground(false);
+      s.maybeNotifyMessage({
+        'type': 'message.created',
+        'message': {
+          'id': 'm9',
+          'conversation_id': 'c1',
+          'sender_id': 'peer',
+          'kind': 'ciphertext',
+          'body': '{"v":1,"secret_bytes":"must-not-show"}'
+        }
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(note.messages, hasLength(1));
+      expect(note.messages.single['body'], s.strings.msgNewMessage);
+      expect(note.messages.single['body'], isNot(contains('secret_bytes')));
     });
 
     test('background ring notifies and tap routes to the room', () async {

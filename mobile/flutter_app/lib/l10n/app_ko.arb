@@ -392,6 +392,10 @@
   "@reportSubmit": {
     "description": "reportSubmit (F20)"
   },
+  "reportE2eeConsent": "복호화한 메시지 내용을 신고에 첨부합니다 (서버·관리자가 열람)",
+  "@reportE2eeConsent": {
+    "description": "reportE2eeConsent (E8)"
+  },
   "gsLeave": "나가기",
   "@gsLeave": {
     "description": "gsLeave (F20)"
@@ -1026,6 +1030,18 @@
   "roomOfflineSync": "오프라인 동기화",
   "@roomOfflineSync": {
     "description": "roomOfflineSync (F20)"
+  },
+  "roomExportDevice": "이 기기의 대화 내보내기",
+  "@roomExportDevice": {
+    "description": "roomExportDevice (E8)"
+  },
+  "roomExportDone": "이 기기의 대화를 파일로 저장했습니다",
+  "@roomExportDone": {
+    "description": "roomExportDone (E8)"
+  },
+  "roomExportEmpty": "내보낼 메시지가 없습니다",
+  "@roomExportEmpty": {
+    "description": "roomExportEmpty (E8)"
   },
   "roomImageFail": "이미지를 불러올 수 없습니다",
   "@roomImageFail": {
@@ -1969,6 +1985,14 @@
   "e2eeUnreadable": "이 메시지를 복호화할 수 없습니다.",
   "@e2eeUnreadable": {
     "description": "e2eeUnreadable (E5)"
+  },
+  "e2eeAiNoticeTitle": "서버 AI로 보내기",
+  "@e2eeAiNoticeTitle": {
+    "description": "e2eeAiNoticeTitle (E8)"
+  },
+  "e2eeAiNoticeBody": "암호화 대화 내용입니다. 이 메시지를 서버 AI(번역)에 보내시겠습니까?",
+  "@e2eeAiNoticeBody": {
+    "description": "e2eeAiNoticeBody (E8)"
   },
   "msgQueuedOffline": "오프라인 — 메시지를 대기열에 저장했습니다.",
   "@msgQueuedOffline": {

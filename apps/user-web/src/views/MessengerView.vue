@@ -115,6 +115,8 @@ async function handleTranslateMessage(msg: Message) {
     delete messageTranslations.value[msg.id]
     return
   }
+  // E8: sealed text leaves the device only on an explicit per-tap notice.
+  if (msg._e2ee && !window.confirm(t('mvE2eeAiNotice'))) return
   await ensureTranslateLanguages()
   if (!translateConfigured.value) {
     messageTranslations.value[msg.id] = {
@@ -818,6 +820,14 @@ function openMessageContextMenu(e: MouseEvent, msg: Message) {
       separator: true,
       action: () => unsendMessage(msg.id)
     })
+  } else if (currentUser.value && msg.sender_id !== currentUser.value.id && !msg.unsent) {
+    // E8: message-level report with quoted content.
+    items.push({
+      label: t('mvReportUser'),
+      danger: true,
+      separator: true,
+      action: () => openReportForMessage(msg)
+    })
   }
 
   contextMenu.value = {
@@ -1023,6 +1033,10 @@ const showReportModal = ref(false)
 const reportTarget = ref<User | null>(null)
 const reportCategory = ref('spam')
 const reportDetails = ref('')
+// E8: message-level report — the quoted message plus the reporter's
+// explicit consent to attach its decrypted content.
+const reportMessage = ref<Message | null>(null)
+const reportE2eeConsent = ref(false)
 const myReports = ref<Array<{ id: string; subject_user_id: string; category: string; details: string; state: string; created_at: string }>>([])
 // L-05: approval box state (room proposals + per-message decision states).
 const showApprovalBox = ref(false)
@@ -1387,7 +1401,8 @@ async function selectChat(convId: string) {
     }
     if (autoTranslateEnabled.value && messages.value.length > 0) {
       for (const m of messages.value.slice(-6)) {
-        if (m.kind === 'text' && !messageTranslations.value[m.id]) {
+        // E8: auto-translate never touches sealed text (explicit taps only).
+        if (m.kind === 'text' && !m._e2ee && !messageTranslations.value[m.id]) {
           void handleTranslateMessage(m)
         }
       }
@@ -1541,6 +1556,17 @@ async function runConversationSearch() {
   const q = chatSearchQuery.value.trim()
   if (!q) {
     chatSearchResults.value = []
+    return
+  }
+  // E8: sealed rooms search the on-device decrypted cache — the server
+  // never sees the query matched against sealed bodies.
+  const sealedRoom = chats.value.find((c) => c.id === selectedChatId.value)?.e2ee === true
+  if (sealedRoom) {
+    const ql = q.toLowerCase()
+    chatSearchResults.value = messages.value
+      .filter((m) => !m.unsent && !m._e2eeError && m.kind !== 'ciphertext' && typeof m.body === 'string' && m.body.toLowerCase().includes(ql))
+      .slice(-50)
+      .reverse()
     return
   }
   try {
@@ -2298,21 +2324,78 @@ async function openApprovalBox() {
     showApprovalBox.value = true
   })
 }
+// E8: "export this device's chats" — decrypted on-device cache to a
+// JSON file. Sealed-but-unreadable rows export as a marker, never raw
+// envelope bytes.
+function exportDeviceChat() {
+  if (!selectedChatId.value || !messages.value.length) {
+    note.value = t('mvExportDeviceEmpty')
+    return
+  }
+  const room = chats.value.find((c) => c.id === selectedChatId.value)
+  const rows = messages.value
+    .filter((m) => !m.unsent)
+    .map((m) => {
+      if (m.kind === 'ciphertext' || m._e2eeError) {
+        return { id: m.id, sender_id: m.sender_id, created_at: m.created_at, sealed: true, unreadable: true, body: '' }
+      }
+      return { id: m.id, sender_id: m.sender_id, created_at: m.created_at, kind: m.kind, sealed: m._e2ee === true, body: typeof m.body === 'string' ? m.body : '' }
+    })
+  const doc = {
+    export_version: 'device-1',
+    room: { id: selectedChatId.value, title: room?.title || '', kind: (room as any)?.kind || '' },
+    exported_at: new Date().toISOString(),
+    exported_by: currentUser.value?.id || '',
+    messages: rows
+  }
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `luno-chat-${selectedChatId.value}-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+  note.value = t('mvExportDeviceDone')
+}
 // F4: report dialog actions + own history.
 function openReportModal(friend: User) {
   reportTarget.value = friend
   reportCategory.value = 'spam'
   reportDetails.value = ''
+  reportMessage.value = null
+  reportE2eeConsent.value = false
+  showReportModal.value = true
+}
+// E8: report from a chat bubble — quotes the message; sealed content
+// rides only with the reporter's explicit consent.
+function openReportForMessage(msg: Message) {
+  reportTarget.value = { id: msg.sender_id } as User
+  reportCategory.value = 'spam'
+  reportDetails.value = ''
+  reportMessage.value = msg._e2eeError ? null : msg
+  reportE2eeConsent.value = false
   showReportModal.value = true
 }
 async function submitReport() {
   if (!reportTarget.value) return
   await wrap(async () => {
-    await api('/api/v1/reports', 'POST', {
+    const quoted = reportMessage.value
+    const payload: Record<string, unknown> = {
       subject_user_id: reportTarget.value!.id,
       category: reportCategory.value,
       details: reportDetails.value
-    })
+    }
+    if (quoted) {
+      payload.message_id = quoted.id
+      if (typeof quoted.body === 'string' && quoted.body) {
+        if (quoted._e2ee && !reportE2eeConsent.value) {
+          delete payload.message_id
+        } else {
+          payload.e2ee_text = quoted.body.slice(0, 2000)
+          if (quoted._e2ee) payload.plaintext_consent = true
+        }
+      }
+    }
+    await api('/api/v1/reports', 'POST', payload)
     note.value = t('reportDoneNote')
     showReportModal.value = false
     await loadMyReports()
@@ -3548,6 +3631,7 @@ onBeforeUnmount(() => {
         @pin="pinMessage"
         @unsend="unsendMessage"
         @forward="openForwardPicker"
+        @export-device="exportDeviceChat"
         @hide="hideMessage"
         @decide="decideProposal"
         @approvals="openApprovalBox"
@@ -3961,6 +4045,11 @@ onBeforeUnmount(() => {
             <span>{{ t('reportDetails') }}</span>
             <textarea v-model="reportDetails" class="pc-login-input" rows="3" maxlength="2000" />
           </label>
+          <label v-if="reportMessage && reportMessage._e2ee" class="pc-input-row" style="flex-direction: row; align-items: center; gap: 8px;">
+            <input v-model="reportE2eeConsent" type="checkbox" />
+            <span>{{ t('reportE2eeConsent') }}</span>
+          </label>
+          <p v-if="reportMessage" style="margin: 0; padding: 8px 10px; border-left: 3px solid #888; background: rgb(0 0 0 / 5%); font-size: 13px; white-space: pre-wrap; word-break: break-word;">{{ reportMessage.body }}</p>
           <button class="btn-pc-submit-full" type="button" @click="submitReport">
             {{ t('reportSubmit') }}
           </button>

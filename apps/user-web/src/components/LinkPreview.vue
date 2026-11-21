@@ -3,7 +3,7 @@
 // fetches OG tags and caches in D1. Silent when disabled, blocked or empty.
 import { onMounted, ref, watch } from 'vue'
 
-import { api } from '../store/session'
+import { api, t } from '../store/session'
 
 interface Preview {
   url: string
@@ -16,9 +16,12 @@ interface Preview {
 const props = defineProps<{
   text: string
   enabled: boolean
+  sealed?: boolean
+  room?: string
 }>()
 
 const preview = ref<Preview | null>(null)
+const consented = ref(false)
 
 function firstUrl(s: string): string {
   const m = s.match(/https:\/\/[^\s<>"']+/i)
@@ -28,21 +31,32 @@ function firstUrl(s: string): string {
 async function load() {
   preview.value = null
   if (!props.enabled) return
+  // E8: sealed rooms never auto-resolve — one tap consents per link.
+  if (props.sealed && !consented.value) return
   const u = firstUrl(props.text)
   if (!u) return
   try {
-    const pv = await api<Preview>(`/api/v1/link-preview?url=${encodeURIComponent(u)}`)
+    const extra = props.sealed ? `&room=${encodeURIComponent(props.room || '')}&consented=1` : ''
+    const pv = await api<Preview>(`/api/v1/link-preview?url=${encodeURIComponent(u)}${extra}`)
     if (pv && !pv.unavailable && pv.title) preview.value = pv
   } catch {
     preview.value = null
   }
 }
 
+function tapConsent() {
+  consented.value = true
+  void load()
+}
+
 onMounted(load)
-watch(() => [props.text, props.enabled], load)
+watch(() => [props.text, props.enabled, props.sealed], () => { consented.value = false; void load() })
 </script>
 
 <template>
+  <button v-if="sealed && !consented && !preview" class="link-preview-consent" type="button" @click="tapConsent">
+    {{ t('mvE2eePreviewTap') }}
+  </button>
   <a v-if="preview" class="link-preview-card" :href="preview.url" target="_blank" rel="noopener">
     <img v-if="preview.image_url" :src="preview.image_url" alt="" loading="lazy" class="link-preview-img" />
     <span class="link-preview-meta">
@@ -53,6 +67,17 @@ watch(() => [props.text, props.enabled], load)
 </template>
 
 <style scoped>
+.link-preview-consent {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px dashed currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.85;
+}
 .link-preview-card {
   display: flex;
   gap: 8px;

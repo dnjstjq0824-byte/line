@@ -102,6 +102,7 @@ const emit = defineEmits<{
   pin: [msgId: string]
   unsend: [msgId: string]
   forward: [msg: Message]
+  'export-device': []
   hide: [msgId: string]
   decide: [msg: Message, decision: 'approved' | 'rejected']
   approvals: []
@@ -160,6 +161,8 @@ function voiceAiLang(): string {
 async function transcribeVoice(msg: Message) {
   const id = String((msg.metadata as any)?.attachment_id || '')
   if (!id || !token.value || voiceAiText.value[msg.id]?.loading) return
+  // E8: sealed voice is transcribed only on an explicit per-tap notice.
+  if (msg._e2ee && !window.confirm(t('mvE2eeAiNotice'))) return
   voiceAiText.value[msg.id] = { loading: true, text: '', error: '' }
   try {
     const dl = await fetch(`${API_URL}/api/v1/attachments/${encodeURIComponent(id)}/content`, {
@@ -168,7 +171,15 @@ async function transcribeVoice(msg: Message) {
     })
     if (!dl.ok) throw new Error('voice download failed')
     const mime = (dl.headers.get('content-type') || 'audio/mp4').split(';')[0].trim().toLowerCase() || 'audio/mp4'
-    const bytes = new Uint8Array(await dl.arrayBuffer())
+    let bytes = new Uint8Array(await dl.arrayBuffer())
+    // E8: sealed bytes open with the key that rode inside the message,
+    // otherwise STT would transcribe ciphertext.
+    const meta = msg.metadata as Record<string, unknown> | undefined
+    if (msg._e2ee && meta && typeof meta.fileKey === 'string' && typeof meta.fileIv === 'string' && typeof meta.fileHash === 'string') {
+      const { openFile } = await import('../../../shared/e2ee/files.ts')
+      const { b64uEncode } = await import('../../../shared/e2ee/codec.ts')
+      bytes = await openFile({ key: meta.fileKey, iv: meta.fileIv, hash: meta.fileHash, ct: b64uEncode(bytes) })
+    }
     let bin = ''
     for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192))
     const res = await fetch(`${API_URL}/api/v1/ai/stt`, {
@@ -421,6 +432,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             <button class="chat-topbar-menu-item" @click="emit('drawer', 'events'); showTopbarMenu = false"><LunoIcon name="calendar" :size="18" /><span>{{ t('mvEventsCalendar') }}</span></button>
             <button class="chat-topbar-menu-item" @click="emit('approvals'); showTopbarMenu = false"><LunoIcon name="check" :size="18" /><span>{{ t('apprTitle') }}</span></button>
             <button v-if="selectedChat?.kind === 'group'" class="chat-topbar-menu-item" @click="emit('group-settings'); showTopbarMenu = false"><LunoIcon name="friends" :size="18" /><span>{{ t('gsMenuSettings') }}</span></button>
+            <button class="chat-topbar-menu-item" @click="emit('export-device'); showTopbarMenu = false"><LunoIcon name="download" :size="18" /><span>{{ t('mvExportDeviceChat') }}</span></button>
           </div>
         </div>
       </div>
@@ -714,7 +726,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                   {{ proposalState(msg) === 'approved' ? t('apprApprovedState') : t('apprRejectedState') }}
                 </div>
                 <div v-else class="bubble-text-content"><template v-if="msg._e2eeError">{{ t('mvE2eeUnreadable') }}</template><template v-else><template v-for="(part, pi) in linkParts(msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></template></div>
-                <LinkPreview v-if="msg.kind === 'text' && !msg.unsent" :text="msg.body" :enabled="linkPreviewsEnabled" />
+                <LinkPreview v-if="msg.kind === 'text' && !msg.unsent && !msg._e2eeError" :text="msg.body" :enabled="linkPreviewsEnabled" :sealed="msg._e2ee === true" :room="selectedChatId" />
 
                 <!-- A15: voice-AI result box (STT transcript, TTS/STT guidance) -->
                 <div v-if="voiceAiText[msg.id]" class="lx-voice-ai-box">

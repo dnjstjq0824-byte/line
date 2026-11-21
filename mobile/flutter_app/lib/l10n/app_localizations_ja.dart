@@ -304,6 +304,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reportSubmit => '通報する';
 
   @override
+  String get reportE2eeConsent => '復号したメッセージ内容を通報に添付します（サーバー・審査者が閲覧）';
+
+  @override
   String get gsLeave => '退室する';
 
   @override
@@ -802,6 +805,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get roomOfflineSync => 'オフライン同期';
+
+  @override
+  String get roomExportDevice => 'この端末のトークを書き出す';
+
+  @override
+  String get roomExportDone => 'この端末のトークをファイルに保存しました';
+
+  @override
+  String get roomExportEmpty => '書き出すメッセージがありません';
 
   @override
   String get roomImageFail => '画像を読み込めませんでした';
@@ -1480,6 +1492,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get e2eeUnreadable => 'このメッセージを復号できませんでした';
+
+  @override
+  String get e2eeAiNoticeTitle => 'サーバーAIに送信';
+
+  @override
+  String get e2eeAiNoticeBody => '暗号化されたメッセージです。このメッセージをサーバーAI（翻訳）に送信しますか？';
 
   @override
   String get msgQueuedOffline => 'オフライン — メッセージを待機列に保存しました。';

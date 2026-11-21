@@ -304,6 +304,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reportSubmit => '신고 접수';
 
   @override
+  String get reportE2eeConsent => '복호화한 메시지 내용을 신고에 첨부합니다 (서버·관리자가 열람)';
+
+  @override
   String get gsLeave => '나가기';
 
   @override
@@ -802,6 +805,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get roomOfflineSync => '오프라인 동기화';
+
+  @override
+  String get roomExportDevice => '이 기기의 대화 내보내기';
+
+  @override
+  String get roomExportDone => '이 기기의 대화를 파일로 저장했습니다';
+
+  @override
+  String get roomExportEmpty => '내보낼 메시지가 없습니다';
 
   @override
   String get roomImageFail => '이미지를 불러올 수 없습니다';
@@ -1480,6 +1492,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get e2eeUnreadable => '이 메시지를 복호화할 수 없습니다.';
+
+  @override
+  String get e2eeAiNoticeTitle => '서버 AI로 보내기';
+
+  @override
+  String get e2eeAiNoticeBody => '암호화 대화 내용입니다. 이 메시지를 서버 AI(번역)에 보내시겠습니까?';
 
   @override
   String get msgQueuedOffline => '오프라인 — 메시지를 대기열에 저장했습니다.';

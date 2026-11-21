@@ -315,8 +315,8 @@ void _messageActions(BuildContext context, Map m, bool mine, String msgId) {
               ListTile(
                 leading: const Icon(Icons.translate),
                 title: Text(l.actTranslate),
-                onTap: () =>
-                    run(() => session.translateMessage(msgId, '${m['body']}')),
+                onTap: () => run(() =>
+                    _translateWithNotice(context, session, msgId, m)),
               ),
               ListTile(
                 leading: const Icon(Icons.forward_outlined),
@@ -353,6 +353,14 @@ void _messageActions(BuildContext context, Map m, bool mine, String msgId) {
                 title: Text(l.actHide),
                 onTap: () => run(() => session.hideMessage(msgId)),
               ),
+              // E8: message-level report with quoted content.
+              if (!mine)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: Text(l.mvReportUser),
+                  onTap: () =>
+                      run(() => _reportMessageSheet(context, session, m)),
+                ),
             ],
           ),
         ),
@@ -472,6 +480,8 @@ class _DeckHeader extends StatelessWidget {
                       approvalsSheet(context, conversationId);
                     case 'sync':
                       session.syncOffline();
+                    case 'export':
+                      session.exportDeviceChat(conversationId);
                     default:
                       context.go('/chats/$conversationId/$value');
                   }
@@ -510,6 +520,10 @@ class _DeckHeader extends StatelessWidget {
                       value: 'sync',
                       child:
                           _MenuRow(Icons.sync, context.l10n.roomOfflineSync)),
+                  PopupMenuItem(
+                      value: 'export',
+                      child: _MenuRow(Icons.download_outlined,
+                          context.l10n.roomExportDevice)),
                   if (session.kindOf(conversationId) == 'group')
                     PopupMenuItem(
                         value: 'settings',
@@ -1576,6 +1590,124 @@ class _SecurityNoticeCard extends StatelessWidget {
 }
 
 // F7: prefilled edit dialog for text messages.
+// E8: report one message — quotes it; sealed content rides only with
+// the reporter's explicit consent.
+Future<void> _reportMessageSheet(
+    BuildContext context, SessionController session, Map m) async {
+  final sealed = m['_e2ee'] == true;
+  final unreadable = m['_e2eeError'] == true || m['kind'] == 'ciphertext';
+  final details = TextEditingController();
+  String category = 'spam';
+  var consent = false;
+  final labels = {
+    'spam': context.l10n.reportCatSpam,
+    'abuse': context.l10n.reportCatAbuse,
+    'harassment': context.l10n.reportCatHarassment,
+    'illegal_filming': context.l10n.reportCatIllegalFilming,
+    'child_exploitation': context.l10n.reportCatChildExploitation,
+    'violence': context.l10n.reportCatViolence,
+    'other': context.l10n.mvDeleteReasonOther,
+  };
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheet) => StatefulBuilder(
+      builder: (sheet, setSheet) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            16, 12, 16, 24 + MediaQuery.of(sheet).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(sheet.l10n.mvReportUser,
+                style: Theme.of(sheet).textTheme.titleLarge),
+            if (!unreadable) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border: Border(
+                      left: BorderSide(
+                          color: Theme.of(sheet).colorScheme.outline,
+                          width: 3)),
+                ),
+                child: Text('${m['body'] ?? ''}',
+                    maxLines: 4, overflow: TextOverflow.ellipsis),
+              ),
+            ],
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: category,
+              decoration:
+                  InputDecoration(labelText: sheet.l10n.reportCategory),
+              items: [
+                for (final e in labels.entries)
+                  DropdownMenuItem(value: e.key, child: Text(e.value)),
+              ],
+              onChanged: (v) => setSheet(() => category = v ?? 'spam'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: details,
+              decoration: InputDecoration(
+                  labelText: sheet.l10n.homeDetailOptional),
+              maxLines: 3,
+              maxLength: 2000,
+            ),
+            if (sealed && !unreadable)
+              CheckboxListTile(
+                value: consent,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(sheet.l10n.reportE2eeConsent,
+                    style: Theme.of(sheet).textTheme.bodySmall),
+                onChanged: (v) => setSheet(() => consent = v ?? false),
+              ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(sheet).pop();
+                final body = '${m['body'] ?? ''}';
+                final attach = !unreadable && body.isNotEmpty;
+                session.reportUser('${m['sender_id']}', category, details.text,
+                    messageId: attach && (!sealed || consent) ? '${m['id']}' : null,
+                    e2eeText: attach && (!sealed || consent) ? body : null,
+                    plaintextConsent: sealed && consent);
+              },
+              child: Text(sheet.l10n.reportSubmit),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+// E8: sealed text leaves the device only on an explicit per-tap notice.
+Future<void> _translateWithNotice(BuildContext context,
+    SessionController session, String msgId, Map m) async {
+  if (m['_e2ee'] == true) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(context.l10n.e2eeAiNoticeTitle),
+        content: Text(context.l10n.e2eeAiNoticeBody),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialog).pop(false),
+              child: Text(context.l10n.mvCancel)),
+          FilledButton(
+            onPressed: () => Navigator.of(dialog).pop(true),
+            child: Text(context.l10n.confirmWord),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+  }
+  await session.translateMessage(msgId, '${m['body']}');
+}
+
 Future<void> _editMessageDialog(BuildContext context, SessionController session,
     String msgId, String body) async {
   final controller = TextEditingController(text: body);

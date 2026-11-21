@@ -155,7 +155,10 @@ class SessionController extends ChangeNotifier {
   // E5: E2EE client (lazy; secure storage, memory override in tests).
   e2ee.E2eeStore? _e2ee;
   e2ee.KeyValue? e2eeKvForTests;
+  // E8: whole-store override for tests that stub decryption.
+  e2ee.E2eeStore? e2eeStoreForTests;
   e2ee.E2eeStore? get e2eeClient {
+    if (e2eeStoreForTests != null) return e2eeStoreForTests;
     if (selfId.isEmpty || deviceId.isEmpty) return null;
     _e2ee ??= e2ee.E2eeStore(
       kv: e2eeKvForTests ?? e2ee.SecureKV(),
@@ -1038,6 +1041,12 @@ class SessionController extends ChangeNotifier {
         .firstWhere((c) => '${c['id']}' == cid, orElse: () => {});
     final title = '${chat['title'] ?? strings.msgNewMessage}';
     final kind = '${item['kind'] ?? 'text'}';
+    // E8: sealed content is decrypted on-device for display; when the keys
+    // are gone the tray shows a generic line, never envelope bytes.
+    if (kind == 'ciphertext') {
+      unawaited(_notifySealed(cid, title, item as Map));
+      return;
+    }
     final rawBody = kind == 'text' ? '${item['body'] ?? ''}' : _notifyKindLabel(kind);
     unawaited(notifier
         .showMessage(
@@ -1046,6 +1055,21 @@ class SessionController extends ChangeNotifier {
             body: rawBody.isEmpty ? strings.msgNewMessage : rawBody,
             locale: locale)
         .catchError((_) {}));
+  }
+
+  Future<void> _notifySealed(String cid, String title, Map item) async {
+    var body = strings.msgNewMessage;
+    try {
+      final copy = Map<String, dynamic>.from(item);
+      if (await decryptMessages([copy]) && copy['_e2ee'] == true) {
+        final kind = '${copy['kind'] ?? ''}';
+        final text = kind == 'text' ? '${copy['body'] ?? ''}' : _notifyKindLabel(kind);
+        if (text.isNotEmpty) body = text;
+      }
+    } catch (_) {}
+    try {
+      await notifier.showMessage(roomId: cid, title: title, body: body, locale: locale);
+    } catch (_) {}
   }
 
   String _notifyKindLabel(String kind) {
@@ -2655,15 +2679,24 @@ class SessionController extends ChangeNotifier {
   /// F4: user reports. History of my own filings with states.
   List<dynamic> myReports = [];
 
-  Future<void> reportUser(String userId, String category, String details) {
+  Future<void> reportUser(String userId, String category, String details,
+      {String? messageId, String? e2eeText, bool plaintextConsent = false}) {
     return run(() async {
-      await api.call('/api/v1/reports',
-          method: 'POST',
-          data: {
-            'subject_user_id': userId,
-            'category': category,
-            'details': details
-          });
+      final data = <String, dynamic>{
+        'subject_user_id': userId,
+        'category': category,
+        'details': details,
+      };
+      // E8: the sheet gates sealed quotes behind consent; the server
+      // refuses sealed text without it. Plaintext quotes ride freely.
+      if (messageId != null && messageId.isNotEmpty) {
+        data['message_id'] = messageId;
+      }
+      if (e2eeText != null && e2eeText.isNotEmpty) {
+        data['e2ee_text'] = e2eeText;
+        if (plaintextConsent) data['plaintext_consent'] = true;
+      }
+      await api.call('/api/v1/reports', method: 'POST', data: data);
       notice = strings.reportDoneNote;
       await loadMyReports();
     });
@@ -2677,6 +2710,59 @@ class SessionController extends ChangeNotifier {
       myReports = [];
     }
     notifyListeners();
+  }
+
+  /// E8: "export this device's chats" — decrypted on-device cache to a
+  /// JSON file. Unreadable sealed rows export as a marker, never raw
+  /// envelope bytes. Returns the file path, or '' when there is nothing.
+  Future<String> exportDeviceChat(String roomId, {Directory? dir}) async {
+    final rows = <Map<String, dynamic>>[];
+    for (final m in messages) {
+      if (m is! Map || m['unsent'] == true) continue;
+      if (m['kind'] == 'ciphertext' || m['_e2eeError'] == true) {
+        rows.add({
+          'id': '${m['id']}',
+          'sender_id': '${m['sender_id']}',
+          'created_at': '${m['created_at']}',
+          'sealed': true,
+          'unreadable': true,
+          'body': '',
+        });
+      } else {
+        rows.add({
+          'id': '${m['id']}',
+          'sender_id': '${m['sender_id']}',
+          'created_at': '${m['created_at']}',
+          'kind': '${m['kind']}',
+          'sealed': m['_e2ee'] == true,
+          'body': '${m['body'] ?? ''}',
+        });
+      }
+    }
+    if (rows.isEmpty) {
+      notice = strings.roomExportEmpty;
+      notifyListeners();
+      return '';
+    }
+    final room = _roomOf(roomId);
+    final doc = {
+      'export_version': 'device-1',
+      'room': {
+        'id': roomId,
+        'title': '${room?['title'] ?? ''}',
+        'kind': '${room?['kind'] ?? ''}',
+      },
+      'exported_at': DateTime.now().toUtc().toIso8601String(),
+      'exported_by': selfId,
+      'messages': rows,
+    };
+    final target = dir ?? await getApplicationDocumentsDirectory();
+    final day = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    final file = File('${target.path}/luno-chat-$roomId-$day.json');
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(doc));
+    notice = strings.roomExportDone;
+    notifyListeners();
+    return file.path;
   }
 
   /// F30: customer support tickets. My filings with admin answers.

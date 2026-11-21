@@ -125,7 +125,7 @@ test('F3: export carries read, write and delete records', async () => {
     await api(`conversations/${room.id}/read`, 'POST', { sequence: hist.messages[hist.messages.length - 1].sequence }, s.access_token);
     void sf;
     const exp = await (await api('me/export-data', 'GET', null, s.access_token)).json();
-    assert.equal(exp.export_version, '1.1');
+    assert.equal(exp.export_version, '1.2');
     assert.ok(Array.isArray(exp.read_cursors) && exp.read_cursors.length >= 1, 'read records');
     assert.ok((exp.messages || []).some((m) => m.body === 'export me'), 'write records');
     assert.ok(Array.isArray(exp.sessions), 'device records');

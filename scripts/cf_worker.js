@@ -625,6 +625,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['polls', 'options_json', "TEXT DEFAULT '[]'"],
   ['attachments', 'name', "TEXT DEFAULT ''"],
   ['attachments', 'encrypted', 'INTEGER DEFAULT 0'],
+  ['reports', 'e2ee_disclosed', 'INTEGER DEFAULT 0'],
   ['e2ee_keys', 'prekey_sig', "TEXT DEFAULT ''"],
   ['albums', 'created_by', "TEXT DEFAULT ''"],
   ['wallet_transactions', 'kind', "TEXT DEFAULT ''"],
@@ -3895,8 +3896,14 @@ async function notify(env, userIds, event) {
     targets.push(uid);
   }
   if (targets.length === 0) return { notified: [] };
+  // E8: sealed content gets "new message" only — never plaintext in the
+  // push body. Plaintext rooms keep their preview (N1-L).
+  let out = event;
+  if (event && event.kind === 'message' && event.sealed && event.body) {
+    out = { ...event, body: '새 메시지' };
+  }
   const provider = activePushProvider(env || {});
-  if (provider) await provider(env, targets, event);
+  if (provider) await provider(env, targets, out);
   return { notified: targets };
 }
 function notifyEnv() {
@@ -5069,6 +5076,15 @@ async function fetchLinkPreview(target) {
     const target = (url.searchParams.get('url') || '').trim();
     const invalid = linkPreviewUrlError(target);
     if (invalid) return bad(invalid);
+    // E8: links inside sealed rooms need an explicit per-tap consent —
+    // resolving one tells the server which URL was shared.
+    const pvRoom = url.searchParams.get('room') || '';
+    if (pvRoom) {
+      const prc = conversations.get(resolveConversationId(pvRoom, myId));
+      if (prc && e2eeRoomTargeted(prc) && url.searchParams.get('consented') !== '1') {
+        return json({ error: 'preview needs your confirmation in encrypted rooms', code: 'PREVIEW_CONSENT_REQUIRED' }, 400);
+      }
+    }
     if (!dbOf()) return bad('previews unavailable', 503);
     await ensureSchema();
     const hit = await dbOf().prepare('SELECT * FROM luno_link_previews WHERE url = ?').bind(target).first().catch(() => null);
@@ -5772,6 +5788,7 @@ async function followedMap(userId) {
         kind: 'message',
         conversation_id: cid,
         sender_id: myId,
+        sealed: kind === 'ciphertext',
         title: me.display_name || me.handle || 'LUNO',
         body: notifyMessagePreview(kind, body),
       });
@@ -5888,6 +5905,7 @@ async function deleteAttachmentEverywhere(attId) {
       kind: 'message',
       conversation_id: tcid,
       sender_id: myId,
+      sealed: orig.kind === 'ciphertext',
       title: me.display_name || me.handle || 'LUNO',
       body: notifyMessagePreview(orig.kind, orig.body),
     });
@@ -6110,14 +6128,15 @@ async function deleteAttachmentEverywhere(attId) {
       // route's contract.
       await ensureSchema();
       const esc = q.replace(/[%_\\]/g, (ch) => '\\' + ch);
-      const { results } = await db.prepare("SELECT * FROM luno_messages WHERE conversation_id = ? AND unsent = 0 AND kind <> 'sticker' AND body LIKE ? ESCAPE '\\' ORDER BY sequence DESC LIMIT 50").bind(cid, '%' + esc + '%').all();
+      // E8: sealed bodies are device-searchable only.
+      const { results } = await db.prepare("SELECT * FROM luno_messages WHERE conversation_id = ? AND unsent = 0 AND kind <> 'sticker' AND kind <> 'ciphertext' AND body LIKE ? ESCAPE '\\' ORDER BY sequence DESC LIMIT 50").bind(cid, '%' + esc + '%').all();
       await hydrateReactions((results || []).map(r => r.id));
       await hydrateUsersByIds((results || []).map(r => r.sender_id));
       const out = (results || []).filter(r => !(hs && hs.has(r.id))).map(r => decorateMessage(rowToMessage(r), myId, cid));
       return json({ messages: out });
     }
     const ql = q.toLowerCase();
-    const out = (messages.get(cid) || []).filter(x => !x.unsent && x.kind !== 'sticker' && !(hs && hs.has(x.id)) && String(x.body).toLowerCase().includes(ql));
+    const out = (messages.get(cid) || []).filter(x => !x.unsent && x.kind !== 'sticker' && x.kind !== 'ciphertext' && !(hs && hs.has(x.id)) && String(x.body).toLowerCase().includes(ql));
     return json({ messages: out.slice(-50).reverse().map(x => decorateMessage(x, myId, cid)) });
   }
 
@@ -6917,7 +6936,8 @@ function entitled(u, feature) {
     for (const c of mine) {
       const title = chatSummary(c, myId).title;
       for (const x of messages.get(c.id) || []) {
-        if (x.unsent || x.kind === 'sticker' || x.kind === 'system' || (hs && hs.has(x.id))) continue;
+        // E8: sealed bodies are device-searchable only — never server-matched.
+        if (x.unsent || x.kind === 'sticker' || x.kind === 'system' || x.kind === 'ciphertext' || (hs && hs.has(x.id))) continue;
         if (String(x.body).toLowerCase().includes(q)) foundMsgs.push({ ...x, conversation_title: title });
       }
     }
@@ -6930,18 +6950,41 @@ function entitled(u, feature) {
   }
   // F4: reports persist to D1 (memory mirror kept for the no-DB path).
   function reportView(r) {
-    return { id: r.id, reporter_id: r.reporter_id, subject_user_id: r.target_id || r.subject_user_id, category: r.reason || r.category, details: r.details || '', state: r.status || r.state, created_at: r.created_at };
+    return { id: r.id, reporter_id: r.reporter_id, subject_user_id: r.target_id || r.subject_user_id, category: r.reason || r.category, details: r.details || '', e2ee_disclosed: !!(r.e2ee_disclosed), state: r.status || r.state, created_at: r.created_at };
   }
   if (p === 'reports' && method === 'POST') {
     const b = await readJson(request);
     const category = clip(b.category, 80);
     if (!usersById.has(b.subject_user_id) || !REPORT_CATEGORIES.includes(category)) return bad('신고 정보가 올바르지 않습니다');
-    const rep = { id: uid(), reporter_id: myId, subject_user_id: b.subject_user_id, category, details: clip(b.details || '', 2000), state: 'open', created_at: now() };
+    // E8: decrypted content from a sealed room rides the report only with the
+    // reporter's explicit per-report consent, and is marked as disclosed.
+    let details = clip(b.details || '', 2000);
+    let disclosed = 0;
+    const dMid = typeof b.message_id === 'string' ? b.message_id : '';
+    const dText = typeof b.e2ee_text === 'string' ? clip(b.e2ee_text, 2000) : '';
+    if (dMid || dText) {
+      let dConv = null;
+      if (dMid) {
+        for (const [dcid, mlist] of messages) {
+          if ((mlist || []).some((x) => x.id === dMid)) { dConv = conversations.get(dcid); break; }
+        }
+        if (!dConv) return bad('메시지를 찾을 수 없습니다', 404);
+      }
+      if (dConv && e2eeRoomTargeted(dConv)) {
+        if (!dText) return bad('복호화 내용을 첨부해 주세요', 400);
+        if (b.plaintext_consent !== true) return json({ error: 'decrypted content needs your consent to attach', code: 'E2EE_CONSENT_REQUIRED' }, 400);
+        disclosed = 1;
+        details = clip(`${details}\n[복호화 첨부·신고자 동의 ${dMid}] ${dText}`, 4000);
+      } else if (dText) {
+        details = clip(`${details}\n${dText}`, 4000);
+      }
+    }
+    const rep = { id: uid(), reporter_id: myId, subject_user_id: b.subject_user_id, category, details, e2ee_disclosed: disclosed, state: 'open', created_at: now() };
     adminReports.unshift(rep);
     if (dbOf()) {
       await ensureSchema();
-      await dbOf().prepare('INSERT INTO reports (id, reporter_id, target_type, target_id, reason, details, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .bind(rep.id, rep.reporter_id, 'user', rep.subject_user_id, rep.category, rep.details, 'open', rep.created_at).run();
+      await dbOf().prepare('INSERT INTO reports (id, reporter_id, target_type, target_id, reason, details, e2ee_disclosed, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(rep.id, rep.reporter_id, 'user', rep.subject_user_id, rep.category, rep.details, disclosed, 'open', rep.created_at).run();
     }
     return json({ id: rep.id }, 201);
   }
@@ -7305,7 +7348,9 @@ function entitled(u, feature) {
       if (dbOf()) {
         await ensureSchema();
         const rows = (await dbOf().prepare('SELECT * FROM reports ORDER BY created_at DESC LIMIT 100').all().catch(() => ({ results: [] }))).results || [];
-        return json({ reports: rows.map(r => ({ id: r.id, reporter_id: r.reporter_id, subject_user_id: r.target_id, category: r.reason, details: r.details || '', state: r.status, created_at: r.created_at })) });
+        // E8: admins review reporter-disclosed text only, flagged as such —
+        // sealed room content itself is never readable here.
+        return json({ reports: rows.map(r => ({ id: r.id, reporter_id: r.reporter_id, subject_user_id: r.target_id, category: r.reason, details: r.details || '', e2ee_disclosed: !!r.e2ee_disclosed, state: r.status, created_at: r.created_at })) });
       }
       return json({ reports: adminReports.slice(0, 100) });
     }
@@ -8004,7 +8049,9 @@ function entitled(u, feature) {
     const myMsgs = [];
     for (const c of mine) {
       for (const m of messages.get(c.id) || []) {
-        if (m.sender_id === myId) myMsgs.push(m);
+        // E8: sealed bodies export as ciphertext, flagged — readable plaintext
+        // comes from the device-side "export this device's chats" instead.
+        if (m.sender_id === myId) myMsgs.push(m.kind === 'ciphertext' ? { ...m, sealed: true } : m);
       }
     }
     // F3: read records (cursors), device records (sessions), delete/manage
@@ -8017,7 +8064,8 @@ function entitled(u, feature) {
       trail = (await dbOf().prepare('SELECT action, target, detail, created_at FROM luno_audit WHERE actor = ? ORDER BY id DESC LIMIT 200').bind(myId).all().catch(() => ({ results: [] }))).results || [];
     }
     return json({
-      export_version: '1.1',
+      export_version: '1.2',
+      e2ee_note: 'messages flagged sealed are ciphertext; export readable text from the device',
       exported_at: now(),
       user: publicUser(me),
       friends: friendIds(myId).map(id => publicUser(usersById.get(id))),
@@ -9917,7 +9965,9 @@ const workerCore = {
         const foundMsgs = [];
         for (const [cid, mlist] of messages) {
           for (const m of mlist) {
-            if (m.body.toLowerCase().includes(q)) foundMsgs.push(m);
+            // E8: sealed bodies are device-searchable only.
+            if (m.kind === 'ciphertext') continue;
+            if (String(m.body || '').toLowerCase().includes(q)) foundMsgs.push(m);
           }
         }
         return json({ messages: foundMsgs, users: [] });

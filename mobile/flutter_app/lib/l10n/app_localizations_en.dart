@@ -307,6 +307,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportSubmit => 'Submit report';
 
   @override
+  String get reportE2eeConsent =>
+      'Attach the decrypted message to this report (readable by the server and reviewers)';
+
+  @override
   String get gsLeave => 'Leave';
 
   @override
@@ -809,6 +813,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get roomOfflineSync => 'Offline sync';
+
+  @override
+  String get roomExportDevice => 'Export this device’s chats';
+
+  @override
+  String get roomExportDone => 'Saved this device’s chats to a file';
+
+  @override
+  String get roomExportEmpty => 'No messages to export';
 
   @override
   String get roomImageFail => 'Couldn\'t load the image';
@@ -1497,6 +1510,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eeUnreadable => 'This message could not be decrypted.';
+
+  @override
+  String get e2eeAiNoticeTitle => 'Send to server AI';
+
+  @override
+  String get e2eeAiNoticeBody =>
+      'This is an encrypted message. Send it to the server AI (translate)?';
 
   @override
   String get msgQueuedOffline => 'Offline — message queued.';

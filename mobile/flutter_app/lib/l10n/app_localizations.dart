@@ -690,6 +690,12 @@ abstract class AppLocalizations {
   /// **'신고 접수'**
   String get reportSubmit;
 
+  /// reportE2eeConsent (E8)
+  ///
+  /// In ko, this message translates to:
+  /// **'복호화한 메시지 내용을 신고에 첨부합니다 (서버·관리자가 열람)'**
+  String get reportE2eeConsent;
+
   /// gsLeave (F20)
   ///
   /// In ko, this message translates to:
@@ -1661,6 +1667,24 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'오프라인 동기화'**
   String get roomOfflineSync;
+
+  /// roomExportDevice (E8)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기의 대화 내보내기'**
+  String get roomExportDevice;
+
+  /// roomExportDone (E8)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 기기의 대화를 파일로 저장했습니다'**
+  String get roomExportDone;
+
+  /// roomExportEmpty (E8)
+  ///
+  /// In ko, this message translates to:
+  /// **'내보낼 메시지가 없습니다'**
+  String get roomExportEmpty;
 
   /// roomImageFail (F20)
   ///
@@ -2957,6 +2981,18 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'이 메시지를 복호화할 수 없습니다.'**
   String get e2eeUnreadable;
+
+  /// e2eeAiNoticeTitle (E8)
+  ///
+  /// In ko, this message translates to:
+  /// **'서버 AI로 보내기'**
+  String get e2eeAiNoticeTitle;
+
+  /// e2eeAiNoticeBody (E8)
+  ///
+  /// In ko, this message translates to:
+  /// **'암호화 대화 내용입니다. 이 메시지를 서버 AI(번역)에 보내시겠습니까?'**
+  String get e2eeAiNoticeBody;
 
   /// msgQueuedOffline (F20)
   ///
