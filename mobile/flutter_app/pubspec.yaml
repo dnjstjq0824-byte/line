@@ -31,6 +31,7 @@ dependencies:
   flutter_contacts: ^2.6.0
   firebase_core: 5.2.0 # push: pinned (FCM closed-app delivery, version fixed)
   firebase_messaging: 17.1.0 # push: pinned (FCM closed-app delivery, version fixed)
+  cryptography: ^2.7.0 # E4: pinned pure-Dart crypto (X25519/Ed25519/HKDF/AES-GCM/PBKDF2)
 dev_dependencies:
   flutter_test:
     sdk: flutter
