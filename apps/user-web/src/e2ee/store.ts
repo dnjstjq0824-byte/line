@@ -29,6 +29,13 @@ import {
 } from '../../../shared/e2ee/ratchet.ts';
 import { decodeEnvelope, encodeEnvelope } from '../../../shared/e2ee/envelope.ts';
 import { b64uDecode, b64uEncode, utf8Decode, utf8Encode } from '../../../shared/e2ee/codec.ts';
+import {
+  createSenderKey,
+  exportSenderKey,
+  importSenderKey,
+  senderDecrypt,
+  senderEncrypt,
+} from '../../../shared/e2ee/sender.ts';
 
 export interface KeyValue {
   get(k: string): Promise<string | null>;
@@ -223,7 +230,8 @@ export class E2eeStore {
   /** Encrypt for every device of every other member plus our other devices. */
   async encryptRoom(room: RoomRef, inner: InnerMessage): Promise<string> {
     await this.ready();
-    if (room.kind === 'group') throw new Error('GROUP_E2EE_PENDING');
+    // E6: groups use sender keys; 1:1/Keep rooms use pairwise fanout.
+    if (room.kind === 'group') return this.encryptGroup(room, inner);
     const targets = new Set(room.memberIds.filter((m) => m !== this.userId));
     targets.add(this.userId); // own devices, including this one (own history)
     const innerBytes = utf8Encode(JSON.stringify({ kind: inner.kind, body: inner.body, ...(inner.meta ? { meta: inner.meta } : {}) }));
@@ -263,9 +271,183 @@ export class E2eeStore {
     });
   }
 
+  // ---------- E6: sender keys for group rooms ----------
+
+  private async loadOwnSenderKey(roomId: string): Promise<{ gen: number; chain: string; signPriv: string; signPub: string; n: number; dealt: Record<string, number>; members: string[] } | null> {
+    const raw = await this.kv.get(this.k('skown', roomId));
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  private async saveOwnSenderKey(roomId: string, rec: { gen: number; chain: string; signPriv: string; signPub: string; n: number; dealt: Record<string, number>; members: string[] }): Promise<void> {
+    await this.kv.set(this.k('skown', roomId), JSON.stringify(rec));
+  }
+
+  private async loadPeerSenderKey(roomId: string, senderId: string, gen: number): Promise<{ gen: number; chain: string; signPub: string; n: number; skipped: Array<{ n: number; mk: string }> } | null> {
+    const raw = await this.kv.get(this.k('skin', roomId, senderId, String(gen)));
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  private async savePeerSenderKey(roomId: string, senderId: string, gen: number, rec: { chain: string; signPub: string; n: number; skipped: Array<{ n: number; mk: string }> }): Promise<void> {
+    await this.kv.set(this.k('skin', roomId, senderId, String(gen)), JSON.stringify({ ...rec, gen }));
+  }
+
+  /** Ensure our sender key for the room, rotate on member exit, deal to newcomers. */
+  private async ensureSenderKey(room: RoomRef): Promise<{ gen: number; chain: string; signPriv: string; signPub: string; n: number; dealt: Record<string, number>; members: string[] }> {
+    let rec = await this.loadOwnSenderKey(room.id);
+    const members = [...room.memberIds].sort();
+    const left = (rec?.members || []).filter((m) => !members.includes(m));
+    if (!rec || !rec.chain || left.length > 0) {
+      const sk = createSenderKey((rec?.gen || 0) + 1);
+      const exp = exportSenderKey(sk);
+      rec = {
+        gen: (rec?.gen || 0) + 1,
+        chain: exp.chain,
+        signPriv: exp.signPriv || '',
+        signPub: exp.signPub,
+        n: 0,
+        dealt: {},
+        members,
+      };
+    }
+    for (const uid of members) {
+      if (uid === this.userId) continue;
+      if (rec.dealt[uid] === rec.gen) continue;
+      await this.dealSenderKey(room.id, uid, rec);
+      rec.dealt[uid] = rec.gen;
+    }
+    rec.members = members;
+    await this.saveOwnSenderKey(room.id, rec);
+    return rec;
+  }
+
+  private async dealSenderKey(roomId: string, toUser: string, rec: { gen: number; chain: string; signPub: string }): Promise<void> {
+    const bundles = await this.fetchBundles(toUser);
+    const envelopes: Record<string, unknown> = {};
+    for (const b of bundles) {
+      const { st, fresh, eph } = await this.sessionFor(b);
+      const saved = (await this.loadSession(toUser, b.device_id))!;
+      const ct = await ratchetEncrypt(st, utf8Encode(JSON.stringify({
+        kind: 'sk',
+        body: '',
+        meta: { room: roomId, gen: rec.gen, chain: rec.chain, signPub: rec.signPub },
+      })));
+      await this.saveSession(toUser, b.device_id, { ...saved, ratchet: serializeRatchet(st), prekeySent: true });
+      envelopes[b.device_id] = fresh
+        ? JSON.parse(encodeEnvelope({
+          v: 1, type: 'prekey', ik: encodeIdentity(this.identity!),
+          ek: eph!, spkId: null, opkId: saved.opkPub, spk: b.signed_prekey,
+          header: encodeHeader(ct.header), iv: b64uEncode(ct.iv), ct: b64uEncode(ct.ct),
+        }))
+        : JSON.parse(encodeEnvelope({
+          v: 1, type: 'msg',
+          header: encodeHeader(ct.header), iv: b64uEncode(ct.iv), ct: b64uEncode(ct.ct),
+        }));
+    }
+    if (!Object.keys(envelopes).length) return;
+    await this.api('e2ee/sk', 'POST', {
+      to_user: toUser,
+      room: roomId,
+      gen: rec.gen,
+      from_device: this.deviceId,
+      envelopes,
+    });
+  }
+
+  /** Import pending sender keys for a room (called on open + unknown gen). */
+  async fetchSenderKeys(roomId?: string): Promise<void> {
+    await this.ready();
+    const res = await this.api<{ parcels?: Array<{ id: string; from_user_id: string; from_device?: string; room_id: string; gen: number; envelopes: Record<string, unknown> }> }>(
+      roomId ? `e2ee/sk?room=${encodeURIComponent(roomId)}` : 'e2ee/sk', 'GET');
+    for (const p of res.parcels || []) {
+      const env = p.envelopes[this.deviceId];
+      if (!env) continue;
+      const inner = await this.decryptBody(p.from_user_id, JSON.stringify({
+        v: 1,
+        from: { user: p.from_user_id, device: p.from_device || 'unknown' },
+        msgs: { [this.userId]: { [this.deviceId]: env } },
+      }));
+      if (inner && inner.kind === 'sk' && inner.meta && typeof inner.meta === 'object') {
+        const meta = inner.meta as Record<string, unknown>;
+        if (typeof meta.chain === 'string' && typeof meta.signPub === 'string' && typeof meta.gen === 'number') {
+          await this.savePeerSenderKey(p.room_id, p.from_user_id, meta.gen as number, {
+            chain: meta.chain as string,
+            signPub: meta.signPub as string,
+            n: 0,
+            skipped: [],
+          });
+          try {
+            await this.api(`e2ee/sk/${p.id}`, 'DELETE');
+          } catch { /* redelivery is harmless */ }
+        }
+      }
+    }
+  }
+
+  private async encryptGroup(room: RoomRef, inner: InnerMessage): Promise<string> {
+    const rec = await this.ensureSenderKey(room);
+    const sk = importSenderKey(b64uDecode(rec.chain), b64uDecode(rec.signPub), rec.gen);
+    (sk as unknown as { n: number }).n = rec.n;
+    (sk as unknown as { signPriv: Uint8Array }).signPriv = b64uDecode(rec.signPriv);
+    const msg = await senderEncrypt(sk, this.userId, utf8Encode(JSON.stringify({ kind: inner.kind, body: inner.body, ...(inner.meta ? { meta: inner.meta } : {}) })));
+    rec.n = sk.n;
+    rec.chain = b64uEncode(sk.chain);
+    await this.saveOwnSenderKey(room.id, rec);
+    return JSON.stringify({
+      v: 1,
+      type: 'groupmsg',
+      from: { user: this.userId, device: this.deviceId },
+      room: room.id,
+      sender: this.userId,
+      gen: msg.gen,
+      n: msg.n,
+      iv: b64uEncode(msg.iv),
+      ct: b64uEncode(msg.ct),
+      sig: b64uEncode(msg.sig),
+    });
+  }
+
+  private async decryptGroup(senderId: string, o: Record<string, unknown>): Promise<InnerMessage | null> {
+    const roomId = String(o.room || '');
+    const gen = Number(o.gen);
+    let rec = await this.loadPeerSenderKey(roomId, senderId, gen);
+    if (!rec) {
+      await this.fetchSenderKeys(roomId);
+      rec = await this.loadPeerSenderKey(roomId, senderId, gen);
+      if (!rec) return null;
+    }
+    const sk = importSenderKey(b64uDecode(rec.chain), b64uDecode(rec.signPub), rec.gen);
+    sk.n = rec.n;
+    sk.skipped = rec.skipped;
+    try {
+      const pt = await senderDecrypt(sk, senderId, {
+        gen,
+        n: Number(o.n),
+        iv: b64uDecode(o.iv as string),
+        ct: b64uDecode(o.ct as string),
+        sig: b64uDecode(o.sig as string),
+      });
+      await this.savePeerSenderKey(roomId, senderId, gen, {
+        chain: b64uEncode(sk.chain), signPub: rec.signPub, n: sk.n, skipped: sk.skipped,
+      });
+      return JSON.parse(new TextDecoder().decode(pt)) as InnerMessage;
+    } catch {
+      return null;
+    }
+  }
+
   /** Decrypt one incoming ciphertext body for this device. Null when undecryptable. */
   async decryptBody(senderId: string, body: string): Promise<InnerMessage | null> {
     await this.ready();
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return null;
+    }
+    // E6: group sender-key message.
+    if (parsed && typeof parsed === 'object' && parsed.type === 'groupmsg') {
+      return this.decryptGroup(senderId, parsed);
+    }
     let fan: { from?: { user: string; device: string }; msgs?: Record<string, Record<string, unknown>> };
     try {
       fan = JSON.parse(body);

@@ -6,6 +6,8 @@ import 'package:luno_messenger/e2ee/store.dart';
 
 class FakeDirectory {
   final bundles = <String, Map<String, Map<String, dynamic>>>{};
+  final parcels = <Map<String, dynamic>>[];
+  var _parcelSeq = 0;
   Future<dynamic> call(String path, [String method = 'GET', Object? body]) async {
     final put = RegExp(r'^devices/([\w-]+)/keys$').firstMatch(path);
     if (put != null) {
@@ -72,6 +74,36 @@ class FakeDirectory {
         'one_time_prekey': consume(did),
       };
     }
+    if (path == 'e2ee/sk' && method == 'POST') {
+      final b = body as Map;
+      parcels.add({
+        'id': 'p${_parcelSeq++}',
+        'to_user_id': b['to_user'],
+        'from_user_id': _authed,
+        'from_device': b['from_device'] ?? 'unknown',
+        'room_id': b['room'],
+        'gen': b['gen'],
+        'envelopes': b['envelopes'],
+      });
+      return {'status': 'parcel_stored'};
+    }
+    if (path.startsWith('e2ee/sk') && method == 'GET') {
+      final room = path.contains('room=')
+          ? Uri.splitQueryString(path.split('?')[1])['room']
+          : null;
+      return {
+        'parcels': parcels
+            .where((p) =>
+                p['to_user_id'] == _authed &&
+                (room == null || p['room_id'] == room))
+            .toList()
+      };
+    }
+    if (path.startsWith('e2ee/sk/') && method == 'DELETE') {
+      parcels.removeWhere((p) =>
+          p['id'] == path.split('/').last && p['to_user_id'] == _authed);
+      return {'status': 'parcel_deleted'};
+    }
     throw StateError('unexpected $method $path');
   }
 
@@ -114,17 +146,41 @@ void main() {
     expect((await a2.decryptBody('bob', ct))?.body, 'to both');
   });
 
-  test('E5 app: group rooms refuse; wipe deletes the bundle', () async {
+  test('E6 app: group rooms encrypt; wipe deletes the bundle', () async {
     final dir = FakeDirectory();
     final alice = E2eeStore(kv: MemoryKV(), api: dir.as('alice'), userId: 'alice', deviceId: 'a1');
+    final bob = E2eeStore(kv: MemoryKV(), api: dir.as('bob'), userId: 'bob', deviceId: 'b1');
     await alice.ready();
-    await expectLater(
-        alice.encryptRoom(
-            const RoomRef(id: 'g', kind: 'group', memberIds: ['alice', 'bob'], e2ee: true),
-            const InnerMessage(kind: 'text', body: 'x')),
-        throwsA(isStateError));
+    await bob.ready();
+    const ref = RoomRef(id: 'g', kind: 'group', memberIds: ['alice', 'bob'], e2ee: true);
+    final ct = await alice.encryptRoom(ref, const InnerMessage(kind: 'text', body: 'group ok'));
+    expect((await bob.decryptBody('alice', ct))?.body, 'group ok');
     await alice.wipe();
     expect(dir.bundles['alice']?.containsKey('a1') ?? false, isFalse);
+  });
+
+  test('E6 app: group dealing, rotation locks the leaver out', () async {
+    final dir = FakeDirectory();
+    E2eeStore mk(String uid, String did) => E2eeStore(
+        kv: MemoryKV(), api: dir.as(uid), userId: uid, deviceId: did);
+    final sa = mk('alice', 'a1');
+    final sb = mk('bob', 'b1');
+    final sc = mk('cara', 'c1');
+    await sa.ready();
+    await sb.ready();
+    await sc.ready();
+    RoomRef ref(List<String> members) =>
+        RoomRef(id: 'g1', kind: 'group', memberIds: members, e2ee: true);
+    const m1 = InnerMessage(kind: 'text', body: 'gen1 hello');
+    final ct1 = await sa.encryptRoom(
+        ref(['alice', 'bob', 'cara']), m1);
+    expect((await sb.decryptBody('alice', ct1))?.body, 'gen1 hello');
+    expect((await sc.decryptBody('alice', ct1))?.body, 'gen1 hello');
+    const m2 = InnerMessage(kind: 'text', body: 'after exit');
+    final ct2 =
+        await sa.encryptRoom(ref(['alice', 'bob']), m2);
+    expect((await sb.decryptBody('alice', ct2))?.body, 'after exit');
+    expect(await sc.decryptBody('alice', ct2), isNull);
   });
 
   test('E5 app: unknown sender keys fail closed', () async {

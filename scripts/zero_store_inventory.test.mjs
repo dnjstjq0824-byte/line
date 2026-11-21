@@ -62,6 +62,7 @@ const CACHE = new Set([
   'featureFlags', // luno_feature_flags
   'officialAccounts', 'followedOfficial', // luno_official_accounts, luno_official_follows
   'chatMeta', // 6-8: migrated to luno_chat_meta (was memory-only)
+  'skParcels', // E6: no-DB fallback; luno_sk_parcels is the store
   // 6-8: D1-primary behind DURABLE_BUSINESS=true (wrangler.jsonc; F17 tests)
   'richMenus', // luno_rich_menus
   'oaBotRules', // luno_oa_bot_rules

@@ -195,6 +195,11 @@ const LUNO_SCHEMA = [
     conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, muted INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
     PRIMARY KEY (conversation_id, user_id))`,
   `CREATE INDEX IF NOT EXISTS idx_luno_chat_meta_user ON luno_chat_meta(user_id)`,
+  // E6: sender-key parcels. Opaque to the server (1:1-sealed per device);
+  // recipients fetch on room open and on unknown generations.
+  `CREATE TABLE IF NOT EXISTS luno_sk_parcels (
+    id TEXT PRIMARY KEY, to_user_id TEXT NOT NULL, from_user_id TEXT NOT NULL, room_id TEXT NOT NULL, gen INTEGER NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_sk_parcels_to ON luno_sk_parcels(to_user_id, room_id)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_sessions_user_active ON luno_sessions(user_id, created_at) WHERE revoked_at IS NULL`,
   `CREATE TABLE IF NOT EXISTS luno_audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, target TEXT, detail TEXT, created_at TEXT NOT NULL)`,
@@ -4357,6 +4362,7 @@ const HIDE_TARGET_TYPES = ['message', 'feed_post', 'community_post', 'attachment
 const pushTokens = new Map();
 const deviceKeys = new Map();
 const userKeys = new Map();
+const skParcels = []; // E6: no-DB fallback; D1 luno_sk_parcels is the store.
 const groupCallRooms = new Map();
 // S6: maximum live participants per group-call room.
 // F6: maximum members per group room (create + invite + join).
@@ -7628,6 +7634,63 @@ function entitled(u, feature) {
       prekey_sig: bundle.prekey_sig,
       one_time_prekey: otk
     });
+  }
+  // E6: sender-key parcels. Opaque relay for group E2EE: the dealer seals
+  // one envelope per recipient device over 1:1 sessions; the server only
+  // checks that both ends share the room.
+  if (p === 'e2ee/sk' && (method === 'POST' || method === 'GET')) {
+    if (!await rateLimit('rl:e2ee-sk:' + myId, 120)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    if (method === 'POST') {
+      const b = await readJson(request);
+      const toUser = typeof b.to_user === 'string' ? b.to_user : '';
+      const roomId = typeof b.room === 'string' ? b.room : '';
+      const gen = Number.isInteger(b.gen) ? b.gen : -1;
+      const envs = b.envelopes && typeof b.envelopes === 'object' ? b.envelopes : null;
+      if (!toUser || !roomId || gen < 0 || !envs || !Object.keys(envs).length) return bad('to_user, room, gen, envelopes가 필요합니다');
+      const conv = conversations.get(roomId) || await hydrateDurableConversation(roomId).catch(() => null);
+      if (!conv || !(conv.members || []).includes(myId) || !(conv.members || []).includes(toUser)) {
+        return json({ error: 'not a shared room' }, 403);
+      }
+      const id = uid();
+      const at = now();
+      const row = { id, to_user_id: toUser, from_user_id: myId, room_id: roomId, gen, payload_json: JSON.stringify(envs), created_at: at };
+      const kdb = dbOf();
+      if (kdb) {
+        await ensureSchema();
+        await kdb.prepare('INSERT INTO luno_sk_parcels (id, to_user_id, from_user_id, room_id, gen, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .bind(id, toUser, myId, roomId, gen, row.payload_json, at).run();
+      } else {
+        skParcels.push(row);
+      }
+      return json({ status: 'parcel_stored', id }, 201);
+    }
+    // GET: my pending parcels (7-day pruning on read).
+    const roomFilter = url.searchParams.get('room') || '';
+    const cutoff = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
+    const kdb = dbOf();
+    if (kdb) {
+      await ensureSchema();
+      await kdb.prepare('DELETE FROM luno_sk_parcels WHERE to_user_id = ? AND created_at < ?').bind(myId, cutoff).run().catch(() => null);
+      const q = roomFilter
+        ? await kdb.prepare('SELECT * FROM luno_sk_parcels WHERE to_user_id = ? AND room_id = ? ORDER BY created_at').bind(myId, roomFilter).all().catch(() => ({ results: [] }))
+        : await kdb.prepare('SELECT * FROM luno_sk_parcels WHERE to_user_id = ? ORDER BY created_at').bind(myId).all().catch(() => ({ results: [] }));
+      return json({ parcels: (q.results || []).map(r => ({ id: r.id, from_user_id: r.from_user_id, room_id: r.room_id, gen: r.gen, envelopes: JSON.parse(r.payload_json), created_at: r.created_at })) });
+    }
+    const mine = skParcels.filter(r => r.to_user_id === myId && r.created_at >= cutoff && (!roomFilter || r.room_id === roomFilter));
+    return json({ parcels: mine.map(r => ({ id: r.id, from_user_id: r.from_user_id, room_id: r.room_id, gen: r.gen, envelopes: JSON.parse(r.payload_json), created_at: r.created_at })) });
+  }
+  if ((m = p.match(/^e2ee\/sk\/([\w-]+)$/)) && method === 'DELETE') {
+    const kdb = dbOf();
+    if (kdb) {
+      await ensureSchema();
+      const gone = await kdb.prepare('DELETE FROM luno_sk_parcels WHERE id = ? AND to_user_id = ? RETURNING id').bind(m[1], myId).first().catch(() => null);
+      if (!gone) return json({ error: 'not found' }, 404);
+      return json({ status: 'parcel_deleted' });
+    }
+    const at = skParcels.findIndex(r => r.id === m[1] && r.to_user_id === myId);
+    if (at < 0) return json({ error: 'not found' }, 404);
+    skParcels.splice(at, 1);
+    return json({ status: 'parcel_deleted' });
   }
   if (p === 'calls/ice-servers' && method === 'GET') {
     // N2-L: STUN always; TURN entries appear only when the operator sets the

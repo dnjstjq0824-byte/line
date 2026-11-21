@@ -9,6 +9,7 @@ import 'codec.dart';
 import 'envelope.dart';
 import 'keys.dart';
 import 'ratchet.dart' as dr;
+import 'sender.dart';
 import 'x3dh.dart';
 
 export 'backup.dart' show BackupBlob;
@@ -232,7 +233,10 @@ class E2eeStore {
 
   Future<String> encryptRoom(RoomRef room, InnerMessage inner) async {
     await ready();
-    if (room.kind == 'group') throw StateError('GROUP_E2EE_PENDING');
+    // E6: groups use sender keys; 1:1/Keep rooms use pairwise fanout.
+    if (room.kind == 'group') {
+      return encryptGroup(room, inner);
+    }
     final targets = room.memberIds.where((m) => m != userId).toSet()..add(userId); // own devices too (own history)
     final innerBytes = utf8Encode(jsonEncode({
       'kind': inner.kind, 'body': inner.body, if (inner.meta != null) 'meta': inner.meta,
@@ -276,6 +280,16 @@ class E2eeStore {
 
   Future<InnerMessage?> decryptBody(String senderId, String body) async {
     await ready();
+    Map<String, dynamic> parsed;
+    try {
+      parsed = jsonDecode(body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+    // E6: group sender-key message.
+    if (parsed['type'] == 'groupmsg') {
+      return decryptGroup(senderId, parsed);
+    }
     Map<String, dynamic> fan;
     try {
       fan = jsonDecode(body) as Map<String, dynamic>;
@@ -345,6 +359,242 @@ class E2eeStore {
         ratchet: dr.serializeRatchet(st), peerIdentity: existing.peerIdentity, peerDevice: existing.peerDevice, eph: existing.eph, opkPub: existing.opkPub));
       final inner = jsonDecode(utf8Decode(pt)) as Map<String, dynamic>;
       return InnerMessage(kind: inner['kind'] as String, body: inner['body'] as String, meta: inner['meta'] as Map<String, dynamic>?);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _loadOwnSenderKey(String roomId) async {
+    final raw = await kv.get(_k(['skown', roomId]));
+    return raw == null ? null : jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  Future<void> _saveOwnSenderKey(
+      String roomId, Map<String, dynamic> rec) async {
+    await kv.set(_k(['skown', roomId]), jsonEncode(rec));
+  }
+
+  Future<Map<String, dynamic>?> _loadPeerSenderKey(
+      String roomId, String senderId, int gen) async {
+    final raw = await kv.get(_k(['skin', roomId, senderId, '$gen']));
+    return raw == null ? null : jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  Future<void> _savePeerSenderKey(String roomId, String senderId, int gen,
+      Map<String, dynamic> rec) async {
+    await kv.set(_k(['skin', roomId, senderId, '$gen']),
+        jsonEncode({...rec, 'gen': gen}));
+  }
+
+  Future<Map<String, dynamic>> _ensureSenderKey(RoomRef room) async {
+    var rec = await _loadOwnSenderKey(room.id);
+    final members = room.memberIds.toSet().toList()..sort();
+    final cached =
+        ((rec?['members'] ?? []) as List).map((e) => '$e').toList();
+    final left = cached.where((m) => !members.contains(m)).toList();
+    if (rec == null ||
+        (rec['chain'] as String? ?? '').isEmpty ||
+        left.isNotEmpty) {
+      final sk = await createSenderKey((rec?['gen'] as int? ?? 0) + 1);
+      rec = {
+        'gen': (rec?['gen'] as int? ?? 0) + 1,
+        'chain': b64uEncode(sk.chain),
+        'signPriv': b64uEncode(sk.signPriv!),
+        'signPub': b64uEncode(sk.signPub),
+        'n': 0,
+        'dealt': <String, dynamic>{},
+        'members': members,
+      };
+    }
+    final dealt = Map<String, dynamic>.from(rec['dealt'] as Map? ?? {});
+    for (final uid in members) {
+      if (uid == userId) continue;
+      if (dealt[uid] == rec['gen']) continue;
+      await _dealSenderKey(room.id, uid, rec);
+      dealt[uid] = rec['gen'];
+    }
+    rec['dealt'] = dealt;
+    rec['members'] = members;
+    await _saveOwnSenderKey(room.id, rec);
+    return rec;
+  }
+
+  Future<void> _dealSenderKey(
+      String roomId, String toUser, Map<String, dynamic> rec) async {
+    final res = await api('users/$toUser/keys?all=1') as Map<String, dynamic>;
+    final bundles = ((res['devices'] ?? []) as List).cast<Map<String, dynamic>>();
+    final envelopes = <String, dynamic>{};
+    for (final b in bundles) {
+      final s = await _sessionFor(b);
+      final saved = (await _loadSession(
+          toUser, b['device_id'] as String))!;
+      final ct = await dr.ratchetEncrypt(
+          s.st,
+          utf8Encode(jsonEncode({
+            'kind': 'sk',
+            'body': '',
+            'meta': {
+              'room': roomId,
+              'gen': rec['gen'],
+              'chain': rec['chain'],
+              'signPub': rec['signPub']
+            },
+          })));
+      await _saveSession(
+          toUser,
+          b['device_id'] as String,
+          _SessionRecord(
+              ratchet: dr.serializeRatchet(s.st),
+              peerIdentity: saved.peerIdentity,
+              peerDevice: saved.peerDevice,
+              eph: saved.eph,
+              opkPub: saved.opkPub));
+      envelopes[b['device_id'] as String] = s.fresh
+          ? {
+              'v': 1,
+              'type': 'prekey',
+              'ik': encodeIdentity(_identity!),
+              'ek': s.eph,
+              'spkId': null,
+              'opkId': saved.opkPub,
+              'spk': b['signed_prekey'],
+              'header': dr.encodeRatchetHeader(ct.header),
+              'iv': b64uEncode(ct.iv),
+              'ct': b64uEncode(ct.ct),
+            }
+          : {
+              'v': 1,
+              'type': 'msg',
+              'header': dr.encodeRatchetHeader(ct.header),
+              'iv': b64uEncode(ct.iv),
+              'ct': b64uEncode(ct.ct),
+            };
+    }
+    if (envelopes.isEmpty) return;
+    await api('e2ee/sk', 'POST', {
+      'to_user': toUser,
+      'room': roomId,
+      'gen': rec['gen'],
+      'from_device': deviceId,
+      'envelopes': envelopes,
+    });
+  }
+
+  Future<void> fetchSenderKeys([String? roomId]) async {
+    await ready();
+    final res = await api(roomId != null
+        ? 'e2ee/sk?room=${Uri.encodeComponent(roomId)}'
+        : 'e2ee/sk') as Map<String, dynamic>;
+    for (final p
+        in ((res['parcels'] ?? []) as List).cast<Map<String, dynamic>>()) {
+      final envs = (p['envelopes'] ?? {}) as Map<String, dynamic>;
+      final env = envs[deviceId];
+      if (env == null) continue;
+      final inner = await decryptBody(
+          p['from_user_id'] as String,
+          jsonEncode({
+            'v': 1,
+            'from': {
+              'user': p['from_user_id'],
+              'device': p['from_device'] ?? 'unknown'
+            },
+            'msgs': {
+              userId: {deviceId: env}
+            },
+          }));
+      if (inner != null && inner.kind == 'sk' && inner.meta != null) {
+        final meta = inner.meta!;
+        if (meta['chain'] is String &&
+            meta['signPub'] is String &&
+            meta['gen'] is int) {
+          await _savePeerSenderKey(p['room_id'] as String,
+              p['from_user_id'] as String, meta['gen'] as int, {
+            'chain': meta['chain'] as String,
+            'signPub': meta['signPub'] as String,
+            'n': 0,
+            'skipped': <dynamic>[],
+          });
+          try {
+            await api("e2ee/sk/${p['id']}", 'DELETE');
+          } catch (_) { /* redelivery is harmless */ }
+        }
+      }
+    }
+  }
+
+  Future<String> encryptGroup(RoomRef room, InnerMessage inner) async {
+    final rec = await _ensureSenderKey(room);
+    final sk = importSenderKey(b64uDecode(rec['chain'] as String),
+        b64uDecode(rec['signPub'] as String), rec['gen'] as int);
+    final sending = SenderKey(
+        chain: sk.chain,
+        signPriv: b64uDecode(rec['signPriv'] as String),
+        signPub: sk.signPub,
+        gen: sk.gen,
+        n: rec['n'] as int);
+    final msg = await senderEncrypt(
+        sending,
+        userId,
+        utf8Encode(jsonEncode({
+          'kind': inner.kind,
+          'body': inner.body,
+          if (inner.meta != null) 'meta': inner.meta,
+        })));
+    rec['n'] = sending.n;
+    rec['chain'] = b64uEncode(sending.chain);
+    await _saveOwnSenderKey(room.id, rec);
+    return jsonEncode({
+      'v': 1,
+      'type': 'groupmsg',
+      'from': {'user': userId, 'device': deviceId},
+      'room': room.id,
+      'sender': userId,
+      'gen': msg.gen,
+      'n': msg.n,
+      'iv': b64uEncode(msg.iv),
+      'ct': b64uEncode(msg.ct),
+      'sig': b64uEncode(msg.sig),
+    });
+  }
+
+  Future<InnerMessage?> decryptGroup(
+      String senderId, Map<String, dynamic> o) async {
+    final roomId = '${o['room'] ?? ''}';
+    final gen = (o['gen'] as num?)?.toInt() ?? -1;
+    var rec = await _loadPeerSenderKey(roomId, senderId, gen);
+    if (rec == null) {
+      await fetchSenderKeys(roomId);
+      rec = await _loadPeerSenderKey(roomId, senderId, gen);
+      if (rec == null) return null;
+    }
+    final sk = importSenderKey(b64uDecode(rec['chain'] as String),
+        b64uDecode(rec['signPub'] as String), rec['gen'] as int);
+    sk.n = rec['n'] as int;
+    for (final e in ((rec['skipped'] ?? []) as List).cast<Map>()) {
+      sk.skipped.add(
+          SkippedSenderKey(n: e['n'] as int, mk: e['mk'] as String));
+    }
+    try {
+      final pt = await senderDecrypt(
+          sk,
+          senderId,
+          SenderMessage(
+              gen: gen,
+              n: (o['n'] as num).toInt(),
+              iv: b64uDecode(o['iv'] as String),
+              ct: b64uDecode(o['ct'] as String),
+              sig: b64uDecode(o['sig'] as String)));
+      await _savePeerSenderKey(roomId, senderId, gen, {
+        'chain': b64uEncode(sk.chain),
+        'signPub': rec['signPub'] as String,
+        'n': sk.n,
+        'skipped': sk.skipped.map((s) => {'n': s.n, 'mk': s.mk}).toList(),
+      });
+      final inner = jsonDecode(utf8Decode(pt)) as Map<String, dynamic>;
+      return InnerMessage(
+          kind: inner['kind'] as String,
+          body: inner['body'] as String,
+          meta: inner['meta'] as Map<String, dynamic>?);
     } catch (_) {
       return null;
     }

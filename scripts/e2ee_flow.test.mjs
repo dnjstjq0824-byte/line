@@ -113,13 +113,20 @@ test('E5: second device fans out; edit and recall stay encrypted', async () => {
   } finally { db.raw.close(); }
 });
 
-test('E5: group rooms refuse until sender keys (E6)', async () => {
+test('E6: group rooms encrypt via sender keys (see e2ee_group for depth)', async () => {
   const db = makeD1();
   try {
     const { api } = await isolate(db);
     const a = await regLogin(api, 'e5g-a@luno-test.local');
-    const store = new E2eeStore({ kv: new MemoryKV(), api: (p, m, b) => api(p, m || 'GET', b || null, a.token).then((r) => r.json()), userId: a.id, deviceId: 'w1' });
-    await store.ready();
-    await assert.rejects(store.encryptRoom({ id: 'g', kind: 'group', memberIds: [], e2ee: true }, { kind: 'text', body: 'x' }), /GROUP_E2EE_PENDING/);
+    const b = await regLogin(api, 'e5g-b@luno-test.local');
+    const room = await (await api('conversations', 'POST', { kind: 'group', title: 'g', member_ids: [b.id] }, a.token)).json();
+    const mk = (u, did) => new E2eeStore({ kv: new MemoryKV(), api: (p, m, bo) => api(p, m || 'GET', bo || null, u.token).then((r) => r.json()), userId: u.id, deviceId: did });
+    const sa = mk(a, 'w1');
+    const sb = mk(b, 'w2');
+    await sa.ready();
+    await sb.ready();
+    const ref = { id: room.id, kind: 'group', memberIds: [a.id, b.id], e2ee: true };
+    const ct = await sa.encryptRoom(ref, { kind: 'text', body: 'group smoke' });
+    assert.equal((await sb.decryptBody(a.id, ct))?.body, 'group smoke');
   } finally { db.raw.close(); }
 });
