@@ -624,6 +624,7 @@ const LUNO_SCHEMA_PHASE1_COLS = [
   ['polls', 'created_by', "TEXT DEFAULT ''"],
   ['polls', 'options_json', "TEXT DEFAULT '[]'"],
   ['attachments', 'name', "TEXT DEFAULT ''"],
+  ['attachments', 'encrypted', 'INTEGER DEFAULT 0'],
   ['e2ee_keys', 'prekey_sig', "TEXT DEFAULT ''"],
   ['albums', 'created_by', "TEXT DEFAULT ''"],
   ['wallet_transactions', 'kind', "TEXT DEFAULT ''"],
@@ -2215,8 +2216,8 @@ async function persistAttachmentR2(att) {
   const sha256 = await sha256Hex(att.bytes);
   await bucket.put(object_key, att.bytes, { httpMetadata: { contentType: att.mime } });
   await ensureSchema();
-  await db.prepare('INSERT INTO attachments (id, conversation_id, object_key, name, mime_type, size_bytes, sha256, uploader_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(att.id, att.conversation_id, object_key, att.name, att.mime, att.bytes.length, sha256, att.owner, now()).run();
+  await db.prepare('INSERT INTO attachments (id, conversation_id, object_key, name, mime_type, size_bytes, sha256, uploader_id, encrypted, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(att.id, att.conversation_id, object_key, att.name, att.mime, att.bytes.length, sha256, att.owner, att.encrypted ? 1 : 0, now()).run();
   return { object_key, sha256, size: att.bytes.length };
 }
 async function loadAttachment(id) {
@@ -6345,18 +6346,23 @@ async function deleteAttachmentEverywhere(attId) {
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     // F29: moderation-blocked bytes are rejected before they touch storage.
+    // E7: sealed (E2EE) bytes skip content screening — ciphertext cannot be
+    // screened, and must not be sent to a third-party API for a verdict.
+    const sealed = b.encrypted === true;
     const upHash = await sha256Hex(bytes);
     await ensureSchema().catch(() => {});
-    const blocked = await store.prepare('SELECT sha256 FROM luno_blocked_hashes WHERE sha256 = ?').bind(upHash).first().catch(() => null);
-    if (blocked) return json({ error: '차단된 파일입니다', code: 'ATTACHMENT_BLOCKED' }, 403);
+    if (!sealed) {
+      const blocked = await store.prepare('SELECT sha256 FROM luno_blocked_hashes WHERE sha256 = ?').bind(upHash).first().catch(() => null);
+      if (blocked) return json({ error: '차단된 파일입니다', code: 'ATTACHMENT_BLOCKED' }, 403);
+    }
     // GCP Vision SafeSearch: adult/violent photos never reach storage.
-    if (mime.startsWith('image/') && mime !== 'image/svg+xml') {
+    if (!sealed && mime.startsWith('image/') && mime !== 'image/svg+xml') {
       const screen = await visionScreenImage(CURRENT_ENV, b.content_base64);
       if (screen.unsafe) return json({ error: '부적절한 이미지로 판단되어 보낼 수 없습니다', code: 'IMAGE_UNSAFE', reasons: screen.reasons }, 422);
     }
-    const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, bytes };
+    const att = { id: uid(), owner: myId, conversation_id: conv.id, name: clip(b.original_name || 'file', 120) || 'file', mime, bytes, encrypted: sealed };
     await persistAttachmentR2(att);
-    return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: bytes.length, quota: { uploads_today: quota.uploads, bytes_today: quota.bytes } }, 201);
+    return json({ id: att.id, status: 'ready', original_name: att.name, mime_type: mime, size_bytes: bytes.length, encrypted: sealed, quota: { uploads_today: quota.uploads, bytes_today: quota.bytes } }, 201);
   }
   if ((m = p.match(/^attachments\/([\w-]+)(?:\/content)?$/)) && method === 'GET') {
     const att = await loadAttachment(m[1]);

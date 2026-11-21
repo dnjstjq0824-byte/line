@@ -13,6 +13,7 @@ import {
 } from '../apps/shared/e2ee/ratchet.ts';
 import { createSenderKey, decodeSenderMessage, encodeSenderMessage, importSenderKey, senderDecrypt, senderEncrypt } from '../apps/shared/e2ee/sender.ts';
 import { decryptBackup, encryptBackup } from '../apps/shared/e2ee/backup.ts';
+import { openFile, sealFile } from '../apps/shared/e2ee/files.ts';
 import { decodeEnvelope, encodeEnvelope } from '../apps/shared/e2ee/envelope.ts';
 
 let counter = 1;
@@ -126,6 +127,10 @@ const vectors = {
     wire_g1: encodeSenderMessage(g1),
   },
   backup: { blob, restored },
+  file: await (async () => {
+    const sealed = await sealFile(utf8Encode('file-bytes-fixture'), { key: seed(600, 32), iv: seed(632, 12) });
+    return { key: sealed.key, iv: sealed.iv, hash: sealed.hash, pt: b64(utf8Encode('file-bytes-fixture')), ct: sealed.ct };
+  })(),
   envelopes: { prekey: prekeyEnv, msg: msgEnv, sk: skEnv },
   sha256_empty_hex: Buffer.from(sha256Hash(new Uint8Array(0))).toString('hex'),
   _priv: {

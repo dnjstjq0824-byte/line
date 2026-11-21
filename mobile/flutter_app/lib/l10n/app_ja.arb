@@ -475,7 +475,6 @@
   "errOutboxDropped": "拒否された待機メッセージ{dropped}件を破棄しました。",
   "msgEdited": "メッセージを編集しました。",
   "e2eeGroupSoon": "グループの暗号化チャットは次回アップデートで対応します",
-  "e2eeAttachSoon": "暗号化ルームのファイル・写真送信は次回アップデートで対応します",
   "e2eeUnreadable": "このメッセージを復号できませんでした",
   "msgQueuedOffline": "オフライン — メッセージを待機列に保存しました。",
   "errFileTooBig": "ファイルが大きすぎます（最大512KB）",

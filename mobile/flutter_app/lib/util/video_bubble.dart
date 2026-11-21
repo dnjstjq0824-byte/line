@@ -3,6 +3,8 @@
 // The controller is created lazily on first tap (with the Authorization
 // header the attachment endpoint requires), so merely rendering a bubble
 // never touches platform channels. Duration appears once loaded.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -13,7 +15,8 @@ import './app_l10n.dart';
 class VideoBubble extends StatefulWidget {
   final String url;
   final String token;
-  const VideoBubble({super.key, required this.url, required this.token});
+  final Future<String?> Function()? resolveLocalPath;
+  const VideoBubble({super.key, required this.url, required this.token, this.resolveLocalPath});
 
   @override
   State<VideoBubble> createState() => _VideoBubbleState();
@@ -41,10 +44,17 @@ class _VideoBubbleState extends State<VideoBubble> {
       _loading = true;
       _error = null;
     });
-    final next = VideoPlayerController.networkUrl(
-      Uri.parse(widget.url),
-      httpHeaders: {'Authorization': 'Bearer ${widget.token}'},
-    );
+    VideoPlayerController next;
+    if (widget.resolveLocalPath != null) {
+      final path = await widget.resolveLocalPath!();
+      if (path == null) throw Exception('video unavailable');
+      next = VideoPlayerController.file(File(path));
+    } else {
+      next = VideoPlayerController.networkUrl(
+        Uri.parse(widget.url),
+        httpHeaders: {'Authorization': 'Bearer ${widget.token}'},
+      );
+    }
     try {
       await next.initialize();
       _ctrl = next;

@@ -2145,15 +2145,20 @@ async function shrinkPhotoForUpload(file: File): Promise<File> {
   }
 }
 async function sendAttachmentFile(file: File, conversation: string, sessionToken: string, voiceDurationSec?: number) {
-    // E5: attachments wait for E7; sending plaintext bytes to an E2EE room
-    // would silently break the seal, so refuse honestly instead.
-    if (chats.value.find((c) => c.id === conversation)?.e2ee) {
-      error.value = t('mvE2eeAttachSoon')
-      return
-    }
     if (voiceDurationSec === undefined) file = await shrinkPhotoForUpload(file)
     if (file.size === 0 || file.size > 512 * 1024) throw new Error(t('attachment_size_limit'))
-    const bytes = new Uint8Array(await file.arrayBuffer())
+    const room = chats.value.find((c) => c.id === conversation)
+    // E7: seal bytes first in E2EE rooms; R2 only ever sees ciphertext.
+    let uploadBytes = new Uint8Array(await file.arrayBuffer())
+    let sealed: { key: string; iv: string; hash: string } | null = null
+    if (room?.e2ee) {
+      const { sealFile } = await import('../../../shared/e2ee/files.ts')
+      const s = await sealFile(uploadBytes)
+      const { b64uDecode } = await import('../../../shared/e2ee/codec.ts')
+      uploadBytes = b64uDecode(s.ct)
+      sealed = { key: s.key, iv: s.iv, hash: s.hash }
+    }
+    const bytes = uploadBytes
     let binary = ''
     for (const byte of bytes) binary += String.fromCharCode(byte)
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
@@ -2166,16 +2171,44 @@ async function sendAttachmentFile(file: File, conversation: string, sessionToken
       mime_type: file.type || 'application/octet-stream',
       size_bytes: file.size,
       checksum_sha256: checksum,
-      content_base64: btoa(binary)
+      content_base64: btoa(binary),
+      ...(sealed ? { encrypted: true } : {})
     })
     if (sessionToken !== token.value) return
+    let wireKind = kind
+    let wireBody = att.original_name
+    let meta: Record<string, unknown> = { attachment_id: att.id, mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}) }
+    if (sealed && room) {
+      const c = e2eeClient()
+      if (!c) return
+      try {
+        const out = await c.encryptOutbound(room, kind, att.original_name, {
+          attachment_id: att.id, fileKey: sealed.key, fileIv: sealed.iv, fileHash: sealed.hash,
+          mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}),
+        })
+        wireKind = out.kind
+        wireBody = out.body
+        meta = {}
+      } catch (e) {
+        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        return
+      }
+    }
     const res = await request<{ message: Message }>(`/api/v1/conversations/${conversation}/messages`, sessionToken, 'POST', {
       client_id: newClientID(),
-      kind,
-      body: att.original_name,
-      metadata: { attachment_id: att.id, mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}) }
+      kind: wireKind,
+      body: wireBody,
+      metadata: meta
     })
-    if (sessionToken === token.value && selectedChatId.value === conversation && !messages.value.some(m => m.id === res.message.id)) messages.value.push(res.message)
+    if (sessionToken === token.value && selectedChatId.value === conversation && !messages.value.some(m => m.id === res.message.id)) {
+      if (wireKind === 'ciphertext') {
+        res.message.kind = kind
+        res.message.body = att.original_name
+        res.message.metadata = { attachment_id: att.id, mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}), ...(sealed ? { fileKey: sealed.key, fileIv: sealed.iv, fileHash: sealed.hash } : {}) }
+        res.message._e2ee = true
+      }
+      messages.value.push(res.message)
+    }
     await loadChats()
 }
 
@@ -2185,7 +2218,21 @@ async function downloadAttachment(message: Message) {
   await wrap(async () => {
     const response = await fetch(`${API_URL}/api/v1/attachments/${encodeURIComponent(id)}/content`, { headers: { Authorization: `Bearer ${token.value}` } })
     if (!response.ok) throw new Error(t('mvDownloadFailed'))
-    const url = URL.createObjectURL(await response.blob())
+    let blob = await response.blob()
+    // E7: sealed bytes open with the key that rode inside the message.
+    const meta = message.metadata as Record<string, unknown> | undefined
+    if (message._e2ee && meta && typeof meta.fileKey === 'string' && typeof meta.fileIv === 'string' && typeof meta.fileHash === 'string') {
+      const { openFile } = await import('../../../shared/e2ee/files.ts')
+      const { b64uEncode } = await import('../../../shared/e2ee/codec.ts')
+      const pt = await openFile({
+        key: meta.fileKey as string,
+        iv: meta.fileIv as string,
+        hash: meta.fileHash as string,
+        ct: b64uEncode(new Uint8Array(await blob.arrayBuffer())),
+      })
+      blob = new Blob([pt.slice().buffer as ArrayBuffer])
+    }
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = message.body || 'attachment'

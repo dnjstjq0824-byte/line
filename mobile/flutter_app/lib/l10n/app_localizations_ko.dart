@@ -1479,9 +1479,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get e2eeGroupSoon => '그룹 채팅 암호화는 다음 업데이트에서 지원됩니다.';
 
   @override
-  String get e2eeAttachSoon => '암호화 대화방의 파일·사진 전송은 다음 업데이트에서 지원됩니다.';
-
-  @override
   String get e2eeUnreadable => '이 메시지를 복호화할 수 없습니다.';
 
   @override

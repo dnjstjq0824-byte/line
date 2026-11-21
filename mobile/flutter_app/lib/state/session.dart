@@ -20,6 +20,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../api/client.dart';
+import '../e2ee/codec.dart';
+import '../e2ee/files.dart';
 import '../e2ee/store.dart' as e2ee;
 import '../legacy_tokens.dart';
 import '../util/app_notify.dart';
@@ -182,6 +184,16 @@ class SessionController extends ChangeNotifier {
     if (members.isEmpty && selfId.isNotEmpty) members.add(selfId);
     return e2ee.RoomRef(
         id: cid, kind: '${c['kind'] ?? 'direct'}', memberIds: members, e2ee: true);
+  }
+
+  /// E7: seal bytes for E2EE rooms (ciphertext upload + sealed message meta).
+  Future<({Uint8List uploadBytes, SealedFile? sealed})> sealForRoom(
+      String cid, Uint8List plain) async {
+    if (_e2eeRoomOf(cid) == null) {
+      return (uploadBytes: plain, sealed: null);
+    }
+    final sealed = await sealFile(plain);
+    return (uploadBytes: b64uDecode(sealed.ct), sealed: sealed);
   }
 
   /// Decrypt ciphertext messages in place; failures keep _e2eeError for UI.
@@ -2313,12 +2325,6 @@ class SessionController extends ChangeNotifier {
 
   Future<void> sendPickedImage(PickedImage pic, {String effect = 'none'}) {
     if (selectedId.isEmpty) return Future.value();
-    // E5: attachments wait for E7 in E2EE rooms.
-    if (_e2eeRoomOf(selectedId) != null) {
-      error = strings.e2eeAttachSoon;
-      notifyListeners();
-      return Future.value();
-    }
     return run(() async {
       final bytes = applyPhotoEffect(pic.bytes, effect);
       if (bytes.length > maxAttachmentBytes) {
@@ -2328,23 +2334,54 @@ class SessionController extends ChangeNotifier {
       final effected = !identical(bytes, pic.bytes);
       final mime = effected ? 'image/jpeg' : pic.mime;
       final name = effected ? photoEffectName(pic.name, effect) : pic.name;
+      // E7: E2EE rooms upload ciphertext and seal the message.
+      final pack = await sealForRoom(selectedId, bytes);
       final att = await api.call('/api/v1/attachments', method: 'POST', data: {
         'conversation_id': selectedId,
         'original_name': name,
         'mime_type': mime,
         'size_bytes': bytes.length,
-        'content_base64': base64Encode(bytes),
+        'content_base64': base64Encode(pack.uploadBytes),
+        if (pack.sealed != null) 'encrypted': true,
       });
+      var kind = attachmentKindForMime(mime);
+      var body = att['original_name'] ?? name;
+      var meta = attachmentMessageMetadata(
+          id: att['id'], mime: mime, size: bytes.length);
+      final e2eeRoom = _e2eeRoomOf(selectedId);
+      if (pack.sealed != null && e2eeRoom != null) {
+        final client = e2eeClient;
+        if (client == null) return;
+        meta['fileKey'] = pack.sealed!.key;
+        meta['fileIv'] = pack.sealed!.iv;
+        meta['fileHash'] = pack.sealed!.hash;
+        body = await client.encryptRoom(
+            e2eeRoom, e2ee.InnerMessage(kind: kind, body: body, meta: meta));
+        kind = 'ciphertext';
+        meta = {};
+      }
       final x = await api.call('/api/v1/conversations/$selectedId/messages',
           method: 'POST', data: {
         'client_id': uuid(),
-        'kind': attachmentKindForMime(mime),
-        'body': att['original_name'] ?? name,
-        'metadata': attachmentMessageMetadata(
-            id: att['id'], mime: mime, size: bytes.length),
+        'kind': kind,
+        'body': body,
+        'metadata': meta,
       });
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
-        messages.add(x['message']);
+        final echo = Map<String, dynamic>.from(x['message'] as Map);
+        if (kind == 'ciphertext') {
+          echo['kind'] = attachmentKindForMime(mime);
+          echo['body'] = att['original_name'] ?? name;
+          echo['metadata'] = attachmentMessageMetadata(
+              id: att['id'], mime: mime, size: bytes.length);
+          if (pack.sealed != null) {
+            echo['metadata']['fileKey'] = pack.sealed!.key;
+            echo['metadata']['fileIv'] = pack.sealed!.iv;
+            echo['metadata']['fileHash'] = pack.sealed!.hash;
+          }
+          echo['_e2ee'] = true;
+        }
+        messages.add(echo);
       }
       await refreshChatList();
     });
@@ -2355,32 +2392,57 @@ class SessionController extends ChangeNotifier {
       String mime = 'audio/mp4',
       String name = 'voice-note.m4a'}) {
     if (selectedId.isEmpty) return Future.value();
-    if (_e2eeRoomOf(selectedId) != null) {
-      error = strings.e2eeAttachSoon;
-      notifyListeners();
-      return Future.value();
-    }
     return run(() async {
       if (bytes.length > maxAttachmentBytes) {
         throw Exception(strings.errFileTooBig);
       }
+      final pack = await sealForRoom(selectedId, bytes);
       final att = await api.call('/api/v1/attachments', method: 'POST', data: {
         'conversation_id': selectedId,
         'original_name': name,
         'mime_type': mime,
         'size_bytes': bytes.length,
-        'content_base64': base64Encode(bytes),
+        'content_base64': base64Encode(pack.uploadBytes),
+        if (pack.sealed != null) 'encrypted': true,
       });
+      var kind = 'voice';
+      var body = att['original_name'] ?? name;
+      var meta = voiceMessageMetadata(
+          id: att['id'], mime: mime, size: bytes.length, durationSec: durationSec);
+      final e2eeRoom = _e2eeRoomOf(selectedId);
+      if (pack.sealed != null && e2eeRoom != null) {
+        final client = e2eeClient;
+        if (client == null) return;
+        meta['fileKey'] = pack.sealed!.key;
+        meta['fileIv'] = pack.sealed!.iv;
+        meta['fileHash'] = pack.sealed!.hash;
+        body = await client.encryptRoom(
+            e2eeRoom, e2ee.InnerMessage(kind: kind, body: body, meta: meta));
+        kind = 'ciphertext';
+        meta = {};
+      }
       final x = await api.call('/api/v1/conversations/$selectedId/messages',
           method: 'POST', data: {
         'client_id': uuid(),
-        'kind': 'voice',
-        'body': att['original_name'] ?? name,
-        'metadata': voiceMessageMetadata(
-            id: att['id'], mime: mime, size: bytes.length, durationSec: durationSec),
+        'kind': kind,
+        'body': body,
+        'metadata': meta,
       });
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
-        messages.add(x['message']);
+        final echo = Map<String, dynamic>.from(x['message'] as Map);
+        if (kind == 'ciphertext') {
+          echo['kind'] = 'voice';
+          echo['body'] = att['original_name'] ?? name;
+          echo['metadata'] = voiceMessageMetadata(
+              id: att['id'], mime: mime, size: bytes.length, durationSec: durationSec);
+          if (pack.sealed != null) {
+            echo['metadata']['fileKey'] = pack.sealed!.key;
+            echo['metadata']['fileIv'] = pack.sealed!.iv;
+            echo['metadata']['fileHash'] = pack.sealed!.hash;
+          }
+          echo['_e2ee'] = true;
+        }
+        messages.add(echo);
       }
       await refreshChatList();
     });
@@ -3292,11 +3354,6 @@ class SessionController extends ChangeNotifier {
 
   Future<void> sendFile() {
     if (selectedId.isEmpty) return Future.value();
-    if (_e2eeRoomOf(selectedId) != null) {
-      error = strings.e2eeAttachSoon;
-      notifyListeners();
-      return Future.value();
-    }
     return run(() async {
       final picked =
           await FilePicker.platform.pickFiles(withData: true);
@@ -3317,41 +3374,120 @@ class SessionController extends ChangeNotifier {
           ? f.name
           : 'file-${DateTime.now().millisecondsSinceEpoch}';
       const mime = 'application/octet-stream';
+      final pack = await sealForRoom(selectedId, bytes);
       final att = await api.call('/api/v1/attachments', method: 'POST', data: {
         'conversation_id': selectedId,
         'original_name': name,
         'mime_type': mime,
         'size_bytes': bytes.length,
-        'content_base64': base64Encode(bytes),
+        'content_base64': base64Encode(pack.uploadBytes),
+        if (pack.sealed != null) 'encrypted': true,
       });
+      var kind = 'file';
+      var body = att['original_name'] ?? name;
+      var meta = attachmentMessageMetadata(
+          id: att['id'], mime: mime, size: bytes.length);
+      final e2eeRoom = _e2eeRoomOf(selectedId);
+      if (pack.sealed != null && e2eeRoom != null) {
+        final client = e2eeClient;
+        if (client == null) return;
+        meta['fileKey'] = pack.sealed!.key;
+        meta['fileIv'] = pack.sealed!.iv;
+        meta['fileHash'] = pack.sealed!.hash;
+        body = await client.encryptRoom(
+            e2eeRoom, e2ee.InnerMessage(kind: kind, body: body, meta: meta));
+        kind = 'ciphertext';
+        meta = {};
+      }
       final x = await api.call('/api/v1/conversations/$selectedId/messages',
           method: 'POST', data: {
         'client_id': uuid(),
-        'kind': 'file',
-        'body': att['original_name'] ?? name,
-        'metadata': attachmentMessageMetadata(
-            id: att['id'], mime: mime, size: bytes.length),
+        'kind': kind,
+        'body': body,
+        'metadata': meta,
       });
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
-        messages.add(x['message']);
+        final echo = Map<String, dynamic>.from(x['message'] as Map);
+        if (kind == 'ciphertext') {
+          echo['kind'] = 'file';
+          echo['body'] = att['original_name'] ?? name;
+          echo['metadata'] = attachmentMessageMetadata(
+              id: att['id'], mime: mime, size: bytes.length);
+          if (pack.sealed != null) {
+            echo['metadata']['fileKey'] = pack.sealed!.key;
+            echo['metadata']['fileIv'] = pack.sealed!.iv;
+            echo['metadata']['fileHash'] = pack.sealed!.hash;
+          }
+          echo['_e2ee'] = true;
+        }
+        messages.add(echo);
       }
       await refreshChatList();
     });
   }
 
-  Future<String?> downloadAttachment(String attachmentId, String fileName) async {
+  Future<Uint8List> fetchAttachmentBytes(String attachmentId) async {
+    final res = await http
+        .get(
+          Uri.parse(attachmentContentUrl(api.baseUrl, attachmentId)),
+          headers: {
+            if (api.token != null) 'Authorization': 'Bearer ${api.token}',
+          },
+        )
+        .timeout(const Duration(seconds: 30));
+    if (res.statusCode != 200) {
+      throw Exception(strings.errFileReceive(res.statusCode));
+    }
+    return res.bodyBytes;
+  }
+
+  /// E7: open already-fetched sealed bytes (voice playback path).
+  Future<Uint8List> openSealedBytes(Uint8List ct,
+      {required String fileKey,
+      required String fileIv,
+      required String fileHash}) async {
+    return openFile(SealedFile(
+        key: fileKey, iv: fileIv, hash: fileHash, ct: b64uEncode(ct)));
+  }
+
+  /// E7: download + open sealed bytes, verified against the sealed hash.
+  Future<Uint8List> openSealedAttachment(String attachmentId,
+      {required String fileKey,
+      required String fileIv,
+      required String fileHash}) async {
+    final ct = await fetchAttachmentBytes(attachmentId);
+    return openFile(SealedFile(
+        key: fileKey,
+        iv: fileIv,
+        hash: fileHash,
+        ct: b64uEncode(ct)));
+  }
+
+  /// E7: sealed media materialized as a temp file (video playback).
+  Future<String> cacheSealedMedia(String attachmentId,
+      {required String fileKey,
+      required String fileIv,
+      required String fileHash,
+      required String suffix}) async {
+    final dir = await getTemporaryDirectory();
+    final safe = attachmentId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final path = '${dir.path}/sealed-$safe$suffix';
+    final file = File(path);
+    if (await file.exists()) return path;
+    final pt = await openSealedAttachment(attachmentId,
+        fileKey: fileKey, fileIv: fileIv, fileHash: fileHash);
+    await file.writeAsBytes(pt);
+    return path;
+  }
+
+  Future<String?> downloadAttachment(String attachmentId, String fileName,
+      {String? fileKey, String? fileIv, String? fileHash}) async {
     String? saved;
     await run(() async {
-      final res = await http
-          .get(
-            Uri.parse(attachmentContentUrl(api.baseUrl, attachmentId)),
-            headers: {
-              if (api.token != null) 'Authorization': 'Bearer ${api.token}',
-            },
-          )
-          .timeout(const Duration(seconds: 30));
-      if (res.statusCode != 200) {
-        throw Exception(strings.errFileReceive(res.statusCode));
+      var bytes = await fetchAttachmentBytes(attachmentId);
+      if (fileKey != null && fileIv != null && fileHash != null) {
+        bytes = await openFile(SealedFile(
+            key: fileKey, iv: fileIv, hash: fileHash, ct: b64uEncode(bytes)));
       }
       Directory? dir;
       if (Platform.isAndroid) {
@@ -3360,7 +3496,7 @@ class SessionController extends ChangeNotifier {
       dir ??= await getApplicationDocumentsDirectory();
       final safe = fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
       final file = File('${dir.path}/$safe');
-      await file.writeAsBytes(res.bodyBytes);
+      await file.writeAsBytes(bytes);
       saved = file.path;
       notice = strings.msgSavedAs(safe);
     });

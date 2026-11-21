@@ -255,12 +255,14 @@ class VoiceBubble extends StatefulWidget {
   final String token;
   final int durationSec;
   final Color foreground;
+  final Future<Uint8List> Function(Uint8List)? openSealed;
   const VoiceBubble({
     super.key,
     required this.url,
     required this.token,
     required this.durationSec,
     required this.foreground,
+    this.openSealed,
   });
 
   @override
@@ -297,7 +299,9 @@ class _VoiceBubbleState extends State<VoiceBubble> {
                 headers: {'Authorization': 'Bearer ${widget.token}'})
             .timeout(const Duration(seconds: 15));
         if (res.statusCode != 200) throw Exception('voice ${res.statusCode}');
-        _bytes = res.bodyBytes;
+        var bytes = res.bodyBytes;
+        if (widget.openSealed != null) bytes = await widget.openSealed!(bytes);
+        _bytes = bytes;
       }
       final player = _player ??= AudioPlayer();
       _doneSub ??= player.onPlayerComplete.listen((_) {

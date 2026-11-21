@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:luno_messenger/e2ee/backup.dart';
 import 'package:luno_messenger/e2ee/codec.dart';
 import 'package:luno_messenger/e2ee/envelope.dart';
+import 'package:luno_messenger/e2ee/files.dart';
 import 'package:luno_messenger/e2ee/keys.dart';
 import 'package:luno_messenger/e2ee/ratchet.dart';
 import 'package:luno_messenger/e2ee/sender.dart';
@@ -161,6 +162,26 @@ void main() {
     final blob = BackupBlob.fromJson(b['blob'] as Map<String, dynamic>);
     expect(await decryptBackup('correct horse 99!', blob), b['restored']);
     await expectLater(decryptBackup('wrong passphrase!!', blob), throwsA(anything));
+  });
+
+  test('E7: sealed files reproduce and tampering fails', () async {
+    final f = v['file'] as Map<String, dynamic>;
+    final again = await sealFile(b64uDecode(f['pt'] as String),
+        key: b64uDecode(f['key'] as String), iv: b64uDecode(f['iv'] as String));
+    expect(again.ct, f['ct']);
+    expect(again.hash, f['hash']);
+    final open = await openFile(SealedFile(
+        key: f['key'] as String,
+        iv: f['iv'] as String,
+        hash: f['hash'] as String,
+        ct: f['ct'] as String));
+    expect(utf8Decode(open), 'file-bytes-fixture');
+    final bad = SealedFile(
+        key: f['key'] as String,
+        iv: f['iv'] as String,
+        hash: f['hash'] as String,
+        ct: '${(f['ct'] as String).substring(0, (f['ct'] as String).length - 4)}AAAA');
+    await expectLater(openFile(bad), throwsA(anything));
   });
 
   test('E4: envelopes decode and reject junk', () {

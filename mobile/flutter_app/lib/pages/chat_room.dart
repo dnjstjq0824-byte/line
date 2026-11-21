@@ -1,6 +1,7 @@
 // Route: /chats/:cid — the vessel deck. Messages only; pins, notes,
 // events and polls each have their own sub-route below this one.
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -579,12 +580,83 @@ class _FileCard extends StatelessWidget {
   }
 }
 
-class _ChatImage extends StatelessWidget {
+class _ChatImage extends StatefulWidget {
   final String url;
   final String token;
   final String label;
+  final String? attId;
+  final String? fileKey;
+  final String? fileIv;
+  final String? fileHash;
   const _ChatImage(
-      {required this.url, required this.token, required this.label});
+      {required this.url,
+      required this.token,
+      required this.label,
+      this.attId,
+      this.fileKey,
+      this.fileIv,
+      this.fileHash});
+
+  @override
+  State<_ChatImage> createState() => _ChatImageState();
+}
+
+class _ChatImageState extends State<_ChatImage> {
+  Uint8List? _sealed;
+  bool _failed = false;
+
+  bool get _isSealed =>
+      widget.attId != null &&
+      widget.fileKey != null &&
+      widget.fileIv != null &&
+      widget.fileHash != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isSealed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+    }
+  }
+
+  Future<void> _open() async {
+    try {
+      final session = SessionScope.of(context, listen: false);
+      final pt = await session.openSealedAttachment(widget.attId!,
+          fileKey: widget.fileKey!,
+          fileIv: widget.fileIv!,
+          fileHash: widget.fileHash!);
+      if (mounted) setState(() => _sealed = pt);
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  Widget _image({double? height, BoxFit fit = BoxFit.cover}) {
+    if (_isSealed) {
+      if (_failed) {
+        return Text(widget.label,
+            style: const TextStyle(fontSize: HarborType.small));
+      }
+      final bytes = _sealed;
+      if (bytes == null) {
+        return const SizedBox(
+            height: 180, child: Center(child: CircularProgressIndicator()));
+      }
+      return Image.memory(bytes, height: height, fit: fit);
+    }
+    return Image.network(widget.url,
+        headers: {'Authorization': 'Bearer ${widget.token}'},
+        height: height,
+        fit: fit,
+        loadingBuilder: (ctx, child, progress) => progress == null
+            ? child
+            : const SizedBox(
+                height: 180,
+                child: Center(child: CircularProgressIndicator())),
+        errorBuilder: (_, __, ___) => Text(widget.label,
+            style: const TextStyle(fontSize: HarborType.small)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -595,26 +667,24 @@ class _ChatImage extends StatelessWidget {
           context: context,
           builder: (_) => Dialog(
             insetPadding: const EdgeInsets.all(16),
-            child: Image.network(url,
-                headers: {'Authorization': 'Bearer $token'},
-                errorBuilder: (_, __, ___) => Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(context.l10n.roomImageFail))),
+            child: _isSealed
+                ? (_sealed == null
+                    ? Padding(
+                        padding: EdgeInsets.all(24),
+                        child: _failed
+                            ? Text(context.l10n.roomImageFail)
+                            : const CircularProgressIndicator())
+                    : Image.memory(_sealed!))
+                : Image.network(widget.url,
+                    headers: {'Authorization': 'Bearer ${widget.token}'},
+                    errorBuilder: (_, __, ___) => Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(context.l10n.roomImageFail))),
           ),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(HarborRadius.card),
-          child: Image.network(url,
-              headers: {'Authorization': 'Bearer $token'},
-              height: 200,
-              fit: BoxFit.cover,
-              loadingBuilder: (ctx, child, progress) => progress == null
-                  ? child
-                  : const SizedBox(
-                      height: 180,
-                      child: Center(child: CircularProgressIndicator())),
-              errorBuilder: (_, __, ___) => Text(label,
-                  style: const TextStyle(fontSize: HarborType.small))),
+          child: _image(height: 200),
         ),
       ),
     );
@@ -929,12 +999,37 @@ class _SignalBubble extends StatelessWidget {
                       session.api.baseUrl, attachmentIdOf(m)!),
                   token: session.api.token ?? '',
                   label: '${m['body']}',
+                  attId: attachmentIdOf(m),
+                  fileKey: '${m['metadata']?['fileKey'] ?? ''}'.isEmpty
+                      ? null
+                      : '${m['metadata']?['fileKey']}',
+                  fileIv: '${m['metadata']?['fileIv'] ?? ''}'.isEmpty
+                      ? null
+                      : '${m['metadata']?['fileIv']}',
+                  fileHash: '${m['metadata']?['fileHash'] ?? ''}'.isEmpty
+                      ? null
+                      : '${m['metadata']?['fileHash']}',
                 ),
               if (m['kind'] == 'video' && attachmentIdOf(m) != null)
                 VideoBubble(
                   url: attachmentContentUrl(
                       session.api.baseUrl, attachmentIdOf(m)!),
                   token: session.api.token ?? '',
+                  resolveLocalPath: m['_e2ee'] == true &&
+                          m['metadata']?['fileKey'] != null
+                      ? () async {
+                          try {
+                            return await session.cacheSealedMedia(
+                                attachmentIdOf(m)!,
+                                fileKey: '${m['metadata']?['fileKey']}',
+                                fileIv: '${m['metadata']?['fileIv']}',
+                                fileHash: '${m['metadata']?['fileHash']}',
+                                suffix: '.mp4');
+                          } catch (_) {
+                            return null;
+                          }
+                        }
+                      : null,
                 ),
               if ((m['kind'] == 'voice' || m['kind'] == 'audio') &&
                   attachmentIdOf(m) != null)
@@ -944,12 +1039,22 @@ class _SignalBubble extends StatelessWidget {
                   token: session.api.token ?? '',
                   durationSec: voiceDurationOf(m) ?? 0,
                   foreground: ink,
+                  openSealed: m['_e2ee'] == true &&
+                          m['metadata']?['fileKey'] != null
+                      ? (bytes) => session.openSealedBytes(bytes,
+                          fileKey: '${m['metadata']?['fileKey']}',
+                          fileIv: '${m['metadata']?['fileIv']}',
+                          fileHash: '${m['metadata']?['fileHash']}')
+                      : null,
                 ),
               if (m['kind'] == 'file' && attachmentIdOf(m) != null)
                 _FileCard(
                   name: '${m['body']}',
                   onSave: () => session.downloadAttachment(
-                      attachmentIdOf(m)!, '${m['body']}'),
+                      attachmentIdOf(m)!, '${m['body']}',
+                      fileKey: m['metadata']?['fileKey'],
+                      fileIv: m['metadata']?['fileIv'],
+                      fileHash: m['metadata']?['fileHash']),
                 ),
               if (m['kind'] == 'location')
                 _LocationCard(meta: m['metadata'], ink: ink, faint: faint),

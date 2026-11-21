@@ -17,6 +17,7 @@ import {
 } from '../apps/shared/e2ee/ratchet.ts';
 import { createSenderKey, decodeSenderMessage, encodeSenderMessage, importSenderKey, senderDecrypt, senderEncrypt } from '../apps/shared/e2ee/sender.ts';
 import { decryptBackup, encryptBackup } from '../apps/shared/e2ee/backup.ts';
+import { openFile, sealFile } from '../apps/shared/e2ee/files.ts';
 import { decodeEnvelope } from '../apps/shared/e2ee/envelope.ts';
 
 const V = JSON.parse(readFileSync(new URL('./fixtures/e2ee_vectors.json', import.meta.url), 'utf8'));
@@ -183,6 +184,17 @@ test('E3: backup blob round-trips; wrong passphrase fails', async () => {
   await assert.rejects(decryptBackup('wrong passphrase!!', blob));
   const fresh = await encryptBackup('another good passphrase 1', '{"v":1}');
   assert.equal(await decryptBackup('another good passphrase 1', fresh), '{"v":1}');
+});
+
+test('E7: sealed files reproduce and tampering fails', async () => {
+  const f = V.file;
+  const again = await sealFile(b64uDecode(f.pt), { key: b64uDecode(f.key), iv: b64uDecode(f.iv) });
+  assert.equal(again.ct, f.ct);
+  assert.equal(again.hash, f.hash);
+  const open = await openFile({ key: f.key, iv: f.iv, hash: f.hash, ct: f.ct });
+  assert.equal(utf8Decode(open), 'file-bytes-fixture');
+  const bad = { key: f.key, iv: f.iv, hash: f.hash, ct: f.ct.slice(0, -4) + 'AAAA' };
+  await assert.rejects(openFile(bad));
 });
 
 test('E3: envelopes encode, decode, and reject junk', () => {

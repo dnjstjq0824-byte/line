@@ -18,7 +18,20 @@ async function load() {
   try {
     const response = await fetch(`${API_URL}/api/v1/attachments/${encodeURIComponent(id)}/content`, { headers: { Authorization: `Bearer ${props.token}` }, signal: controller.signal, cache: 'no-store' })
     if (!response.ok) throw new Error('Attachment unavailable')
-    const bytes = await response.arrayBuffer()
+    let bytes = await response.arrayBuffer()
+    // E7: sealed bytes open with the key that rode inside the message.
+    const meta = props.message.metadata as Record<string, unknown> | undefined
+    if (props.message._e2ee && meta && typeof meta.fileKey === 'string' && typeof meta.fileIv === 'string' && typeof meta.fileHash === 'string') {
+      const { openFile } = await import('../../../shared/e2ee/files.ts')
+      const { b64uEncode } = await import('../../../shared/e2ee/codec.ts')
+      const pt = await openFile({
+        key: meta.fileKey as string,
+        iv: meta.fileIv as string,
+        hash: meta.fileHash as string,
+        ct: b64uEncode(new Uint8Array(bytes)),
+      })
+      bytes = pt.slice().buffer as ArrayBuffer
+    }
     if (version !== generation) return
     release()
     url.value = URL.createObjectURL(new Blob([bytes], { type: media.value ? mime.value : 'application/octet-stream' }))

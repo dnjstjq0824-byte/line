@@ -1488,9 +1488,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get e2eeGroupSoon => 'แชทกลุ่มแบบเข้ารหัสจะมาในอัปเดตหน้า';
 
   @override
-  String get e2eeAttachSoon => 'การส่งไฟล์และรูปในห้องเข้ารหัสจะมาในอัปเดตหน้า';
-
-  @override
   String get e2eeUnreadable => 'ไม่สามารถถอดรหัสข้อความนี้ได้';
 
   @override

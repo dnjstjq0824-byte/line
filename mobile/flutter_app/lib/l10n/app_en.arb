@@ -475,7 +475,6 @@
   "errOutboxDropped": "Dropped {dropped} rejected queued messages.",
   "msgEdited": "Message edited.",
   "e2eeGroupSoon": "Encrypted group chat arrives in the next update.",
-  "e2eeAttachSoon": "File and photo sharing in encrypted rooms arrives in the next update.",
   "e2eeUnreadable": "This message could not be decrypted.",
   "msgQueuedOffline": "Offline — message queued.",
   "errFileTooBig": "File too large (max 512KB)",
