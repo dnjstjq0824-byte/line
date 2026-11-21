@@ -31,6 +31,9 @@ class Api {
   String baseUrl = apiBase;
   String? token;
   String? refreshToken;
+  // E5: native build number for the server's minimum-build gate (E2).
+  // Null until PackageInfo loads; header omitted while unknown.
+  int? appBuild;
   // F20: UI locale for thrown messages (session mirrors its own here).
   String locale = 'ko';
   Future<void> Function(String access, String? refresh)? onTokensRefreshed;
@@ -107,6 +110,7 @@ class Api {
     final uri = Uri.parse('$baseUrl$path');
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
+    if (appBuild != null) headers['X-App-Build'] = '$appBuild';
 
     late http.Response res;
     try {

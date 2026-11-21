@@ -20,6 +20,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../api/client.dart';
+import '../e2ee/store.dart' as e2ee;
 import '../legacy_tokens.dart';
 import '../util/app_notify.dart';
 import '../util/app_update.dart';
@@ -149,6 +150,99 @@ class SessionController extends ChangeNotifier {
   }
   String selfId = '';
   String deviceId = '';
+  // E5: E2EE client (lazy; secure storage, memory override in tests).
+  e2ee.E2eeStore? _e2ee;
+  e2ee.KeyValue? e2eeKvForTests;
+  e2ee.E2eeStore? get e2eeClient {
+    if (selfId.isEmpty || deviceId.isEmpty) return null;
+    _e2ee ??= e2ee.E2eeStore(
+      kv: e2eeKvForTests ?? e2ee.SecureKV(),
+      api: (p, [m, b]) => api.call('/api/v1/$p',
+          method: m ?? 'GET', data: b as Map<String, dynamic>?),
+      userId: selfId,
+      deviceId: deviceId,
+    );
+    return _e2ee;
+  }
+
+  Map<String, dynamic>? _roomOf(String cid) {
+    for (final c in chats) {
+      if (c is Map && '${c['id']}' == cid) return Map<String, dynamic>.from(c);
+    }
+    return null;
+  }
+
+  e2ee.RoomRef? _e2eeRoomOf(String cid) {
+    final c = _roomOf(cid);
+    if (c == null || c['e2ee'] != true) return null;
+    final members = <String>[];
+    for (final m in (c['members'] ?? []) as List) {
+      if (m is Map && '${m['id']}'.isNotEmpty) members.add('${m['id']}');
+    }
+    if (members.isEmpty && selfId.isNotEmpty) members.add(selfId);
+    return e2ee.RoomRef(
+        id: cid, kind: '${c['kind'] ?? 'direct'}', memberIds: members, e2ee: true);
+  }
+
+  /// Decrypt ciphertext messages in place; failures keep _e2eeError for UI.
+  Future<bool> decryptMessages(List msgs) async {
+    final client = e2eeClient;
+    if (client == null) return false;
+    var changed = false;
+    for (final m in msgs) {
+      if (m is! Map ||
+          m['kind'] != 'ciphertext' ||
+          m['_e2ee'] == true ||
+          m['_e2eeError'] == true ||
+          m['unsent'] == true) {
+        continue;
+      }
+      final body = '${m['body'] ?? ''}';
+      if (body.isEmpty) continue;
+      try {
+        final open =
+            await client.decryptBody('${m['sender_id'] ?? ''}', body);
+        if (open != null) {
+          m['_ct'] = body;
+          m['kind'] = open.kind;
+          m['body'] = open.body;
+          if (open.meta != null) {
+            m['metadata'] = {
+              ...((m['metadata'] ?? {}) as Map),
+              ...open.meta!
+            };
+          }
+          m['_e2ee'] = true;
+          changed = true;
+        } else {
+          m['_e2eeError'] = true;
+          changed = true;
+        }
+      } catch (_) {
+        m['_e2eeError'] = true;
+        changed = true;
+      }
+    }
+    // Reply previews of E2EE messages would show ciphertext: re-derive.
+    final byId = <String, dynamic>{for (final m in msgs) '${m['id']}': m};
+    for (final m in msgs) {
+      final rid = '${m['reply_to'] ?? ''}';
+      final orig = byId[rid];
+      final preview = m['reply_preview'];
+      if (rid.isEmpty || orig == null || preview is! Map) continue;
+      if (orig['_e2ee'] == true) {
+        final want = '${orig['body'] ?? ''}';
+        final shown = '${preview['body'] ?? ''}';
+        if (shown != (want.length > 80 ? want.substring(0, 80) : want)) {
+          preview['kind'] = orig['kind'];
+          preview['body'] =
+              want.length > 80 ? want.substring(0, 80) : want;
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
   // C3: app-update advisory from /api/v1/app/latest (none until checked).
   UpdateKind appUpdate = UpdateKind.none;
   String currentAppVersion = '';
@@ -593,6 +687,24 @@ class SessionController extends ChangeNotifier {
   Future<void> refreshChatList() async {
     final res = await api.call('/api/v1/conversations');
     chats = res['conversations'] ?? [];
+    // E5: list previews of E2EE rooms decrypt best-effort.
+    final client = e2eeClient;
+    if (client != null) {
+      for (final c in chats) {
+        if (c is! Map || c['e2ee'] != true) continue;
+        final last = c['last_message'];
+        if (last is! Map || last['kind'] != 'ciphertext') continue;
+        try {
+          final open = await client.decryptBody(
+              '${last['sender_id'] ?? ''}', '${last['body'] ?? ''}');
+          if (open != null) {
+            last['kind'] = open.kind;
+            final text = open.body;
+            last['body'] = text.length > 120 ? text.substring(0, 120) : text;
+          }
+        } catch (_) {}
+      }
+    }
     notifyListeners();
   }
 
@@ -768,6 +880,7 @@ class SessionController extends ChangeNotifier {
         final since = messages.isEmpty ? 0 : ((messages.last['sequence'] ?? 0) as num).toInt();
         final res = await api.call('/api/v1/conversations/$selectedId/sync?since_sequence=$since');
         messages = mergeDeltaMessages(messages, res['delta_messages'] ?? []);
+        await decryptMessages(messages);
       } catch (_) {}
     }
     try {
@@ -785,6 +898,10 @@ class SessionController extends ChangeNotifier {
     final mine = '${item['sender_id']}' == selfId;
     if (cid == selectedId && !messages.any((m) => m['id'] == item['id'])) {
       messages.add(item);
+      // E5: live ciphertext decrypts in place, then the row below re-reads it.
+      unawaited(decryptMessages([item]).then((changed) {
+        if (changed) notifyListeners();
+      }));
       if (autoTranslate && !mine && item['kind'] == 'text') {
         translateMessage(item['id'], item['body']);
       }
@@ -1190,6 +1307,7 @@ class SessionController extends ChangeNotifier {
         api.call('/api/v1/conversations/$id/proposals').catchError((_) => <String, dynamic>{'proposals': []}),
       ]);
       messages = withoutUnsent(List<dynamic>.from(resultsList[0]['messages'] ?? []));
+      await decryptMessages(messages);
       pins = resultsList[1]['pins'] ?? [];
       notes = resultsList[2]['notes'] ?? [];
       events = resultsList[3]['events'] ?? [];
@@ -1222,6 +1340,7 @@ class SessionController extends ChangeNotifier {
       for (final m in list) {
         if (!messages.any((old) => old['id'] == m['id'])) messages.add(m);
       }
+      await decryptMessages(messages);
       notice = strings.msgOfflineSynced(list.length);
       await reload();
     });
@@ -2029,16 +2148,29 @@ class SessionController extends ChangeNotifier {
         continue;
       }
       try {
+        // E5: queued plaintext is sealed at flush time, never earlier.
+        var fKind = '${item['kind'] ?? 'text'}';
+        var fBody = '${item['body'] ?? ''}';
+        Map<String, dynamic>? fMeta =
+            item['metadata'] is Map ? Map<String, dynamic>.from(item['metadata'] as Map) : null;
+        final fRoom = _e2eeRoomOf('${item['conversation_id']}');
+        final fClient = e2eeClient;
+        if (fRoom != null && fClient != null) {
+          fBody = await fClient.encryptRoom(fRoom,
+              e2ee.InnerMessage(kind: fKind, body: fBody, meta: fMeta));
+          fKind = 'ciphertext';
+          fMeta = null;
+        }
         final x = await api.call(
             '/api/v1/conversations/${item['conversation_id']}/messages',
             method: 'POST',
             data: {
               'client_id': '${item['client_id']}',
-              'kind': '${item['kind'] ?? 'text'}',
-              'body': '${item['body'] ?? ''}',
+              'kind': fKind,
+              'body': fBody,
               if ('${item['reply_to'] ?? ''}'.isNotEmpty)
                 'reply_to': '${item['reply_to']}',
-              if (item['metadata'] is Map) 'metadata': item['metadata'],
+              if (fMeta != null) 'metadata': fMeta,
             });
         outbox.removeAt(0);
         sent++;
@@ -2078,8 +2210,18 @@ class SessionController extends ChangeNotifier {
       editingMsgId = '';
       notifyListeners();
       await run(() async {
+        // E5: edits in E2EE rooms replace the envelope.
+        var wireBody = body;
+        final target = messages.whereType<Map>().firstWhere((m) => m['id'] == targetId, orElse: () => {});
+        if (target['_e2ee'] == true) {
+          final room = _e2eeRoomOf(selectedId);
+          final client = e2eeClient;
+          if (room == null || client == null) return;
+          wireBody = await client.encryptRoom(
+              room, e2ee.InnerMessage(kind: '${target['kind'] ?? 'text'}', body: body));
+        }
         await api.call('/api/v1/conversations/$selectedId/messages/$targetId',
-            method: 'PATCH', data: {'body': body});
+            method: 'PATCH', data: {'body': wireBody});
         for (final m in messages) {
           if (m['id'] == targetId) m['body'] = body;
         }
@@ -2092,6 +2234,25 @@ class SessionController extends ChangeNotifier {
     replyToId = '';
     showStickerPicker = false;
     notifyListeners();
+    // E5: E2EE rooms seal text/sticker at send time; groups wait for E6.
+    var wireKind = kind;
+    var wireBody = body;
+    Map<String, dynamic>? wireMeta = metadata;
+    final e2eeRoom = _e2eeRoomOf(selectedId);
+    if (e2eeRoom != null) {
+      final client = e2eeClient;
+      if (client == null) return false;
+      try {
+        wireBody = await client.encryptRoom(
+            e2eeRoom, e2ee.InnerMessage(kind: kind, body: body, meta: metadata));
+        wireKind = 'ciphertext';
+        wireMeta = null;
+      } catch (_) {
+        error = strings.e2eeGroupSoon;
+        notifyListeners();
+        return false;
+      }
+    }
     final clientId = uuid();
     var kept = false;
     await run(() async {
@@ -2099,13 +2260,21 @@ class SessionController extends ChangeNotifier {
         final x = await api.call('/api/v1/conversations/$selectedId/messages',
             method: 'POST', data: {
           'client_id': clientId,
-          'kind': kind,
-          'body': body,
+          'kind': wireKind,
+          'body': wireBody,
           if (reply.isNotEmpty) 'reply_to': reply,
-          if (metadata != null) 'metadata': metadata,
+          if (wireMeta != null) 'metadata': wireMeta,
         });
         if (!messages.any((m) => m['id'] == x['message']['id'])) {
-          messages.add(x['message']);
+          final echo = Map<String, dynamic>.from(x['message'] as Map);
+          if (wireKind == 'ciphertext') {
+            // Our own send: stitch the plaintext we just sealed.
+            echo['kind'] = kind;
+            echo['body'] = body;
+            if (metadata != null) echo['metadata'] = metadata;
+            echo['_e2ee'] = true;
+          }
+          messages.add(echo);
         }
         kept = true;
         await refreshChatList();
@@ -2144,6 +2313,12 @@ class SessionController extends ChangeNotifier {
 
   Future<void> sendPickedImage(PickedImage pic, {String effect = 'none'}) {
     if (selectedId.isEmpty) return Future.value();
+    // E5: attachments wait for E7 in E2EE rooms.
+    if (_e2eeRoomOf(selectedId) != null) {
+      error = strings.e2eeAttachSoon;
+      notifyListeners();
+      return Future.value();
+    }
     return run(() async {
       final bytes = applyPhotoEffect(pic.bytes, effect);
       if (bytes.length > maxAttachmentBytes) {
@@ -2180,6 +2355,11 @@ class SessionController extends ChangeNotifier {
       String mime = 'audio/mp4',
       String name = 'voice-note.m4a'}) {
     if (selectedId.isEmpty) return Future.value();
+    if (_e2eeRoomOf(selectedId) != null) {
+      error = strings.e2eeAttachSoon;
+      notifyListeners();
+      return Future.value();
+    }
     return run(() async {
       if (bytes.length > maxAttachmentBytes) {
         throw Exception(strings.errFileTooBig);
@@ -2212,15 +2392,39 @@ class SessionController extends ChangeNotifier {
       {required double lat, required double lng, String label = ''}) {
     if (selectedId.isEmpty) return Future.value();
     return run(() async {
+      var kind = 'location';
+      var body = label.trim();
+      Map<String, dynamic>? meta = {'lat': lat, 'lng': lng, 'label': label.trim()};
+      final e2eeRoom = _e2eeRoomOf(selectedId);
+      if (e2eeRoom != null) {
+        final client = e2eeClient;
+        if (client == null) return;
+        try {
+          body = await client.encryptRoom(
+              e2eeRoom, e2ee.InnerMessage(kind: 'location', body: body, meta: meta));
+          kind = 'ciphertext';
+          meta = null;
+        } catch (_) {
+          error = strings.e2eeGroupSoon;
+          return;
+        }
+      }
       final x = await api.call('/api/v1/conversations/$selectedId/messages',
           method: 'POST', data: {
         'client_id': uuid(),
-        'kind': 'location',
-        'body': label.trim(),
-        'metadata': {'lat': lat, 'lng': lng, 'label': label.trim()},
+        'kind': kind,
+        'body': body,
+        if (meta != null) 'metadata': meta,
       });
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
-        messages.add(x['message']);
+        final echo = Map<String, dynamic>.from(x['message'] as Map);
+        if (kind == 'ciphertext') {
+          echo['kind'] = 'location';
+          echo['body'] = label.trim();
+          echo['metadata'] = {'lat': lat, 'lng': lng, 'label': label.trim()};
+          echo['_e2ee'] = true;
+        }
+        messages.add(echo);
       }
       notice = strings.msgLocationShared;
       await refreshChatList();
@@ -2230,19 +2434,47 @@ class SessionController extends ChangeNotifier {
   Future<void> sendContact(Map<String, dynamic> friend) {
     if (selectedId.isEmpty) return Future.value();
     return run(() async {
+      var kind = 'contact';
+      var body = '${friend['display_name'] ?? ''}';
+      Map<String, dynamic>? meta = {
+        'user_id': '${friend['id']}',
+        'handle': '${friend['handle'] ?? ''}',
+        'display_name': '${friend['display_name'] ?? ''}',
+      };
+      final e2eeRoom = _e2eeRoomOf(selectedId);
+      if (e2eeRoom != null) {
+        final client = e2eeClient;
+        if (client == null) return;
+        try {
+          body = await client.encryptRoom(e2eeRoom,
+              e2ee.InnerMessage(kind: 'contact', body: body, meta: meta));
+          kind = 'ciphertext';
+          meta = null;
+        } catch (_) {
+          error = strings.e2eeGroupSoon;
+          return;
+        }
+      }
       final x = await api.call('/api/v1/conversations/$selectedId/messages',
           method: 'POST', data: {
         'client_id': uuid(),
-        'kind': 'contact',
-        'body': '${friend['display_name'] ?? ''}',
-        'metadata': {
-          'user_id': '${friend['id']}',
-          'handle': '${friend['handle'] ?? ''}',
-          'display_name': '${friend['display_name'] ?? ''}',
-        },
+        'kind': kind,
+        'body': body,
+        if (meta != null) 'metadata': meta,
       });
       if (!messages.any((m) => m['id'] == x['message']['id'])) {
-        messages.add(x['message']);
+        final echo = Map<String, dynamic>.from(x['message'] as Map);
+        if (kind == 'ciphertext') {
+          echo['kind'] = 'contact';
+          echo['body'] = '${friend['display_name'] ?? ''}';
+          echo['metadata'] = {
+            'user_id': '${friend['id']}',
+            'handle': '${friend['handle'] ?? ''}',
+            'display_name': '${friend['display_name'] ?? ''}',
+          };
+          echo['_e2ee'] = true;
+        }
+        messages.add(echo);
       }
       notice = strings.msgContactShared;
       await refreshChatList();
@@ -3060,6 +3292,11 @@ class SessionController extends ChangeNotifier {
 
   Future<void> sendFile() {
     if (selectedId.isEmpty) return Future.value();
+    if (_e2eeRoomOf(selectedId) != null) {
+      error = strings.e2eeAttachSoon;
+      notifyListeners();
+      return Future.value();
+    }
     return run(() async {
       final picked =
           await FilePicker.platform.pickFiles(withData: true);
@@ -3202,6 +3439,7 @@ class SessionController extends ChangeNotifier {
     try {
       final res = await api.call('/api/v1/app/latest');
       final info = await PackageInfo.fromPlatform();
+      api.appBuild = int.tryParse(info.buildNumber);
       currentAppVersion = '${info.version}+${info.buildNumber}';
       latestAppVersion = '${res['version']}+${res['build']}';
       appUpdate = compareAppVersions(currentAppVersion, latestAppVersion);
@@ -3284,6 +3522,11 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // E5: our key bundle dies with the session (re-login mints fresh keys).
+    try {
+      await _e2ee?.wipe();
+    } catch (_) {}
+    _e2ee = null;
     // While the access token is still valid: this device stops getting push.
     await _unregisterPush();
     reconnectTimer?.cancel();
@@ -3449,8 +3692,18 @@ class SessionController extends ChangeNotifier {
   Future<void> editMessage(String msgId, String body) {
     if (body.trim().isEmpty) return Future.value();
     return run(() async {
+      var wireBody = body.trim();
+      final target =
+          messages.whereType<Map>().firstWhere((m) => m['id'] == msgId, orElse: () => {});
+      if (target['_e2ee'] == true) {
+        final room = _e2eeRoomOf(selectedId);
+        final client = e2eeClient;
+        if (room == null || client == null) return;
+        wireBody = await client.encryptRoom(room,
+            e2ee.InnerMessage(kind: '${target['kind'] ?? 'text'}', body: wireBody));
+      }
       await api.call('/api/v1/conversations/$selectedId/messages/$msgId',
-          method: 'PATCH', data: {'body': body.trim()});
+          method: 'PATCH', data: {'body': wireBody});
       for (final m in messages) {
         if (m['id'] == msgId) {
           m['body'] = body.trim();
@@ -3472,8 +3725,35 @@ class SessionController extends ChangeNotifier {
 
   Future<void> forwardMessage(String targetCid, String msgId) {
     return run(() async {
-      await api.call('/api/v1/conversations/$selectedId/messages/$msgId/forward',
-          method: 'POST', data: {'to_conversation_id': targetCid});
+      // E5: forwarding into an E2EE room re-encrypts client-side.
+      final targetRoom = _e2eeRoomOf(targetCid);
+      if (targetRoom != null) {
+        final client = e2eeClient;
+        if (client == null) return;
+        final msg = messages
+            .whereType<Map>()
+            .firstWhere((m) => m['id'] == msgId, orElse: () => {});
+        if (msg['_e2eeError'] == true ||
+            (msg['kind'] == 'ciphertext' && msg['_e2ee'] != true)) {
+          error = strings.e2eeUnreadable;
+          return;
+        }
+        try {
+          final out = await client.encryptRoom(
+              targetRoom,
+              e2ee.InnerMessage(
+                  kind: '${msg['kind'] ?? 'text'}', body: '${msg['body'] ?? ''}'));
+          await api.call('/api/v1/conversations/$targetCid/messages',
+              method: 'POST',
+              data: {'client_id': uuid(), 'kind': 'ciphertext', 'body': out});
+        } catch (_) {
+          error = strings.e2eeGroupSoon;
+          return;
+        }
+      } else {
+        await api.call('/api/v1/conversations/$selectedId/messages/$msgId/forward',
+            method: 'POST', data: {'to_conversation_id': targetCid});
+      }
       notice = strings.mvForwarded;
       await refreshChatList();
     });

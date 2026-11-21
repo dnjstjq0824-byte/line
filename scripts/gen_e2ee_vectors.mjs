@@ -16,10 +16,12 @@ import { decryptBackup, encryptBackup } from '../apps/shared/e2ee/backup.ts';
 import { decodeEnvelope, encodeEnvelope } from '../apps/shared/e2ee/envelope.ts';
 
 let counter = 1;
+const rndLog = [];
 __setTestRandom((n) => {
   const out = new Uint8Array(n);
   for (let i = 0; i < n; i++) out[i] = (counter + i) & 0xff;
   counter += n;
+  rndLog.push(b64(out));
   return out;
 });
 const seed = (from, n) => {
@@ -78,7 +80,7 @@ const blob = await encryptBackup('correct horse 99!', payload, { salt: seed(500,
 const restored = await decryptBackup('correct horse 99!', blob);
 
 // ---- Envelopes ----
-const prekeyEnv = encodeEnvelope({ v: 1, type: 'prekey', ik: b64(alice.xPub), ek: b64(init.ephemeralPub), spkId: 7, opkId: 'opk-9', header: wire(m1).header, iv: wire(m1).iv, ct: wire(m1).ct });
+const prekeyEnv = encodeEnvelope({ v: 1, type: 'prekey', ik: encodeIdentity(alice), ek: b64(init.ephemeralPub), spkId: 7, opkId: 'opk-9', spk: b64(bobSpk.pub), header: wire(m1).header, iv: wire(m1).iv, ct: wire(m1).ct });
 const msgEnv = encodeEnvelope({ v: 1, type: 'msg', header: wire(m2).header, iv: wire(m2).iv, ct: wire(m2).ct });
 const skEnv = encodeEnvelope({ v: 1, type: 'sk', room: 'room-7', gen: 3, chain: b64(skA.chain), signPub: b64(skA.signPub) });
 decodeEnvelope(prekeyEnv);
@@ -126,6 +128,15 @@ const vectors = {
   backup: { blob, restored },
   envelopes: { prekey: prekeyEnv, msg: msgEnv, sk: skEnv },
   sha256_empty_hex: Buffer.from(sha256Hash(new Uint8Array(0))).toString('hex'),
+  _priv: {
+    note: 'TEST-ONLY deterministic inputs so the Dart port replays the same bytes. Never real keys.',
+    alice_x: b64(seed(1, 32)), alice_ed: b64(seed(33, 32)),
+    bob_x: b64(seed(101, 32)), bob_ed: b64(seed(133, 32)),
+    bob_spk: b64(seed(201, 32)), bob_opk: b64(seed(233, 32)),
+    eph: b64(seed(44, 32)), a_ratchet: b64(seed(300, 32)),
+    b_init_rnd: rndLog[0], b_send_rnd: rndLog[1],
+    sk_chain0: b64(seed(400, 32)), sk_signpriv: b64(seed(432, 32)),
+  },
 };
 
 mkdirSync('scripts/fixtures', { recursive: true });

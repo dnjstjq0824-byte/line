@@ -2612,7 +2612,7 @@ function chatSummary(conv, viewerId) {
     unread_count: unread, mentioned: mentionedIn(conv.id, viewerId),
     updated_at: conv.updated_at, owner_id: conv.owner_id || null, notice: conv.notice || '',
     pinned: meta.pinned, muted: meta.muted, hidden: meta.hidden, badge_n: !!conv.badge_n && unread > 0,
-    member_count: conv.members.length, members: memberBriefs, my_role: convRole(conv, viewerId), avatar_url: conv.avatar_url || '', official: !!conv.official,
+    member_count: conv.members.length, members: memberBriefs, my_role: convRole(conv, viewerId), avatar_url: conv.avatar_url || '', official: !!conv.official, e2ee: e2eeEnforcedSync() && e2eeRoomTargeted(conv),
     last_message: last ? { id: last.id, kind: last.kind, body: last.unsent ? '' : String(last.body).slice(0, 120), unsent: !!last.unsent, sender_id: last.sender_id, created_at: last.created_at } : null
   };
 }
@@ -2728,13 +2728,14 @@ async function e2eeVerifyPrekeySig(identityKey, signedPrekey, sig) {
     return await crypto.subtle.verify({ name: 'Ed25519' }, key, s, spk);
   } catch { return null; }
 }
+// E5: enforcement follows the env switch only, so the room flag below
+// (sync, read from the same switch) can never disagree with it. The
+// admin-console flag entry is display-only (E10 updates its wording).
+function e2eeEnforcedSync() {
+  return String((typeof CURRENT_ENV !== 'undefined' && CURRENT_ENV && CURRENT_ENV.E2EE_ENFORCED) || '').toLowerCase() === 'true';
+}
 async function e2eeEnforced() {
-  if (String((typeof CURRENT_ENV !== 'undefined' && CURRENT_ENV && CURRENT_ENV.E2EE_ENFORCED) || '').toLowerCase() === 'true') return true;
-  try {
-    const flags = await listFeatureFlags();
-    const f = flags.find(x => x.key === 'e2ee_letter_sealing');
-    return !!f && !!f.enabled;
-  } catch { return false; }
+  return e2eeEnforcedSync();
 }
 // Rooms whose new messages must be ciphertext: 1:1 / group / self rooms
 // with no bot member. Official rooms are read-only elsewhere; openchat,
@@ -2747,6 +2748,21 @@ function e2eeRoomTargeted(conv) {
     if (u && userKind(u) === 'bot') return false;
   }
   return true;
+}
+const E2EE_INTRO_BODY = '이 시점부터 종단 간 암호화됩니다';
+async function e2eeEnsureIntroNotice(cid, conv) {
+  try {
+    const db = dbOf();
+    if (db) {
+      await ensureSchema();
+      const hit = await db.prepare("SELECT 1 AS x FROM luno_messages WHERE conversation_id = ? AND kind = 'system' AND body = ? LIMIT 1").bind(cid, E2EE_INTRO_BODY).first().catch(() => null);
+      if (hit) return;
+    } else if ((messages.get(cid) || []).some(m => m.kind === 'system' && m.body === E2EE_INTRO_BODY)) {
+      return;
+    }
+    if (conv && conv._durable) await pushPersistent(cid, conv.owner_id, { kind: 'system', body: E2EE_INTRO_BODY });
+    else pushMessage(cid, 'system', { kind: 'system', body: E2EE_INTRO_BODY });
+  } catch { /* the marker must never break sending */ }
 }
 async function e2eeAnnounceKeyChange(userId, deviceId) {
   try { await hydrateDurableConversations(userId); } catch { /* memory only */ }
@@ -5730,6 +5746,8 @@ async function followedMap(userId) {
         if (!(messages.get(cid) || []).some(x => x.id === b.reply_to)) return bad('답장할 메시지를 찾을 수 없습니다', 404);
         replyTo = b.reply_to;
       }
+      // E5: the one-time "encrypted from here" marker above the first ciphertext.
+      if (kind === 'ciphertext') await e2eeEnsureIntroNotice(cid, conv);
       const msg = await pushPersistent(cid, myId, { client_id: b.client_id, kind, body, reply_to: replyTo, metadata: Object.keys(metadata).length ? metadata : undefined });
       if (msg._duplicate === true) {
         delete msg._duplicate;
@@ -5795,7 +5813,8 @@ async function deleteAttachmentEverywhere(attId) {
     if (!msg) return bad('메시지를 찾을 수 없습니다', 404);
     if (['PATCH', 'DELETE'].includes(method) && msg.sender_id !== myId) return bad('보낸 사람만 수정하거나 취소할 수 있습니다', 403);
     if (method === 'PATCH') {
-      if (msg.kind !== 'text' || msg.unsent) return bad('텍스트 메시지만 수정할 수 있습니다');
+      // E5: ciphertext edits replace the envelope (same kind, new body).
+      if ((msg.kind !== 'text' && msg.kind !== 'ciphertext') || msg.unsent) return bad('텍스트 메시지만 수정할 수 있습니다');
       const b = await readJson(request);
       const text = clip(b.body, MAX_BODY);
       if (!text) return bad('메시지를 입력하세요');
@@ -5841,6 +5860,10 @@ async function deleteAttachmentEverywhere(attId) {
     if (!tconv && dbOf()) tconv = await hydrateDurableConversation(tcid).catch(() => null);
     if (!tconv || !tconv.members.includes(myId)) return bad('대화방을 찾을 수 없거나 접근 권한이 없습니다', 404);
     if (tconv.official || tconv.kind === 'official') return bad('공식계정 방은 읽기 전용입니다');
+    // E5: server-side forward cannot mint ciphertext; the client re-encrypts.
+    if (await e2eeEnforced() && e2eeRoomTargeted(tconv)) {
+      return json({ error: 'this room is end-to-end encrypted', code: 'E2EE_CIPHERTEXT_REQUIRED' }, 400);
+    }
     let metadata = { ...(orig.metadata || {}) };
     delete metadata.mentions;
     metadata.forwarded = true;

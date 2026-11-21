@@ -34,6 +34,8 @@ export interface ChatSocketDeps {
   handleGroupSignal?: (data: any) => Promise<void>
   // build 17: someone's name/photo/cover changed — refetch people lists.
   onProfileUpdated?: (userId: string) => void
+  // E5: encrypt queued plaintext at flush time for E2EE rooms.
+  encryptQueued?: (convId: string, kind: string, body: string) => Promise<{ kind: string; body: string }>
 }
 
 export function useChatSocket(deps: ChatSocketDeps) {
@@ -43,6 +45,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
     loadKeep, chatTitleOf, onAuthExpired, activeCall, handleIncomingCallSignal,
     handleIncomingRing, endCallLocally, startCallTimer, clearNoAnswerTimer,
     handleGroupUserJoined, handleGroupUserLeft, handleGroupSignal, onProfileUpdated,
+    encryptQueued,
   } = deps
 
   // --- Realtime WebSocket ---
@@ -207,10 +210,15 @@ export function useChatSocket(deps: ChatSocketDeps) {
     try {
       await flushOfflineQueue(ownerId, async (msg) => {
         if (sessionToken !== token.value) throw new Error('Session changed')
+        // E5: plaintext waits in the queue; encryption happens at send time
+        // so failed sends never burn ratchet steps on the peer side.
+        const out = encryptQueued
+          ? await encryptQueued(msg.conversation_id, msg.kind, msg.body)
+          : { kind: msg.kind, body: msg.body }
         await request(`/api/v1/conversations/${msg.conversation_id}/messages`, sessionToken, 'POST', {
           client_id: msg.client_id,
-          kind: msg.kind,
-          body: msg.body,
+          kind: out.kind,
+          body: out.body,
           ...(msg.reply_to ? { reply_to: msg.reply_to } : {})
         })
       })

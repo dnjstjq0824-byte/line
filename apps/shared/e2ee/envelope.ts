@@ -1,6 +1,7 @@
 // E3: ciphertext message envelopes (E1 §4). JSON with v:1; unknown
 // versions and shapes are rejected, never guessed.
 import { b64uDecode, b64uEncode } from './codec.ts';
+import { parseIdentity } from './keys.ts';
 
 export interface PrekeyEnvelope {
   v: 1;
@@ -9,6 +10,8 @@ export interface PrekeyEnvelope {
   ek: string;
   spkId: number | null;
   opkId: string | null;
+  /** E5: responder selects the signed-prekey private half by this pubkey. */
+  spk?: string;
   header: string;
   iv: string;
   ct: string;
@@ -44,9 +47,14 @@ export function decodeEnvelope(s: string): CipherEnvelope {
     for (const k of ['ik', 'ek', 'header', 'iv', 'ct']) {
       if (typeof o[k] !== 'string' || !o[k]) throw new Error('bad prekey envelope');
     }
-    // Validate base64url shapes eagerly so corrupt envelopes fail here.
-    for (const k of ['ik', 'ek', 'header', 'iv', 'ct']) b64uDecode(o[k]);
-    return { v: 1, type: 'prekey', ik: o.ik, ek: o.ek, spkId: o.spkId ?? null, opkId: o.opkId ?? null, header: o.header, iv: o.iv, ct: o.ct };
+    // Validate shapes eagerly so corrupt envelopes fail here (ik is dotted).
+    if (!parseIdentity(o.ik)) throw new Error('bad prekey envelope');
+    for (const k of ['ek', 'header', 'iv', 'ct']) b64uDecode(o[k]);
+    if (o.spk !== undefined) {
+      if (typeof o.spk !== 'string' || !o.spk) throw new Error('bad prekey envelope');
+      b64uDecode(o.spk);
+    }
+    return { v: 1, type: 'prekey', ik: o.ik, ek: o.ek, spkId: o.spkId ?? null, opkId: o.opkId ?? null, ...(o.spk !== undefined ? { spk: o.spk } : {}), header: o.header, iv: o.iv, ct: o.ct };
   }
   if (o.type === 'msg') {
     for (const k of ['header', 'iv', 'ct']) {

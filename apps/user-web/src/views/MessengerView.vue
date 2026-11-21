@@ -61,6 +61,7 @@ import {
   queueOfflineMessage
 } from '../messenger-utils'
 import { useChatSocket } from '../composables/useChatSocket'
+import { getE2ee, resetE2ee } from '../e2ee/client'
 import { useAuth } from '../composables/useAuth'
 import { useWebRTC, type CallRecord, type WebRTCDeps } from '../composables/useWebRTC'
 import { useGroupCall } from '../composables/useGroupCall'
@@ -1554,6 +1555,34 @@ function sendCommand(text: string) {
   draftMessage.value = text
   void sendMessage()
 }
+function e2eeClient() {
+  const uid = currentUser.value?.id
+  const did = readStoredDeviceId()
+  if (!uid || !did) return null
+  // The store passes paths without the /api/v1 prefix.
+  return getE2ee(<T>(p: string, m?: string, b?: unknown) => api<T>(`/api/v1/${p}`, m, b), uid, did)
+}
+// E5: decrypt newly arrived ciphertext in place (socket, sync, cache, sends).
+let e2eeDecrypting = false
+watch(messages, async () => {
+  if (e2eeDecrypting || !selectedChatId.value) return
+  const c = e2eeClient()
+  if (!c) return
+  e2eeDecrypting = true
+  try {
+    if (await c.decryptInto(selectedChatId.value, messages.value)) messages.value = [...messages.value]
+  } finally {
+    e2eeDecrypting = false
+  }
+})
+watch(chats, async () => {
+  const c = e2eeClient()
+  if (!c) return
+  if (await c.decryptPreviews(chats.value)) chats.value = [...chats.value]
+})
+watch(token, (v, old) => {
+  if (!v && old) void resetE2ee()
+})
 async function sendMessage() {
   if (!selectedChatId.value || !draftMessage.value.trim() || sendingConversations.value.has(selectedChatId.value)) return
   const body = draftMessage.value.trim()
@@ -1564,6 +1593,22 @@ async function sendMessage() {
   const senderId = currentUser.value?.id
   const sessionToken = token.value
   if (!senderId) return
+  // E5: E2EE rooms send ciphertext; groups wait for E6 sender keys.
+  let kind = 'text'
+  let wireBody = body
+  const room = chats.value.find((c) => c.id === convId)
+  if (room?.e2ee) {
+    const c = e2eeClient()
+    if (!c) return
+    try {
+      const out = await c.encryptOutbound(room, 'text', body)
+      kind = out.kind
+      wireBody = out.body
+    } catch (e) {
+      error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+      return
+    }
+  }
   const pendingSet = sendingConversations.value
   const controller = new AbortController()
   pendingSends.set(convId, controller)
@@ -1575,12 +1620,18 @@ async function sendMessage() {
     error.value = ''
     const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
       client_id: clientId,
-      kind: 'text',
-      body,
+      kind,
+      body: wireBody,
       ...(replyId ? { reply_to: replyId } : {})
     }, controller.signal)
     if (sessionToken !== token.value) return
     if (selectedChatId.value === convId && !messages.value.some(m => m.id === res.message.id)) {
+      // E5: our own send echoes ciphertext; stitch the plaintext we just sealed.
+      if (kind === 'ciphertext') {
+        res.message.kind = 'text'
+        res.message.body = body
+        res.message._e2ee = true
+      }
       messages.value.push(res.message)
     }
     playSendSound()
@@ -1627,8 +1678,16 @@ async function saveEditMessage() {
   const mid = editingMessageId.value
   const newBody = editingMessageBody.value.trim()
   await wrap(async () => {
-    await api(`/api/v1/conversations/${selectedChatId.value}/messages/${mid}`, 'PATCH', { body: newBody })
     const target = messages.value.find(m => m.id === mid)
+    let wireBody = newBody
+    // E5: edits in E2EE rooms replace the envelope.
+    if (target?._e2ee) {
+      const room = chats.value.find((c) => c.id === selectedChatId.value)
+      const c = e2eeClient()
+      if (!room || !c) return
+      wireBody = (await c.encryptOutbound(room, target.kind, newBody)).body
+    }
+    await api(`/api/v1/conversations/${selectedChatId.value}/messages/${mid}`, 'PATCH', { body: wireBody })
     if (target) {
       target.body = newBody
       target.edited_at = new Date().toISOString()
@@ -1703,17 +1762,45 @@ async function sendSticker(stickerId: string) {
   showStickerPicker.value = false
   const found = LUNO_STICKERS.find(s => s.id === stickerId)
   await wrap(async () => {
+    // E5: stickers ride inside the ciphertext envelope in E2EE rooms.
+    let kind = 'sticker'
+    let wireBody = stickerId
+    let meta: Record<string, unknown> = {
+      sticker_id: stickerId,
+      character: found?.character || imageStickerChar(stickerId) || 'Lumi',
+      label: found?.name || stickerId
+    }
+    const room = chats.value.find((c) => c.id === selectedChatId.value)
+    if (room?.e2ee) {
+      const c = e2eeClient()
+      if (!c) return
+      try {
+        const out = await c.encryptOutbound(room, 'sticker', stickerId, meta)
+        kind = out.kind
+        wireBody = out.body
+        meta = {}
+      } catch (e) {
+        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        return
+      }
+    }
     const res = await api<{ message: Message }>(`/api/v1/conversations/${selectedChatId.value}/messages`, 'POST', {
       client_id: newClientID(),
-      kind: 'sticker',
-      body: stickerId,
-      metadata: {
-        sticker_id: stickerId,
-        character: found?.character || imageStickerChar(stickerId) || 'Lumi',
-        label: found?.name || stickerId
-      }
+      kind,
+      body: wireBody,
+      metadata: meta
     })
     if (!messages.value.some(m => m.id === res.message.id)) {
+      if (kind === 'ciphertext') {
+        res.message.kind = 'sticker'
+        res.message.body = stickerId
+        res.message.metadata = {
+          sticker_id: stickerId,
+          character: found?.character || imageStickerChar(stickerId) || 'Lumi',
+          label: found?.name || stickerId
+        }
+        res.message._e2ee = true
+      }
       messages.value.push(res.message)
     }
     playSendSound()
@@ -1730,17 +1817,44 @@ async function sendLocationMessage() {
     if (!navigator.geolocation) throw new Error(t('location_unavailable'))
     const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }))
     if (sessionToken !== token.value) return
+    let kind = 'location'
+    let wireBody = t('location_shared')
+    let meta: Record<string, unknown> = {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+      accuracy_m: position.coords.accuracy
+    }
+    const room = chats.value.find((c) => c.id === convId)
+    if (room?.e2ee) {
+      const c = e2eeClient()
+      if (!c) return
+      try {
+        const out = await c.encryptOutbound(room, 'location', wireBody, meta)
+        kind = out.kind
+        wireBody = out.body
+        meta = {}
+      } catch (e) {
+        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        return
+      }
+    }
     const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
       client_id: newClientID(),
-      kind: 'location',
-      body: t('location_shared'),
-      metadata: {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy_m: position.coords.accuracy
-      }
+      kind,
+      body: wireBody,
+      metadata: meta
     })
     if (sessionToken === token.value && selectedChatId.value === convId && !messages.value.some(m => m.id === res.message.id)) {
+      if (kind === 'ciphertext') {
+        res.message.kind = 'location'
+        res.message.body = t('location_shared')
+        res.message.metadata = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy_m: position.coords.accuracy
+        }
+        res.message._e2ee = true
+      }
       messages.value.push(res.message)
     }
     playSendSound()
@@ -1756,17 +1870,44 @@ async function shareContact(f: User) {
   const convId = selectedChatId.value
   const sessionToken = token.value
   await wrap(async () => {
+    let kind = 'contact'
+    let wireBody = f.display_name
+    let meta: Record<string, unknown> = {
+      user_id: f.id,
+      ...(f.handle ? { handle: f.handle } : {}),
+      display_name: f.display_name
+    }
+    const room = chats.value.find((c) => c.id === convId)
+    if (room?.e2ee) {
+      const c = e2eeClient()
+      if (!c) return
+      try {
+        const out = await c.encryptOutbound(room, 'contact', wireBody, meta)
+        kind = out.kind
+        wireBody = out.body
+        meta = {}
+      } catch (e) {
+        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        return
+      }
+    }
     const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
       client_id: newClientID(),
-      kind: 'contact',
-      body: f.display_name,
-      metadata: {
-        user_id: f.id,
-        ...(f.handle ? { handle: f.handle } : {}),
-        display_name: f.display_name
-      }
+      kind,
+      body: wireBody,
+      metadata: meta
     })
     if (sessionToken === token.value && selectedChatId.value === convId && !messages.value.some(m => m.id === res.message.id)) {
+      if (kind === 'ciphertext') {
+        res.message.kind = 'contact'
+        res.message.body = f.display_name
+        res.message.metadata = {
+          user_id: f.id,
+          ...(f.handle ? { handle: f.handle } : {}),
+          display_name: f.display_name
+        }
+        res.message._e2ee = true
+      }
       messages.value.push(res.message)
     }
     playSendSound()
@@ -2004,6 +2145,12 @@ async function shrinkPhotoForUpload(file: File): Promise<File> {
   }
 }
 async function sendAttachmentFile(file: File, conversation: string, sessionToken: string, voiceDurationSec?: number) {
+    // E5: attachments wait for E7; sending plaintext bytes to an E2EE room
+    // would silently break the seal, so refuse honestly instead.
+    if (chats.value.find((c) => c.id === conversation)?.e2ee) {
+      error.value = t('mvE2eeAttachSoon')
+      return
+    }
     if (voiceDurationSec === undefined) file = await shrinkPhotoForUpload(file)
     if (file.size === 0 || file.size > 512 * 1024) throw new Error(t('attachment_size_limit'))
     const bytes = new Uint8Array(await file.arrayBuffer())
@@ -2233,7 +2380,26 @@ async function doForward(chatId: string) {
   const msg = forwardTargetMsg.value
   if (!msg || !selectedChatId.value) return
   await wrap(async () => {
-    await api(`/api/v1/conversations/${selectedChatId.value}/messages/${msg.id}/forward`, 'POST', { to_conversation_id: chatId })
+    // E5: forwarding into an E2EE room re-encrypts client-side.
+    const targetRoom = chats.value.find((c) => c.id === chatId)
+    if (targetRoom?.e2ee) {
+      const c = e2eeClient()
+      if (!c) return
+      const readable = c.readableBody(msg)
+      if (!readable) {
+        error.value = t('mvE2eeUnreadable')
+        return
+      }
+      try {
+        const out = await c.encryptOutbound(targetRoom, readable.kind === 'ciphertext' ? 'text' : readable.kind, readable.body)
+        await api(`/api/v1/conversations/${chatId}/messages`, 'POST', { client_id: newClientID(), kind: out.kind, body: out.body })
+      } catch (e) {
+        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('mvE2eeUnreadable')
+        return
+      }
+    } else {
+      await api(`/api/v1/conversations/${selectedChatId.value}/messages/${msg.id}/forward`, 'POST', { to_conversation_id: chatId })
+    }
     showForwardModal.value = false
     forwardTargetMsg.value = null
     note.value = t('mvForwarded')
@@ -2574,6 +2740,12 @@ const {
   handleGroupUserLeft,
   handleGroupSignal,
   chatTitleOf: (convId: string) => chats.value.find((c) => c.id === convId)?.title || 'LUNO',
+  encryptQueued: async (convId: string, kind: string, body: string) => {
+    const room = chats.value.find((c) => c.id === convId)
+    const c = e2eeClient()
+    if (!room?.e2ee || !c || kind !== 'text') return { kind, body }
+    return c.encryptOutbound(room, kind, body)
+  },
 })
 
 // I-4: session lifecycle (names unchanged).

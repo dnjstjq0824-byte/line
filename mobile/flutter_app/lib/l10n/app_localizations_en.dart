@@ -1492,6 +1492,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgEdited => 'Message edited.';
 
   @override
+  String get e2eeGroupSoon =>
+      'Encrypted group chat arrives in the next update.';
+
+  @override
+  String get e2eeAttachSoon =>
+      'File and photo sharing in encrypted rooms arrives in the next update.';
+
+  @override
+  String get e2eeUnreadable => 'This message could not be decrypted.';
+
+  @override
   String get msgQueuedOffline => 'Offline — message queued.';
 
   @override

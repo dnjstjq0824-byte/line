@@ -2,6 +2,7 @@
 import 'dart:convert';
 
 import 'codec.dart';
+import 'keys.dart';
 
 abstract class CipherEnvelope {
   String get type;
@@ -14,10 +15,11 @@ class PrekeyEnvelope implements CipherEnvelope {
   final String ek;
   final int? spkId;
   final String? opkId;
+  final String? spk;
   final String header;
   final String iv;
   final String ct;
-  const PrekeyEnvelope({required this.ik, required this.ek, required this.spkId, required this.opkId, required this.header, required this.iv, required this.ct});
+  const PrekeyEnvelope({required this.ik, required this.ek, required this.spkId, required this.opkId, this.spk, required this.header, required this.iv, required this.ct});
 }
 
 class MsgEnvelope implements CipherEnvelope {
@@ -46,12 +48,17 @@ CipherEnvelope decodeEnvelope(String s) {
     for (final k in ['ik', 'ek', 'header', 'iv', 'ct']) {
       if (o[k] is! String || (o[k] as String).isEmpty) throw StateError('bad prekey envelope');
     }
-    for (final k in ['ik', 'ek', 'header', 'iv', 'ct']) {
+    if (parseIdentity(o['ik'] as String) == null) throw StateError('bad prekey envelope');
+    for (final k in ['ek', 'header', 'iv', 'ct']) {
       b64uDecode(o[k] as String);
+    }
+    if (o['spk'] != null) {
+      if (o['spk'] is! String || (o['spk'] as String).isEmpty) throw StateError('bad prekey envelope');
+      b64uDecode(o['spk'] as String);
     }
     return PrekeyEnvelope(
       ik: o['ik'] as String, ek: o['ek'] as String,
-      spkId: o['spkId'] as int?, opkId: o['opkId'] as String?,
+      spkId: o['spkId'] as int?, opkId: o['opkId'] as String?, spk: o['spk'] as String?,
       header: o['header'] as String, iv: o['iv'] as String, ct: o['ct'] as String,
     );
   }

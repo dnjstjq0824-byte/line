@@ -1014,7 +1014,13 @@ class _SignalBubble extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                           color: faint)),
                 ),
-              if (m['kind'] == 'sticker' &&
+              if (m['_e2eeError'] == true)
+                Text(context.l10n.e2eeUnreadable,
+                    style: TextStyle(
+                        color: faint,
+                        fontSize: LunoType.bubbleSize,
+                        fontStyle: FontStyle.italic))
+              else if (m['kind'] == 'sticker' &&
                   isImageStickerId('${_stickerIdOf(m) ?? m['body']}'))
                 StickerImage(
                   stickerId: '${_stickerIdOf(m) ?? m['body']}',

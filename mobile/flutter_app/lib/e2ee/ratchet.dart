@@ -225,3 +225,23 @@ String serializeRatchet(RatchetState st) => jsonEncode({
           .map((s) => {'dhHex': s.dhHex, 'n': s.n, 'mk': s.mk})
           .toList(),
     });
+
+RatchetState deserializeRatchet(String s) {
+  final o = jsonDecode(s) as Map<String, dynamic>;
+  Uint8List? opt(String? v) => v == null ? null : b64uDecode(v);
+  return RatchetState(
+    root: b64uDecode(o['root'] as String),
+    sendChain: opt(o['sendChain'] as String?),
+    recvChain: opt(o['recvChain'] as String?),
+    sendRatchetPriv: b64uDecode(o['sendRatchetPriv'] as String),
+    sendRatchetPub: b64uDecode(o['sendRatchetPub'] as String),
+    recvRatchetPub: opt(o['recvRatchetPub'] as String?),
+    sendN: o['sendN'] as int,
+    recvN: o['recvN'] as int,
+    prevSendLen: o['prevSendLen'] as int,
+    skipped: ((o['skipped'] ?? []) as List).map((e) {
+      final m = e as Map<String, dynamic>;
+      return SkippedKey(dhHex: m['dhHex'] as String, n: m['n'] as int, mk: m['mk'] as String);
+    }).toList(),
+  );
+}

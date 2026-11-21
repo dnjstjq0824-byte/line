@@ -1476,6 +1476,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get msgEdited => 'メッセージを編集しました。';
 
   @override
+  String get e2eeGroupSoon => 'グループの暗号化チャットは次回アップデートで対応します';
+
+  @override
+  String get e2eeAttachSoon => '暗号化ルームのファイル・写真送信は次回アップデートで対応します';
+
+  @override
+  String get e2eeUnreadable => 'このメッセージを復号できませんでした';
+
+  @override
   String get msgQueuedOffline => 'オフライン — メッセージを待機列に保存しました。';
 
   @override

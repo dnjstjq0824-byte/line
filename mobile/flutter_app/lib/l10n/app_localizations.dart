@@ -2946,6 +2946,24 @@ abstract class AppLocalizations {
   /// **'메시지를 수정했습니다.'**
   String get msgEdited;
 
+  /// e2eeGroupSoon (E5)
+  ///
+  /// In ko, this message translates to:
+  /// **'그룹 채팅 암호화는 다음 업데이트에서 지원됩니다.'**
+  String get e2eeGroupSoon;
+
+  /// e2eeAttachSoon (E5)
+  ///
+  /// In ko, this message translates to:
+  /// **'암호화 대화방의 파일·사진 전송은 다음 업데이트에서 지원됩니다.'**
+  String get e2eeAttachSoon;
+
+  /// e2eeUnreadable (E5)
+  ///
+  /// In ko, this message translates to:
+  /// **'이 메시지를 복호화할 수 없습니다.'**
+  String get e2eeUnreadable;
+
   /// msgQueuedOffline (F20)
   ///
   /// In ko, this message translates to:

@@ -713,7 +713,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <div v-else-if="msg.kind === 'proposal' && proposalState(msg) !== 'pending'" class="bubble-decided-mark">
                   {{ proposalState(msg) === 'approved' ? t('apprApprovedState') : t('apprRejectedState') }}
                 </div>
-                <div v-else class="bubble-text-content"><template v-for="(part, pi) in linkParts(msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></div>
+                <div v-else class="bubble-text-content"><template v-if="msg._e2eeError">{{ t('mvE2eeUnreadable') }}</template><template v-else><template v-for="(part, pi) in linkParts(msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></template></div>
                 <LinkPreview v-if="msg.kind === 'text' && !msg.unsent" :text="msg.body" :enabled="linkPreviewsEnabled" />
 
                 <!-- A15: voice-AI result box (STT transcript, TTS/STT guidance) -->

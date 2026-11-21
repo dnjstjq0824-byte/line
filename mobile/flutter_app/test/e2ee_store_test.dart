@@ -1,0 +1,137 @@
+// E5: Dart E2EE store through a fake key directory with the same
+// semantics as the server (bundle store, one-time-prekey consume,
+// ownership on delete). Live-server flows are covered node-side.
+import 'package:flutter_test/flutter_test.dart';
+import 'package:luno_messenger/e2ee/store.dart';
+
+class FakeDirectory {
+  final bundles = <String, Map<String, Map<String, dynamic>>>{};
+  Future<dynamic> call(String path, [String method = 'GET', Object? body]) async {
+    final put = RegExp(r'^devices/([\w-]+)/keys$').firstMatch(path);
+    if (put != null) {
+      final did = put.group(1)!;
+      final b = (body ?? {}) as Map;
+      if (method == 'PUT') {
+        final uid = _authed;
+        bundles.putIfAbsent(uid, () => {})[did] = {
+          'user_id': uid,
+          'device_id': did,
+          'identity_key': b['identity_key'],
+          'signed_prekey': b['signed_prekey'],
+          'prekey_sig': b['prekey_sig'] ?? '',
+          'one_time_prekeys': List<String>.from(b['one_time_prekeys'] ?? []),
+        };
+        return {'status': 'keys_registered'};
+      }
+      if (method == 'DELETE') {
+        for (final entry in bundles.entries) {
+          if (entry.value.containsKey(did)) {
+            if (entry.key != _authed) {
+              throw StateError('forbidden');
+            }
+            entry.value.remove(did);
+            return {'status': 'keys_deleted'};
+          }
+        }
+        throw StateError('not found');
+      }
+    }
+    final get = RegExp(r'^users/([\w-]+)/keys(\?all=1)?$').firstMatch(path);
+    if (get != null && method == 'GET') {
+      final uid = get.group(1)!;
+      final all = get.group(2) != null;
+      final devs = bundles[uid] ?? {};
+      String? consume(String did) {
+        final otks = devs[did]!['one_time_prekeys'] as List;
+        return otks.isEmpty ? null : otks.removeAt(0) as String;
+      }
+      if (all) {
+        return {
+          'user_id': uid,
+          'devices': [
+            for (final e in devs.entries)
+              {
+                'user_id': uid,
+                'device_id': e.key,
+                'identity_key': e.value['identity_key'],
+                'signed_prekey': e.value['signed_prekey'],
+                'prekey_sig': e.value['prekey_sig'],
+                'one_time_prekey': consume(e.key),
+              }
+          ],
+        };
+      }
+      if (devs.isEmpty) throw StateError('no bundle');
+      final did = devs.keys.first;
+      return {
+        'user_id': uid,
+        'device_id': did,
+        'identity_key': devs[did]!['identity_key'],
+        'signed_prekey': devs[did]!['signed_prekey'],
+        'prekey_sig': devs[did]!['prekey_sig'],
+        'one_time_prekey': consume(did),
+      };
+    }
+    throw StateError('unexpected $method $path');
+  }
+
+  String _authed = '';
+  ApiFn as(String uid) {
+    return (String path, [String? method, Object? body]) {
+      _authed = uid;
+      return call(path, method ?? 'GET', body);
+    };
+  }
+}
+
+void main() {
+  test('E5 app: two devices exchange sealed messages', () async {
+    final dir = FakeDirectory();
+    final alice = E2eeStore(kv: MemoryKV(), api: dir.as('alice'), userId: 'alice', deviceId: 'a1');
+    final bob = E2eeStore(kv: MemoryKV(), api: dir.as('bob'), userId: 'bob', deviceId: 'b1');
+    await alice.ready();
+    await bob.ready();
+    const room = RoomRef(id: 'r1', kind: 'direct', memberIds: ['alice', 'bob'], e2ee: true);
+    final ct = await alice.encryptRoom(room, const InnerMessage(kind: 'text', body: 'sealed hello'));
+    final open = await bob.decryptBody('alice', ct);
+    expect(open?.body, 'sealed hello');
+    expect(open?.kind, 'text');
+    final back = await bob.encryptRoom(room, const InnerMessage(kind: 'text', body: 'sealed reply'));
+    expect((await alice.decryptBody('bob', back))?.body, 'sealed reply');
+  });
+
+  test('E5 app: own second device reads the same blob; rotation tops up', () async {
+    final dir = FakeDirectory();
+    final a1 = E2eeStore(kv: MemoryKV(), api: dir.as('alice'), userId: 'alice', deviceId: 'a1');
+    final a2 = E2eeStore(kv: MemoryKV(), api: dir.as('alice'), userId: 'alice', deviceId: 'a2');
+    final bob = E2eeStore(kv: MemoryKV(), api: dir.as('bob'), userId: 'bob', deviceId: 'b1');
+    await a1.ready();
+    await a2.ready();
+    await bob.ready();
+    const room = RoomRef(id: 'r1', kind: 'direct', memberIds: ['alice', 'bob'], e2ee: true);
+    final ct = await bob.encryptRoom(room, const InnerMessage(kind: 'text', body: 'to both'));
+    expect((await a1.decryptBody('bob', ct))?.body, 'to both');
+    expect((await a2.decryptBody('bob', ct))?.body, 'to both');
+  });
+
+  test('E5 app: group rooms refuse; wipe deletes the bundle', () async {
+    final dir = FakeDirectory();
+    final alice = E2eeStore(kv: MemoryKV(), api: dir.as('alice'), userId: 'alice', deviceId: 'a1');
+    await alice.ready();
+    await expectLater(
+        alice.encryptRoom(
+            const RoomRef(id: 'g', kind: 'group', memberIds: ['alice', 'bob'], e2ee: true),
+            const InnerMessage(kind: 'text', body: 'x')),
+        throwsA(isStateError));
+    await alice.wipe();
+    expect(dir.bundles['alice']?.containsKey('a1') ?? false, isFalse);
+  });
+
+  test('E5 app: unknown sender keys fail closed', () async {
+    final dir = FakeDirectory();
+    final bob = E2eeStore(kv: MemoryKV(), api: dir.as('bob'), userId: 'bob', deviceId: 'b1');
+    await bob.ready();
+    expect(await bob.decryptBody('alice', 'not-json'), isNull);
+    expect(await bob.decryptBody('alice', '{"v":1,"msgs":{}}'), isNull);
+  });
+}

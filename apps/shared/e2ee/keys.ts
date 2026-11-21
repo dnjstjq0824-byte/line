@@ -117,6 +117,10 @@ export function verifyPrekeySig(identity: string, spkPub: Uint8Array, sig: Uint8
   }
 }
 
+export function x25519Public(priv: Uint8Array): Uint8Array {
+  return x25519.getPublicKey(priv);
+}
+
 export function x25519Shared(priv: Uint8Array, pub: Uint8Array): Uint8Array {
   return x25519.getSharedSecret(priv, pub);
 }

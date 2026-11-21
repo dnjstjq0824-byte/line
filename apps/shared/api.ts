@@ -58,6 +58,7 @@ export type Chat = {
   notice?: string
   official?: boolean
   badge_n?: boolean
+  e2ee?: boolean
   member_count?: number
   members?: User[]
   owner_id?: string | null
@@ -89,6 +90,8 @@ export type Message = {
   edited_at?: string
   unsent?: boolean
   read_count?: number
+  _e2ee?: boolean
+  _e2eeError?: boolean
   reactions?: Record<string, number>
   my_reactions?: string[]
   reply_preview?: {
