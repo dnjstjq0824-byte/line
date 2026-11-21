@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/no_pull_refresh.dart';
+import '../widgets/harbor_empty.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -41,17 +42,9 @@ class StoriesPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               if (session.stories.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 64),
-                  child: Column(
-                    children: [
-                      Icon(Icons.auto_awesome_outlined,
-                          size: 44, color: dark ? HarborDark.channel : HarborLight.channel),
-                      const SizedBox(height: 12),
-                      Text(context.l10n.storyEmpty,
-                          style: Theme.of(context).textTheme.titleMedium),
-                    ],
-                  ),
+                HarborEmpty(
+                  title: context.l10n.storyEmpty,
+                  icon: Icons.auto_awesome_outlined,
                 )
               else
                 GridView.builder(

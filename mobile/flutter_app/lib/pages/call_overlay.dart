@@ -120,14 +120,10 @@ class CallOverlay extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
-                          radius: 44,
-                          backgroundColor: HarborLight.harbor,
-                          child: Text(
-                            title.isEmpty ? '?' : title.characters.first,
-                            style: const TextStyle(
-                                fontSize: 36, color: Colors.white),
-                          ),
+                        IdentityTile(
+                          glyph: title,
+                          color: HarborLight.harbor,
+                          size: 88,
                         ),
                         const SizedBox(height: 12),
                         Text(title,

@@ -111,7 +111,7 @@ class FriendProfilePage extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                LineAvatar(
+                IdentityTile(
                   key: const Key('friend-avatar'),
                   glyph: name,
                   color: color,

@@ -103,11 +103,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final loading = !_opened || (session.selectedId == widget.conversationId && session.busy && session.messages.isEmpty);
+    final loading = !_opened ||
+        (session.selectedId == widget.conversationId &&
+            session.busy &&
+            session.messages.isEmpty);
     return Column(
       children: [
         _DeckHeader(conversationId: widget.conversationId),
-        if (session.selectedId == widget.conversationId && session.pins.isNotEmpty)
+        if (session.selectedId == widget.conversationId &&
+            session.pins.isNotEmpty)
           Container(
             width: double.infinity,
             color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
@@ -117,10 +121,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
               child: Row(
                 children: [
                   Icon(Icons.campaign,
-                      size: 18, color: dark ? HarborDark.harbor : HarborLight.harbor),
+                      size: 18,
+                      color: dark ? HarborDark.harbor : HarborLight.harbor),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(context.l10n.roomPinBody(session.pins.first['body'] ?? ''),
+                    child: Text(
+                        context.l10n
+                            .roomPinBody(session.pins.first['body'] ?? ''),
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             fontSize: HarborType.small,
@@ -138,7 +145,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Text(
                 session.translateConfigured
-                    ? context.l10n.roomAutoOnLang(session.targetTranslateLang.toUpperCase())
+                    ? context.l10n.roomAutoOnLang(
+                        session.targetTranslateLang.toUpperCase())
                     : context.l10n.roomAutoTranslateOn,
                 style: TextStyle(
                     fontSize: HarborType.micro,
@@ -149,50 +157,51 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             children: [
               Container(
                 color: LunoTheme.chatRoomBackgroundColor(
-                dark ? Brightness.dark : Brightness.light),
-            child: loading
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    // Reversed: a room opens at the newest message (bottom)
-                    // like LINE, new messages stay pinned to the bottom and
-                    // late-loading photos grow upward instead of pushing the
-                    // view. Index 0 is the newest message.
-                    key: const ValueKey('chat-messages'),
-                    controller: _scroll,
-                    reverse: true,
-                    padding: const EdgeInsets.all(12),
-                    itemCount: session.messages.length,
-                    itemBuilder: (_, r) {
-                      final i = session.messages.length - 1 - r;
-                      final msg = session.messages[i];
-                      final prev = i > 0 ? session.messages[i - 1] : null;
-                      final next = i + 1 < session.messages.length
-                          ? session.messages[i + 1]
-                          : null;
-                      final prevIso = prev == null ? null : prev['created_at'];
-                      final lead = isGroupLead(prev, msg);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (showDateDivider(prevIso, msg['created_at']))
-                            _DateDivider(iso: msg['created_at']),
-                          Padding(
-                            padding: EdgeInsets.only(
-                                top: lead
-                                    ? LunoBubble.gapBreak
-                                    : LunoBubble.gapInner),
-                            child: _SignalBubble(
-                              entry: msg,
-                              groupLead: lead,
-                              groupTail: isGroupTail(msg, next),
-                              peerName: session.senderLabel(
-                                  widget.conversationId, msg),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                    dark ? Brightness.dark : Brightness.light),
+                child: loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.builder(
+                        // Reversed: a room opens at the newest message (bottom)
+                        // like LINE, new messages stay pinned to the bottom and
+                        // late-loading photos grow upward instead of pushing the
+                        // view. Index 0 is the newest message.
+                        key: const ValueKey('chat-messages'),
+                        controller: _scroll,
+                        reverse: true,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: session.messages.length,
+                        itemBuilder: (_, r) {
+                          final i = session.messages.length - 1 - r;
+                          final msg = session.messages[i];
+                          final prev = i > 0 ? session.messages[i - 1] : null;
+                          final next = i + 1 < session.messages.length
+                              ? session.messages[i + 1]
+                              : null;
+                          final prevIso =
+                              prev == null ? null : prev['created_at'];
+                          final lead = isGroupLead(prev, msg);
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (showDateDivider(prevIso, msg['created_at']))
+                                _DateDivider(iso: msg['created_at']),
+                              Padding(
+                                padding: EdgeInsets.only(
+                                    top: lead
+                                        ? LunoBubble.gapBreak
+                                        : LunoBubble.gapInner),
+                                child: _SignalBubble(
+                                  entry: msg,
+                                  groupLead: lead,
+                                  groupTail: isGroupTail(msg, next),
+                                  peerName: session.senderLabel(
+                                      widget.conversationId, msg),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
               ),
               if (_showJump)
                 Positioned(
@@ -210,9 +219,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         padding: const EdgeInsets.all(10),
                         child: Icon(Icons.arrow_downward,
                             size: 20,
-                            color: dark
-                                ? HarborDark.harbor
-                                : HarborLight.harbor),
+                            color:
+                                dark ? HarborDark.harbor : HarborLight.harbor),
                       ),
                     ),
                   ),
@@ -290,7 +298,8 @@ void _messageActions(BuildContext context, Map m, bool mine, String msgId) {
                         onTap: () => run(() => session.react(m['id'], emo)),
                         child: Padding(
                           padding: const EdgeInsets.all(8),
-                          child: Text(emo, style: const TextStyle(fontSize: 26)),
+                          child:
+                              Text(emo, style: const TextStyle(fontSize: 26)),
                         ),
                       ),
                   ],
@@ -305,17 +314,20 @@ void _messageActions(BuildContext context, Map m, bool mine, String msgId) {
               ListTile(
                 leading: const Icon(Icons.translate),
                 title: Text(l.actTranslate),
-                onTap: () => run(() => session.translateMessage(msgId, '${m['body']}')),
+                onTap: () =>
+                    run(() => session.translateMessage(msgId, '${m['body']}')),
               ),
               ListTile(
                 leading: const Icon(Icons.forward_outlined),
                 title: Text(l.actForward),
-                onTap: () => run(() => _forwardRoomSheet(context, session, msgId)),
+                onTap: () =>
+                    run(() => _forwardRoomSheet(context, session, msgId)),
               ),
               ListTile(
                 leading: const Icon(Icons.bookmark_border),
                 title: Text(l.actKeep),
-                onTap: () => run(() => session.saveToKeep(m['id'], '${m['body']}')),
+                onTap: () =>
+                    run(() => session.saveToKeep(m['id'], '${m['body']}')),
               ),
               ListTile(
                 leading: const Icon(Icons.push_pin_outlined),
@@ -326,7 +338,8 @@ void _messageActions(BuildContext context, Map m, bool mine, String msgId) {
                 ListTile(
                   leading: const Icon(Icons.edit_outlined),
                   title: Text(l.roomEditTitle),
-                  onTap: () => run(() => _editMessageDialog(context, session, msgId, '${m['body']}')),
+                  onTap: () => run(() => _editMessageDialog(
+                      context, session, msgId, '${m['body']}')),
                 ),
               if (mine)
                 ListTile(
@@ -405,25 +418,43 @@ class _DeckHeader extends StatelessWidget {
               ),
               IconButton(
                 tooltip: context.l10n.callVoice,
-                icon: Icon(Icons.phone, color: dark ? HarborDark.ink : Colors.white),
+                icon: Icon(Icons.phone,
+                    color: dark ? HarborDark.ink : Colors.white),
                 onPressed: () => withPermissions(
                   context,
                   permissions: [
-                    (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseVoice),
+                    (
+                      Permission.microphone,
+                      context.l10n.permMicTitle,
+                      context.l10n.permMicUseVoice
+                    ),
                   ],
-                  action: () async => session.kindOf(conversationId) == 'group' ? session.joinGroupCall(conversationId, 'voice') : session.startCall('voice'),
+                  action: () async => session.kindOf(conversationId) == 'group'
+                      ? session.joinGroupCall(conversationId, 'voice')
+                      : session.startCall('voice'),
                 ),
               ),
               IconButton(
                 tooltip: context.l10n.callVideo,
-                icon: Icon(Icons.videocam, color: dark ? HarborDark.ink : Colors.white),
+                icon: Icon(Icons.videocam,
+                    color: dark ? HarborDark.ink : Colors.white),
                 onPressed: () => withPermissions(
                   context,
                   permissions: [
-                    (Permission.microphone, context.l10n.permMicTitle, context.l10n.permCamUseVideo),
-                    (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUseVideo),
+                    (
+                      Permission.microphone,
+                      context.l10n.permMicTitle,
+                      context.l10n.permCamUseVideo
+                    ),
+                    (
+                      Permission.camera,
+                      context.l10n.permCamTitle,
+                      context.l10n.permCamUseVideo
+                    ),
                   ],
-                  action: () async => session.kindOf(conversationId) == 'group' ? session.joinGroupCall(conversationId, 'video') : session.startCall('video'),
+                  action: () async => session.kindOf(conversationId) == 'group'
+                      ? session.joinGroupCall(conversationId, 'video')
+                      : session.startCall('video'),
                 ),
               ),
               // Everything past calls lives in one menu so the room name
@@ -445,17 +476,44 @@ class _DeckHeader extends StatelessWidget {
                   }
                 },
                 itemBuilder: (_) => [
-                  PopupMenuItem(value: 'pins', child: _MenuRow(Icons.campaign_outlined, context.l10n.gsNotice)),
-                  PopupMenuItem(value: 'notes', child: _MenuRow(Icons.sticky_note_2_outlined, context.l10n.noteWord)),
-                  PopupMenuItem(value: 'events', child: _MenuRow(Icons.event_outlined, context.l10n.scheduleWord)),
-                  PopupMenuItem(value: 'polls', child: _MenuRow(Icons.how_to_vote_outlined, context.l10n.pollWord)),
-                  PopupMenuItem(value: 'albums', child: _MenuRow(Icons.photo_library_outlined, context.l10n.albumWord)),
+                  PopupMenuItem(
+                      value: 'pins',
+                      child: _MenuRow(
+                          Icons.campaign_outlined, context.l10n.gsNotice)),
+                  PopupMenuItem(
+                      value: 'notes',
+                      child: _MenuRow(
+                          Icons.sticky_note_2_outlined, context.l10n.noteWord)),
+                  PopupMenuItem(
+                      value: 'events',
+                      child: _MenuRow(
+                          Icons.event_outlined, context.l10n.scheduleWord)),
+                  PopupMenuItem(
+                      value: 'polls',
+                      child: _MenuRow(
+                          Icons.how_to_vote_outlined, context.l10n.pollWord)),
+                  PopupMenuItem(
+                      value: 'albums',
+                      child: _MenuRow(Icons.photo_library_outlined,
+                          context.l10n.albumWord)),
                   const PopupMenuDivider(),
-                  PopupMenuItem(value: 'pay', child: _MenuRow(Icons.payments_outlined, context.l10n.mvSend)),
-                  PopupMenuItem(value: 'approvals', child: _MenuRow(Icons.fact_check_outlined, context.l10n.apprTitle)),
-                  PopupMenuItem(value: 'sync', child: _MenuRow(Icons.sync, context.l10n.roomOfflineSync)),
+                  PopupMenuItem(
+                      value: 'pay',
+                      child: _MenuRow(
+                          Icons.payments_outlined, context.l10n.mvSend)),
+                  PopupMenuItem(
+                      value: 'approvals',
+                      child: _MenuRow(
+                          Icons.fact_check_outlined, context.l10n.apprTitle)),
+                  PopupMenuItem(
+                      value: 'sync',
+                      child:
+                          _MenuRow(Icons.sync, context.l10n.roomOfflineSync)),
                   if (session.kindOf(conversationId) == 'group')
-                    PopupMenuItem(value: 'settings', child: _MenuRow(Icons.settings_outlined, context.l10n.gsTitle)),
+                    PopupMenuItem(
+                        value: 'settings',
+                        child: _MenuRow(
+                            Icons.settings_outlined, context.l10n.gsTitle)),
                 ],
               ),
             ],
@@ -496,8 +554,8 @@ class _FileCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: dark ? HarborDark.surface : Colors.white,
         borderRadius: BorderRadius.circular(HarborRadius.card),
-        border: Border.all(
-            color: dark ? Colors.white24 : const Color(0xFFE5E7EB)),
+        border:
+            Border.all(color: dark ? Colors.white24 : const Color(0xFFE5E7EB)),
       ),
       child: Row(
         children: [
@@ -525,7 +583,8 @@ class _ChatImage extends StatelessWidget {
   final String url;
   final String token;
   final String label;
-  const _ChatImage({required this.url, required this.token, required this.label});
+  const _ChatImage(
+      {required this.url, required this.token, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -536,9 +595,11 @@ class _ChatImage extends StatelessWidget {
           context: context,
           builder: (_) => Dialog(
             insetPadding: const EdgeInsets.all(16),
-            child: Image.network(url, headers: {'Authorization': 'Bearer $token'},
+            child: Image.network(url,
+                headers: {'Authorization': 'Bearer $token'},
                 errorBuilder: (_, __, ___) => Padding(
-                    padding: EdgeInsets.all(24), child: Text(context.l10n.roomImageFail))),
+                    padding: EdgeInsets.all(24),
+                    child: Text(context.l10n.roomImageFail))),
           ),
         ),
         child: ClipRRect(
@@ -550,9 +611,10 @@ class _ChatImage extends StatelessWidget {
               loadingBuilder: (ctx, child, progress) => progress == null
                   ? child
                   : const SizedBox(
-                      height: 180, child: Center(child: CircularProgressIndicator())),
-              errorBuilder: (_, __, ___) =>
-                  Text(label, style: const TextStyle(fontSize: HarborType.small))),
+                      height: 180,
+                      child: Center(child: CircularProgressIndicator())),
+              errorBuilder: (_, __, ___) => Text(label,
+                  style: const TextStyle(fontSize: HarborType.small))),
         ),
       ),
     );
@@ -619,9 +681,10 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
             ClipRRect(
               borderRadius: BorderRadius.circular(HarborRadius.control),
               child: Image.network(img,
-                  width: 64, height: 64, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      const SizedBox.shrink()),
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink()),
             ),
           if (img.isNotEmpty) const SizedBox(width: 8),
           Expanded(
@@ -660,8 +723,7 @@ class _LocationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final lat = meta is Map ? '${meta['lat'] ?? ''}' : '';
     final lng = meta is Map ? '${meta['lng'] ?? ''}' : '';
-    final label =
-        meta is Map ? '${meta['label'] ?? ''}' : '';
+    final label = meta is Map ? '${meta['label'] ?? ''}' : '';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -677,8 +739,7 @@ class _LocationCard extends StatelessWidget {
                       fontSize: HarborType.small,
                       fontWeight: FontWeight.w700)),
               Text('$lat, $lng',
-                  style: TextStyle(
-                      color: faint, fontSize: HarborType.micro)),
+                  style: TextStyle(color: faint, fontSize: HarborType.micro)),
             ],
           ),
         ),
@@ -697,16 +758,22 @@ class _ContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name =
-        meta is Map ? '${meta['display_name'] ?? ''}' : '';
+    final name = meta is Map ? '${meta['display_name'] ?? ''}' : '';
     final handle = meta is Map ? '${meta['handle'] ?? ''}' : '';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        CircleAvatar(
-          backgroundColor: faint.withValues(alpha: 0.3),
-          child: Text(name.isEmpty ? '?' : name.characters.first,
-              style: TextStyle(color: ink)),
+        // Build 20: person tiles match the lists (rounded square).
+        ClipRRect(
+          borderRadius: BorderRadius.circular(HarborRadius.avatar),
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            color: faint.withValues(alpha: 0.3),
+            child: Text(name.isEmpty ? '?' : name.characters.first,
+                style: TextStyle(color: ink)),
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -720,8 +787,7 @@ class _ContactCard extends StatelessWidget {
                       fontWeight: FontWeight.w700)),
               if (handle.isNotEmpty)
                 Text('@$handle',
-                    style: TextStyle(
-                        color: faint, fontSize: HarborType.micro)),
+                    style: TextStyle(color: faint, fontSize: HarborType.micro)),
             ],
           ),
         ),
@@ -745,9 +811,11 @@ class _DateDivider extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: dark
-                ? HarborDark.seaGlass
-                : Colors.white.withValues(alpha: 0.85),
+            // Build 20: softer pill like the web (8% text, muted label).
+            color: Theme.of(context)
+                .colorScheme
+                .onSurface
+                .withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(HarborRadius.lamp),
           ),
           child: Text(label,
@@ -774,8 +842,7 @@ class _SignalBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (entry is Map<String, dynamic> &&
-        entry['kind'] == 'call_status') {
+    if (entry is Map<String, dynamic> && entry['kind'] == 'call_status') {
       return _CallBubble(
         entry: entry,
         groupLead: groupLead,
@@ -783,8 +850,7 @@ class _SignalBubble extends StatelessWidget {
         peerName: peerName,
       );
     }
-    if (entry is Map<String, dynamic> &&
-        entry['kind'] == 'security_notice') {
+    if (entry is Map<String, dynamic> && entry['kind'] == 'security_notice') {
       return _SecurityNoticeCard(
         entry: entry,
         groupLead: groupLead,
@@ -834,179 +900,195 @@ class _SignalBubble extends StatelessWidget {
     // no coloured bubble behind them and no file name under a photo.
     final media = bareMediaKind(m);
     final bubbleBody = Container(
-        constraints: BoxConstraints(maxWidth: maxW),
-        decoration: media
-            ? null
-            : BoxDecoration(
-                color: bubble,
-                borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
-              ),
-        child: InkWell(
-          onLongPress: () => _messageActions(context, m, mine, msgId),
-          child: Padding(
-            padding: media
-                ? EdgeInsets.zero
-                : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Column(
-              crossAxisAlignment:
-                  mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                if (m['reply_to'] != null && '${m['reply_to']}'.isNotEmpty)
-                  Text('↩ ${m['reply_preview'] ?? context.l10n.roomReplyWord}',
-                      style: TextStyle(fontSize: 10, color: faint)),
-                if (m['metadata'] is Map && m['metadata']['forwarded'] == true)
-                  Text(context.l10n.roomForwarded,
-                      style: TextStyle(fontSize: 10, color: faint)),
-                if (m['kind'] == 'image' && attachmentIdOf(m) != null)
-                  _ChatImage(
-                    url: attachmentContentUrl(
-                        session.api.baseUrl, attachmentIdOf(m)!),
-                    token: session.api.token ?? '',
-                    label: '${m['body']}',
-                  ),
-                if (m['kind'] == 'video' && attachmentIdOf(m) != null)
-                  VideoBubble(
-                    url: attachmentContentUrl(
-                        session.api.baseUrl, attachmentIdOf(m)!),
-                    token: session.api.token ?? '',
-                  ),
-                if ((m['kind'] == 'voice' || m['kind'] == 'audio') && attachmentIdOf(m) != null)
-                  VoiceBubble(
-                    url: attachmentContentUrl(
-                        session.api.baseUrl, attachmentIdOf(m)!),
-                    token: session.api.token ?? '',
-                    durationSec: voiceDurationOf(m) ?? 0,
-                    foreground: ink,
-                  ),
-                if (m['kind'] == 'file' && attachmentIdOf(m) != null)
-                  _FileCard(
-                    name: '${m['body']}',
-                    onSave: () => session.downloadAttachment(
-                        attachmentIdOf(m)!, '${m['body']}'),
-                  ),
-                if (m['kind'] == 'location')
-                  _LocationCard(meta: m['metadata'], ink: ink, faint: faint),
-                if (m['kind'] == 'contact')
-                  _ContactCard(meta: m['metadata'], ink: ink, faint: faint),
-                // L-03: bot proposal/decision/report tag above the standard body.
-                if (m['kind'] == 'proposal' || m['kind'] == 'decision' || m['kind'] == 'report')
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
-                        borderRadius: BorderRadius.circular(HarborRadius.lamp),
-                      ),
-                      child: Text(
-                        m['kind'] == 'proposal' ? context.l10n.msgKindProposal : m['kind'] == 'decision' ? context.l10n.msgKindDecision : context.l10n.msgKindReport,
-                        style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: ink)),
-                    ),
-                  ),
-                if (m['kind'] == 'proposal' && canDecide && proposalState == 'pending')
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FilledButton(
-                          onPressed: () => session.decideProposal(session.selectedId, msgId, 'approved'),
-                          child: Text(context.l10n.mvApprove),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: () => session.decideProposal(session.selectedId, msgId, 'rejected'),
-                          child: Text(context.l10n.apprReject),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (m['kind'] == 'proposal' && proposalState != 'pending')
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(proposalState == 'approved' ? context.l10n.apprApprovedState : context.l10n.apprRejectedState,
-                        style: TextStyle(fontSize: HarborType.micro, fontWeight: FontWeight.w700, color: faint)),
-                  ),
-                if (m['kind'] == 'sticker' &&
-                    isImageStickerId('${_stickerIdOf(m) ?? m['body']}'))
-                  StickerImage(
-                    stickerId: '${_stickerIdOf(m) ?? m['body']}',
-                    baseUrl: session.api.baseUrl,
-                    fallbackGlyph: stickerGlyph(
-                        body: '${m['body']}', stickerId: _stickerIdOf(m)),
-                  )
-                else if (m['kind'] == 'sticker')
-                  StickerBubble(
-                    glyph: stickerGlyph(
-                        body: '${m['body']}', stickerId: _stickerIdOf(m)),
-                  )
-                else if (!media)
-                  Text('${m['body']}',
-                      style: TextStyle(
-                          color: ink,
-                          fontSize: LunoType.bubbleSize,
-                          fontWeight: LunoType.bubbleWeight,
-                          height: LunoType.bubbleHeight)),
-                if (m['kind'] == 'text' && m['unsent'] != true)
-                  _LinkPreviewCard(text: '${m['body']}'),
-                if (trans != null) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.all(6),
+      constraints: BoxConstraints(maxWidth: maxW),
+      decoration: media
+          ? null
+          : BoxDecoration(
+              color: bubble,
+              borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
+            ),
+      child: InkWell(
+        onLongPress: () => _messageActions(context, m, mine, msgId),
+        child: Padding(
+          padding: media
+              ? EdgeInsets.zero
+              : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            crossAxisAlignment:
+                mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              if (m['reply_to'] != null && '${m['reply_to']}'.isNotEmpty)
+                Text('↩ ${m['reply_preview'] ?? context.l10n.roomReplyWord}',
+                    style: TextStyle(fontSize: 10, color: faint)),
+              if (m['metadata'] is Map && m['metadata']['forwarded'] == true)
+                Text(context.l10n.roomForwarded,
+                    style: TextStyle(fontSize: 10, color: faint)),
+              if (m['kind'] == 'image' && attachmentIdOf(m) != null)
+                _ChatImage(
+                  url: attachmentContentUrl(
+                      session.api.baseUrl, attachmentIdOf(m)!),
+                  token: session.api.token ?? '',
+                  label: '${m['body']}',
+                ),
+              if (m['kind'] == 'video' && attachmentIdOf(m) != null)
+                VideoBubble(
+                  url: attachmentContentUrl(
+                      session.api.baseUrl, attachmentIdOf(m)!),
+                  token: session.api.token ?? '',
+                ),
+              if ((m['kind'] == 'voice' || m['kind'] == 'audio') &&
+                  attachmentIdOf(m) != null)
+                VoiceBubble(
+                  url: attachmentContentUrl(
+                      session.api.baseUrl, attachmentIdOf(m)!),
+                  token: session.api.token ?? '',
+                  durationSec: voiceDurationOf(m) ?? 0,
+                  foreground: ink,
+                ),
+              if (m['kind'] == 'file' && attachmentIdOf(m) != null)
+                _FileCard(
+                  name: '${m['body']}',
+                  onSave: () => session.downloadAttachment(
+                      attachmentIdOf(m)!, '${m['body']}'),
+                ),
+              if (m['kind'] == 'location')
+                _LocationCard(meta: m['metadata'], ink: ink, faint: faint),
+              if (m['kind'] == 'contact')
+                _ContactCard(meta: m['metadata'], ink: ink, faint: faint),
+              // L-03: bot proposal/decision/report tag above the standard body.
+              if (m['kind'] == 'proposal' ||
+                  m['kind'] == 'decision' ||
+                  m['kind'] == 'report')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: mine
-                          ? Colors.white.withValues(alpha: 0.18)
-                          : (dark ? HarborDark.seaGlass : HarborLight.seaGlass),
-                      borderRadius: BorderRadius.circular(8),
+                      color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+                      borderRadius: BorderRadius.circular(HarborRadius.lamp),
                     ),
-                    child: trans['loading'] == true
-                        ? Text(context.l10n.translating,
-                            style: TextStyle(fontSize: HarborType.micro, fontStyle: FontStyle.italic))
-                        : trans['error'] != null
-                            ? Text('${trans['error']}',
-                                style: TextStyle(fontSize: HarborType.micro, color: faint))
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text('${trans['target_lang']}'
-                                          .toString()
-                                          .toUpperCase()),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text('${trans['translated']}',
-                                      style: TextStyle(
-                                          fontSize: HarborType.small,
-                                          fontWeight: FontWeight.w600,
-                                          color: ink)),
-                                ],
-                              ),
+                    child: Text(
+                        m['kind'] == 'proposal'
+                            ? context.l10n.msgKindProposal
+                            : m['kind'] == 'decision'
+                                ? context.l10n.msgKindDecision
+                                : context.l10n.msgKindReport,
+                        style: TextStyle(
+                            fontSize: HarborType.micro,
+                            fontWeight: FontWeight.w700,
+                            color: ink)),
                   ),
-                ],
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (groupTail && readCount > 0)
-                      Text(context.l10n.roomReadCount(readCount),
+                ),
+              if (m['kind'] == 'proposal' &&
+                  canDecide &&
+                  proposalState == 'pending')
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FilledButton(
+                        onPressed: () => session.decideProposal(
+                            session.selectedId, msgId, 'approved'),
+                        child: Text(context.l10n.mvApprove),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => session.decideProposal(
+                            session.selectedId, msgId, 'rejected'),
+                        child: Text(context.l10n.apprReject),
+                      ),
+                    ],
+                  ),
+                ),
+              if (m['kind'] == 'proposal' && proposalState != 'pending')
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                      proposalState == 'approved'
+                          ? context.l10n.apprApprovedState
+                          : context.l10n.apprRejectedState,
+                      style: TextStyle(
+                          fontSize: HarborType.micro,
+                          fontWeight: FontWeight.w700,
+                          color: faint)),
+                ),
+              if (m['kind'] == 'sticker' &&
+                  isImageStickerId('${_stickerIdOf(m) ?? m['body']}'))
+                StickerImage(
+                  stickerId: '${_stickerIdOf(m) ?? m['body']}',
+                  baseUrl: session.api.baseUrl,
+                  fallbackGlyph: stickerGlyph(
+                      body: '${m['body']}', stickerId: _stickerIdOf(m)),
+                )
+              else if (m['kind'] == 'sticker')
+                StickerBubble(
+                  glyph: stickerGlyph(
+                      body: '${m['body']}', stickerId: _stickerIdOf(m)),
+                )
+              else if (!media)
+                Text('${m['body']}',
+                    style: TextStyle(
+                        color: ink,
+                        fontSize: LunoType.bubbleSize,
+                        fontWeight: LunoType.bubbleWeight,
+                        height: LunoType.bubbleHeight)),
+              if (m['kind'] == 'text' && m['unsent'] != true)
+                _LinkPreviewCard(text: '${m['body']}'),
+              if (trans != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: mine
+                        ? Colors.white.withValues(alpha: 0.18)
+                        : (dark ? HarborDark.seaGlass : HarborLight.seaGlass),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: trans['loading'] == true
+                      ? Text(context.l10n.translating,
                           style: TextStyle(
-                              fontSize: LunoType.stampSize,
-                              fontWeight: LunoType.stampWeight,
-                              fontFeatures: const [LunoType.tabular],
-                              color: faint)),
-                    if (m['edited_at'] != null && '${m['edited_at']}'.isNotEmpty)
-                      Text(context.l10n.roomEdited, style: TextStyle(fontSize: 9, color: faint)),
-                  ],
+                              fontSize: HarborType.micro,
+                              fontStyle: FontStyle.italic))
+                      : trans['error'] != null
+                          ? Text('${trans['error']}',
+                              style: TextStyle(
+                                  fontSize: HarborType.micro, color: faint))
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('${trans['target_lang']}'
+                                        .toString()
+                                        .toUpperCase()),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text('${trans['translated']}',
+                                    style: TextStyle(
+                                        fontSize: HarborType.small,
+                                        fontWeight: FontWeight.w600,
+                                        color: ink)),
+                              ],
+                            ),
                 ),
               ],
-            ),
+              // Build 20: the read count moved beside the bubble (above the
+              // time, LINE-style); only the edited mark stays inside.
+              if (m['edited_at'] != null && '${m['edited_at']}'.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(context.l10n.roomEdited,
+                      style: TextStyle(fontSize: 9, color: faint)),
+                ),
+            ],
           ),
         ),
-        );
+      ),
+    );
     final sender = mine
         ? null
         : session.memberOf(session.selectedId, '${m['sender_id']}');
@@ -1015,7 +1097,8 @@ class _SignalBubble extends StatelessWidget {
             onTap: sender == null
                 ? null
                 : () => showFriendProfile(context, sender),
-            child: LineAvatar(
+            // Build 20: room avatars match the lists (rounded square).
+            child: IdentityTile(
               glyph: peerName,
               color: dark ? HarborDark.harbor : HarborLight.harbor,
               size: LunoBubble.avatarSize,
@@ -1033,10 +1116,20 @@ class _SignalBubble extends StatelessWidget {
             avatar,
             const SizedBox(width: 8),
           ],
-          if (mine && time.isNotEmpty)
+          // Build 20: read count above the time, beside the bubble.
+          if (mine && ((groupTail && readCount > 0) || time.isNotEmpty))
             Padding(
               padding: const EdgeInsets.only(right: 6, bottom: 6),
-              child: Text(time, style: timeStyle),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (groupTail && readCount > 0)
+                    Text(context.l10n.roomReadCount(readCount),
+                        style: timeStyle),
+                  if (time.isNotEmpty) Text(time, style: timeStyle),
+                ],
+              ),
             ),
           Flexible(
               child: Column(
@@ -1057,10 +1150,20 @@ class _SignalBubble extends StatelessWidget {
               bubbleBody,
             ],
           )),
-          if (!mine && time.isNotEmpty)
+          // Build 20: read count above the time, beside the bubble.
+          if (!mine && ((groupTail && readCount > 0) || time.isNotEmpty))
             Padding(
               padding: const EdgeInsets.only(left: 6, bottom: 6),
-              child: Text(time, style: timeStyle),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (groupTail && readCount > 0)
+                    Text(context.l10n.roomReadCount(readCount),
+                        style: timeStyle),
+                  if (time.isNotEmpty) Text(time, style: timeStyle),
+                ],
+              ),
             ),
         ],
       ),
@@ -1115,7 +1218,8 @@ class _CallBubble extends StatelessWidget {
             onTap: sender == null
                 ? null
                 : () => showFriendProfile(context, sender),
-            child: LineAvatar(
+            // Build 20: room avatars match the lists (rounded square).
+            child: IdentityTile(
               glyph: peerName,
               color: dark ? HarborDark.harbor : HarborLight.harbor,
               size: LunoBubble.avatarSize,
@@ -1194,9 +1298,7 @@ class _CallBubble extends StatelessWidget {
                                 style: TextStyle(
                                     fontSize: 13,
                                     color: faint,
-                                    fontFeatures: const [
-                                      LunoType.tabular
-                                    ])),
+                                    fontFeatures: const [LunoType.tabular])),
                         ],
                       ),
                     ],
@@ -1237,9 +1339,8 @@ class _SecurityNoticeCard extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final m = entry;
     final meta = m['metadata'];
-    final data = meta is Map<String, dynamic>
-        ? meta
-        : const <String, dynamic>{};
+    final data =
+        meta is Map<String, dynamic> ? meta : const <String, dynamic>{};
     final device = data['device']?.toString() ?? '';
     final ip = data['ip']?.toString() ?? '';
     final location = data['location']?.toString() ?? '';
@@ -1250,19 +1351,11 @@ class _SecurityNoticeCard extends StatelessWidget {
     final sub = dark ? LunoDark.textSecondary : LunoLight.textSecondary;
     final ink = dark ? LunoDark.textPrimary : LunoLight.textPrimary;
     final avatar = groupLead
-        ? Container(
-            width: LunoBubble.avatarSize,
-            height: LunoBubble.avatarSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: dark ? HarborDark.harbor : HarborLight.harbor,
-            ),
-            child: Text(peerName.isEmpty ? '?' : peerName.characters.first,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700)),
+        // Build 20: room avatars match the lists (rounded square).
+        ? IdentityTile(
+            glyph: peerName,
+            color: dark ? HarborDark.harbor : HarborLight.harbor,
+            size: LunoBubble.avatarSize,
           )
         : const SizedBox(width: LunoBubble.continuedIndent);
     return Align(
@@ -1307,22 +1400,20 @@ class _SecurityNoticeCard extends StatelessWidget {
                         const Divider(height: 16),
                         if (device.isNotEmpty)
                           Text(context.l10n.roomLoginNotice(device),
-                              style:
-                                  TextStyle(fontSize: 13, color: ink)),
+                              style: TextStyle(fontSize: 13, color: ink)),
                         const SizedBox(height: 8),
-                        Text(
-                            context.l10n.roomSecurityAdvice,
+                        Text(context.l10n.roomSecurityAdvice,
                             style: TextStyle(fontSize: 13, color: ink)),
                         if (ip.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Text(context.l10n.roomIpAddr(ip),
-                              style:
-                                  TextStyle(fontSize: HarborType.small, color: sub)),
+                              style: TextStyle(
+                                  fontSize: HarborType.small, color: sub)),
                         ],
                         if (location.isNotEmpty)
                           Text(context.l10n.roomLocation(location),
-                              style:
-                                  TextStyle(fontSize: HarborType.small, color: sub)),
+                              style: TextStyle(
+                                  fontSize: HarborType.small, color: sub)),
                         if (sample)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
@@ -1337,8 +1428,8 @@ class _SecurityNoticeCard extends StatelessWidget {
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed: () => session
-                                  .revokeNoticeSession(sessionId),
+                              onPressed: () =>
+                                  session.revokeNoticeSession(sessionId),
                               child: Text(context.l10n.mvLogout),
                             ),
                           ),
@@ -1374,8 +1465,8 @@ class _SecurityNoticeCard extends StatelessWidget {
 }
 
 // F7: prefilled edit dialog for text messages.
-Future<void> _editMessageDialog(BuildContext context,
-    SessionController session, String msgId, String body) async {
+Future<void> _editMessageDialog(BuildContext context, SessionController session,
+    String msgId, String body) async {
   final controller = TextEditingController(text: body);
   await showDialog<void>(
     context: context,
@@ -1387,8 +1478,8 @@ Future<void> _editMessageDialog(BuildContext context,
           autofocus: true,
           maxLines: 4,
           onChanged: (_) => setDialog(() {}),
-          decoration:
-              InputDecoration(labelText: context.l10n.messageWord, isDense: true),
+          decoration: InputDecoration(
+              labelText: context.l10n.messageWord, isDense: true),
         ),
         actions: [
           TextButton(
@@ -1410,11 +1501,10 @@ Future<void> _editMessageDialog(BuildContext context,
 }
 
 // F7: forward target picker. Official rooms are read-only, like the web.
-Future<void> _forwardRoomSheet(BuildContext context,
-    SessionController session, String msgId) async {
-  final rooms = session.chats
-      .where((c) => c is Map && c['official'] != true)
-      .toList();
+Future<void> _forwardRoomSheet(
+    BuildContext context, SessionController session, String msgId) async {
+  final rooms =
+      session.chats.where((c) => c is Map && c['official'] != true).toList();
   await showModalBottomSheet<void>(
     context: context,
     builder: (sheet) => SafeArea(
@@ -1433,7 +1523,8 @@ Future<void> _forwardRoomSheet(BuildContext context,
                 for (final c in rooms)
                   ListTile(
                     dense: true,
-                    title: Text('${(c as Map)['title'] ?? context.l10n.mvChatFallback}'),
+                    title: Text(
+                        '${(c as Map)['title'] ?? context.l10n.mvChatFallback}'),
                     onTap: () {
                       Navigator.of(sheet).pop();
                       session.forwardMessage('${c['id']}', msgId);
@@ -1544,8 +1635,7 @@ Future<void> _shareContactSheet(BuildContext context) async {
                       subtitle: Text('@${f['handle'] ?? ''}'),
                       onTap: () {
                         Navigator.of(sheet).pop();
-                        session.sendContact(
-                            Map<String, dynamic>.from(f));
+                        session.sendContact(Map<String, dynamic>.from(f));
                       },
                     ),
               ],
@@ -1585,7 +1675,8 @@ Future<void> approvalsSheet(BuildContext context, String conversationId) async {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(context.l10n.apprTitle, style: Theme.of(sheet).textTheme.titleLarge),
+              Text(context.l10n.apprTitle,
+                  style: Theme.of(sheet).textTheme.titleLarge),
               const SizedBox(height: 8),
               Expanded(
                 child: session.proposals.isEmpty
@@ -1599,27 +1690,42 @@ Future<void> approvalsSheet(BuildContext context, String conversationId) async {
                                 child: Padding(
                                   padding: const EdgeInsets.all(12),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
-                                      Text('${p['author_name'] ?? ''} · ${p['state'] == 'approved' ? context.l10n.apprApprovedState : p['state'] == 'rejected' ? context.l10n.apprRejectedState : context.l10n.proposalPending}',
-                                          style: Theme.of(sheet).textTheme.bodySmall),
+                                      Text(
+                                          '${p['author_name'] ?? ''} · ${p['state'] == 'approved' ? context.l10n.apprApprovedState : p['state'] == 'rejected' ? context.l10n.apprRejectedState : context.l10n.proposalPending}',
+                                          style: Theme.of(sheet)
+                                              .textTheme
+                                              .bodySmall),
                                       const SizedBox(height: 4),
                                       Text('${p['body'] ?? ''}'),
-                                      if ('${p['state']}' == 'pending' && canDecide) ...[
+                                      if ('${p['state']}' == 'pending' &&
+                                          canDecide) ...[
                                         const SizedBox(height: 8),
                                         Row(
                                           children: [
                                             Expanded(
                                               child: FilledButton(
-                                                onPressed: () => session.decideProposal(conversationId, '${p['message_id']}', 'approved'),
-                                                child: Text(context.l10n.mvApprove),
+                                                onPressed: () =>
+                                                    session.decideProposal(
+                                                        conversationId,
+                                                        '${p['message_id']}',
+                                                        'approved'),
+                                                child: Text(
+                                                    context.l10n.mvApprove),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: OutlinedButton(
-                                                onPressed: () => session.decideProposal(conversationId, '${p['message_id']}', 'rejected'),
-                                                child: Text(context.l10n.apprReject),
+                                                onPressed: () =>
+                                                    session.decideProposal(
+                                                        conversationId,
+                                                        '${p['message_id']}',
+                                                        'rejected'),
+                                                child: Text(
+                                                    context.l10n.apprReject),
                                               ),
                                             ),
                                           ],
@@ -1654,48 +1760,48 @@ Future<void> _passwordDialog(BuildContext context) async {
   // No synchronous dispose: the pop transition still touches these while
   // the session notify rebuilds. Unmount unregisters; GC collects.
   await showDialog<void>(
-      context: context,
-      builder: (dialog) => ValueListenableBuilder<bool>(
-        valueListenable: ready,
-        builder: (dialog, ok, _) => AlertDialog(
-          title: Text(context.l10n.mvRecoverReset),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: current,
-                obscureText: true,
-                decoration: InputDecoration(
-                    labelText: context.l10n.mvPwCurrent, isDense: true),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: fresh,
-                obscureText: true,
-                decoration: InputDecoration(
-                    labelText: context.l10n.roomNewPwHint, isDense: true),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.of(dialog).pop(),
-                child: Text(context.l10n.mvCancel)),
-            FilledButton(
-              // Call first, pop second: the sync notify lands while the
-              // dialog is active (controllers alive), matching _qrDialog.
-              onPressed: ok
-                  ? () {
-                      session.changePassword(current.text, fresh.text);
-                      Navigator.of(dialog).pop();
-                    }
-                  : null,
-              child: Text(context.l10n.changeWord),
+    context: context,
+    builder: (dialog) => ValueListenableBuilder<bool>(
+      valueListenable: ready,
+      builder: (dialog, ok, _) => AlertDialog(
+        title: Text(context.l10n.mvRecoverReset),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: current,
+              obscureText: true,
+              decoration: InputDecoration(
+                  labelText: context.l10n.mvPwCurrent, isDense: true),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: fresh,
+              obscureText: true,
+              decoration: InputDecoration(
+                  labelText: context.l10n.roomNewPwHint, isDense: true),
             ),
           ],
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialog).pop(),
+              child: Text(context.l10n.mvCancel)),
+          FilledButton(
+            // Call first, pop second: the sync notify lands while the
+            // dialog is active (controllers alive), matching _qrDialog.
+            onPressed: ok
+                ? () {
+                    session.changePassword(current.text, fresh.text);
+                    Navigator.of(dialog).pop();
+                  }
+                : null,
+            child: Text(context.l10n.changeWord),
+          ),
+        ],
       ),
-    );
+    ),
+  );
 }
 
 class _StickerDeck extends StatefulWidget {
@@ -1867,7 +1973,11 @@ Future<void> _recordVoice(BuildContext context) {
   return withPermissions(
     context,
     permissions: [
-      (Permission.microphone, context.l10n.permMicTitle, context.l10n.permMicUseVoiceMsg),
+      (
+        Permission.microphone,
+        context.l10n.permMicTitle,
+        context.l10n.permMicUseVoiceMsg
+      ),
     ],
     action: () async {
       if (!context.mounted) return;
@@ -1881,14 +1991,19 @@ Future<void> _recordVoice(BuildContext context) {
   );
 }
 
-Future<void> _sendImageWithEffect(BuildContext context, ImageSource source) async {
+Future<void> _sendImageWithEffect(
+    BuildContext context, ImageSource source) async {
   final session = SessionScope.of(context, listen: false);
   // 시스템 사진 선택기(갤러리)는 권한이 필요 없으므로 카메라 경로만 가드한다.
   if (source == ImageSource.camera) {
     final ok = await withPermissions(
       context,
       permissions: [
-        (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUsePhoto),
+        (
+          Permission.camera,
+          context.l10n.permCamTitle,
+          context.l10n.permCamUsePhoto
+        ),
       ],
     );
     if (!ok || !context.mounted) return;
@@ -1908,7 +2023,11 @@ Future<void> _captureWithInAppCamera(BuildContext context) async {
   final ok = await withPermissions(
     context,
     permissions: [
-      (Permission.camera, context.l10n.permCamTitle, context.l10n.permCamUsePhotoVideo),
+      (
+        Permission.camera,
+        context.l10n.permCamTitle,
+        context.l10n.permCamUsePhotoVideo
+      ),
     ],
   );
   if (!ok || !context.mounted) return;
@@ -1993,9 +2112,17 @@ class _Composer extends StatelessWidget {
                 }
               },
               itemBuilder: (_) => [
-                PopupMenuItem(value: 'file', child: _MenuRow(Icons.attach_file, context.l10n.fileWord)),
-                PopupMenuItem(value: 'location', child: _MenuRow(Icons.place_outlined, context.l10n.mvLocationShare)),
-                PopupMenuItem(value: 'contact', child: _MenuRow(Icons.person_outline, context.l10n.mvShareContact)),
+                PopupMenuItem(
+                    value: 'file',
+                    child: _MenuRow(Icons.attach_file, context.l10n.fileWord)),
+                PopupMenuItem(
+                    value: 'location',
+                    child: _MenuRow(
+                        Icons.place_outlined, context.l10n.mvLocationShare)),
+                PopupMenuItem(
+                    value: 'contact',
+                    child: _MenuRow(
+                        Icons.person_outline, context.l10n.mvShareContact)),
               ],
             ),
             IconButton(
@@ -2017,7 +2144,8 @@ class _Composer extends StatelessWidget {
                     hintMaxLines: 1,
                     isDense: true,
                     filled: true,
-                    fillColor: dark ? HarborDark.chart : const Color(0xFFF1F3F4),
+                    fillColor:
+                        dark ? HarborDark.chart : const Color(0xFFF1F3F4),
                     contentPadding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(HarborRadius.sheet),
@@ -2033,9 +2161,10 @@ class _Composer extends StatelessWidget {
                     ),
                     suffixIcon: IconButton(
                       tooltip: context.l10n.mvSticker,
-                      icon: Icon(Icons.sentiment_satisfied_alt_outlined, color: idle),
-                      onPressed: () =>
-                          SessionScope.of(context, listen: false).toggleStickerPicker(),
+                      icon: Icon(Icons.sentiment_satisfied_alt_outlined,
+                          color: idle),
+                      onPressed: () => SessionScope.of(context, listen: false)
+                          .toggleStickerPicker(),
                     ),
                   ),
                   onSubmitted: (_) => onSend(),

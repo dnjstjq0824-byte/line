@@ -318,7 +318,7 @@ class _ProfileRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         child: Row(
           children: [
-            LineAvatar(
+            IdentityTile(
               glyph: name,
               color: dark ? HarborDark.harbor : LunoBrand.deep,
               size: 48,

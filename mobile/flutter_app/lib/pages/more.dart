@@ -41,7 +41,7 @@ class MorePage extends StatelessWidget {
                   padding: const EdgeInsets.all(14),
                   child: Row(
                     children: [
-                      LineAvatar(
+                      IdentityTile(
                         glyph: name,
                         color: dark ? HarborDark.harbor : HarborLight.harbor,
                         size: 48,

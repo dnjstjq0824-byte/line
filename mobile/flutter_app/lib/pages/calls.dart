@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../widgets/no_pull_refresh.dart';
+import '../widgets/harbor_empty.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -21,7 +22,6 @@ class CallsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final groups = groupCalls(session.callHistory);
     return NoPullRefresh(
       onRefresh: session.reload,
@@ -31,23 +31,10 @@ class CallsPage extends StatelessWidget {
             children: [
               Masthead(title: context.l10n.mvCall),
               if (groups.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 64),
-                  child: Column(
-                    children: [
-                      Icon(Icons.phone_disabled_outlined,
-                          size: 48,
-                          color: dark ? HarborDark.channel : HarborLight.channel),
-                      const SizedBox(height: 12),
-                      Text(context.l10n.callsEmpty,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Text(context.l10n.callsStartHint,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                  ),
+                HarborEmpty(
+                  title: context.l10n.callsEmpty,
+                  hint: context.l10n.callsStartHint,
+                  icon: Icons.phone_disabled_outlined,
                 )
               else
                 for (var i = 0; i < groups.length; i++) ...[

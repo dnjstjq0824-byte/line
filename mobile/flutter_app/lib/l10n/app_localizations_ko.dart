@@ -1387,9 +1387,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get walletProtect => '간편 송금 & 결제 보호';
 
   @override
-  String get walletFds => '24시간 이상거래 탐지 FDS 및 종단간 암호화 적용';
-
-  @override
   String get walletRecent => '최근 기록';
 
   @override

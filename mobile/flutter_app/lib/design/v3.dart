@@ -304,45 +304,6 @@ abstract final class LunoBrand {
   static const deep = lunoDeepBlue;
 }
 
-/// Circular identity avatar in the reference style (people, profiles).
-class LineAvatar extends StatelessWidget {
-  final String glyph;
-  final Color color;
-  final double size;
-  /// Build 16: the person's real photo when they set one.
-  final ImageProvider? photo;
-  const LineAvatar({super.key, required this.glyph, required this.color, this.size = 48, this.photo});
-
-  @override
-  Widget build(BuildContext context) {
-    final ch = glyph.isEmpty ? '?' : glyph.characters.first;
-    final initials = Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Text(ch,
-          style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: size * 0.4)),
-    );
-    if (photo == null) return initials;
-    return ClipOval(
-      child: Image(
-        image: photo!,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => initials,
-        frameBuilder: (_, child, frame, sync) =>
-            sync || frame != null ? child : initials,
-      ),
-    );
-  }
-}
-
 /// Orbit Crew badge: a crew member's face plus name.
 /// The crew faces are canonical product data (lunoOrbitCrewStickers in
 /// legacy_tokens.dart, pinned by messenger_test.dart) — this renders the

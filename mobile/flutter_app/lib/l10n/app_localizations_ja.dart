@@ -1387,9 +1387,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get walletProtect => 'かんたん送金＆決済保護';
 
   @override
-  String get walletFds => '24時間の不正取引検知FDSとエンドツーエンド暗号化を適用';
-
-  @override
   String get walletRecent => '最近の記録';
 
   @override

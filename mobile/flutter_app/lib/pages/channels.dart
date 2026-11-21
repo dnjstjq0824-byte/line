@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/no_pull_refresh.dart';
+import '../widgets/harbor_empty.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -22,7 +23,10 @@ class ChannelsPage extends StatelessWidget {
             children: [
               Masthead(
                 title: context.l10n.officialChannels,
-                subtitle: context.l10n.oaDirectory(session.officialAccounts.length),
+                subtitle: session.officialAccounts.isEmpty
+                    ? null
+                    : context.l10n
+                        .oaDirectory(session.officialAccounts.length),
               ),
               for (final oa in session.officialAccounts)
                 Card(
@@ -44,11 +48,9 @@ class ChannelsPage extends StatelessWidget {
                   ),
                 ),
               if (session.officialAccounts.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 64),
-                  child: Text(context.l10n.channelsEmpty,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium),
+                HarborEmpty(
+                  title: context.l10n.channelsEmpty,
+                  icon: Icons.verified_outlined,
                 ),
             ],
           ),

@@ -147,7 +147,7 @@ void main() {
       ));
       await tester.pump();
       expect(find.byKey(const Key('friend-cover')), findsOneWidget);
-      final avatar = tester.widget<LineAvatar>(find.byKey(const Key('friend-avatar')));
+      final avatar = tester.widget<IdentityTile>(find.byKey(const Key('friend-avatar')));
       expect(avatar.photo, isNotNull);
       expect(find.text('Alice'), findsOneWidget);
       expect(find.text('hello'), findsOneWidget);

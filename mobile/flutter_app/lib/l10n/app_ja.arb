@@ -447,7 +447,6 @@
   "walletTopupNumber": "チャージ金額を数字で入力してください。",
   "walletTopupBtn": "＋チャージ",
   "walletProtect": "かんたん送金＆決済保護",
-  "walletFds": "24時間の不正取引検知FDSとエンドツーエンド暗号化を適用",
   "walletRecent": "最近の記録",
   "walletTxWord": "取引",
   "errTransient": "一時的なエラーです。もう一度お試しください。",
