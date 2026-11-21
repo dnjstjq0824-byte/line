@@ -7927,12 +7927,12 @@ async function downloadPage(env, url) {
 const LATEST_ANDROID_BUILD = {
   platform: 'android',
   version: '2.0.0',
-  build: 19,
+  build: 20,
   package: 'com.bookingnetwork.messenger.global_messenger',
   assets: [
-    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44084234, sha256: '4D7784CFAA6F5B68B99A747909CDA1A02DB5C71D67D068EB756978C2A16D451C', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build19/luno-messenger-arm64.apk' },
-    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35087998, sha256: '8285AA0E45FCAF5284C98B2FDB48EE6C6652C567BEB23504D224F4A79C317165', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build19/luno-messenger-arm32.apk' },
-    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50605058, sha256: '73121CDDBA3C6E94528A15BDECFE51B470A2F6B3E8C37690E337DC73463804A6', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build19/luno-messenger-x86_64.apk' },
+    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44084350, sha256: 'FF5B092CCBAFB6FFE41F90C3E2E27BD0EDF61CB7BDD4DB1062B3622E1FEF960E', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build20/luno-messenger-arm64.apk' },
+    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35088114, sha256: '0C55F3EFDEC71A578ACF1A862F03CF339A737881CC44BB71DCDE4CECC215EB12', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build20/luno-messenger-arm32.apk' },
+    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50539638, sha256: 'D4346F0DA4474A25F6560572AAEC56E77D1031DBE06912E4EDD0BF2E71E347DE', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build20/luno-messenger-x86_64.apk' },
   ],
 };
 
