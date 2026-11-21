@@ -40,6 +40,7 @@ const EPHEMERAL = new Set([
   'sttProviderCalls', // F14: per-isolate provider-call probe for tests
   'ttsProviderCalls', // A14: per-isolate provider-call probe for tests
   'f22Requests', 'f22Errors', // F22: per-isolate request/error counters (reset on evict, /metrics-labeled)
+  'storeOrders', // 6-8: write-only purchase counter for /metrics (like f22 counters, not domain state)
 ]);
 const CACHE = new Set([
   'callSessions', // build 16: D1 write-through (luno_call_sessions); every /calls/:id request re-reads it
@@ -54,17 +55,24 @@ const CACHE = new Set([
   'userConsents', // F24: D1 write-through consent cache (luno_consents; seeds are memory bootstrap like seed users)
   'botPresenceCache', // PC agent: write-throttle for runner presence; D1 (luno_bot_config presence:<bot>) is what status reads
   'seenCache', // S1: write-throttle for the claim heartbeat; D1 (luno_bot_config seen:<bot>) is what the cron reads
+  // 6-8: D1-primary with a no-DB map fallback (verified read+write paths)
+  'passkeyCreds', // luno_passkey_credentials
+  'adminReports', // reports
+  'auditLogs', // luno_audit (live writes all via persistAudit)
+  'featureFlags', // luno_feature_flags
+  'officialAccounts', 'followedOfficial', // luno_official_accounts, luno_official_follows
+  'chatMeta', // 6-8: migrated to luno_chat_meta (was memory-only)
+  // 6-8: D1-primary behind DURABLE_BUSINESS=true (wrangler.jsonc; F17 tests)
+  'richMenus', // luno_rich_menus
+  'oaBotRules', // luno_oa_bot_rules
+  'partnerOrgs', 'partnerAccounts', 'partnerTickets', 'partnerCampaigns', // luno_partner_*
+  'devOrgs', 'devApps', 'devWebhooks', 'devMiniApps', // luno_dev_*
+  'creatorProfiles', 'creatorPacks', 'creatorItems', // luno_creator_* + luno_owned_resources
+  'adsAdvertisers', 'adsCampaigns', 'adsGroups', // luno_ads_* + luno_owned_resources
 ]);
-const UNBACKED = new Set([
-  'passkeyCreds', 'storeOrders',
-  'partnerOrgs', 'partnerAccounts',
-  'partnerTickets', 'partnerCampaigns', 'oaBotRules', 'devOrgs', 'devApps',
-  'devWebhooks', 'devMiniApps', 'creatorProfiles', 'creatorPacks', 'creatorItems',
-  'adsAdvertisers', 'adsCampaigns', 'adsGroups', 'chatMeta',
-  'officialAccounts', 'followedOfficial', 'richMenus', 'creatorSettlements',
-  'auditLogs', 'adminReports',
-  'featureFlags',
-]);
+// 6-8: empty. Every module store is now static, ephemeral or D1-backed;
+// the ratchet below fails on any regression to memory-only durable state.
+const UNBACKED = new Set([]);
 
 function moduleStores() {
   const names = new Set();
@@ -84,7 +92,7 @@ test('§5.1: every module-level store is classified (no silent additions)', () =
 });
 
 test('§5.1: the unbacked (memory-only) set may only shrink', () => {
-  assert.ok(UNBACKED.size <= 39, `unbacked stores: ${UNBACKED.size} (ratchet: 39, shrink only)`);
+  assert.ok(UNBACKED.size <= 0, `unbacked stores: ${UNBACKED.size} (ratchet: 0 since 6-8, shrink only)`);
   for (const core of ['users', 'sessions', 'friendships', 'conversations', 'messages', 'blocks']) {
     if (core === 'blocks') continue; // blocks live in D1 only; no module store exists
     assert.ok(CACHE.has(core), `${core} must stay D1-backed`);

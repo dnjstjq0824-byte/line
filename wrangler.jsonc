@@ -53,6 +53,10 @@
     // worker's runtime schema (ensureSchema), so no hand-applied migration
     // is needed first. Pinned by scripts/direct_chat.test.mjs.
     "DURABLE_CONVERSATIONS": "true",
+    // 6-8: business consoles (partner/developer/creator/ads, rich menus, bot
+    // rules) persist in D1 instead of per-isolate memory. Tables are runtime
+    // schema too. Covered by scripts/f17_business.test.mjs.
+    "DURABLE_BUSINESS": "true",
     // PC agent (remote work): master switch for bot routing. Only rooms and
     // users on the admin allowlist can create bot work (L-17), and the
     // killswitch (PUT admin/llm/kill) stops it at once.

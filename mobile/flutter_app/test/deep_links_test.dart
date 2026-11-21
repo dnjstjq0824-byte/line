@@ -15,7 +15,7 @@ import 'package:luno_messenger/router.dart';
 import 'package:luno_messenger/state/session.dart';
 import 'package:luno_messenger/util/deep_links.dart';
 
-const host = 'luno-messenger.dnjstjqppk.workers.dev';
+const host = 'lunotalk.com';
 
 class FakeHttp extends http.BaseClient {
   Future<http.Response> Function(http.BaseRequest request, String body)? handler;

@@ -191,6 +191,10 @@ const LUNO_SCHEMA = [
     PRIMARY KEY (conversation_id, user_id))`,
   // hydrateCursors filters by user_id alone, which the composite primary key cannot serve.
   `CREATE INDEX IF NOT EXISTS idx_luno_read_cursors_user ON luno_read_cursors(user_id)`,
+  `CREATE TABLE IF NOT EXISTS luno_chat_meta (
+    conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, muted INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+    PRIMARY KEY (conversation_id, user_id))`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_chat_meta_user ON luno_chat_meta(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_luno_sessions_user_active ON luno_sessions(user_id, created_at) WHERE revoked_at IS NULL`,
   `CREATE TABLE IF NOT EXISTS luno_audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, target TEXT, detail TEXT, created_at TEXT NOT NULL)`,
@@ -1833,6 +1837,7 @@ async function deleteAccountData(userId) {
     ['DELETE FROM luno_attachments WHERE owner_id = ?', userId],
     ['DELETE FROM attachments WHERE uploader_id = ?', userId],
     ['DELETE FROM luno_read_cursors WHERE user_id = ?', userId],
+    ['DELETE FROM luno_chat_meta WHERE user_id = ?', userId],
     ['DELETE FROM luno_ws_tickets WHERE user_id = ?', userId],
     ['DELETE FROM conversation_notes WHERE author_id = ?', userId],
     ['DELETE FROM event_rsvps WHERE user_id = ?', userId],
@@ -2087,6 +2092,7 @@ async function hydrateUserConversations(userId) {
   // One SELECT, no UNION: D1 rejects compound SELECTs of more than 5 terms
   // ("too many terms in compound SELECT"); multi-row VALUES is not limited.
   await hydrateCursors(userId);
+  await hydrateChatMeta(userId);
   const cids = Array.from(conversations.values()).filter(c => c.members.includes(userId)).map(c => c.id);
   for (let i = 0; i < cids.length; i += LIST_HYDRATE_CHUNK) {
     const chunk = cids.slice(i, i + LIST_HYDRATE_CHUNK);
@@ -2111,6 +2117,28 @@ async function persistCursor(cid, userId, seq) {
   await ensureSchema();
   await db.prepare('INSERT INTO luno_read_cursors (conversation_id, user_id, sequence, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(conversation_id, user_id) DO UPDATE SET sequence = MAX(sequence, excluded.sequence), updated_at = excluded.updated_at')
     .bind(cid, userId, seq, now()).run();
+}
+// 6-8: chat list flags (pin/mute/hide) survive isolates. The memory map is
+// the read cache; D1 is the source of truth. Hydration only fills misses so
+// it never clobbers a flag this isolate just set; roomMuted re-checks D1
+// when memory says unmuted, like blockState.
+async function persistChatMeta(cid, userId) {
+  const db = dbOf();
+  if (!db || !cid || !userId) return;
+  await ensureSchema();
+  const m = cMeta(cid, userId);
+  await db.prepare('INSERT INTO luno_chat_meta (conversation_id, user_id, pinned, muted, hidden, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(conversation_id, user_id) DO UPDATE SET pinned = excluded.pinned, muted = excluded.muted, hidden = excluded.hidden, updated_at = excluded.updated_at')
+    .bind(cid, userId, m.pinned ? 1 : 0, m.muted ? 1 : 0, m.hidden ? 1 : 0, now()).run();
+}
+async function hydrateChatMeta(userId) {
+  const db = dbOf();
+  if (!db || !userId) return;
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT conversation_id, pinned, muted, hidden FROM luno_chat_meta WHERE user_id = ?').bind(userId).all();
+  for (const r of results || []) {
+    const key = `${r.conversation_id}:${userId}`;
+    if (!chatMeta.has(key)) chatMeta.set(key, { pinned: Number(r.pinned) === 1, muted: Number(r.muted) === 1, hidden: Number(r.hidden) === 1 });
+  }
 }
 async function persistMessageUpdate(msg) {
   const db = dbOf();
@@ -2847,7 +2875,7 @@ function json(data, status = 200, headers = {}) {
 // the current production host. CORS and every absolute self-link derive
 // from this one value (no other host literals in this file). STANDALONE_HOSTS
 // stays explicit opt-in per the hostname-gate security contract.
-const DEFAULT_PUBLIC_BASE_URL = 'https://luno-messenger.dnjstjqppk.workers.dev';
+const DEFAULT_PUBLIC_BASE_URL = 'https://lunotalk.com';
 function publicBaseUrl(env) {
   const src = env || (typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null);
   const v = String((src && src.PUBLIC_BASE_URL) || DEFAULT_PUBLIC_BASE_URL).trim().replace(/\/+$/, '');
@@ -3774,8 +3802,10 @@ async function roomMuted(cid, uid) {
   const db = dbOf();
   if (!db) return false;
   await ensureSchema();
-  const row = await db.prepare('SELECT is_muted FROM conversation_members WHERE conversation_id = ? AND user_id = ?').bind(cid, uid).first().catch(() => null);
-  return !!row?.is_muted;
+  // 6-8: the legacy conversation_members table is never written; the live
+  // flags are in luno_chat_meta.
+  const row = await db.prepare('SELECT muted FROM luno_chat_meta WHERE conversation_id = ? AND user_id = ?').bind(cid, uid).first().catch(() => null);
+  return Number(row?.muted) === 1;
 }
 async function notify(env, userIds, event) {
   const targets = [];
@@ -4260,7 +4290,7 @@ const groupCallRooms = new Map();
 const GROUP_MAX_MEMBERS = 500;
 const GROUP_CALL_MAX_PARTICIPANTS = 8;
 const richMenus = new Map();
-const creatorSettlements = new Map();
+// 6-8: removed dead creatorSettlements (declared, never read or written).
 const REACTIONS = ['❤️', '😍', '😂', '😮', '😢', '👍'];
 // Smart-channel slot: served from D1 luno_notices (no hardcoded content).
 
@@ -5264,7 +5294,7 @@ async function followedMap(userId) {
     }
     if (method === 'DELETE') {
       const cid = mine.get(acct.id);
-      if (cid) cMeta(cid, myId).hidden = true;
+      if (cid) { cMeta(cid, myId).hidden = true; await persistChatMeta(cid, myId); }
       mine.delete(acct.id);
       if (dbOf()) {
         await ensureSchema();
@@ -5323,7 +5353,7 @@ async function followedMap(userId) {
         if (ids.length !== 1) return bad('1:1 대화는 상대가 한 명이어야 합니다');
         await hydrateDurableConversations(myId);
         const existing = findDirect(myId, ids[0]);
-        if (existing) { cMeta(existing.id, myId).hidden = false; return json(chatSummary(existing, myId)); }
+        if (existing) { cMeta(existing.id, myId).hidden = false; await persistChatMeta(existing.id, myId); return json(chatSummary(existing, myId)); }
         const isOA = officialAccounts.has(ids[0]);
         const oa = isOA ? officialAccounts.get(ids[0]) : null;
         const targetUser = !isOA ? usersById.get(ids[0]) : null;
@@ -5357,6 +5387,7 @@ async function followedMap(userId) {
     if (conv.members.length >= GROUP_MAX_MEMBERS) return bad(`그룹은 최대 ${GROUP_MAX_MEMBERS}명까지 가능합니다`);
     conv.members.push(myId);
     cMeta(conv.id, myId).hidden = false;
+    await persistChatMeta(conv.id, myId);
     await persistDurableConversation(conv);
     await systemMessage(conv.id, `${me.display_name}님이 초대 링크로 참여했습니다.`);
     sendTo(conv.members, { type: 'conversation.updated', conversation_id: conv.id });
@@ -5405,6 +5436,7 @@ async function followedMap(userId) {
     if (method === 'DELETE') {
       if (conv.kind === 'group') return await leaveConversation(conv, myId, me);
       cMeta(conv.id, myId).hidden = true;
+      await persistChatMeta(conv.id, myId);
       const hs = hiddenMsgs.get(myId) || new Set();
       (messages.get(conv.id) || []).forEach(x => hs.add(x.id));
       hiddenMsgs.set(myId, hs);
@@ -5413,8 +5445,10 @@ async function followedMap(userId) {
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/meta$/)) && method === 'PATCH') {
     const b = await readJson(request);
-    const meta = cMeta(resolveConversationId(m[1], myId), myId);
+    const cid = resolveConversationId(m[1], myId);
+    const meta = cMeta(cid, myId);
     for (const k of ['pinned', 'muted', 'hidden']) if (typeof b[k] === 'boolean') meta[k] = b[k];
+    await persistChatMeta(cid, myId);
     return json({ status: 'updated', meta });
   }
   if ((m = p.match(/^conversations\/([\w-]+)\/avatar$/)) && method === 'GET') {
@@ -7800,6 +7834,7 @@ async function leaveConversation(conv, myId, me) {
   conv.members = conv.members.filter(x => x !== myId);
   conv.admins = (conv.admins || []).filter(x => x !== myId);
   cMeta(conv.id, myId).hidden = true;
+  await persistChatMeta(conv.id, myId);
   if (!conv.members.length) {
     if (mediaBucketOf()) await mediaBucketOf().delete(`conv/${conv.id}/avatar`).catch(() => {});
     await persistDurableConversation(conv);

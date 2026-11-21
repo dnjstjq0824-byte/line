@@ -49,6 +49,7 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https"/>
                 <data android:host="luno-messenger.dnjstjqppk.workers.dev"/>
+                <data android:host="lunotalk.com"/>
                 <data android:pathPattern="/invite/..*"/>
                 <data android:path="/chats"/>
                 <data android:pathPattern="/chats/..*"/>

@@ -39,7 +39,8 @@ test('F21: manifest declares verified links, fallback scheme and shares', async 
   const manifest = await readFile(
     new URL('../mobile/flutter_app/android/app/src/main/AndroidManifest.xml', import.meta.url), 'utf8');
   assert.ok(manifest.includes('android:autoVerify="true"'), 'app links verified');
-  assert.ok(manifest.includes('luno-messenger.dnjstjqppk.workers.dev'), 'prod host');
+  assert.ok(manifest.includes('luno-messenger.dnjstjqppk.workers.dev'), 'legacy host kept for old links');
+  assert.ok(manifest.includes('lunotalk.com'), '6-6: new prod host');
   assert.ok(manifest.includes('/invite/..*') && manifest.includes('/chats/..*'), 'link paths');
   assert.ok(manifest.includes('android:scheme="luno"'), 'custom scheme fallback');
   assert.ok(manifest.includes('android.intent.action.SEND'), 'share targets');

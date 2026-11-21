@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { F24_CONSENT } from './test_helpers.mjs';
 
 const require = createRequire(import.meta.url);
-const HOST = 'luno-messenger.dnjstjqppk.workers.dev';
+const HOST = 'lunotalk.com';
 const BASE = `https://${HOST}`;
 const TOKEN = '__LUNO_PUBLIC_BASE__';
 
@@ -45,7 +45,7 @@ async function registerLogin(email, env = {}) {
 
 test('F27: the production host lives in exactly one worker constant', () => {
   const src = readFileSync(new URL('./cf_worker.js', import.meta.url), 'utf8');
-  assert.equal((src.match(/luno-messenger\.dnjstjqppk\.workers\.dev/g) || []).length, 1);
+  assert.equal((src.match(/https:\/\/lunotalk\.com/g) || []).length, 1);
   assert.ok(src.includes(`const DEFAULT_PUBLIC_BASE_URL = '${BASE}'`));
   assert.ok(src.includes('PUBLIC_BASE_URL'), 'env override read');
 });
