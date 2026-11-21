@@ -59,7 +59,7 @@ const PASS = 'CapturePass#2026!';
   const r = await fetch(`http://127.0.0.1:${API_PORT}/api/v1/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: EMAIL, password: PASS, display_name: 'Capture' }),
+    body: JSON.stringify({ email: EMAIL, password: PASS, display_name: 'Capture', birthdate: '1990-01-01', consent: { terms: '2026-11-15.1', privacy: '2026-11-15.1' } }),
   });
   if (!r.ok) throw new Error('register failed: ' + r.status);
   console.log('capture account registered');

@@ -284,14 +284,12 @@ class _ProfileAvatar extends StatelessWidget {
     final session = SessionScope.of(context);
     final img = profilePhotoImage(session.api.baseUrl, session.selfAvatarUrl,
         token: session.api.token);
-    if (img == null) {
-      return LineAvatar(
-        glyph: name,
-        color: dark ? HarborDark.harbor : LunoBrand.deep,
-        size: 88,
-      );
-    }
-    return CircleAvatar(backgroundImage: img, radius: 44);
+    return IdentityTile(
+      glyph: name,
+      color: dark ? HarborDark.harbor : LunoBrand.deep,
+      size: 88,
+      photo: img,
+    );
   }
 }
 

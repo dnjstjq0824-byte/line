@@ -83,7 +83,7 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
                 children: [
-                  LineAvatar(
+                  IdentityTile(
                     glyph: name,
                     color: dark ? HarborDark.harbor : HarborLight.harbor,
                     size: 56,
@@ -171,8 +171,9 @@ class _HomePageState extends State<HomePage> {
             leading: Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(
-                  color: LunoBrand.primary, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                  color: LunoBrand.primary,
+                  borderRadius: BorderRadius.circular(HarborRadius.avatar)),
               child: const Icon(Icons.verified_outlined, color: Colors.white),
             ),
             title: Text(context.l10n.mvOfficialAccount,
@@ -243,7 +244,7 @@ class _HomePageState extends State<HomePage> {
             for (final u in session.friends)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: LineAvatar(
+                leading: IdentityTile(
                   glyph: '${u['display_name'] ?? 'U'}',
                   color: session.colorFromHex(u['peer_color']?.toString(),
                       dark ? HarborDark.harbor : HarborLight.harbor),

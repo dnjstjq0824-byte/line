@@ -447,7 +447,6 @@
   "walletTopupNumber": "Enter the top-up amount as a number.",
   "walletTopupBtn": "+ Top up",
   "walletProtect": "Easy transfers & payment protection",
-  "walletFds": "24-hour fraud detection (FDS) and end-to-end encryption",
   "walletRecent": "Recent",
   "walletTxWord": "Transactions",
   "errTransient": "Temporary error. Please try again.",

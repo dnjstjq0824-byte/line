@@ -1403,10 +1403,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get walletProtect => 'Easy transfers & payment protection';
 
   @override
-  String get walletFds =>
-      '24-hour fraud detection (FDS) and end-to-end encryption';
-
-  @override
   String get walletRecent => 'Recent';
 
   @override

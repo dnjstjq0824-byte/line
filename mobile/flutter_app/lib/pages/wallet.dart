@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../widgets/no_pull_refresh.dart';
+import '../widgets/harbor_empty.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -196,11 +197,10 @@ class _WalletPageState extends State<WalletPage> {
                   children: [
                     Text(context.l10n.walletRecent, style: sectionTitle),
                     if (session.walletHistory.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        child: Text(context.l10n.walletNoTx,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall),
+                      HarborEmpty(
+                        title: context.l10n.walletNoTx,
+                        icon: Icons.receipt_long_outlined,
+                        dense: true,
                       ),
                     for (var i = 0; i < session.walletHistory.length; i++) ...[
                       if (i > 0) Divider(height: 1, color: line),
@@ -233,7 +233,8 @@ class _WalletPageState extends State<WalletPage> {
                   Icon(Icons.verified_user_outlined, size: 18, color: accent),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('${context.l10n.walletProtect} · ${context.l10n.walletFds}',
+                    // P4: the FDS/E2EE claim is removed (neither exists yet).
+                    child: Text(context.l10n.walletProtect,
                         style: Theme.of(context).textTheme.bodySmall),
                   ),
                 ],

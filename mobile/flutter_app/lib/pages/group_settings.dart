@@ -66,17 +66,12 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
         children: [
           Row(
             children: [
-              photo == null
-                  ? CircleAvatar(
-                      radius: 28,
-                      backgroundColor:
-                          dark ? HarborDark.harbor : LunoBrand.deep,
-                      child: Text(title.isEmpty ? '?' : title[0],
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: HarborType.display)),
-                    )
-                  : CircleAvatar(radius: 28, backgroundImage: photo),
+              IdentityTile(
+                glyph: title,
+                color: dark ? HarborDark.harbor : LunoBrand.deep,
+                size: 56,
+                photo: photo,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -235,17 +230,11 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: img == null
-          ? CircleAvatar(
-              backgroundColor:
-                  dark ? HarborDark.harbor : LunoBrand.deep,
-              child: Text(
-                  ('${m['display_name'] ?? '?'}').isEmpty
-                      ? '?'
-                      : '${m['display_name']} '[0],
-                  style: const TextStyle(color: Colors.white)),
-            )
-          : CircleAvatar(backgroundImage: img),
+      leading: IdentityTile(
+        glyph: '${m['display_name'] ?? ''}',
+        color: dark ? HarborDark.harbor : LunoBrand.deep,
+        photo: img,
+      ),
       title: Text('${m['display_name'] ?? ''}'),
       subtitle: Text(_roleLabel(role)),
       trailing: canAct

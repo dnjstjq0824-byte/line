@@ -401,8 +401,8 @@ class _GateForm extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(register ? context.l10n.createAccount : context.l10n.signInBtn, style: text.headlineSmall),
-            const SizedBox(height: 4),
-            Text('Connect Beyond Borders', style: text.bodySmall),
+            // No slogan here: the page wordmark (phone) and side panel
+            // (wide) already carry it; a third copy duplicated the line.
             const SizedBox(height: 16),
             TextField(controller: email, decoration: InputDecoration(labelText: context.l10n.verifyEmailLabel)),
             if (register)

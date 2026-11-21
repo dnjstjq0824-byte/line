@@ -392,9 +392,20 @@ class _CompactDesk extends StatelessWidget {
   Widget build(BuildContext context) => _PhoneDesk(compact: true, child: child);
 }
 
-/// A route that renders its own header row (back button included).
+/// A route that renders its own header row (back button included): the
+/// phone shell must not add a second AppBar above it.
 bool _drawsOwnHeader(String location) =>
-    RegExp(r'^/chats/[^/]+$').hasMatch(location);
+    RegExp(r'^/chats/[^/]+$').hasMatch(location) ||
+    const {
+      '/search',
+      '/privacy',
+      '/support',
+      '/reports',
+      '/contacts/find',
+      '/profile',
+    }.contains(location) ||
+    RegExp(r'^/(calls/[^/]+|invite/[^/]+|chats/[^/]+/settings)$')
+        .hasMatch(location);
 
 class _PhoneDesk extends StatelessWidget {
   final Widget child;

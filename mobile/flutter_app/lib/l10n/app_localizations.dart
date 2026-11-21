@@ -2784,12 +2784,6 @@ abstract class AppLocalizations {
   /// **'간편 송금 & 결제 보호'**
   String get walletProtect;
 
-  /// walletFds (F20)
-  ///
-  /// In ko, this message translates to:
-  /// **'24시간 이상거래 탐지 FDS 및 종단간 암호화 적용'**
-  String get walletFds;
-
   /// walletRecent (F20)
   ///
   /// In ko, this message translates to:

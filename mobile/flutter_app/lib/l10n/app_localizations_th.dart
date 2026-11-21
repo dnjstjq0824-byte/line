@@ -1396,9 +1396,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get walletProtect => 'โอนง่ายและป้องกันการชำระเงิน';
 
   @override
-  String get walletFds => 'ตรวจจับทุจริต 24 ชม. และเข้ารหัสต้นทางถึงปลายทาง';
-
-  @override
   String get walletRecent => 'ล่าสุด';
 
   @override
