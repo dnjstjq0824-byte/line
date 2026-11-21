@@ -657,6 +657,7 @@ const newVoomBody = ref('')
 const newVoomComment = ref<Record<string, string>>({})
 const devicesList = ref<Array<{ id: string; name: string; platform: string; trusted: boolean; last_seen_at?: string }>>([])
 const photoInput = ref<HTMLInputElement | null>(null)
+const coverInput = ref<HTMLInputElement | null>(null)
 const photoSaving = ref(false)
 const photoError = ref('')
 async function changeProfilePhoto(event: Event) {
@@ -691,6 +692,43 @@ async function persistProfilePhoto(avatar_url: string) {
 async function removeProfilePhoto() {
   photoSaving.value = true; photoError.value = ''
   try { await persistProfilePhoto('') }
+  catch (error) { photoError.value = error instanceof Error ? error.message : t('profile_save_error') }
+  finally { photoSaving.value = false }
+}
+// 6-4: web cover change, the same upload path as the profile photo
+// (client downscale + PATCH /api/v1/me cover_url).
+async function changeCoverPhoto(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  photoError.value = ''
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) { photoError.value = t('profile_photo_invalid'); return }
+  photoSaving.value = true
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error(t('profile_photo_invalid'))
+      context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      await persistCoverPhoto(canvas.toDataURL('image/jpeg', 0.85))
+    } finally { bitmap.close() }
+  } catch (error) { photoError.value = error instanceof Error ? error.message : t('profile_save_error') }
+  finally { photoSaving.value = false }
+}
+async function persistCoverPhoto(cover_url: string) {
+  const updated = await api<User>('/api/v1/me', 'PATCH', { cover_url })
+  currentUser.value = updated
+  if (activeProfileUser.value?.id === updated.id) activeProfileUser.value = updated
+}
+async function removeCoverPhoto() {
+  photoSaving.value = true; photoError.value = ''
+  try { await persistCoverPhoto('') }
   catch (error) { photoError.value = error instanceof Error ? error.message : t('profile_save_error') }
   finally { photoSaving.value = false }
 }
@@ -2878,7 +2916,10 @@ onBeforeUnmount(() => {
 
                 <section class="lx-news-list">
                   <h3 class="lx-page-subtitle">{{ t('mvTodayPopular') }}</h3>
-                  <p v-if="!filteredPopularNews.length" class="lx-list-empty">{{ t('lxNoNews') }}</p>
+                  <div v-if="!filteredPopularNews.length" class="lx-list-empty lx-empty-illustrated">
+                    <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="news" :size="28" /></span>
+                    <p>{{ t('lxNoNews') }}</p>
+                  </div>
                   <button
                     v-for="article in filteredPopularNews"
                     :key="article.id"
@@ -2972,12 +3013,12 @@ onBeforeUnmount(() => {
                   <small>{{ t('mvAddStory') }}</small>
                 </button>
                 <div v-for="s in stories" :key="s.id" class="lx-story">
-                  <span class="lx-story-ring" :class="{ viewed: s.viewed }"><span class="lx-avatar s56" :style="{ background: s.bg || 'var(--ln-accent)' }">{{ initialOf(s.author_name, 'L') }}</span></span>
+                  <span class="lx-story-ring" :class="{ viewed: s.viewed }"><span class="lx-avatar s56" :style="{ background: s.bg || 'var(--ln-accent)' }"><span>{{ initialOf(s.author_name, 'L') }}</span><img v-if="s.author?.avatar_url" :src="s.author.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span></span>
                   <small>{{ s.author_name || t('navFriends') }}</small>
                 </div>
               </div>
               <div v-if="!voomVideos.length" class="lx-page-empty">
-                <LunoIcon name="voom" :size="40" />
+                <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="voom" :size="28" /></span>
                 <strong>{{ t('lxNoVoom') }}</strong>
                 <p>{{ t('lxNoVoomDesc') }}</p>
               </div>
@@ -2988,7 +3029,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="lx-voom-body">
                     <div class="lx-voom-author">
-                      <span class="lx-avatar s36" style="background: var(--ln-accent)">{{ initialOf(v.author_name || v.author?.display_name, 'L') }}</span>
+                      <span class="lx-avatar s36" style="background: var(--ln-accent)"><span>{{ initialOf(v.author_name || v.author?.display_name, 'L') }}</span><img v-if="v.author?.avatar_url" :src="v.author.avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" /></span>
                       <strong>{{ v.author_name || v.author?.display_name || 'LUNO' }}</strong>
                     </div>
                     <p>{{ v.title || v.body }}</p>
@@ -3013,7 +3054,8 @@ onBeforeUnmount(() => {
             <button type="button" class="lx-icon-btn" :title="t('mvCreateOpenChat')" :aria-label="t('mvCreateOpenChat')" @click="showCreateOpenChatModal = true"><LunoIcon name="plus" :size="20" /></button>
           </div>
           <div class="lx-scroll">
-            <div v-if="!openChatRooms.length" class="lx-list-empty">
+            <div v-if="!openChatRooms.length" class="lx-list-empty lx-empty-illustrated">
+              <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="openchat" :size="28" /></span>
               <p>{{ t('lxNoOpenChat') }}</p>
               <button type="button" class="lx-text-btn" @click="showCreateOpenChatModal = true">{{ t('mvCreateOpenChat') }}</button>
             </div>
@@ -3064,7 +3106,10 @@ onBeforeUnmount(() => {
               </section>
               <section class="lx-card">
                 <h3 class="lx-page-subtitle">{{ t('mvRecentTx') }}</h3>
-                <p v-if="!walletTx.length" class="lx-list-empty">{{ t('lxNoTx') }}</p>
+                <div v-if="!walletTx.length" class="lx-list-empty lx-empty-illustrated">
+                  <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="wallet" :size="28" /></span>
+                  <p>{{ t('lxNoTx') }}</p>
+                </div>
                 <div v-for="tx in walletTx.slice(0, 20)" :key="tx.id" class="lx-tx-row">
                   <span class="lx-tx-main">
                     <strong>{{ tx.title || tx.note || tx.kind || t('mvTxFallback') }}</strong>
@@ -3086,7 +3131,10 @@ onBeforeUnmount(() => {
             <div class="lx-page-body">
               <p class="lx-notice">{{ t('shopPayNote') }}</p>
               <p v-if="storeLoading" class="lx-list-empty">{{ t('attachment_loading') }}</p>
-              <p v-else-if="!storePacks.length" class="lx-list-empty">{{ t('shopEmpty') }}</p>
+              <div v-else-if="!storePacks.length" class="lx-list-empty lx-empty-illustrated">
+                <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="shop" :size="28" /></span>
+                <p>{{ t('shopEmpty') }}</p>
+              </div>
               <div class="lx-shop-grid">
                 <article v-for="pk in storePacks" :key="pk.id" class="lx-card lx-shop-card">
                   <div class="lx-shop-strip">
@@ -3511,6 +3559,9 @@ onBeforeUnmount(() => {
           <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="changeProfilePhoto" />
           <button class="btn-secondary" :disabled="photoSaving" @click="photoInput?.click()">{{ photoSaving ? t('profile_saving') : t('profile_photo_change') }}</button>
           <button v-if="currentUser?.avatar_url" class="btn-secondary" :disabled="photoSaving" @click="removeProfilePhoto">{{ t('profile_photo_remove') }}</button>
+          <input ref="coverInput" type="file" accept="image/jpeg,image/png,image/webp" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="changeCoverPhoto" />
+          <button class="btn-secondary" :disabled="photoSaving" @click="coverInput?.click()">{{ photoSaving ? t('profile_saving') : t('profile_cover_change') }}</button>
+          <button v-if="(currentUser as any)?.cover_url" class="btn-secondary" :disabled="photoSaving" @click="removeCoverPhoto">{{ t('profile_cover_remove') }}</button>
           <small>{{ t('profile_photo_hint') }}</small>
           <p v-if="photoError" role="alert" class="ln-profile-error">{{ photoError }}</p>
         </div>
@@ -3892,9 +3943,9 @@ onBeforeUnmount(() => {
               class="quick-pick-friend-row"
               @click="addFriendById(u.id)"
             >
-              <div class="pc-avatar circle-34" :style="{ background: u.avatar_color || 'var(--ln-accent)' }">
-                {{ initialOf(u.display_name, '?') }}
-              </div>
+              <span class="lx-avatar s36" :style="{ background: u.avatar_color || 'var(--ln-accent)' }">
+                <span>{{ initialOf(u.display_name, '?') }}</span><img v-if="(u as any).avatar_url" :src="(u as any).avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
+              </span>
               <div class="friend-pick-meta">
                 <strong>{{ u.display_name }}</strong>
                 <small>{{ u.handle ? '@' + u.handle : '' }}</small>
@@ -3974,9 +4025,9 @@ onBeforeUnmount(() => {
               class="quick-pick-friend-row"
               @click="startDirectChat(f); showNewChatModal = false"
             >
-              <div class="pc-avatar circle-34" :style="{ background: f.avatar_color || 'var(--ln-accent)' }">
-                {{ initialOf(f.display_name) }}
-              </div>
+              <span class="lx-avatar s36" :style="{ background: f.avatar_color || 'var(--ln-accent)' }">
+                <span>{{ initialOf(f.display_name) }}</span><img v-if="(f as any).avatar_url" :src="(f as any).avatar_url" alt="" class="ln-profile-photo" @error="hideBrokenAvatar" />
+              </span>
               <div class="friend-pick-meta">
                 <strong>{{ f.display_name }}</strong>
                 <small>{{ taglineOf(f) }}</small>

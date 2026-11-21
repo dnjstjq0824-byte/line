@@ -224,7 +224,8 @@ function hideBrokenAvatar(ev: Event) {
           <LunoIcon :name="friendsSectionOpen ? 'chevron-down' : 'chevron-right'" :size="16" />
         </button>
         <div v-show="friendsSectionOpen">
-          <div v-if="!filteredFriends.length" class="lx-list-empty">
+          <div v-if="!filteredFriends.length" class="lx-list-empty lx-empty-illustrated">
+            <span class="lx-empty-icon" aria-hidden="true"><LunoIcon :name="friendSearchQuery ? 'search' : 'friends'" :size="28" /></span>
             <p>{{ friendSearchQuery ? t('lxNoSearchResult') : t('lxNoFriends') }}</p>
             <button v-if="!friendSearchQuery" type="button" class="lx-text-btn" @click="emit('add-friend')">{{ t('mvAddFriend') }}</button>
           </div>

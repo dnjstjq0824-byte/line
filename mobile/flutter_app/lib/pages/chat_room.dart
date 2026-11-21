@@ -763,10 +763,17 @@ class _ContactCard extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        CircleAvatar(
-          backgroundColor: faint.withValues(alpha: 0.3),
-          child: Text(name.isEmpty ? '?' : name.characters.first,
-              style: TextStyle(color: ink)),
+        // Build 20: person tiles match the lists (rounded square).
+        ClipRRect(
+          borderRadius: BorderRadius.circular(HarborRadius.avatar),
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            color: faint.withValues(alpha: 0.3),
+            child: Text(name.isEmpty ? '?' : name.characters.first,
+                style: TextStyle(color: ink)),
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -804,9 +811,11 @@ class _DateDivider extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: dark
-                ? HarborDark.seaGlass
-                : Colors.white.withValues(alpha: 0.85),
+            // Build 20: softer pill like the web (8% text, muted label).
+            color: Theme.of(context)
+                .colorScheme
+                .onSurface
+                .withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(HarborRadius.lamp),
           ),
           child: Text(label,
@@ -1067,23 +1076,14 @@ class _SignalBubble extends StatelessWidget {
                             ),
                 ),
               ],
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (groupTail && readCount > 0)
-                    Text(context.l10n.roomReadCount(readCount),
-                        style: TextStyle(
-                            fontSize: LunoType.stampSize,
-                            fontWeight: LunoType.stampWeight,
-                            fontFeatures: const [LunoType.tabular],
-                            color: faint)),
-                  if (m['edited_at'] != null && '${m['edited_at']}'.isNotEmpty)
-                    Text(context.l10n.roomEdited,
-                        style: TextStyle(fontSize: 9, color: faint)),
-                ],
-              ),
+              // Build 20: the read count moved beside the bubble (above the
+              // time, LINE-style); only the edited mark stays inside.
+              if (m['edited_at'] != null && '${m['edited_at']}'.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(context.l10n.roomEdited,
+                      style: TextStyle(fontSize: 9, color: faint)),
+                ),
             ],
           ),
         ),
@@ -1097,7 +1097,8 @@ class _SignalBubble extends StatelessWidget {
             onTap: sender == null
                 ? null
                 : () => showFriendProfile(context, sender),
-            child: LineAvatar(
+            // Build 20: room avatars match the lists (rounded square).
+            child: IdentityTile(
               glyph: peerName,
               color: dark ? HarborDark.harbor : HarborLight.harbor,
               size: LunoBubble.avatarSize,
@@ -1115,10 +1116,20 @@ class _SignalBubble extends StatelessWidget {
             avatar,
             const SizedBox(width: 8),
           ],
-          if (mine && time.isNotEmpty)
+          // Build 20: read count above the time, beside the bubble.
+          if (mine && ((groupTail && readCount > 0) || time.isNotEmpty))
             Padding(
               padding: const EdgeInsets.only(right: 6, bottom: 6),
-              child: Text(time, style: timeStyle),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (groupTail && readCount > 0)
+                    Text(context.l10n.roomReadCount(readCount),
+                        style: timeStyle),
+                  if (time.isNotEmpty) Text(time, style: timeStyle),
+                ],
+              ),
             ),
           Flexible(
               child: Column(
@@ -1139,10 +1150,20 @@ class _SignalBubble extends StatelessWidget {
               bubbleBody,
             ],
           )),
-          if (!mine && time.isNotEmpty)
+          // Build 20: read count above the time, beside the bubble.
+          if (!mine && ((groupTail && readCount > 0) || time.isNotEmpty))
             Padding(
               padding: const EdgeInsets.only(left: 6, bottom: 6),
-              child: Text(time, style: timeStyle),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (groupTail && readCount > 0)
+                    Text(context.l10n.roomReadCount(readCount),
+                        style: timeStyle),
+                  if (time.isNotEmpty) Text(time, style: timeStyle),
+                ],
+              ),
             ),
         ],
       ),
@@ -1197,7 +1218,8 @@ class _CallBubble extends StatelessWidget {
             onTap: sender == null
                 ? null
                 : () => showFriendProfile(context, sender),
-            child: LineAvatar(
+            // Build 20: room avatars match the lists (rounded square).
+            child: IdentityTile(
               glyph: peerName,
               color: dark ? HarborDark.harbor : HarborLight.harbor,
               size: LunoBubble.avatarSize,
@@ -1329,19 +1351,11 @@ class _SecurityNoticeCard extends StatelessWidget {
     final sub = dark ? LunoDark.textSecondary : LunoLight.textSecondary;
     final ink = dark ? LunoDark.textPrimary : LunoLight.textPrimary;
     final avatar = groupLead
-        ? Container(
-            width: LunoBubble.avatarSize,
-            height: LunoBubble.avatarSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: dark ? HarborDark.harbor : HarborLight.harbor,
-            ),
-            child: Text(peerName.isEmpty ? '?' : peerName.characters.first,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700)),
+        // Build 20: room avatars match the lists (rounded square).
+        ? IdentityTile(
+            glyph: peerName,
+            color: dark ? HarborDark.harbor : HarborLight.harbor,
+            size: LunoBubble.avatarSize,
           )
         : const SizedBox(width: LunoBubble.continuedIndent);
     return Align(

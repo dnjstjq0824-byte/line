@@ -94,7 +94,10 @@ const showListMenu = ref(false)
     </div>
 
     <div class="lx-scroll">
-      <p v-if="!filteredChats.length" class="lx-list-empty">{{ searchKeyword ? t('lxNoSearchResult') : t('lxNoChats') }}</p>
+      <div v-if="!filteredChats.length" class="lx-list-empty lx-empty-illustrated">
+        <span class="lx-empty-icon" aria-hidden="true"><LunoIcon :name="searchKeyword ? 'search' : 'chats'" :size="28" /></span>
+        <p>{{ searchKeyword ? t('lxNoSearchResult') : t('lxNoChats') }}</p>
+      </div>
       <div
         v-for="c in filteredChats"
         :key="c.id"
