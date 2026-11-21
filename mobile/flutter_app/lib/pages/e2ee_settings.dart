@@ -196,6 +196,11 @@ class _E2eeSettingsPageState extends State<E2eeSettingsPage> {
                     ],
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  child: Text(l.e2eeInternalAudit,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ),
               ],
             ),
           ),

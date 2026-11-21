@@ -65,13 +65,17 @@ class _PrivacyPageState extends State<PrivacyPage> {
               onChanged: session.setSearchableById,
             ),
             const Divider(height: 1),
-            _StatusRow(
-              icon: Icons.lock_outline,
-              title: context.l10n.privacyE2ee,
-              subtitle: context.l10n.privacyE2eePreparing,
-              ink: ink,
-              sub: sub,
-              dark: dark,
+            // E10: E2EE is live — the row opens device/backup management.
+            InkWell(
+              onTap: () => context.go('/e2ee'),
+              child: _StatusRow(
+                icon: Icons.lock_outline,
+                title: context.l10n.privacyE2ee,
+                subtitle: context.l10n.privacyE2eeLive,
+                ink: ink,
+                sub: sub,
+                dark: dark,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.only(top: 20, bottom: 4),

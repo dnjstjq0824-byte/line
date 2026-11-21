@@ -144,5 +144,6 @@ defineExpose({ loadDevices, loadBackupStatus })
         </button>
       </div>
     </div>
+    <div class="muted" style="font-size: 11px; margin-top: 6px">{{ t('e2eeInternalAudit') }}</div>
   </div>
 </template>

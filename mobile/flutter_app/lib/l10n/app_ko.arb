@@ -1513,9 +1513,9 @@
   "@privacyE2ee": {
     "description": "privacyE2ee (F20)"
   },
-  "privacyE2eePreparing": "준비 중 — 현재 전송 구간 암호화(TLS)만 적용됩니다",
-  "@privacyE2eePreparing": {
-    "description": "privacyE2eePreparing (F20)"
+  "privacyE2eeLive": "1:1·그룹·Keep 암호화 사용 중",
+  "@privacyE2eeLive": {
+    "description": "privacyE2eeLive (E10)"
   },
   "privacyDevices": "로그인된 기기",
   "@privacyDevices": {
@@ -1978,9 +1978,9 @@
   "@msgEdited": {
     "description": "msgEdited (F20)"
   },
-  "e2eeGroupSoon": "그룹 채팅 암호화는 다음 업데이트에서 지원됩니다.",
-  "@e2eeGroupSoon": {
-    "description": "e2eeGroupSoon (E5)"
+  "e2eeEncryptFailed": "메시지 암호화에 실패했습니다.",
+  "@e2eeEncryptFailed": {
+    "description": "e2eeEncryptFailed (E10)"
   },
   "e2eeUnreadable": "이 메시지를 복호화할 수 없습니다.",
   "@e2eeUnreadable": {
@@ -2129,6 +2129,10 @@
   "mvSafetyCode": "보안 코드 확인",
   "@mvSafetyCode": {
     "description": "mvSafetyCode (E9)"
+  },
+  "e2eeInternalAudit": "외부 보안 감사를 받지 않았습니다 (내부 검토 상태).",
+  "@e2eeInternalAudit": {
+    "description": "e2eeInternalAudit (E10)"
   },
   "msgQueuedOffline": "오프라인 — 메시지를 대기열에 저장했습니다.",
   "@msgQueuedOffline": {

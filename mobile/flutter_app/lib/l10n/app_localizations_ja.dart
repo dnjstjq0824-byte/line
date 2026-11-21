@@ -1147,7 +1147,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get privacyE2ee => 'エンドツーエンド暗号化（E2EE）';
 
   @override
-  String get privacyE2eePreparing => '準備中 — 現在は転送区間暗号化（TLS）のみ適用されます';
+  String get privacyE2eeLive => '1:1・グループ・Keepを暗号化して利用中';
 
   @override
   String get privacyDevices => 'ログイン中のデバイス';
@@ -1488,7 +1488,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get msgEdited => 'メッセージを編集しました。';
 
   @override
-  String get e2eeGroupSoon => 'グループの暗号化チャットは次回アップデートで対応します';
+  String get e2eeEncryptFailed => 'メッセージの暗号化に失敗しました';
 
   @override
   String get e2eeUnreadable => 'このメッセージを復号できませんでした';
@@ -1601,6 +1601,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get mvSafetyCode => 'セーフティ番号を確認';
+
+  @override
+  String get e2eeInternalAudit => '外部セキュリティ監査は未実施です（内部レビュー済み）。';
 
   @override
   String get msgQueuedOffline => 'オフライン — メッセージを待機列に保存しました。';

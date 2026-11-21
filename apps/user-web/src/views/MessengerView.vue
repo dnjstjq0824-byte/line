@@ -1640,7 +1640,7 @@ async function sendMessage() {
       kind = out.kind
       wireBody = out.body
     } catch (e) {
-      error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+      error.value = t('message_queue_failed')
       return
     }
   }
@@ -1815,7 +1815,7 @@ async function sendSticker(stickerId: string) {
         wireBody = out.body
         meta = {}
       } catch (e) {
-        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        error.value = t('message_queue_failed')
         return
       }
     }
@@ -1869,7 +1869,7 @@ async function sendLocationMessage() {
         wireBody = out.body
         meta = {}
       } catch (e) {
-        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        error.value = t('message_queue_failed')
         return
       }
     }
@@ -1922,7 +1922,7 @@ async function shareContact(f: User) {
         wireBody = out.body
         meta = {}
       } catch (e) {
-        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        error.value = t('message_queue_failed')
         return
       }
     }
@@ -2225,7 +2225,7 @@ async function sendAttachmentFile(file: File, conversation: string, sessionToken
         wireBody = out.body
         meta = {}
       } catch (e) {
-        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('message_queue_failed')
+        error.value = t('message_queue_failed')
         return
       }
     }
@@ -2642,7 +2642,7 @@ async function doForward(chatId: string) {
         const out = await c.encryptOutbound(targetRoom, readable.kind === 'ciphertext' ? 'text' : readable.kind, readable.body)
         await api(`/api/v1/conversations/${chatId}/messages`, 'POST', { client_id: newClientID(), kind: out.kind, body: out.body })
       } catch (e) {
-        error.value = (e as Error).message === 'GROUP_E2EE_PENDING' ? t('mvE2eeGroupSoon') : t('mvE2eeUnreadable')
+        error.value = t('mvE2eeUnreadable')
         return
       }
     } else {

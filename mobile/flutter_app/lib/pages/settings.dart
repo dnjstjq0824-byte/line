@@ -221,10 +221,12 @@ class SettingsPage extends StatelessWidget {
                 _ActionRow(
                   icon: Icons.lock_outline,
                   title: context.l10n.privacyE2ee,
-                  subtitle: context.l10n.privacyE2eePreparing,
+                  subtitle: context.l10n.privacyE2eeLive,
                   ink: ink,
                   sub: sub,
                   dark: dark,
+                  chevron: true,
+                  onTap: () => context.go('/e2ee'),
                 ),
               ],
             ),

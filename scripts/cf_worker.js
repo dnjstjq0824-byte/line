@@ -78,7 +78,7 @@ const adminReports = [];
 // signup/login gates demand; userConsents is a D1 write-through cache of who
 // agreed to what, when (luno_consents). The verification birthdate is NEVER
 // stored — only the age14 confirmation bit and timestamp survive.
-const LEGAL_VERSIONS = { terms: '2026-11-15.1', privacy: '2026-11-15.1' };
+const LEGAL_VERSIONS = { terms: '2026-11-21.1', privacy: '2026-11-21.1' };
 const userConsents = new Map();
 // A-20/B-3: attachment bytes live in R2 (MEDIA_BUCKET); D1 keeps metadata
 // only. Base64 intake is kept so existing clients keep working.

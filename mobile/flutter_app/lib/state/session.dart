@@ -2297,7 +2297,7 @@ class SessionController extends ChangeNotifier {
         wireKind = 'ciphertext';
         wireMeta = null;
       } catch (_) {
-        error = strings.e2eeGroupSoon;
+        error = strings.e2eeEncryptFailed;
         notifyListeners();
         return false;
       }
@@ -2504,7 +2504,7 @@ class SessionController extends ChangeNotifier {
           kind = 'ciphertext';
           meta = null;
         } catch (_) {
-          error = strings.e2eeGroupSoon;
+          error = strings.e2eeEncryptFailed;
           return;
         }
       }
@@ -2550,7 +2550,7 @@ class SessionController extends ChangeNotifier {
           kind = 'ciphertext';
           meta = null;
         } catch (_) {
-          error = strings.e2eeGroupSoon;
+          error = strings.e2eeEncryptFailed;
           return;
         }
       }
@@ -4151,7 +4151,7 @@ class SessionController extends ChangeNotifier {
               method: 'POST',
               data: {'client_id': uuid(), 'kind': 'ciphertext', 'body': out});
         } catch (_) {
-          error = strings.e2eeGroupSoon;
+          error = strings.e2eeEncryptFailed;
           return;
         }
       } else {

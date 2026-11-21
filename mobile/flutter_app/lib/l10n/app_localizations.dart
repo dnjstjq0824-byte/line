@@ -2310,11 +2310,11 @@ abstract class AppLocalizations {
   /// **'종단간 암호화 (E2EE)'**
   String get privacyE2ee;
 
-  /// privacyE2eePreparing (F20)
+  /// privacyE2eeLive (E10)
   ///
   /// In ko, this message translates to:
-  /// **'준비 중 — 현재 전송 구간 암호화(TLS)만 적용됩니다'**
-  String get privacyE2eePreparing;
+  /// **'1:1·그룹·Keep 암호화 사용 중'**
+  String get privacyE2eeLive;
 
   /// privacyDevices (F20)
   ///
@@ -2970,11 +2970,11 @@ abstract class AppLocalizations {
   /// **'메시지를 수정했습니다.'**
   String get msgEdited;
 
-  /// e2eeGroupSoon (E5)
+  /// e2eeEncryptFailed (E10)
   ///
   /// In ko, this message translates to:
-  /// **'그룹 채팅 암호화는 다음 업데이트에서 지원됩니다.'**
-  String get e2eeGroupSoon;
+  /// **'메시지 암호화에 실패했습니다.'**
+  String get e2eeEncryptFailed;
 
   /// e2eeUnreadable (E5)
   ///
@@ -3191,6 +3191,12 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'보안 코드 확인'**
   String get mvSafetyCode;
+
+  /// e2eeInternalAudit (E10)
+  ///
+  /// In ko, this message translates to:
+  /// **'외부 보안 감사를 받지 않았습니다 (내부 검토 상태).'**
+  String get e2eeInternalAudit;
 
   /// msgQueuedOffline (F20)
   ///

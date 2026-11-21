@@ -1157,8 +1157,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyE2ee => 'End-to-end encryption (E2EE)';
 
   @override
-  String get privacyE2eePreparing =>
-      'Preparing — only transport encryption (TLS) applies for now';
+  String get privacyE2eeLive => 'Encrypting 1:1, group and Keep chats';
 
   @override
   String get privacyDevices => 'Logged-in devices';
@@ -1505,8 +1504,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgEdited => 'Message edited.';
 
   @override
-  String get e2eeGroupSoon =>
-      'Encrypted group chat arrives in the next update.';
+  String get e2eeEncryptFailed => 'Message encryption failed.';
 
   @override
   String get e2eeUnreadable => 'This message could not be decrypted.';
@@ -1621,6 +1619,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mvSafetyCode => 'Check safety number';
+
+  @override
+  String get e2eeInternalAudit =>
+      'No external security audit yet (internally reviewed).';
 
   @override
   String get msgQueuedOffline => 'Offline — message queued.';

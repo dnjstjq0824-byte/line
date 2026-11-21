@@ -1147,7 +1147,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get privacyE2ee => '종단간 암호화 (E2EE)';
 
   @override
-  String get privacyE2eePreparing => '준비 중 — 현재 전송 구간 암호화(TLS)만 적용됩니다';
+  String get privacyE2eeLive => '1:1·그룹·Keep 암호화 사용 중';
 
   @override
   String get privacyDevices => '로그인된 기기';
@@ -1488,7 +1488,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get msgEdited => '메시지를 수정했습니다.';
 
   @override
-  String get e2eeGroupSoon => '그룹 채팅 암호화는 다음 업데이트에서 지원됩니다.';
+  String get e2eeEncryptFailed => '메시지 암호화에 실패했습니다.';
 
   @override
   String get e2eeUnreadable => '이 메시지를 복호화할 수 없습니다.';
@@ -1601,6 +1601,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get mvSafetyCode => '보안 코드 확인';
+
+  @override
+  String get e2eeInternalAudit => '외부 보안 감사를 받지 않았습니다 (내부 검토 상태).';
 
   @override
   String get msgQueuedOffline => '오프라인 — 메시지를 대기열에 저장했습니다.';

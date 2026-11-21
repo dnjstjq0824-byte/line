@@ -1153,8 +1153,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get privacyE2ee => 'การเข้ารหัสต้นทางถึงปลายทาง (E2EE)';
 
   @override
-  String get privacyE2eePreparing =>
-      'กำลังเตรียม — ใช้ได้เฉพาะการเข้ารหัสช่องทาง (TLS)';
+  String get privacyE2eeLive => 'กำลังเข้ารหัสแชท 1:1 กลุ่ม และ Keep';
 
   @override
   String get privacyDevices => 'อุปกรณ์ที่เข้าสู่ระบบ';
@@ -1498,7 +1497,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get msgEdited => 'แก้ไขข้อความแล้ว';
 
   @override
-  String get e2eeGroupSoon => 'แชทกลุ่มแบบเข้ารหัสจะมาในอัปเดตหน้า';
+  String get e2eeEncryptFailed => 'เข้ารหัสข้อความไม่สำเร็จ';
 
   @override
   String get e2eeUnreadable => 'ไม่สามารถถอดรหัสข้อความนี้ได้';
@@ -1612,6 +1611,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get mvSafetyCode => 'ตรวจหมายเลขความปลอดภัย';
+
+  @override
+  String get e2eeInternalAudit =>
+      'ยังไม่ผ่านการตรวจความปลอดภัยภายนอก (ตรวจสอบภายในแล้ว)';
 
   @override
   String get msgQueuedOffline => 'ออฟไลน์ — เก็บข้อความเข้าคิวแล้ว';

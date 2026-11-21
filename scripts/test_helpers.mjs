@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 // drift, so a version bump breaks loudly instead of silently.
 export const F24_CONSENT = {
   birthdate: '1990-01-01',
-  consent: { terms: '2026-11-15.1', privacy: '2026-11-15.1' },
+  consent: { terms: '2026-11-21.1', privacy: '2026-11-21.1' },
 };
 
 export function makeD1() {
