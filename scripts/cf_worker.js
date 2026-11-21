@@ -2704,6 +2704,63 @@ async function saveFeatureFlag(key, enabled) {
     .bind(key, enabled ? 1 : 0, (target && target.description) || '', now()).run();
 }
 
+// ---------- E2 (F11): E2EE directory + enforcement ----------
+// Identity format: base64url(X25519 32B) + "." + base64url(Ed25519 32B).
+function e2eeIdentityParts(s) {
+  if (typeof s !== 'string') return null;
+  const parts = s.split('.');
+  if (parts.length !== 2) return null;
+  try {
+    const x = pkB64Decode(parts[0]), ed = pkB64Decode(parts[1]);
+    if (x.length !== 32 || ed.length !== 32) return null;
+    return { x, ed };
+  } catch { return null; }
+}
+// Server-side prekey check (defense in depth; clients always verify bundles
+// before use). Returns true/false when well-formed, null when the bundle
+// predates the dotted identity format (stored unverified, as before).
+async function e2eeVerifyPrekeySig(identityKey, signedPrekey, sig) {
+  const id = e2eeIdentityParts(identityKey);
+  if (!id || typeof signedPrekey !== 'string' || !signedPrekey || typeof sig !== 'string' || !sig) return null;
+  try {
+    const spk = pkB64Decode(signedPrekey), s = pkB64Decode(sig);
+    const key = await crypto.subtle.importKey('raw', id.ed, { name: 'Ed25519' }, false, ['verify']);
+    return await crypto.subtle.verify({ name: 'Ed25519' }, key, s, spk);
+  } catch { return null; }
+}
+async function e2eeEnforced() {
+  if (String((typeof CURRENT_ENV !== 'undefined' && CURRENT_ENV && CURRENT_ENV.E2EE_ENFORCED) || '').toLowerCase() === 'true') return true;
+  try {
+    const flags = await listFeatureFlags();
+    const f = flags.find(x => x.key === 'e2ee_letter_sealing');
+    return !!f && !!f.enabled;
+  } catch { return false; }
+}
+// Rooms whose new messages must be ciphertext: 1:1 / group / self rooms
+// with no bot member. Official rooms are read-only elsewhere; openchat,
+// feed and stories never pass through conversations.
+function e2eeRoomTargeted(conv) {
+  if (!conv || conv.official || conv.kind === 'official') return false;
+  if (conv.kind !== 'direct' && conv.kind !== 'group' && conv.kind !== 'self' && conv.kind !== 'keep') return false;
+  for (const id of conv.members || []) {
+    const u = usersById.get(id);
+    if (u && userKind(u) === 'bot') return false;
+  }
+  return true;
+}
+async function e2eeAnnounceKeyChange(userId, deviceId) {
+  try { await hydrateDurableConversations(userId); } catch { /* memory only */ }
+  const rooms = Array.from(conversations.values()).filter(c => (c.members || []).includes(userId) && e2eeRoomTargeted(c));
+  for (const room of rooms) {
+    const fields = { kind: 'security_notice', body: '보안 키가 변경되었습니다', metadata: { user_id: userId, device_id: deviceId } };
+    try {
+      if (room._durable) await pushPersistent(room.id, userId, fields);
+      else pushMessage(room.id, userId, fields);
+    } catch { /* one room must not block the rest */ }
+  }
+  try { await persistAudit(userId, 'e2ee.key_change', userId, { device_id: deviceId }); } catch { /* audit never blocks */ }
+}
+
 // =====================================================================
 // Cross-isolate realtime delivery
 //
@@ -5586,6 +5643,10 @@ async function followedMap(userId) {
       } else if (userKind(me) === 'bot' && !botScopeAllows(me, 'post', cid)) {
         return json({ error: 'forbidden' }, 403);
       }
+      // E2: E2EE rooms accept ciphertext only (system kinds pass through).
+      if (await e2eeEnforced() && e2eeRoomTargeted(conv) && kind !== 'ciphertext' && kind !== 'call_status' && kind !== 'security_notice') {
+        return json({ error: 'this room is end-to-end encrypted', code: 'E2EE_CIPHERTEXT_REQUIRED' }, 400);
+      }
       if (conv.kind === 'direct') {
         const other = conv.members.find(x => x !== myId);
         if (other) {
@@ -7435,6 +7496,12 @@ function entitled(u, feature) {
     if (method === 'PUT') {
       const b = await readJson(request);
       if (typeof b.identity_key !== 'string' || !b.identity_key) return bad('identity_key가 필요합니다');
+      if (!await rateLimit('rl:e2ee-put:' + myId, 60)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+      // E2: a well-formed bundle with a bad prekey signature is rejected.
+      // Legacy bundles (no dotted identity) are stored as before.
+      if (await e2eeVerifyPrekeySig(b.identity_key, b.signed_prekey, b.prekey_sig) === false) {
+        return json({ error: 'invalid prekey signature', code: 'INVALID_PREKEY_SIG' }, 400);
+      }
       const otks = Array.isArray(b.one_time_prekeys) ? b.one_time_prekeys.filter(x => typeof x === 'string').slice(0, 100) : [];
       const bundle = {
         device_id: m[1],
@@ -7445,22 +7512,67 @@ function entitled(u, feature) {
         one_time_prekeys: otks,
         updated_at: now()
       };
-      deviceKeys.set(m[1], bundle);
-      userKeys.set(myId, bundle);
+      // E2: an identity change on this device notifies every E2EE room.
+      let prevIdentity = null;
       const kdb = dbOf();
       if (kdb) {
         await ensureSchema();
+        const prev = await kdb.prepare('SELECT identity_key FROM e2ee_keys WHERE user_id = ? AND device_id = ?').bind(myId, m[1]).first().catch(() => null);
+        if (prev) prevIdentity = prev.identity_key;
+      } else {
+        const mem = deviceKeys.get(m[1]);
+        if (mem && mem.user_id === myId) prevIdentity = mem.identity_key;
+      }
+      deviceKeys.set(m[1], bundle);
+      userKeys.set(myId, bundle);
+      if (kdb) {
         await kdb.prepare('INSERT INTO e2ee_keys (user_id, device_id, identity_key, signed_prekey, prekey_sig, prekeys_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, device_id) DO UPDATE SET identity_key=excluded.identity_key, signed_prekey=excluded.signed_prekey, prekey_sig=excluded.prekey_sig, prekeys_json=excluded.prekeys_json, updated_at=excluded.updated_at')
           .bind(myId, m[1], bundle.identity_key, bundle.signed_prekey, bundle.prekey_sig, JSON.stringify(otks), bundle.updated_at).run();
       }
+      if (prevIdentity && prevIdentity !== b.identity_key) await e2eeAnnounceKeyChange(myId, m[1]);
       return json({ status: 'keys_registered', device_id: m[1] });
+    }
+    if (method === 'DELETE') {
+      // E2: only the owning user may delete a device's keys.
+      const kdb = dbOf();
+      if (kdb) {
+        await ensureSchema();
+        const row = await kdb.prepare('SELECT user_id FROM e2ee_keys WHERE device_id = ?').bind(m[1]).first().catch(() => null);
+        if (!row) return json({ error: 'not found' }, 404);
+        if (row.user_id !== myId) return json({ error: 'forbidden' }, 403);
+        await kdb.prepare('DELETE FROM e2ee_keys WHERE user_id = ? AND device_id = ?').bind(myId, m[1]).run();
+      } else {
+        const mem = deviceKeys.get(m[1]);
+        if (!mem) return json({ error: 'not found' }, 404);
+        if (mem.user_id !== myId) return json({ error: 'forbidden' }, 403);
+        deviceKeys.delete(m[1]);
+        if (userKeys.get(myId)?.device_id === m[1]) userKeys.delete(myId);
+      }
+      if (deviceKeys.get(m[1])?.user_id === myId) deviceKeys.delete(m[1]);
+      return json({ status: 'keys_deleted', device_id: m[1] });
     }
   }
   if ((m = p.match(/^users\/([\w-]+)\/keys$/)) && method === 'GET') {
     const targetId = m[1];
+    if (!await rateLimit('rl:e2ee-get:' + myId, 300)) return json({ error: 'too many requests', code: 'RATE_LIMITED' }, 429);
+    // E2: ?all=1 returns every device bundle (multi-device fanout), each
+    // consuming one one-time prekey. Without it, the latest bundle only.
+    const wantAll = url.searchParams.get('all') === '1';
     const kdb = dbOf();
     if (kdb) {
       await ensureSchema();
+      if (wantAll) {
+        const { results } = await kdb.prepare('SELECT * FROM e2ee_keys WHERE user_id = ? ORDER BY updated_at DESC').bind(targetId).all().catch(() => ({ results: [] }));
+        const devices = [];
+        for (const row of results || []) {
+          let otks = [];
+          try { otks = JSON.parse(row.prekeys_json || '[]'); } catch { otks = []; }
+          const otk = otks.length ? otks.shift() : null;
+          if (otk) await kdb.prepare('UPDATE e2ee_keys SET prekeys_json = ? WHERE user_id = ? AND device_id = ?').bind(JSON.stringify(otks), targetId, row.device_id).run();
+          devices.push({ user_id: targetId, device_id: row.device_id, identity_key: row.identity_key, signed_prekey: row.signed_prekey, prekey_sig: row.prekey_sig || '', one_time_prekey: otk });
+        }
+        return json({ user_id: targetId, devices });
+      }
       const row = await kdb.prepare('SELECT * FROM e2ee_keys WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1').bind(targetId).first();
       if (row) {
         let otks = [];
@@ -7469,6 +7581,16 @@ function entitled(u, feature) {
         if (otk) await kdb.prepare('UPDATE e2ee_keys SET prekeys_json = ? WHERE user_id = ? AND device_id = ?').bind(JSON.stringify(otks), targetId, row.device_id).run();
         return json({ user_id: targetId, device_id: row.device_id, identity_key: row.identity_key, signed_prekey: row.signed_prekey, prekey_sig: row.prekey_sig || '', one_time_prekey: otk });
       }
+    }
+    if (wantAll) {
+      const devices = [];
+      for (const [did, b] of deviceKeys) {
+        if (!b || b.user_id !== targetId) continue;
+        const otks = Array.isArray(b.one_time_prekeys) ? b.one_time_prekeys : [];
+        const otk = otks.length ? otks.shift() : null;
+        devices.push({ user_id: targetId, device_id: did, identity_key: b.identity_key, signed_prekey: b.signed_prekey, prekey_sig: b.prekey_sig || '', one_time_prekey: otk });
+      }
+      return json({ user_id: targetId, devices });
     }
     const bundle = userKeys.get(targetId);
     if (!bundle) {
@@ -8070,6 +8192,19 @@ const workerCore = {
           'Vary': 'Origin',
         } : {},
       });
+    }
+    // E2: minimum native build. New clients send X-App-Build on every call;
+    // below APP_MIN_BUILD they get 426 + the update feed stays open. Web and
+    // headerless callers pass (old apps are contained by ciphertext
+    // rejection + the C3 update nag instead).
+    {
+      const minBuild = Number.parseInt(String(env.APP_MIN_BUILD || '0'), 10) || 0;
+      const buildHdr = request.headers.get('X-App-Build');
+      const openApi = ['/api/v1/version', '/api/version', '/api/v1/app/latest', '/api/v1/legal'];
+      if (minBuild > 0 && url.pathname.startsWith('/api/') && !openApi.includes(url.pathname) && buildHdr !== null) {
+        const build = Number.parseInt(String(buildHdr), 10) || 0;
+        if (build < minBuild) return json({ error: 'update required', code: 'APP_UPGRADE_REQUIRED', min_build: minBuild }, 426);
+      }
     }
 
     // Health / Readyz / Metrics / Version
