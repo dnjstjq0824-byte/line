@@ -222,6 +222,10 @@ const MORE_ITEMS: { id: string; icon: string; label: string; nav?: NavItem }[] =
   { id: 'download', icon: 'download', label: 'lxGetApp' },
   { id: 'settings', icon: 'settings', label: 'navSettings' },
 ]
+// Audit P0-7: launch is 100% free — the wallet entry hides until the
+// server reports payments_enabled (Stage 3 re-enables it).
+const visibleMoreItems = computed(() =>
+  paymentsEnabled.value ? MORE_ITEMS : MORE_ITEMS.filter(entry => entry.id !== 'wallet'))
 function runMoreItem(id: string) {
   showMorePanel.value = false
   const item = MORE_ITEMS.find(entry => entry.id === id)
@@ -270,7 +274,7 @@ export interface NewsArticle {
 const showQrModal = ref(false)
 const myQrSvg = computed(() => makeFriendQrSvg(currentUser.value?.handle || ''))
 
-// News categories use stable IDs; labels resolve via t() (server sample feed still carries ko labels).
+// News categories use stable IDs; labels resolve via t().
 const NEWS_CATEGORY_IDS = ['all', 'popular', 'economy', 'science', 'global', 'ent', 'bookmark']
 const NEWS_CAT_KEY: Record<string, string> = { all: 'mvNewsCatAll', popular: 'mvNewsCatPopular', economy: 'mvNewsCatEconomy', science: 'mvNewsCatScience', global: 'mvNewsCatGlobal', ent: 'mvNewsCatEnt', bookmark: 'mvNewsCatBookmark' }
 function newsCatLabel(id: string): string { return t(NEWS_CAT_KEY[id] || 'mvNewsCatAll') }
@@ -299,7 +303,7 @@ function relTime(iso: string): string {
   return rtf.format(-Math.round(min / 1440), 'day')
 }
 
-// News comes from GET /api/v1/news (explicitly labelled editorial SAMPLE content, never real press).
+// News comes from GET /api/v1/news (editor-published rows, or an honest empty feed).
 async function loadNews() {
   try {
     const res = await api<{ hero: NewsArticle[]; popular: NewsArticle[]; sample?: boolean }>('/api/v1/news')
@@ -3218,7 +3222,7 @@ onBeforeUnmount(() => {
           </button>
           <div class="lx-more-grid">
             <button
-              v-for="item in MORE_ITEMS"
+              v-for="item in visibleMoreItems"
               :key="item.id"
               type="button"
               class="lx-more-item"
@@ -3503,7 +3507,17 @@ onBeforeUnmount(() => {
           <div class="lx-pane-head">
             <h2 class="lx-pane-title">{{ t('mvWallet') }}</h2>
           </div>
-          <div class="lx-scroll">
+          <!-- Audit P0-7: direct /wallet links land on an honest preparing
+               panel while payments are off (the entry itself is hidden). -->
+          <div v-if="!paymentsEnabled" class="lx-scroll">
+            <div class="lx-page-body">
+              <div class="lx-list-empty lx-empty-illustrated">
+                <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="wallet" :size="28" /></span>
+                <p>{{ t('mvPaymentsPreparing') }}</p>
+              </div>
+            </div>
+          </div>
+          <div v-else class="lx-scroll">
             <div class="lx-page-body lx-wallet">
               <section class="lx-pay-card">
                 <div class="lx-pay-top">

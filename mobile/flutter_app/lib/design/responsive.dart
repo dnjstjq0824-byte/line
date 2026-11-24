@@ -151,6 +151,8 @@ class _ConsoleDesk extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final location = GoRouterState.of(context).uri.path;
     final active = LunoNav.parentOf(location);
+    // Audit P0-7: /wallet hides while payments are off.
+    final payments = SessionScope.of(context).paymentsEnabled;
     return Scaffold(
       body: Row(
         children: [
@@ -177,7 +179,7 @@ class _ConsoleDesk extends StatelessWidget {
                           child: Text(context.l10n.harborDesk,
                               style: Theme.of(context).textTheme.labelSmall),
                         ),
-                        for (final d in LunoNav.secondary)
+                        for (final d in LunoNav.secondaryFor(payments: payments))
                           _RailItem(destination: d, active: active == d.route),
                       ],
                     ),
@@ -280,6 +282,8 @@ class _TabletDesk extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final location = GoRouterState.of(context).uri.path;
     final active = LunoNav.parentOf(location);
+    // Audit P0-7: /wallet hides while payments are off.
+    final payments = SessionScope.of(context).paymentsEnabled;
     return Scaffold(
       body: Row(
         children: [
@@ -298,7 +302,7 @@ class _TabletDesk extends StatelessWidget {
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       children: [
-                        for (final d in LunoNav.rail)
+                        for (final d in LunoNav.railFor(payments: payments))
                           _IconRailItem(destination: d, active: active == d.route),
                       ],
                     ),

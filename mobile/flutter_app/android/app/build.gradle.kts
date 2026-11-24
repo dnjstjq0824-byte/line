@@ -20,7 +20,7 @@ fun signingValue(key: String, env: String): String? =
 val releaseStoreFile = signingValue("storeFile", "LUNO_KEYSTORE_PATH")
 
 android {
-    namespace = "com.bookingnetwork.messenger.global_messenger"
+    namespace = "com.lunotalk.messenger"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -32,8 +32,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.bookingnetwork.messenger.global_messenger"
+        // Audit P0-4 (2026-11-22): Play Store launch ID, fixed before first
+        // registration (it can never change afterwards).
+        applicationId = "com.lunotalk.messenger"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

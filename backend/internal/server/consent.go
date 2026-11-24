@@ -10,7 +10,7 @@ import (
 // ageOnDate, luno_consents). The two version pairs MUST match; a node
 // drift test reads both files and fails the suite if they differ.
 const (
-	legalTermsVersion   = "2026-11-21.1"
+	legalTermsVersion   = "2026-11-24.1"
 	legalPrivacyVersion = "2026-11-21.1"
 )
 

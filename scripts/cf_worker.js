@@ -78,7 +78,7 @@ const adminReports = [];
 // signup/login gates demand; userConsents is a D1 write-through cache of who
 // agreed to what, when (luno_consents). The verification birthdate is NEVER
 // stored — only the age14 confirmation bit and timestamp survive.
-const LEGAL_VERSIONS = { terms: '2026-11-21.1', privacy: '2026-11-21.1' };
+const LEGAL_VERSIONS = { terms: '2026-11-24.1', privacy: '2026-11-21.1' };
 const userConsents = new Map();
 // A-20/B-3: attachment bytes live in R2 (MEDIA_BUCKET); D1 keeps metadata
 // only. Base64 intake is kept so existing clients keep working.
@@ -344,6 +344,12 @@ const LUNO_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS luno_blocked_hashes (
     sha256 TEXT PRIMARY KEY, reason TEXT NOT NULL DEFAULT '',
     blocked_by TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
+  // P0-5: group-call seat directory (user -> live rooms). The seat set
+  // itself lives in the per-room Durable Object; this table only tells
+  // the socket-close sweep which rooms to vacate on every isolate.
+  `CREATE TABLE IF NOT EXISTS luno_group_call_seats (
+    user_id TEXT NOT NULL, room_id TEXT NOT NULL, joined_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, room_id))`,
 ];
 const LUNO_SCHEMA_BASE = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -1287,15 +1293,29 @@ async function clearLoginFailures(identifier, ip) {
     await db.prepare('DELETE FROM login_attempts WHERE key = ?').bind(key).run();
   }
 }
+// P1-2: rate_limits TTL. Only the current window is ever read, so any older
+// row is garbage. The 2-minute cron is reserved for the offline sweep, so
+// each isolate sweeps opportunistically, at most once per 10 minutes.
+let rateLimitGcAt = 0;
+const RATE_LIMIT_GC_MS = 10 * 60 * 1000;
+async function rateLimitGc(db, windowStart) {
+  const nowMs = Date.now();
+  if (nowMs - rateLimitGcAt < RATE_LIMIT_GC_MS) return;
+  rateLimitGcAt = nowMs;
+  await db.prepare('DELETE FROM rate_limits WHERE window_start < ?').bind(windowStart).run().catch(() => null);
+}
 async function rateLimit(key, limit) {
   const db = dbOf();
   if (!db) return true; // single-node dev without D1: nothing to coordinate.
   await ensureSchema();
   const windowStart = Math.floor(Date.now() / RATE_WINDOW_MS);
-  const row = await db.prepare('SELECT count FROM rate_limits WHERE key = ? AND window_start = ?').bind(key, windowStart).first();
-  if (row && Number(row.count) >= limit) return false;
-  await db.prepare('INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(key, window_start) DO UPDATE SET count = count + 1').bind(key, windowStart).run();
-  return true;
+  // P1-2: one atomic upsert instead of SELECT-then-INSERT (no TOCTOU race,
+  // one D1 write instead of two). The first `limit` hits in a window stay
+  // open; hit limit+1 is 429 — the exact contract stage5/auth_hardening pin.
+  const row = await db.prepare('INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(key, window_start) DO UPDATE SET count = count + 1 RETURNING count').bind(key, windowStart).first();
+  const allowed = !row || Number(row.count) <= limit;
+  await rateLimitGc(db, windowStart);
+  return allowed;
 }
 // H2: daily quotas are D1-backed (UTC day) so every isolate sees the same
 // counters. Pure boundary check is exported for tests; without D1 (local
@@ -2248,114 +2268,6 @@ async function loadAttachment(id) {
   return { id: r.id, owner: r.owner_id, conversation_id: r.conversation_id, name: r.name, mime: r.mime, size: r.size, bytes };
 }
 
-// ---------- LUNO editorial SAMPLE content (G-4: explicitly labelled, not real press) ----------
-const NEWS_SAMPLE = [
-  {
-    "id": "news-hero-01",
-    "title": "LUNO Pay로 시작하는 스마트한 더치페이",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "경제",
-    "published_at": "2026-10-31T08:50:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80",
-    "summary": "모임 뒤 정산은 대화방 송금으로 끝내세요.",
-    "content": "LUNO 지갑에서 대화 상대에게 바로 송금할 수 있습니다. 더치페이 내역은 대화방에서 바로 확인할 수 있으며, 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
-    "sample": true
-  },
-  {
-    "id": "news-hero-02",
-    "title": "[샘플] 뉴스 카드 예시 2",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "IT/과학",
-    "published_at": "2026-10-31T08:42:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=80",
-    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
-    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
-    "sample": true
-  },
-  {
-    "id": "news-hero-03",
-    "title": "LUNO 포인트 적립 가이드",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "경제",
-    "published_at": "2026-10-31T08:28:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80",
-    "summary": "송금할 때마다 쌓이는 포인트를 확인하세요.",
-    "content": "LUNO Pay 송금 금액의 0.1%가 포인트로 적립됩니다. 지갑 탭에서 잔액과 포인트를 함께 확인할 수 있으며, 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
-    "sample": true
-  },
-  {
-    "id": "news-hero-04",
-    "title": "LUNO 스티커로 대화에 생기를",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "엔터",
-    "published_at": "2026-10-31T08:15:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80",
-    "summary": "감정을 전하는 스티커 팩을 만나보세요.",
-    "content": "채팅방 스티커 버튼에서 다양한 팩을 고를 수 있습니다. 자주 쓰는 스티커는 즐겨찾기에 담아두세요. 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
-    "sample": true
-  },
-  {
-    "id": "news-hero-05",
-    "title": "[샘플] 뉴스 카드 예시 5",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "글로벌",
-    "published_at": "2026-10-31T08:00:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&auto=format&fit=crop&q=80",
-    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
-    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
-    "sample": true
-  },
-  {
-    "id": "news-pop-01",
-    "rank": 1,
-    "title": "주말 모임 정산은 LUNO 송금으로",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "엔터",
-    "published_at": "2026-10-31T08:35:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
-    "summary": "영수증 사진과 함께 정산 요청을 보내세요.",
-    "content": "모임 사진을 앨범에 올리고 정산은 대화방 송금으로 마무리하세요. 송금 완료 메시지가 대화방에 남습니다. 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
-    "sample": true
-  },
-  {
-    "id": "news-pop-02",
-    "rank": 2,
-    "title": "[샘플] 뉴스 카드 예시 7",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "엔터",
-    "published_at": "2026-10-31T08:20:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
-    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
-    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
-    "sample": true
-  },
-  {
-    "id": "news-pop-03",
-    "rank": 3,
-    "title": "[샘플] 뉴스 카드 예시 8",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "IT/과학",
-    "published_at": "2026-10-31T08:00:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=300&auto=format&fit=crop&q=80",
-    "summary": "화면 구성을 확인하기 위한 샘플 콘텐츠입니다.",
-    "content": "이 항목은 LUNO 뉴스 탭의 레이아웃 확인용 샘플이며, 실제 보도 내용이 아닙니다.",
-    "sample": true
-  },
-  {
-    "id": "news-pop-04",
-    "rank": 4,
-    "title": "QR 로그인은 모바일에서 승인하세요",
-    "press": "LUNO 에디토리얼(샘플)",
-    "category": "경제",
-    "published_at": "2026-10-31T07:00:00.000Z",
-    "image_url": "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=300&auto=format&fit=crop&q=80",
-    "summary": "PC 로그인은 언제나 내 손안에서 승인됩니다.",
-    "content": "PC/웹에서 로그인하면 모바일 설정의 QR 승인으로 직접 승인해야 로그인됩니다. 모르는 승인 요청은 무시하세요. 이 기사는 LUNO 에디토리얼 샘플 콘텐츠입니다.",
-    "sample": true
-  }
-];
-
-
 // S2: handles that registration must never assign (compared lowercased).
 // System peer identities use the peer- prefix; handles cannot contain '-',
 // so the reservation is enforced as "peer" plus a separator (or exact).
@@ -2832,6 +2744,71 @@ async function hubDeliver(userIds, payload) {
   return results.reduce((a, b) => a + b, 0);
 }
 
+// P0-5: group-call rooms live in per-room Durable Objects (one stub per
+// conversation id), so joins and signals agree on every isolate. Without
+// the GROUP_CALLS binding (unit tests, local dev) the previous
+// per-isolate Map path stands unchanged.
+function groupCallsBinding() {
+  return CURRENT_ENV && CURRENT_ENV.GROUP_CALLS ? CURRENT_ENV.GROUP_CALLS : null;
+}
+async function groupRoomFetch(roomId, path, body) {
+  const ns = groupCallsBinding();
+  const stub = ns.get(ns.idFromName(String(roomId)));
+  const res = await stub.fetch(`https://group-call.internal${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+async function trackGroupCallSeat(userId, roomId) {
+  const db = dbOf();
+  if (!db) return;
+  await ensureSchema();
+  await db.prepare('INSERT OR IGNORE INTO luno_group_call_seats (user_id, room_id, joined_at) VALUES (?, ?, ?)').bind(userId, roomId, Date.now()).run().catch(() => null);
+}
+async function untrackGroupCallSeat(userId, roomId) {
+  const db = dbOf();
+  if (!db) return;
+  await db.prepare('DELETE FROM luno_group_call_seats WHERE user_id = ? AND room_id = ?').bind(userId, roomId).run().catch(() => null);
+}
+// P0-5: a dropped socket vacates every group seat of its user. With the
+// binding the seat directory (D1) names the rooms, so seats die on all
+// isolates; without it the legacy local sweep stands. Takes env
+// explicitly so tests can drive it (exported below).
+async function groupCallSeatSweep(env, userId) {
+  const ns = env && env.GROUP_CALLS ? env.GROUP_CALLS : null;
+  const db = env && env.DB ? env.DB : null;
+  if (!ns || !db) {
+    for (const [rid, peers] of groupCallRooms) {
+      if (peers.has(userId)) {
+        peers.delete(userId);
+        sendTo(Array.from(peers), { type: 'call.group.user_left', room_id: rid, user_id: userId });
+      }
+    }
+    return { swept: true };
+  }
+  await ensureSchema();
+  const { results } = await db.prepare('SELECT room_id FROM luno_group_call_seats WHERE user_id = ?').bind(userId).all().catch(() => ({ results: [] }));
+  for (const row of results || []) {
+    try {
+      const stub = ns.get(ns.idFromName(String(row.room_id)));
+      const res = await stub.fetch('https://group-call.internal/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const left = await res.json().catch(() => ({}));
+      if (res.status === 200 && left && left.left) {
+        sendTo(left.participants || [], { type: 'call.group.user_left', room_id: row.room_id, user_id: userId });
+      }
+    } catch { /* a dead room leaves nothing behind */ }
+  }
+  await db.prepare('DELETE FROM luno_group_call_seats WHERE user_id = ?').bind(userId).run().catch(() => null);
+  return { swept: true };
+}
+
 // Every call site is synchronous fire-and-forget. Keep that contract and let the
 // runtime finish the delivery after the response has been returned.
 function hubFanOut(userIds, payload) {
@@ -3092,29 +3069,78 @@ async function withCors(request, env, res) {
   return new Response(nullBody ? null : res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
-// F2: mail/SMS driver adapter. Only none (quiet off) and log (persisted
-// log + test outbox) exist; real sending (Resend etc.) is never connected.
+// F2: mail/SMS driver adapter. mock/log are test doubles; P0-1 adds the
+// real senders (resend mail, twilio SMS). Without their keys the driver
+// resolves to none and every route fails closed exactly as before.
 // In workerd the "file" is the worker log (dashboard/tail); tests observe
-// the same deliveries through the outbox seams.
+// deliveries through the outbox seams (mock/log) or a stubbed fetch.
 function resolveMailDriver(env) {
   const provider = env.RECOVERY_MAIL_PROVIDER;
-  return (provider === 'mock' || provider === 'log') ? provider : 'none';
+  if (provider === 'mock' || provider === 'log') return provider;
+  if (provider === 'resend' && env.RESEND_API_KEY) return 'resend';
+  return 'none';
 }
 function resolveSmsDriver(env) {
   const provider = env.SMS_PROVIDER;
-  return (provider === 'mock' || provider === 'log') ? provider : 'none';
+  if (provider === 'mock' || provider === 'log') return provider;
+  if (provider === 'twilio' && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM) return 'twilio';
+  return 'none';
+}
+// P0-1: Resend mail send. Throws on transport/API failure (callers fail
+// closed); returns the provider id. Needs the RESEND_API_KEY secret and
+// a verified MAIL_FROM domain (SPF/DKIM/DMARC) — representative action.
+async function resendSend(env, entry) {
+  const from = env.MAIL_FROM || 'LUNO <noreply@lunotalk.com>';
+  const recovery = entry.purpose === 'recovery';
+  const subject = recovery ? '[LUNO] 비밀번호 재설정 안내' : '[LUNO] 이메일 인증번호';
+  const text = recovery
+    ? `LUNO 비밀번호 재설정 요청이 접수되었습니다.\n\n아래 코드를 15분 안에 입력해 주세요:\n${entry.code}\n\n본인이 요청하지 않았다면 이 메일을 무시해 주세요.`
+    : `LUNO 이메일 인증번호입니다. 15분 안에 입력해 주세요:\n${entry.code}`;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to: [entry.email], subject, text }),
+  });
+  if (!res.ok) throw new Error(`resend send failed: ${res.status}`);
+  const sent = await res.json().catch(() => ({}));
+  return sent && sent.id ? String(sent.id) : '';
+}
+// P0-1: Twilio SMS send. Throws on transport/API failure. Needs the
+// TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM secrets.
+async function twilioSend(env, entry) {
+  const sid = env.TWILIO_ACCOUNT_SID;
+  const body = new URLSearchParams({ To: entry.phone, From: env.TWILIO_FROM, Body: `[LUNO] 인증번호: ${entry.code} (3분 유효)` });
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${btoa(`${sid}:${env.TWILIO_AUTH_TOKEN}`)}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) throw new Error(`twilio send failed: ${res.status}`);
+  const sent = await res.json().catch(() => ({}));
+  return sent && sent.sid ? String(sent.sid) : '';
 }
 // Deliver one code; returns false on none (caller decides quiet vs closed).
-function deliverCode(driver, outbox, entry) {
+// Real sends push a redacted record (provider id only — never the
+// recipient or code) and the outbox is capped so production never grows it.
+async function deliverCode(env, driver, outbox, entry) {
   if (driver === 'none') return false;
   // F22: recipient addresses never reach logs (outbox seam keeps them for tests).
   if (driver === 'log') logx('info', 'code delivered', { channel: entry.channel, purpose: entry.purpose });
-  outbox.push({ ...entry, created_at: Date.now() });
+  let providerId = '';
+  if (driver === 'resend') providerId = await resendSend(env, entry);
+  if (driver === 'twilio') providerId = await twilioSend(env, entry);
+  if (driver === 'resend' || driver === 'twilio') {
+    logx('info', 'code delivered', { channel: entry.channel, purpose: entry.purpose, provider: driver, provider_id: providerId });
+    outbox.push({ channel: entry.channel, purpose: entry.purpose, provider: driver, provider_id: providerId, created_at: Date.now() });
+  } else {
+    outbox.push({ ...entry, created_at: Date.now() });
+  }
+  while (outbox.length > 500) outbox.shift();
   return true;
 }
 // S1: recovery mail fails closed without a driver (501 at the route).
 async function sendRecoveryMail(env, email, code) {
-  if (!deliverCode(resolveMailDriver(env), recoveryMailOutbox, { channel: 'mail', purpose: 'recovery', email, code })) {
+  if (!await deliverCode(env, resolveMailDriver(env), recoveryMailOutbox, { channel: 'mail', purpose: 'recovery', email, code })) {
     throw new Error(`recovery mail provider not implemented: ${env.RECOVERY_MAIL_PROVIDER}`);
   }
 }
@@ -3124,12 +3150,12 @@ function verificationProvider(env) {
   return resolveMailDriver(env) === 'none' ? null : resolveMailDriver(env);
 }
 async function sendVerificationMail(env, email, code) {
-  if (!deliverCode(resolveMailDriver(env), verificationMailOutbox, { channel: 'mail', purpose: 'verify', email, code })) {
+  if (!await deliverCode(env, resolveMailDriver(env), verificationMailOutbox, { channel: 'mail', purpose: 'verify', email, code })) {
     throw new Error('verification mail provider not configured');
   }
 }
 async function sendSms(env, phone, code) {
-  if (!deliverCode(resolveSmsDriver(env), smsOutbox, { channel: 'sms', purpose: 'login', phone, code })) {
+  if (!await deliverCode(env, resolveSmsDriver(env), smsOutbox, { channel: 'sms', purpose: 'login', phone, code })) {
     throw new Error('sms provider not configured');
   }
 }
@@ -6501,19 +6527,15 @@ async function deleteAttachmentEverywhere(attId) {
     return json({ calls: rows.slice(0, 100) });
   }
   if (p === 'news' && method === 'GET') {
+    // P1-6: the tab shows editor-published D1 rows (admin console) or an
+    // honest empty feed. The labeled-sample fallback is removed: launch
+    // serves no placeholder articles.
     if (dbOf()) {
       await ensureSchema();
       const { results } = await dbOf().prepare('SELECT * FROM luno_news ORDER BY published_at DESC, created_at DESC LIMIT 50').all().catch(() => ({ results: [] }));
       if (results && results.length) return json({ sample: false, hero: results, popular: [], fetched_at: now() });
     }
-    const withRank = NEWS_SAMPLE.filter(a => a.rank);
-    return json({
-      sample: true,
-      source: 'LUNO 에디토리얼 샘플 콘텐츠 (실제 언론 기사가 아닙니다)',
-      hero: NEWS_SAMPLE.filter(a => !a.rank),
-      popular: withRank,
-      fetched_at: now()
-    });
+    return json({ sample: false, hero: [], popular: [], fetched_at: now() });
   }
   if ((m = p.match(/^calls\/([\w-]+)\/state$/)) && method === 'POST') {
     const call = await loadCallSession(m[1]);
@@ -7883,6 +7905,23 @@ function entitled(u, feature) {
     }
     if (!conv || !conv.members.includes(myId)) return json({ error: 'conversation not found' }, 404);
     if (conv.official || conv.kind === 'official') return bad('공식계정 방에서는 그룹통화를 할 수 없습니다');
+    // P0-5: the room Durable Object owns the seat set on every isolate.
+    if (groupCallsBinding()) {
+      let joined;
+      try {
+        joined = await groupRoomFetch(roomId, '/join', { user_id: myId, max: GROUP_CALL_MAX_PARTICIPANTS });
+      } catch (err) {
+        logx('error', 'group call join failed', { room_id: roomId, error: err && err.message ? err.message : String(err) });
+        return json({ error: 'group call unavailable', code: 'GROUP_CALL_UNAVAILABLE' }, 503);
+      }
+      if (joined.status === 409) return json({ error: 'group call is full' }, 409);
+      if (joined.status !== 201) return json({ error: 'group call unavailable', code: 'GROUP_CALL_UNAVAILABLE' }, 503);
+      const seats = (joined.data && joined.data.participants) || [];
+      await trackGroupCallSeat(myId, roomId);
+      sendTo(seats, { type: 'call.group.user_joined', room_id: roomId, user_id: myId, user_name: me.display_name });
+      await hydrateUsersByIds(seats);
+      return json({ status: 'joined', room_id: roomId, participants: seats.map(id => userBrief(id)).filter(Boolean) }, 201);
+    }
     if (!groupCallRooms.has(roomId)) groupCallRooms.set(roomId, new Set());
     const room = groupCallRooms.get(roomId);
     if (!room.has(myId) && room.size >= GROUP_CALL_MAX_PARTICIPANTS) return json({ error: 'group call is full' }, 409);
@@ -7896,6 +7935,20 @@ function entitled(u, feature) {
     if (!targetId) return bad('target_user_id가 필요합니다');
     const roomId = resolveConversationId(b.room_id || b.conversation_id, myId);
     if (!roomId) return bad('room_id가 필요합니다');
+    // P0-5: membership is checked against the room Durable Object.
+    if (groupCallsBinding()) {
+      let checked;
+      try {
+        checked = await groupRoomFetch(roomId, '/signal-check', { from_user_id: myId, target_user_id: targetId });
+      } catch (err) {
+        logx('error', 'group call signal failed', { room_id: roomId, error: err && err.message ? err.message : String(err) });
+        return json({ error: 'group call unavailable', code: 'GROUP_CALL_UNAVAILABLE' }, 503);
+      }
+      if (checked.status === 404) return json({ error: 'call not found' }, 404);
+      if (checked.status !== 200) return json({ error: 'not a participant of this call' }, 403);
+      sendTo([targetId], { type: 'call.group.signal', from_user_id: myId, signal: b.signal, room_id: roomId });
+      return json({ status: 'relayed' });
+    }
     // S6: relay only between two participants of the same live call room.
     const room = groupCallRooms.get(roomId);
     if (!room) return json({ error: 'call not found' }, 404);
@@ -7906,6 +7959,22 @@ function entitled(u, feature) {
   if (p === 'calls/group/leave' && method === 'POST') {
     const b = await readJson(request);
     const roomId = resolveConversationId(b.room_id || b.conversation_id, myId);
+    // P0-5: vacate the DO seat and the directory row (self-healing when
+    // they drift); a leave stays a quiet no-op either way.
+    if (groupCallsBinding()) {
+      if (roomId) {
+        await untrackGroupCallSeat(myId, roomId);
+        try {
+          const left = await groupRoomFetch(roomId, '/leave', { user_id: myId });
+          if (left.status === 200 && left.data && left.data.left) {
+            sendTo(left.data.participants || [], { type: 'call.group.user_left', room_id: roomId, user_id: myId });
+          }
+        } catch (err) {
+          logx('error', 'group call leave failed', { room_id: roomId, error: err && err.message ? err.message : String(err) });
+        }
+      }
+      return json({ status: 'left' });
+    }
     if (roomId && groupCallRooms.has(roomId)) {
       const room = groupCallRooms.get(roomId);
       // S6: only a participant's leave fans out; anything else is a quiet no-op.
@@ -8291,7 +8360,7 @@ const LATEST_ANDROID_BUILD = {
   platform: 'android',
   version: '2.0.0',
   build: 21,
-  package: 'com.bookingnetwork.messenger.global_messenger',
+  package: 'com.lunotalk.messenger',
   assets: [
     { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44477262, sha256: 'BE2D65CDE818EF135220C5E68A8839565B4F2A50993425B85FB32865BD10C369', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build21/luno-messenger-arm64.apk' },
     { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35530178, sha256: 'CD099B249F049BD5C87219B06E5A9874B797E854EC81AE0F73389AE507F68E4F', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build21/luno-messenger-arm32.apk' },
@@ -8386,14 +8455,16 @@ const workerCore = {
     }
     // F21: Android App Links verification. Public by design (no boot,
     // no auth): the OS fetches this to bind the package to the host.
-    // Fingerprints: luno-release (prod) + androiddebugkey (dev builds).
+    // Audit P0-4: luno-release-2 (current prod, apksigner-verified) +
+    // legacy release (installed base) + androiddebugkey (dev builds).
     if (url.pathname === '/.well-known/assetlinks.json' && request.method === 'GET') {
       return new Response(JSON.stringify([{
         relation: ['delegate_permission/common.handle_all_urls'],
         target: {
           namespace: 'android_app',
-          package_name: 'com.bookingnetwork.messenger.global_messenger',
+          package_name: 'com.lunotalk.messenger',
           sha256_cert_fingerprints: [
+            'F2:D7:2C:CC:80:54:A2:FA:EB:42:3F:18:5F:5F:F7:7B:A3:1D:EF:4B:90:2C:31:5E:07:1B:A8:D7:0B:4C:97:7C',
             '6D:CD:CD:38:DB:6A:48:5C:E9:99:FE:EC:9D:B5:8F:E5:CD:C7:80:63:16:AA:63:6A:56:90:8B:FD:F0:BA:64:F0',
             '15:09:C9:EE:A6:53:6E:9C:F4:9C:53:61:47:E0:66:27:0A:A9:B2:EC:93:C3:35:43:65:CF:2F:BD:D9:6C:BE:A9',
           ],
@@ -8617,14 +8688,10 @@ const workerCore = {
       });
       server.addEventListener('close', () => {
         activeSockets.delete(server);
-        // F15: a dropped socket leaves every group call room, so no ghost
-        // seat blocks the 8-participant cap.
-        for (const [rid, peers] of groupCallRooms) {
-          if (peers.has(grant.userId)) {
-            peers.delete(grant.userId);
-            sendTo(Array.from(peers), { type: 'call.group.user_left', room_id: rid, user_id: grant.userId });
-          }
-        }
+        // P0-5: a dropped socket vacates every group seat of its user on
+        // all isolates (seat directory + room DOs); without the binding
+        // the legacy local sweep inside the helper stands.
+        groupCallSeatSweep(env, grant.userId).catch(() => {});
       });
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -8710,7 +8777,11 @@ const workerCore = {
             const code = newEmailCode();
             await env.DB.prepare('INSERT OR REPLACE INTO luno_email_codes (email, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, datetime(\'now\'))')
               .bind(email, await sha256Hex(code), Date.now() + 15 * 60 * 1000).run();
-            await sendVerificationMail(env, email, code);
+            try {
+              await sendVerificationMail(env, email, code);
+            } catch {
+              return json({ error: 'verification mail unavailable, try resend later', code: 'mail_unavailable' }, 503);
+            }
           }
         }
         users.set(email, newUser);
@@ -9094,7 +9165,11 @@ const workerCore = {
         const code = newEmailCode();
         await dbOf().prepare('INSERT OR REPLACE INTO luno_email_codes (email, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, datetime(\'now\'))')
           .bind(email, await sha256Hex(code), Date.now() + 15 * 60 * 1000).run();
-        await sendVerificationMail(env, email, code);
+        try {
+          await sendVerificationMail(env, email, code);
+        } catch {
+          return json({ error: 'verification mail unavailable, try again later', code: 'mail_unavailable' }, 503);
+        }
         return quiet();
       }
 
@@ -9107,7 +9182,12 @@ const workerCore = {
         if (resolveSmsDriver(env) === 'none') return json({ error: 'phone login unavailable: SMS provider not configured' }, 501);
         const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
         phoneVerificationCodes.set(phone, { code, expires_at: Date.now() + 180000 });
-        await sendSms(env, phone, code);
+        try {
+          await sendSms(env, phone, code);
+        } catch {
+          phoneVerificationCodes.delete(phone);
+          return json({ error: 'sms unavailable, try again later', code: 'sms_unavailable' }, 503);
+        }
         return json({ status: 'sent', phone, expires_in: 180 });
       }
       if (p === 'auth/phone/verify' && request.method === 'POST') {
@@ -10200,11 +10280,99 @@ export class UserSocketHub {
   }
 }
 
+// P0-5: one Durable Object per group-call room (stub via
+// env.GROUP_CALLS.idFromName(roomId)). The seat set is the only state:
+// SQLite-backed so an evicted room reloads its seats instead of 404ing
+// a live call. Relay fanout stays in the worker (sendTo -> UserSocketHub).
+export class GroupCallRoom {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.seats = null;
+    this.started = null;
+  }
+
+  sql() {
+    return this.state.storage.sql;
+  }
+
+  ensure() {
+    this.sql().exec('CREATE TABLE IF NOT EXISTS seats (user_id TEXT PRIMARY KEY, joined_at INTEGER NOT NULL)');
+    this.sql().exec('CREATE TABLE IF NOT EXISTS room_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
+    if (!this.seats) {
+      const rows = this.sql().exec('SELECT user_id FROM seats ORDER BY joined_at, user_id').toArray();
+      this.seats = new Set(rows.map((r) => r.user_id));
+      const meta = this.sql().exec("SELECT v FROM room_meta WHERE k = 'started'").toArray();
+      this.started = meta.length > 0;
+    }
+  }
+
+  json(data, status = 200) {
+    return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    this.ensure();
+
+    if (url.pathname === '/join' && request.method === 'POST') {
+      const b = await request.json().catch(() => ({}));
+      const userId = String((b && b.user_id) || '');
+      const max = Number((b && b.max) || 8);
+      if (!userId) return this.json({ error: 'user_id required' }, 400);
+      if (!this.seats.has(userId) && this.seats.size >= max) {
+        return this.json({ error: 'group call is full' }, 409);
+      }
+      if (!this.seats.has(userId)) {
+        this.sql().exec('INSERT OR IGNORE INTO seats (user_id, joined_at) VALUES (?, ?)', userId, Date.now());
+        this.seats.add(userId);
+      }
+      if (!this.started) {
+        // The room counts as started from the first join on, even after
+        // every seat leaves — the legacy Map kept the empty room too.
+        this.sql().exec("INSERT OR IGNORE INTO room_meta (k, v) VALUES ('started', '1')");
+        this.started = true;
+      }
+      return this.json({ status: 'joined', participants: [...this.seats] }, 201);
+    }
+
+    if (url.pathname === '/signal-check' && request.method === 'POST') {
+      const b = await request.json().catch(() => ({}));
+      const from = String((b && b.from_user_id) || '');
+      const target = String((b && b.target_user_id) || '');
+      if (!this.started) return this.json({ error: 'call not found' }, 404);
+      if (!this.seats.has(from) || !this.seats.has(target)) {
+        return this.json({ error: 'not a participant of this call' }, 403);
+      }
+      return this.json({ status: 'ok' });
+    }
+
+    if (url.pathname === '/leave' && request.method === 'POST') {
+      const b = await request.json().catch(() => ({}));
+      const userId = String((b && b.user_id) || '');
+      let left = false;
+      if (userId && this.seats.has(userId)) {
+        this.sql().exec('DELETE FROM seats WHERE user_id = ?', userId);
+        this.seats.delete(userId);
+        left = true;
+      }
+      return this.json({ status: 'left', left, participants: [...this.seats] });
+    }
+
+    if (url.pathname === '/participants' && request.method === 'GET') {
+      return this.json({ participants: [...this.seats] });
+    }
+
+    return this.json({ error: 'not found' }, 404);
+  }
+}
+
 // S1: test seam export (mock/log recovery-mail deliveries).
 export { recoveryMailOutbox, verificationMailOutbox, smsOutbox };
 export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };
 export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };
 export { maskTelemetryValue, logSafe };
+export { groupCallSeatSweep }; // P0-5: socket-close seat sweep (env, userId).
 export default {
   async fetch(request, env, ctx) {
     CURRENT_ENV = env;

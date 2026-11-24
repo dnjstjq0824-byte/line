@@ -84,6 +84,15 @@ abstract final class LunoNav {
       primary.where((d) => d.route != '/more').toList();
   static List<LunoDestination> get rail => [...railPrimary, ...secondary];
 
+  /// Audit P0-7: launch is 100% free — /wallet hides from every
+  /// destination list until the server reports payments_enabled
+  /// (Stage 3 re-enables it). The route itself stays mounted so
+  /// direct links land on the WalletPage preparing panel.
+  static List<LunoDestination> secondaryFor({required bool payments}) =>
+      payments ? secondary : secondary.where((d) => d.route != '/wallet').toList();
+  static List<LunoDestination> railFor({required bool payments}) =>
+      [...railPrimary, ...secondaryFor(payments: payments)];
+
   /// Deep routes highlight their parent destination (/chats/9 -> /chats).
   static String parentOf(String location) {
     for (final d in all) {

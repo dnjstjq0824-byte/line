@@ -19,7 +19,7 @@ class MorePage extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final name = session.selfName.isEmpty ? context.l10n.myProfile : session.selfName;
     // Operator console is a staff tool, not part of the messenger.
-    final items = LunoNav.secondary
+    final items = LunoNav.secondaryFor(payments: session.paymentsEnabled)
         .where((d) => d.route != '/console' || session.selfRole == 'admin')
         .toList();
     final line = dark ? HarborDark.channel : HarborLight.channel;

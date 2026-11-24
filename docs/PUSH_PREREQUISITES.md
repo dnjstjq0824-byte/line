@@ -6,7 +6,7 @@ firebase_messaging를 넣으면 Android 빌드가 깨짐).
 
 ## 필요물 (사용자/PO 준비)
 
-1. Firebase 프로젝트 1개 + Android 앱 등록 (`com.bookingnetwork.messenger.global_messenger`)
+1. Firebase 프로젝트 1개 + Android 앱 등록 (`com.lunotalk.messenger`) — 구 패키지에서 변경됨(2026-11-24), 콘솔에 새 앱 등록 후 `google-services.json` 재발급 필요
 2. `google-services.json` → `mobile/flutter_app/android/app/`에 배치
 3. APNs 키 1개(.p8) → Firebase 콘솔에 등록(iOS 푸시용)
 4. `GoogleService-Info.plist` → `mobile/flutter_app/ios/Runner/`에 배치

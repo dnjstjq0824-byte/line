@@ -68,13 +68,10 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
-            <!-- F21: shared images are accepted but honest: the app says
-                 photo sharing is still preparing instead of dropping them. -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="image/*"/>
-            </intent-filter>
+            <!-- Audit P0-4 (2026-11-24): the photo share target stays out until the
+                 receive pipeline lands. The app no longer advertises receiving it
+                 cannot do (text/plain shares keep working). MainActivity share
+                 collection and receiveShare(hasImages) stay dormant for that day. -->
         </activity>
         <meta-data
             android:name="flutterEmbedding"

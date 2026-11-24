@@ -62,7 +62,7 @@ if (fs.existsSync(iosPlistPath)) {
 }
 
 console.log('\n=== Mobile Release Packaging Summary ===');
-console.log('• Application ID: com.bookingnetwork.messenger.global_messenger');
+console.log('• Application ID: com.lunotalk.messenger');
 console.log('• Version: 2.0.0 (versionCode: 2001)');
 console.log('• Android TargetSDK: 35 (Android 15 Google Play 2026 Compliant)');
 console.log('• Android Keystore: PKCS12 / RSA 4096-bit (Signed with LUNO Global Release Authority)');

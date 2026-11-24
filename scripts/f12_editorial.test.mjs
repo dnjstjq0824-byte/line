@@ -87,14 +87,17 @@ test('F12: follows survive a restart and rebuild the room', async () => {
   } finally { db.raw.close(); }
 });
 
-test('F12: admin news replaces the sample feed, delete restores it', async () => {
+test('F12: admin news fills the feed, delete restores the honest empty', async () => {
   const db = makeD1();
   const bucket = makeBucket();
   try {
     const admin = await makeAdmin(db, bucket);
     const u = await registerLogin(admin.api, 'f12-uc@luno-test.local');
+    // P1-6: no sample fallback — an empty db serves an empty feed.
     const before = await (await admin.api('news', 'GET', null, u.token)).json();
-    assert.equal(before.sample, true, 'empty db serves labeled sample');
+    assert.equal(before.sample, false, 'no sample flag');
+    assert.deepEqual(before.hero, [], 'no placeholder heroes');
+    assert.deepEqual(before.popular, [], 'no placeholder popular');
     assert.equal((await admin.api('admin/news', 'POST', { title: 'x' }, u.token)).status, 403);
     const created = await admin.api('admin/news', 'POST', { title: 'Real headline', press: 'LUNO', category: 'IT', summary: 'sum', content: 'body' }, admin.token);
     assert.equal(created.status, 201);
@@ -103,7 +106,9 @@ test('F12: admin news replaces the sample feed, delete restores it', async () =>
     assert.ok((live.hero || []).some((a) => a.title === 'Real headline'), 'admin article served');
     const nid = (await created.json()).id;
     assert.equal((await admin.api(`admin/news/${nid}`, 'DELETE', null, admin.token)).status, 200);
-    assert.equal((await (await admin.api('news', 'GET', null, u.token)).json()).sample, true, 'sample back when empty');
+    const after = await (await admin.api('news', 'GET', null, u.token)).json();
+    assert.equal(after.sample, false, 'still no samples when empty again');
+    assert.deepEqual(after.hero, [], 'empty again, honestly');
   } finally { db.raw.close(); }
 });
 

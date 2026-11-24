@@ -13,7 +13,7 @@ import { loadStickerCatalog, type StickerCatalogCategory } from '../../../shared
 import type { LunoSticker } from '../luno-stickers'
 import type { LunoLocale } from '../luno-i18n'
 import LinkPreview from './LinkPreview.vue'
-import { currentUser, t, token, currentLocale } from '../store/session'
+import { currentUser, t, token, currentLocale, paymentsEnabled } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import MessageAttachment from './MessageAttachment.vue'
 import PcAgentBar from './PcAgentBar.vue'
@@ -889,7 +889,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
         <button class="attach-panel-item" @click="emit('location'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="globe" :size="22" /></span><small>{{ t('mvLocationShare') }}</small></button>
         <button class="attach-panel-item" @click="emit('contact'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="friends" :size="22" /></span><small>{{ t('mvShareContact') }}</small></button>
         <button class="attach-panel-item" @click="emit('capture'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="scan" :size="22" /></span><small>{{ t('mvCapture') }}</small></button>
-        <button class="attach-panel-item" @click="emit('send-money'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="money" :size="22" /></span><small>{{ t('mvSend') }}</small></button>
+        <button v-if="paymentsEnabled" class="attach-panel-item" @click="emit('send-money'); showAttachPanel = false"><span class="lx-attach-icon"><LunoIcon name="money" :size="22" /></span><small>{{ t('mvSend') }}</small></button>
       </div>
 
       <!-- A12: runner presence + command chips above the composer in bot rooms. -->

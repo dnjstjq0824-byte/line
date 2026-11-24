@@ -38,7 +38,7 @@ void mockPackageInfo({required String version, required String buildNumber}) {
     if (call.method == 'getAll') {
       return <String, dynamic>{
         'appName': 'LUNO',
-        'packageName': 'com.bookingnetwork.messenger.global_messenger',
+        'packageName': 'com.lunotalk.messenger',
         'version': version,
         'buildNumber': buildNumber,
       };

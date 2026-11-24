@@ -54,4 +54,19 @@ jobs:
           command: deploy --config wrangler.jsonc
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '6d53e0a853ad74dec5fefcd4b4600e3a' }}
+      # Audit P1-3 (2026-11-22): every deploy is verified live, and a red
+      # gate rolls the Worker back to the previous release automatically.
+      - name: Verify live deployment
+        run: |
+          sleep 20
+          node scripts/post_deploy_gate.mjs https://luno-messenger.dnjstjqppk.workers.dev
+
+      - name: Roll back on verification failure
+        if: failure()
+        uses: cloudflare/wrangler-action@v3
+        with:
+          wranglerVersion: '4.157.0'
+          command: rollback --config wrangler.jsonc
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '6d53e0a853ad74dec5fefcd4b4600e3a' }}
 

@@ -159,10 +159,13 @@ class _HomePageState extends State<HomePage> {
                   route: '/channels'),
               _ServiceButton(
                   icon: Icons.bookmark_border, label: 'Keep', route: '/keep'),
-              _ServiceButton(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: context.l10n.mvWallet,
-                  route: '/wallet'),
+              // Audit P0-7: launch is 100% free — wallet hides until
+              // the server reports payments_enabled.
+              if (session.paymentsEnabled)
+                _ServiceButton(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: context.l10n.mvWallet,
+                    route: '/wallet'),
             ],
           ),
           const SizedBox(height: 8),

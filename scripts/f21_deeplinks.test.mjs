@@ -26,9 +26,12 @@ test('F21: assetlinks binds the package to both signing certs', async () => {
     const [entry] = await res.json();
     assert.deepEqual(entry.relation, ['delegate_permission/common.handle_all_urls']);
     assert.equal(entry.target.namespace, 'android_app');
-    assert.equal(entry.target.package_name, 'com.bookingnetwork.messenger.global_messenger');
+    assert.equal(entry.target.package_name, 'com.lunotalk.messenger');
     // Pinned deliberately: a key rotation must update this file on purpose.
+    // Order: current release (luno-release-2, apksigner-verified 2026-11-24),
+    // legacy release (installed base), debug key.
     assert.deepEqual(entry.target.sha256_cert_fingerprints, [
+      'F2:D7:2C:CC:80:54:A2:FA:EB:42:3F:18:5F:5F:F7:7B:A3:1D:EF:4B:90:2C:31:5E:07:1B:A8:D7:0B:4C:97:7C',
       '6D:CD:CD:38:DB:6A:48:5C:E9:99:FE:EC:9D:B5:8F:E5:CD:C7:80:63:16:AA:63:6A:56:90:8B:FD:F0:BA:64:F0',
       '15:09:C9:EE:A6:53:6E:9C:F4:9C:53:61:47:E0:66:27:0A:A9:B2:EC:93:C3:35:43:65:CF:2F:BD:D9:6C:BE:A9',
     ]);
@@ -44,7 +47,10 @@ test('F21: manifest declares verified links, fallback scheme and shares', async 
   assert.ok(manifest.includes('/invite/..*') && manifest.includes('/chats/..*'), 'link paths');
   assert.ok(manifest.includes('android:scheme="luno"'), 'custom scheme fallback');
   assert.ok(manifest.includes('android.intent.action.SEND'), 'share targets');
-  assert.ok(manifest.includes('text/plain') && manifest.includes('image/*'), 'text + image shares');
+  assert.ok(manifest.includes('text/plain'), 'text shares');
+  // Audit P0-4: the photo share target stays out until the receive pipeline
+  // lands — the manifest must not advertise it.
+  assert.ok(!manifest.includes('mimeType="image/'), 'no image share target');
 });
 
 test('F21: router mounts the invite landing, activity bridges shares', async () => {
@@ -53,7 +59,7 @@ test('F21: router mounts the invite landing, activity bridges shares', async () 
   assert.ok(router.includes("path: '/invite/:token'"), 'invite route');
   assert.ok(router.includes('JoinPage(token:'), 'invite landing');
   const activity = await readFile(
-    new URL('../mobile/flutter_app/android/app/src/main/kotlin/com/bookingnetwork/messenger/global_messenger/MainActivity.kt', import.meta.url),
+    new URL('../mobile/flutter_app/android/app/src/main/kotlin/com/lunotalk/messenger/MainActivity.kt', import.meta.url),
     'utf8');
   assert.ok(activity.includes('"luno.links"'), 'link channel');
   assert.ok(activity.includes('getInitialShare'), 'cold share');

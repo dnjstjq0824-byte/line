@@ -1,4 +1,4 @@
-package com.bookingnetwork.messenger.global_messenger
+package com.lunotalk.messenger
 
 import android.content.Context
 import android.media.AudioAttributes

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:luno_messenger/design/responsive.dart';
 import 'package:luno_messenger/design/v3.dart';
 import 'package:luno_messenger/router.dart';
 import 'package:luno_messenger/state/session.dart';
@@ -34,9 +35,17 @@ Future<GoRouter> _pumpHome(WidgetTester tester, SessionController s) async {
 }
 
 void main() {
+  // The tablet rail lists the same destinations, so capsule taps are
+  // scoped to the Masthead (P0-7 hid /wallet, pulling more rail tiles
+  // into the lazily built fold).
+  Finder capsuleIcon(String tooltip) => find.descendant(
+        of: find.byType(Masthead),
+        matching: find.byTooltip(tooltip),
+      );
+
   testWidgets('capsule opens Keep', (WidgetTester tester) async {
     await _pumpHome(tester, _fixture());
-    await tester.tap(find.byTooltip('Keep'));
+    await tester.tap(capsuleIcon('Keep'));
     await tester.pumpAndSettle();
     expect(find.text('Keep'), findsWidgets);
     expect(find.text('보관한 항목이 없습니다'), findsOneWidget);
@@ -44,7 +53,7 @@ void main() {
 
   testWidgets('capsule opens settings', (WidgetTester tester) async {
     await _pumpHome(tester, _fixture());
-    await tester.tap(find.byTooltip('설정'));
+    await tester.tap(capsuleIcon('설정'));
     await tester.pumpAndSettle();
     expect(find.text('설정'), findsOneWidget);
   });

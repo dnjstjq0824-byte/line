@@ -508,10 +508,12 @@ class _DeckHeader extends StatelessWidget {
                       child: _MenuRow(Icons.photo_library_outlined,
                           context.l10n.albumWord)),
                   const PopupMenuDivider(),
-                  PopupMenuItem(
-                      value: 'pay',
-                      child: _MenuRow(
-                          Icons.payments_outlined, context.l10n.mvSend)),
+                  // Audit P0-7: in-chat send hides until payments_enabled.
+                  if (session.paymentsEnabled)
+                    PopupMenuItem(
+                        value: 'pay',
+                        child: _MenuRow(
+                            Icons.payments_outlined, context.l10n.mvSend)),
                   PopupMenuItem(
                       value: 'approvals',
                       child: _MenuRow(

@@ -239,8 +239,8 @@ test('A-08: no placeholder endpoints; news/devices/calls follow their contracts'
   const api = await isolate();
   const t = await signup(api, 'lv-a08@lv.test', 'lva08');
   const news = await (await api('news', 'GET', null, t.access_token)).json();
-  assert.equal(news.sample, true); assert.ok(news.hero.length === 5 && news.popular.length === 4);
-  assert.ok(news.hero.concat(news.popular).every(a => a.sample === true && a.press.includes('샘플') && !Number.isNaN(Date.parse(a.published_at))));
+  // P1-6: no placeholder articles — empty db serves an empty feed.
+  assert.equal(news.sample, false); assert.ok(news.hero.length === 0 && news.popular.length === 0);
   const devices = await (await api('devices', 'GET', null, t.access_token)).json();
   assert.ok(devices.devices.some(d => d.id === t.device_id && d.current === true));
   const calls = await (await api('calls', 'GET', null, t.access_token)).json();

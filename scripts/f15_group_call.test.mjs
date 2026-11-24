@@ -99,12 +99,18 @@ test('F15: join lists carry tile fields (name, color) for every seat', async () 
 
 test('F15: a dropped socket vacates every group seat (no ghosts)', async () => {
   // The WS close path needs a live socket pair, which the fetch harness
-  // cannot drive; pin the cleanup block in source instead.
+  // cannot drive; pin the cleanup wiring in source instead.
   const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-  const closeBlock = source.match(/addEventListener\('close', \(\) => \{[\s\S]*?for \(const \[rid, peers\] of groupCallRooms\)[\s\S]*?\}\);/)?.[0] || '';
-  assert.ok(closeBlock.length > 0, 'close handler walks groupCallRooms');
-  assert.ok(closeBlock.includes('peers.delete(grant.userId)'), 'seat vacated');
-  assert.ok(closeBlock.includes("type: 'call.group.user_left'"), 'rest are notified');
+  // P0-5: the close handler delegates to the cross-isolate sweep.
+  const closeBlock = source.match(/addEventListener\('close', \(\) => \{[\s\S]*?\}\);/)?.[0] || '';
+  assert.ok(closeBlock.includes('groupCallSeatSweep(env, grant.userId)'), 'close handler sweeps seats');
+  // The sweep itself: directory-driven DO leave + fanout, legacy fallback.
+  const sweep = source.match(/async function groupCallSeatSweep[\s\S]*?\n\}/)?.[0] || '';
+  assert.ok(sweep.includes('FROM luno_group_call_seats WHERE user_id'), 'directory names the rooms');
+  assert.ok(sweep.includes('/leave'), 'room DO vacated');
+  assert.ok(sweep.includes("type: 'call.group.user_left'"), 'rest are notified');
+  assert.ok(sweep.includes('DELETE FROM luno_group_call_seats WHERE user_id'), 'directory cleared');
+  assert.ok(sweep.includes('for (const [rid, peers] of groupCallRooms)'), 'legacy fallback stands');
 });
 
 test('F15: web mesh joins, relays per peer, and leaves through the group endpoints', async () => {

@@ -68,10 +68,19 @@ void main() {
 
   testWidgets('apps tab lists every secondary destination but itself',
       (WidgetTester tester) async {
+    // Audit P0-7: AppsPage reads the payments flag from the session;
+    // with payments on the directory lists every secondary tile again.
+    final session = SessionController()
+      ..selfId = 'u-test'
+      ..paymentsEnabled = true;
+    addTearDown(session.disposeAll);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: LunoHarbor.theme(Brightness.light),
-        home: const AppsPage(),
+      SessionScope(
+        notifier: session,
+        child: MaterialApp(
+          theme: LunoHarbor.theme(Brightness.light),
+          home: const AppsPage(),
+        ),
       ),
     );
     await tester.pumpAndSettle();

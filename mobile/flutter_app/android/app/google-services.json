@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:885496575720:android:4d5a8b195782e9f4383b5d",
         "android_client_info": {
-          "package_name": "com.bookingnetwork.messenger.global_messenger"
+          "package_name": "com.lunotalk.messenger"
         }
       },
       "oauth_client": [],

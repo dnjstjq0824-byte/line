@@ -43,14 +43,24 @@
   // Rollback: redeploy the prior worker/bindings, retaining this namespace and
   // migration history. Do not use a deleted_classes migration as a rollback.
   // ---------------------------------------------------------------------------
-  "durable_objects": { "bindings": [{ "name": "USER_HUB", "class_name": "UserSocketHub" }] },
-  "migrations": [{ "tag": "v1-user-socket-hub", "new_sqlite_classes": ["UserSocketHub"] }],
+  "durable_objects": { "bindings": [{ "name": "USER_HUB", "class_name": "UserSocketHub" }, { "name": "GROUP_CALLS", "class_name": "GroupCallRoom" }] },
+  "migrations": [{ "tag": "v1-user-socket-hub", "new_sqlite_classes": ["UserSocketHub"] }, { "tag": "v2-group-call-room", "new_sqlite_classes": ["GroupCallRoom"] }],
   "triggers": { "crons": ["*/2 * * * *"] },
+  // Local development only: `npx wrangler dev --env dev` restores the
+  // localhost Vite origins for cross-origin UI work. Production
+  // (top-level vars) must never list localhost (audit P1-3, 2026-11-22).
+  "env": {
+    "dev": {
+      "vars": {
+        "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,https://lunotalk.com,https://www.lunotalk.com,http://localhost:5173,http://localhost:8080"
+      }
+    }
+  },
   "vars": {
     // Preserve the existing standalone service on its one approved hostname.
     // All other public hosts still fail closed. Demo-account policy is unchanged.
     "STANDALONE_HOSTS": "luno-messenger.dnjstjqppk.workers.dev,lunotalk.com,www.lunotalk.com",
-    "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,https://lunotalk.com,https://www.lunotalk.com,http://localhost:5173,http://localhost:8080",
+    "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,https://lunotalk.com,https://www.lunotalk.com",
     // Rooms persist in D1. The two tables behind this flag are part of the
     // worker's runtime schema (ensureSchema), so no hand-applied migration
     // is needed first. Pinned by scripts/direct_chat.test.mjs.
@@ -86,6 +96,13 @@
     // (GCP asia-northeast3-a, static IP 34.47.120.225). Credentials are minted
     // per user from the TURN_SECRET secret (coturn use-auth-secret); without
     // the secret only STUN is offered.
-    "TURN_URLS": "turn:34.47.120.225:3478?transport=udp,turn:34.47.120.225:3478?transport=tcp"
+    "TURN_URLS": "turn:34.47.120.225:3478?transport=udp,turn:34.47.120.225:3478?transport=tcp",
+    // P0-1: real mail/SMS sending. RECOVERY_MAIL_PROVIDER='resend' needs the
+    // RESEND_API_KEY secret plus a verified MAIL_FROM domain (SPF/DKIM/DMARC
+    // at the DNS + Resend dashboard — representative action).
+    // SMS_PROVIDER='twilio' needs TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN /
+    // TWILIO_FROM secrets (`wrangler secret put`). Without the keys the
+    // drivers resolve to 'none' and auth routes fail closed as before.
+    "MAIL_FROM": "LUNO <noreply@lunotalk.com>"
   }
 }

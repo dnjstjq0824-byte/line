@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../nav.dart';
+import '../state/session.dart';
 import '../util/app_l10n.dart';
 
 class AppsPage extends StatelessWidget {
@@ -14,6 +15,8 @@ class AppsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // Audit P0-7: /wallet hides while payments are off.
+    final payments = SessionScope.of(context).paymentsEnabled;
     return ListView(
       children: [
         PageColumn(
@@ -27,7 +30,7 @@ class AppsPage extends StatelessWidget {
               crossAxisSpacing: 8,
               children: [
                 // UX4: the directory never lists itself.
-                for (final d in LunoNav.secondary)
+                for (final d in LunoNav.secondaryFor(payments: payments))
                   if (d.route != '/apps')
                     Card(
                       color: dark ? HarborDark.surface : Colors.white,

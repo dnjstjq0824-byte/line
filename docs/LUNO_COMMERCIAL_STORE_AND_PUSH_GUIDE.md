@@ -20,7 +20,7 @@
 ## 2. [Track 1] 모바일 앱 스토어 배포 규격
 
 ### 2-1. Android (Google Play Console)
-- **패키지 식별자:** `com.bookingnetwork.messenger.global_messenger`
+- **패키지 식별자:** `com.lunotalk.messenger` (2026-11-24 감사 P0-4 확정, 최초 등록 후 변경 불가)
 - **버전:** `versionName: 2.0.0`, `versionCode: 2001`
 - **Android TargetSDK:** `35` (Android 15 Google Play 2026 규정 준수)
 - **최소 SDK:** `minSdkVersion: 24` (Android 7.0 이상 전 기기 지원)
@@ -36,7 +36,7 @@
   - `android.permission.FOREGROUND_SERVICE_*` (통화 백그라운드 유지)
 
 ### 2-2. iOS (Apple App Store)
-- **번들 식별자:** `com.bookingnetwork.messenger.globalMessenger`
+- **번들 식별자:** `com.lunotalk.messenger` (2026-11-24 감사 P0-4 확정)
 - **최소 배포 타깃:** iOS 14.0+
 - **Background Modes (Info.plist):**
   - `voip`: Apple PushKit을 통한 수신 전화 시 CallKit 즉시 기동

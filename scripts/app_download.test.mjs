@@ -148,7 +148,7 @@ test('GET /api/v1/app/latest reports the per-ABI Build 21 assets', async () => {
   assert.equal(body.platform, 'android');
   assert.equal(body.version, '2.0.0');
   assert.equal(body.build, 21);
-  assert.equal(body.package, 'com.bookingnetwork.messenger.global_messenger');
+  assert.equal(body.package, 'com.lunotalk.messenger');
   assert.equal(body.assets.length, 3);
   const byAbi = Object.fromEntries(body.assets.map((a) => [a.abi, a]));
   assert.deepEqual(byAbi['arm64-v8a'], {
