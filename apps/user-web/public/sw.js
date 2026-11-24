@@ -60,3 +60,55 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+// P1-4: Web Push. Encrypted payloads from notify() arrive here even with the
+// browser closed. call_end carries { dismiss } to close the ring; everything
+// else renders and deep-links through data.url.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = {}; }
+  event.waitUntil((async () => {
+    if (data && data.dismiss) {
+      const open = await self.registration.getNotifications({ tag: data.dismiss }).catch(() => []);
+      open.forEach((n) => { try { n.close(); } catch {} });
+      return;
+    }
+    const title = (data && data.title) || 'LUNO';
+    const body = (data && data.body) || '새 알림';
+    const tag = (data && data.tag) || 'luno';
+    const url = (data && data.url) || '/';
+    await self.registration.showNotification(title, {
+      body,
+      tag,
+      data: { url },
+      icon: './brand/luno-icon-192.png',
+      badge: './brand/luno-icon-192.png',
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const raw = (event.notification.data && event.notification.data.url) || '/';
+  let target = '/';
+  try {
+    const u = new URL(raw, self.location.origin);
+    target = u.origin === self.location.origin ? (u.pathname + u.search + u.hash) : '/';
+  } catch { target = '/'; }
+  const abs = new URL(target, self.location.origin).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of wins) {
+      if (c.url === abs && 'focus' in c) return c.focus();
+    }
+    for (const c of wins) {
+      try {
+        if (new URL(c.url).origin === self.location.origin && 'navigate' in c && 'focus' in c) {
+          await c.navigate(abs);
+          return c.focus();
+        }
+      } catch {}
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(abs);
+  })());
+});

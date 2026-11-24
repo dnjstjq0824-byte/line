@@ -500,6 +500,13 @@ const LUNO_SCHEMA_PHASE1 = [
   `CREATE TABLE IF NOT EXISTS push_tokens (
     user_id TEXT NOT NULL, device_id TEXT NOT NULL, platform TEXT NOT NULL DEFAULT '',
     token TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, device_id))`,
+  // P1-4: Web Push subscriptions (browser endpoints). D1-required, no
+  // memory mirror (support-tickets precedent). Endpoints the push
+  // service reports 404/410 are deleted on send.
+  `CREATE TABLE IF NOT EXISTS luno_webpush_subs (
+    endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+    p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_luno_webpush_user ON luno_webpush_subs(user_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS conversation_notes (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, author_id TEXT NOT NULL,
     title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`,
@@ -3907,6 +3914,181 @@ registerPushProvider('log', async (env, targets, event) => {
       .bind(uid, event.kind, event.conversation_id || '', event.title || '', preview ? (event.body || '') : '새 알림', at).run();
   }
 });
+// P1-4: Web Push (VAPID RFC 8292 + message encryption RFC 8291
+// aes128gcm). Needs VAPID_PUBLIC_KEY (vars, base64url raw 65 bytes) +
+// VAPID_PRIVATE_KEY (secret, base64url raw 32 bytes) + VAPID_SUBJECT
+// (mailto). Without them this leg is a no-op and native/FCM behavior
+// stands unchanged. Tests inject stub fetch via env.WEBPUSH_FETCH and
+// drive webpushEncrypt directly against the RFC 8291 section 5 vector
+// (exported below).
+const WEBPUSH_MAX_SUBS_PER_USER = 10;
+const WEBPUSH_TTL_MESSAGE = 86400;
+const WEBPUSH_TTL_CALL = 45;
+const WEBPUSH_TTL_DISMISS = 60;
+function webpushB64uDecode(s) {
+  const b = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b + '='.repeat((4 - (b.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function webpushConcat(...parts) {
+  const bytes = parts.map((p) => (typeof p === 'number' ? new Uint8Array([p]) : p));
+  const out = new Uint8Array(bytes.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of bytes) { out.set(p, at); at += p.length; }
+  return out;
+}
+function webpushConfig(env) {
+  try {
+    const pub = webpushB64uDecode(env && env.VAPID_PUBLIC_KEY);
+    const priv = webpushB64uDecode(env && env.VAPID_PRIVATE_KEY);
+    const subject = String((env && env.VAPID_SUBJECT) || '');
+    if (pub.length !== 65 || pub[0] !== 0x04 || priv.length !== 32) return null;
+    if (!subject) return null;
+    return { pub, priv, subject, pubB64u: String(env.VAPID_PUBLIC_KEY) };
+  } catch { return null; }
+}
+async function webpushHkdf(salt, ikm, info, len) {
+  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, len * 8);
+  return new Uint8Array(bits);
+}
+// RFC 8291 section 3.4 (single aes128gcm record). opts pins the random
+// inputs for the section 5 vector test: { salt, asPublicRaw,
+// asPrivateRaw, rs, padLen }. Production omits them (fresh ephemeral
+// key, random salt, no extra padding).
+async function webpushEncrypt(receiverPubRaw, authRaw, plaintext, opts = {}) {
+  const enc = new TextEncoder();
+  let asPub = opts.asPublicRaw || null;
+  let asPrivKey = null;
+  if (opts.asPrivateRaw && asPub) {
+    asPrivKey = await crypto.subtle.importKey('jwk', {
+      kty: 'EC', crv: 'P-256',
+      x: fcmB64url(asPub.slice(1, 33)), y: fcmB64url(asPub.slice(33, 65)),
+      d: fcmB64url(opts.asPrivateRaw),
+    }, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  } else {
+    const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    asPrivKey = pair.privateKey;
+    const j = await crypto.subtle.exportKey('jwk', pair.publicKey);
+    asPub = webpushConcat(0x04, webpushB64uDecode(j.x), webpushB64uDecode(j.y));
+  }
+  const uaPubKey = await crypto.subtle.importKey('jwk', {
+    kty: 'EC', crv: 'P-256',
+    x: fcmB64url(receiverPubRaw.slice(1, 33)), y: fcmB64url(receiverPubRaw.slice(33, 65)),
+  }, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const ecdh = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaPubKey }, asPrivKey, 256));
+  const keyInfo = webpushConcat(enc.encode('WebPush: info'), 0x00, receiverPubRaw, asPub);
+  const ikm = await webpushHkdf(authRaw, ecdh, keyInfo, 32);
+  const salt = opts.salt || crypto.getRandomValues(new Uint8Array(16));
+  const cek = await webpushHkdf(salt, ikm, webpushConcat(enc.encode('Content-Encoding: aes128gcm'), 0x00), 16);
+  const nonce = await webpushHkdf(salt, ikm, webpushConcat(enc.encode('Content-Encoding: nonce'), 0x00), 12);
+  const record = webpushConcat(plaintext, 0x02, new Uint8Array(opts.padLen || 0));
+  const rs = opts.rs || (record.length + 16);
+  if (rs < record.length + 16) throw new Error('webpush rs too small');
+  const cekKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, cekKey, record));
+  const header = new Uint8Array(16 + 4 + 1 + 65);
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, rs);
+  header[20] = 65;
+  header.set(asPub, 21);
+  return webpushConcat(header, ct);
+}
+async function webpushVapidJwt(cfg, audience) {
+  const enc = new TextEncoder();
+  const nowS = Math.floor(Date.now() / 1000);
+  const h = fcmB64url(enc.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const c = fcmB64url(enc.encode(JSON.stringify({ aud: audience, exp: nowS + 12 * 3600, sub: cfg.subject })));
+  const key = await crypto.subtle.importKey('jwk', {
+    kty: 'EC', crv: 'P-256',
+    x: fcmB64url(cfg.pub.slice(1, 33)), y: fcmB64url(cfg.pub.slice(33, 65)),
+    d: fcmB64url(cfg.priv),
+  }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, enc.encode(`${h}.${c}`)));
+  return `${h}.${c}.${fcmB64url(sig)}`;
+}
+// Payload the service worker renders. call_end carries a dismiss tag
+// (the worker closes the ring notification); everything else opens url.
+function webpushPayloadFor(event) {
+  const kind = String((event && event.kind) || 'message');
+  const cid = String((event && event.conversation_id) || '');
+  const callId = String((event && event.call_id) || '');
+  if (kind === 'call_end' && callId) return { dismiss: `call-${callId}` };
+  const url = cid ? `/chats/${cid}` : '/chats';
+  const tag = kind === 'call' && callId ? `call-${callId}` : (cid ? `chat-${cid}` : 'luno');
+  return {
+    title: String((event && event.title) || 'LUNO'),
+    body: String((event && event.body) || '새 알림').slice(0, 200),
+    url, tag, kind, conversation_id: cid,
+  };
+}
+function webpushTopicFor(event) {
+  const cid = String((event && event.conversation_id) || 'luno').replace(/[^A-Za-z0-9-_]/g, '').slice(0, 32);
+  return cid || 'luno';
+}
+async function webpushSendOne(env, cfg, sub, payloadBytes, event) {
+  const doFetch = typeof env.WEBPUSH_FETCH === 'function' ? env.WEBPUSH_FETCH : fetch;
+  let uaPub = null, auth = null;
+  try {
+    uaPub = webpushB64uDecode(sub.p256dh);
+    auth = webpushB64uDecode(sub.auth);
+  } catch { return { ok: false, gone: true }; }
+  if (uaPub.length !== 65 || uaPub[0] !== 0x04 || auth.length !== 16) return { ok: false, gone: true };
+  const body = await webpushEncrypt(uaPub, auth, payloadBytes);
+  const aud = new URL(sub.endpoint).origin;
+  const jwt = await webpushVapidJwt(cfg, aud);
+  const ringing = event && event.kind === 'call';
+  const dismiss = event && event.kind === 'call_end';
+  const res = await doFetch(sub.endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Encoding': 'aes128gcm',
+      'Content-Length': String(body.length),
+      TTL: String(ringing ? WEBPUSH_TTL_CALL : (dismiss ? WEBPUSH_TTL_DISMISS : WEBPUSH_TTL_MESSAGE)),
+      Urgency: ringing ? 'high' : 'normal',
+      Topic: webpushTopicFor(event),
+      Authorization: `vapid t=${jwt}, k=${cfg.pubB64u}`,
+    },
+    body,
+  });
+  await res.arrayBuffer().catch(() => null);
+  if (res.status === 404 || res.status === 410) return { ok: false, gone: true };
+  return { ok: res.ok, gone: false };
+}
+async function webpushDeliver(env, cfg, targets, event) {
+  const db = dbOf();
+  if (!db) return { sent: 0 };
+  await ensureSchema();
+  const enc = new TextEncoder();
+  let payloadBytes = enc.encode(JSON.stringify(webpushPayloadFor(event)));
+  if (payloadBytes.length > 3800) {
+    const slim = { ...webpushPayloadFor(event), body: String((event && event.body) || '새 알림').slice(0, 100) };
+    payloadBytes = enc.encode(JSON.stringify(slim));
+  }
+  if (payloadBytes.length > 3800) return { sent: 0 };
+  let sent = 0;
+  for (const uid of targets) {
+    const { results } = await db.prepare('SELECT endpoint, p256dh, auth FROM luno_webpush_subs WHERE user_id = ?').bind(uid).all().catch(() => ({ results: [] }));
+    for (const sub of results || []) {
+      try {
+        const r = await webpushSendOne(env, cfg, sub, payloadBytes, event);
+        if (r.gone) await db.prepare('DELETE FROM luno_webpush_subs WHERE endpoint = ?').bind(sub.endpoint).run().catch(() => null);
+        else if (r.ok) sent++;
+      } catch { /* one dead endpoint never fails the batch */ }
+    }
+  }
+  return { sent };
+}
+registerPushProvider('webpush', async (env, targets, event) => {
+  const cfg = webpushConfig(env);
+  if (!cfg) return;
+  const task = webpushDeliver(env, cfg, targets, event).catch(() => ({ sent: 0 }));
+  if (CURRENT_CTX && typeof CURRENT_CTX.waitUntil === 'function') { CURRENT_CTX.waitUntil(task); return; }
+  await task;
+});
 async function roomMuted(cid, uid) {
   if (!cid) return false;
   if (cMeta(cid, uid).muted) return true;
@@ -3935,6 +4117,11 @@ async function notify(env, userIds, event) {
   }
   const provider = activePushProvider(env || {});
   if (provider) await provider(env, targets, out);
+  // P1-4: Web Push rides alongside the native leg (a user with both an
+  // app and a subscribed browser gets both). Unconfigured VAPID keeps
+  // this a strict no-op.
+  const web = webpushConfig(env || {}) ? pushProviders.get('webpush') : null;
+  if (web && web !== provider) await web(env, targets, out);
   return { notified: targets };
 }
 function notifyEnv() {
@@ -7576,6 +7763,38 @@ function entitled(u, feature) {
     const out = await notify(env, [myId], { kind: 'message', conversation_id: '', sender_id: null, title: 'LUNO', body: '푸시 알림 테스트입니다' });
     return json({ status: 'queued', notified: out.notified.length });
   }
+  // P1-4: Web Push subscription management (browser endpoints).
+  if (p === 'push/vapid-key' && method === 'GET') {
+    const key = notifyEnv().VAPID_PUBLIC_KEY;
+    if (!key) return json({ error: 'web push not configured', code: 'VAPID_NOT_CONFIGURED' }, 503);
+    return json({ public_key: key });
+  }
+  if (p === 'push/subscriptions' && (method === 'POST' || method === 'DELETE')) {
+    if (!dbOf()) return bad('web push subscriptions need a database', 503);
+    await ensureSchema();
+    if (method === 'DELETE') {
+      const b = await readJson(request);
+      const endpoint = clip(new URL(request.url).searchParams.get('endpoint') || b.endpoint || '', 2000);
+      if (!endpoint) return bad('endpoint가 필요합니다');
+      await dbOf().prepare('DELETE FROM luno_webpush_subs WHERE endpoint = ? AND user_id = ?').bind(endpoint, myId).run();
+      return json({ status: 'cleared' });
+    }
+    const b = await readJson(request);
+    const endpoint = clip(b.endpoint || '', 2000);
+    const p256dh = String((b.keys && b.keys.p256dh) || '');
+    const auth = String((b.keys && b.keys.auth) || '');
+    let pad = null, ad = null;
+    try { pad = webpushB64uDecode(p256dh); ad = webpushB64uDecode(auth); } catch { return bad('keys 형식이 올바르지 않습니다'); }
+    if (!endpoint.startsWith('https://') || pad.length !== 65 || pad[0] !== 0x04 || ad.length !== 16) {
+      return bad('endpoint/keys 형식이 올바르지 않습니다');
+    }
+    // One browser, one owner: reassign on account switch.
+    await dbOf().prepare('DELETE FROM luno_webpush_subs WHERE endpoint = ?').bind(endpoint).run();
+    await dbOf().prepare('INSERT INTO luno_webpush_subs (endpoint, user_id, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)').bind(endpoint, myId, p256dh, auth, now()).run();
+    // Cap per user, oldest evicted (P1-2 lesson: no unbounded growth).
+    await dbOf().prepare(`DELETE FROM luno_webpush_subs WHERE user_id = ? AND endpoint NOT IN (SELECT endpoint FROM luno_webpush_subs WHERE user_id = ? ORDER BY created_at DESC, endpoint DESC LIMIT ${WEBPUSH_MAX_SUBS_PER_USER})`).bind(myId, myId).run().catch(() => null);
+    return json({ status: 'subscribed' }, 201);
+  }
   if ((m = p.match(/^conversations\/([\w-]+)\/sync$/)) && method === 'GET') {
     const cid = resolveConversationId(m[1], myId);
     const conv = conversations.get(cid);
@@ -10373,6 +10592,7 @@ export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY,
 export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };
 export { maskTelemetryValue, logSafe };
 export { groupCallSeatSweep }; // P0-5: socket-close seat sweep (env, userId).
+export { webpushEncrypt, webpushB64uDecode }; // P1-4: RFC 8291 vector test seam.
 export default {
   async fetch(request, env, ctx) {
     CURRENT_ENV = env;

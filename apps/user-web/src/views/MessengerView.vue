@@ -19,6 +19,7 @@ import { makeFriendQrSvg } from '../../../shared/friend_qr'
 import { listRowTime } from '../../../shared/list_time'
 import { initialOf } from '../../../shared/avatar_initial'
 import { playSendSound } from '../sound-effects'
+import { syncWebPushSubscription } from '../web_notify'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -3122,6 +3123,9 @@ onMounted(async () => {
       // After the token is restored: firing earlier sends this request
       // without auth and logs a 401 on every screen load.
       void ensureTranslateLanguages()
+      // P1-4: re-assert the closed-browser push subscription on every
+      // authenticated mount (idempotent; silent without VAPID keys).
+      void syncWebPushSubscription()
       await connectRealtime()
     } catch {
       clearLocalSession()

@@ -5,6 +5,7 @@ import { ref, type Ref } from 'vue'
 import type { Router } from 'vue-router'
 
 import { api, currentUser, error, note, t, token, wrap } from '../store/session'
+import { clearWebPushSubscription } from '../web_notify'
 import type { Chat, Message } from '../../../shared/api'
 
 export interface AuthDeps {
@@ -77,6 +78,9 @@ export function useAuth(deps: AuthDeps) {
     try {
       await api('/api/v1/auth/logout', 'POST', {})
     } catch { error.value = t('logout_unconfirmed') }
+    // P1-4: stop closed-browser pushes for this browser (best effort,
+    // before the token is cleared).
+    await clearWebPushSubscription().catch(() => {})
     clearLocalSession()
     void router.push('/login')
   }

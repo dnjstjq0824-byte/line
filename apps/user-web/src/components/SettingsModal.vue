@@ -7,7 +7,7 @@ import { computed, onMounted, ref } from 'vue'
 import type { User } from '../../../shared/api'
 import E2eeSettings from './E2eeSettings.vue'
 import { SUPPORTED_LOCALES, type LunoLocale } from '../luno-i18n'
-import { requestWebNotifyPermission, webNotifyEnabled } from '../web_notify'
+import { requestWebNotifyPermission, syncWebPushSubscription, webNotifyEnabled } from '../web_notify'
 import {
   api,
   appVersion,
@@ -241,7 +241,9 @@ function refreshNotifyState() {
   else notifyState.value = webNotifyEnabled.value ? 'on' : 'off'
 }
 async function enableWebNotify() {
-  await requestWebNotifyPermission()
+  const granted = await requestWebNotifyPermission()
+  // P1-4: granted here also subscribes the closed-browser push channel.
+  if (granted) void syncWebPushSubscription()
   refreshNotifyState()
 }
 

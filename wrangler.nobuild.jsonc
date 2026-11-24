@@ -103,6 +103,12 @@
     // SMS_PROVIDER='twilio' needs TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN /
     // TWILIO_FROM secrets (`wrangler secret put`). Without the keys the
     // drivers resolve to 'none' and auth routes fail closed as before.
-    "MAIL_FROM": "LUNO <noreply@lunotalk.com>"
+    "MAIL_FROM": "LUNO <noreply@lunotalk.com>",
+    // P1-4: Web Push (VAPID). Generate one keypair and keep it stable:
+    //   node -e "require('crypto').webcrypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']).then(async (p)=>{const j=await require('crypto').webcrypto.subtle.exportKey('jwk',p.publicKey);const d=(await require('crypto').webcrypto.subtle.exportKey('jwk',p.privateKey)).d;console.log('PUBLIC='+Buffer.concat([Buffer.from([4]),Buffer.from(j.x,'base64url'),Buffer.from(j.y,'base64url')]).toString('base64url'));console.log('PRIVATE='+d)})"
+    // then set VAPID_PUBLIC_KEY here and `wrangler secret put VAPID_PRIVATE_KEY`.
+    // Empty (below) keeps the web leg a strict no-op.
+    "VAPID_PUBLIC_KEY": "BPpeC1NLmwJXD5Z9fj14BbeWOuVhxiMzzjR9yr83k_ab1LIermnYiYFP3irwA-uuX_Y8DBh5Pfuf6Zbnv14b2bQ",
+    "VAPID_SUBJECT": "mailto:push@lunotalk.com"
   }
 }
