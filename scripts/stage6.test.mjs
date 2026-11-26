@@ -124,11 +124,13 @@ test('T1: guard defaults live in one exported place', async () => {
 test('T1: web translates through the server endpoint, never local', async () => {
   const { readFile } = await import('node:fs/promises');
   const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+  const translate = await readFile(new URL('../apps/user-web/src/composables/useMessengerTranslate.ts', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
   const settings = await readFile(new URL('../apps/user-web/src/components/SettingsModal.vue', import.meta.url), 'utf8');
   const i18n = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
   assert.ok(!i18n.includes('translateMessageText'), 'local phrasebook engine removed');
-  assert.ok(view.includes("'/api/v1/translate'") && view.includes("'/api/v1/translate/languages'"), 'view uses the server contract');
+  assert.ok(translate.includes("'/api/v1/translate'") && translate.includes("'/api/v1/translate/languages'"), 'translate flow uses the server contract');
+  assert.ok(view.includes('useMessengerTranslate()'), 'view wires the translate flow');
   assert.ok(pane.includes('v-for="lang in translateLanguages"'), 'pane picker renders the server list');
   assert.ok(pane.includes(':disabled="!translateConfigured"'), 'pane translate controls disable while unconfigured');
   assert.ok(settings.includes("SUPPORTED_LOCALES.filter((l) => translateLanguages.includes(l.code))"), 'settings grid follows the server list');

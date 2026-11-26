@@ -47,7 +47,7 @@ test('mvCallStartFailed is translated in all four locales', () => {
 
 test('worker starts a call session without any SDP (signaling needs no media)', async () => {
   const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-  const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const { default: worker } = await import('./cf_worker.js?outgoing_call');
   const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' };
   const call = (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,

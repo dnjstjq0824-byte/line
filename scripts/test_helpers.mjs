@@ -47,6 +47,48 @@ export function makeD1() {
   };
 }
 
+// P2 split: worker source scan. Tests asserting on worker source text must
+// read the entry plus every worker module, because names move out of
+// cf_worker.js into scripts/worker/. Entry stays first so its line numbers
+// never shift for positional assertions (f23 caps block).
+export async function readWorkerSources() {
+  const { readFile } = await import('node:fs/promises');
+  const parts = [await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')];
+  let names = [];
+  try {
+    names = fs.readdirSync(new URL('./worker/', import.meta.url)).filter((f) => f.endsWith('.mjs')).sort();
+  } catch { names = []; }
+  for (const n of names) parts.push(await readFile(new URL(`./worker/${n}`, import.meta.url), 'utf8'));
+  return parts.join('\n');
+}
+
+// P2 split: bundle worker modules into one importable source. ONLY for tests
+// that patch worker source before importing (explicit_roles): data-URL imports
+// cannot resolve relative ./worker/*.mjs specifiers. Constraint: worker modules
+// must export through trailing `export {...}` lists only (no inline exports),
+// and the entry must reference them through single-line worker import /
+// re-export lines only.
+export async function bundleWorkerSource(patchedEntrySource) {
+  const { readFile } = await import('node:fs/promises');
+  const names = fs.readdirSync(new URL('./worker/', import.meta.url)).filter((f) => f.endsWith('.mjs')).sort();
+  const mods = [];
+  for (const n of names) {
+    const text = await readFile(new URL(`./worker/${n}`, import.meta.url), 'utf8');
+    // Strip the export list and inter-module imports: concatenated modules
+    // share one scope, so cross-module names resolve as globals.
+    const flat = text
+      .replace(/^export \{[^}]*\};?\s*$/gm, '')
+      .replace(/^import \{[^}]*\} from '\.\/[^']+\.mjs';\s*$/gm, '');
+    mods.push(`\n// ---- bundled: worker/${n} ----\n${flat}`);
+  }
+  // Strip both worker imports and worker re-exports (`export ... from`):
+  // the concatenated modules already define every name in one scope.
+  const entry = patchedEntrySource
+    .replace(/^import \{[^}]*\} from '\.\/worker\/[^']+';\s*$/gm, '')
+    .replace(/^export \{[^}]*\} from '\.\/worker\/[^']+';[^\n]*$/gm, '');
+  return `${mods.join('\n')}\n${entry}`;
+}
+
 // Minimal R2 bucket fake: put/get/delete with byte-fidelity bodies.
 export function makeBucket() {
   const objects = new Map();

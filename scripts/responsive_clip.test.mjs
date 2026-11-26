@@ -26,13 +26,16 @@ test('sticker picker overlays above the dock instead of squeezing in-flow', () =
   assert.match(css, /\.sticker-picker-popover \{[^}]*position: absolute; bottom: 100%;/);
 });
 
-test('phone tab bar: four named destinations plus More, sharing the width evenly', () => {
+test('phone tab bar: four named destinations plus More, sharing the width evenly', async () => {
   // The shell replaced the floating capsule with a full-width tab bar.
+  const { readFile } = await import('node:fs/promises');
+  const tab = await readFile(new URL('../apps/user-web/src/components/PhoneTabBar.vue', import.meta.url), 'utf8');
   const nav = messengerView.split('const PRIMARY_NAV')[1].split('= [')[1].split(/\r?\n\]/)[0];
   assert.equal((nav.match(/\{ nav: '/g) || []).length, 4, 'four primary destinations');
-  const tabbar = messengerView.split('<nav class="lx-tabbar"')[1].split('</nav>')[0];
-  assert.ok(tabbar.includes('v-for="item in PRIMARY_NAV"'), 'tabs come from PRIMARY_NAV');
+  const tabbar = tab.split('<nav class="lx-tabbar"')[1].split('</nav>')[0];
+  assert.ok(tabbar.includes('v-for="item in primaryNav"'), 'tabs come from primaryNav');
   assert.ok(tabbar.includes("t('lxMore')"), 'More is the fifth tab');
+  assert.ok(messengerView.includes('<PhoneTabBar'), 'view renders the tab bar');
   assert.match(shell, /\.lx-tab \{[^}]*flex: 1;[^}]*min-width: 0;/);
   assert.match(shell, /\.lx-tabbar \{[^}]*position: fixed;[^}]*display: flex;/);
 });

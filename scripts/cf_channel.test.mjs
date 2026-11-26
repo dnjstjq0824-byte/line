@@ -4,7 +4,7 @@ import test from 'node:test';
 import { F24_CONSENT } from './test_helpers.mjs';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { default: worker } = await import('./cf_worker.js?cf_channel');
 
 async function api(path, token, method = 'GET', body) {
   return worker.fetch(new Request(`http://localhost/api/v1/${path}`, {

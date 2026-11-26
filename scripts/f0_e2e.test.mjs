@@ -196,10 +196,12 @@ test('F0: typing pings members and strangers 404', async () => {
 
 test('F0: clients call the single password path', async () => {
   const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+  const pw = await readFile(new URL('../apps/user-web/src/composables/usePasswordChange.ts', import.meta.url), 'utf8');
   const session = await readFile(new URL('../mobile/flutter_app/lib/state/session.dart', import.meta.url), 'utf8');
   const worker = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
   assert.ok(!worker.includes("p === 'me/password'"), 'duplicate worker path removed');
-  assert.ok(view.includes('/api/v1/auth/change-password') && !view.includes('/api/v1/auth/password'), 'web uses the single path');
+  assert.ok(pw.includes('/api/v1/auth/change-password') && !pw.includes('/api/v1/auth/password'), 'web uses the single path');
   assert.ok(!view.includes('me/password'), 'web never calls the removed path');
+  assert.ok(view.includes('usePasswordChange()'), 'view wires the password flow');
   assert.ok(session.includes('/api/v1/auth/change-password'), 'app uses the single path');
 });

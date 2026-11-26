@@ -8,6 +8,7 @@ import { F24_CONSENT } from './test_helpers.mjs';
 // proves the matrix is structurally a QR code.
 const qr = await import('../apps/shared/friend_qr.ts');
 const viewSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const qrModalSource = await readFile(new URL('../apps/user-web/src/components/QrModal.vue', import.meta.url), 'utf8');
 
 test('friend QR payload mirrors the server code format', () => {
   assert.equal(qr.friendQrPayload('alice_kim'), 'LUNO-FRIEND:alice_kim');
@@ -40,13 +41,14 @@ test('QR svg is deterministic, well-formed, and distinct per handle', () => {
 
 test('QR modal renders the real matrix instead of the scan icon', () => {
   assert.ok(viewSource.includes('makeFriendQrSvg'));
-  assert.ok(viewSource.includes('v-html="myQrSvg"'));
+  assert.ok(viewSource.includes(':qr-svg="myQrSvg"'), 'view feeds its matrix into the modal');
+  assert.ok(qrModalSource.includes('v-html="qrSvg"'));
   assert.ok(!viewSource.includes('name="scan" :size="96"'));
 });
 
 test('worker me/qr returns the code format the client mirrors', async () => {
   const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-  const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const { default: worker } = await import('./cf_worker.js?friend_qr');
   const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' };
   const call = (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,

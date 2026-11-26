@@ -89,9 +89,10 @@ test('F4: reporters list their own history', async () => {
 
 test('F4: web and app ship report screens', async () => {
   const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+  const report = await readFile(new URL('../apps/user-web/src/composables/useMessengerReport.ts', import.meta.url), 'utf8');
   const modal = await readFile(new URL('../apps/user-web/src/components/SettingsModal.vue', import.meta.url), 'utf8');
   const session = await readFile(new URL('../mobile/flutter_app/lib/state/session.dart', import.meta.url), 'utf8');
-  assert.ok(view.includes('/api/v1/reports') && view.includes('mvReportUser'), 'web report dialog posts');
-  assert.ok(modal.includes('reports/mine') || view.includes('reports/mine'), 'web history lists mine');
+  assert.ok(report.includes('/api/v1/reports') && view.includes('mvReportUser'), 'web report dialog posts');
+  assert.ok(modal.includes('reports/mine') || report.includes('reports/mine'), 'web history lists mine');
   assert.ok(session.includes('/api/v1/reports') && session.includes('reports/mine'), 'app reports and lists');
 });

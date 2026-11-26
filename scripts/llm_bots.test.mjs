@@ -801,10 +801,10 @@ test('L-15: mention to decision record passes with zero real LLM calls', async (
 test('L-01: web profile and bubbles badge bots', async () => {
   const panel = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
   const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
-  const shell = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+  const preview = await readFile(new URL('../apps/user-web/src/components/FriendDetailPane.vue', import.meta.url), 'utf8');
   const css = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
   assert.ok(css.includes('.badge-bot'), 'bot badge style exists');
   assert.ok(panel.includes("kind === 'bot'") && panel.includes('badge-bot'), 'friend rows badge bots');
   assert.ok(pane.includes('sender_kind') && pane.includes('badge-bot'), 'bubbles badge bot senders');
-  assert.ok(shell.includes('badge-bot'), 'profile preview badges bots');
+  assert.ok(preview.includes("kind === 'bot'") && preview.includes('badge-bot'), 'profile preview badges bots');
 });

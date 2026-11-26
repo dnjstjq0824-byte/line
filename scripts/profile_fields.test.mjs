@@ -9,7 +9,7 @@ import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 
 async function memoryApi() {
-  const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`);
+  const { default: worker } = await import('./cf_worker.js?profilemem');
   const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' };
   return (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,

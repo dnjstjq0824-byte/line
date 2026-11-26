@@ -28,10 +28,10 @@ function memoryApi(worker, outbox) {
 
 let memorySerial = 0;
 async function memoryWorker() {
-  // A trailing comment keeps every data-URL import a distinct module, so each
-  // test gets a fresh isolate (memory state and mock outbox).
-  const src = `${workerSource}\n// memory isolate ${++memorySerial}\n`;
-  const ns = await import(`data:text/javascript;base64,${Buffer.from(src).toString('base64')}`);
+  // A unique query keeps every import a distinct module, so each test gets a
+  // fresh isolate (memory state and mock outbox). Shared worker/*.mjs modules
+  // hold frozen data only, so sharing them is behavior-identical.
+  const ns = await import(`./cf_worker.js?recoverymem=${++memorySerial}`);
   return memoryApi(ns.default, ns.recoveryMailOutbox);
 }
 

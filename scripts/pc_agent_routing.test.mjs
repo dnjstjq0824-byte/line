@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { makeD1, F24_CONSENT } from './test_helpers.mjs';
+import { makeD1, F24_CONSENT, readWorkerSources } from './test_helpers.mjs';
 
 const PW = 'Str0ng!Passw0rd';
 let serial = 0;
@@ -287,7 +287,7 @@ test('production config turns the remote-work switches on', async () => {
   const wrangler = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
   assert.match(wrangler, /"LLM_ENABLED"\s*:\s*"true"/);
   assert.match(wrangler, /"DURABLE_CONVERSATIONS"\s*:\s*"true"/);
-  const worker = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
+  const worker = await readWorkerSources();
   assert.match(worker, /CREATE TABLE IF NOT EXISTS luno_conversations \(/, 'the flag is only safe because the tables self-create');
   assert.match(worker, /CREATE TABLE IF NOT EXISTS luno_conversation_members \(/);
 });

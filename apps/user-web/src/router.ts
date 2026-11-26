@@ -7,6 +7,25 @@ import { SITE_LANGS, SITE_LANG_ALIASES, pickSiteLang } from './site-i18n'
 // Menu = URL: every reachable pane has an independent address.
 export const NAV_PATHS = ['chats', 'home', 'news', 'calls', 'voom', 'openchat', 'wallet', 'shop'] as const
 export type NavPath = (typeof NAV_PATHS)[number]
+// P2 split: view-local nav vocabulary, moved verbatim from views/MessengerView.vue
+// (NavPath covers routable panes; NavItem adds rail-only actions).
+export type NavItem =
+  | 'home'
+  | 'chats'
+  | 'news'
+  | 'calls'
+  | 'voom'
+  | 'openchat'
+  | 'wallet'
+  | 'shop'
+  | 'add-friends'
+  | 'open-search'
+  | 'open-mail'
+  | 'open-apps'
+  | 'open-video'
+  | 'open-stream'
+  | 'open-ai'
+  | 'open-services'
 
 const langPattern = SITE_LANGS.join('|')
 const aliasPattern = Object.keys(SITE_LANG_ALIASES).join('|')

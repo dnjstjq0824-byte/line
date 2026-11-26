@@ -31,11 +31,13 @@ test('CallModal forwards video refs with dynamic :ref', () => {
   assert.equal(statics.length, 0);
 });
 
-test('voice fallback explains itself before opening the audio picker', () => {
-  const body = viewSource.match(/async function toggleVoiceRecording[\s\S]*?\n}\n/)?.[0] || '';
+test('voice fallback explains itself before opening the audio picker', async () => {
+  const voice = (await readFile(new URL('../apps/user-web/src/composables/useVoiceRecording.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  const body = voice.match(/async function toggleVoiceRecording[\s\S]*?\n}\n/)?.[0] || '';
   assert.ok(body.length > 0);
   const notes = body.match(/note\.value = t\('mvVoiceRecordFailed'\)/g) || [];
   assert.equal(notes.length, 2);
+  assert.ok(viewSource.includes('useVoiceRecording({ selectedChatId, uploading, chooseAttachment'), 'view wires voice recording');
 });
 
 test('mvVoiceRecordFailed is translated in all four locales', () => {

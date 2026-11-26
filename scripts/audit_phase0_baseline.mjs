@@ -3,7 +3,10 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 const output = 'docs/audit-20261105';
 const origin = 'https://luno-messenger.dnjstjqppk.workers.dev';
-const source = fs.readFileSync('scripts/cf_worker.js', 'utf8');
+// P2 split: worker source is the entry plus worker/*.mjs (sorted), same set the
+// deploy hash covers.
+const workerModFiles = fs.readdirSync('scripts/worker').filter((f) => f.endsWith('.mjs')).sort();
+const source = fs.readFileSync('scripts/cf_worker.js', 'utf8') + '\n' + workerModFiles.map((f) => fs.readFileSync(`scripts/worker/${f}`, 'utf8')).join('\n');
 const probes = await Promise.all(['/api/v1/version', '/readyz', '/', '/admin/', '/partner/', '/developer/', '/creator/', '/ads/'].map(async path => {
   const response = await fetch(origin + path, { signal: AbortSignal.timeout(15000) });
   const details = path.startsWith('/api/') || path === '/readyz' ? await response.json() : undefined;
@@ -15,7 +18,7 @@ const baseline = {
   measuredAt: new Date().toISOString(), scope: 'Read-only production HTTP and local source inspection; no production authentication or data/schema/deployment changes',
   gitHead: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   worktree: execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim().split(/\r?\n/),
-  localWorkerSha256: createHash('sha256').update(source).digest('hex'),
+  localWorkerSha256: createHash('sha256').update(Buffer.concat([fs.readFileSync('scripts/cf_worker.js'), ...workerModFiles.map((f) => fs.readFileSync(`scripts/worker/${f}`))])).digest('hex'),
   probes, localStateMaps: maps, runtimeSchemaTables: tables,
   note: 'This is not a full authorized workflow audit. Production role accounts, live provider/device workflows and full schema constraints are not assessed by these probes.'
 };

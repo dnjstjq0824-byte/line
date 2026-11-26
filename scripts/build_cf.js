@@ -74,7 +74,15 @@ const versionData = {
 // A local hotfix may be authorized while Git writes are on hold. Never present
 // its old HEAD as though it uniquely identified the deployed worker source.
 versionData.source_dirty = execSync('git status --porcelain', { encoding: 'utf8' }).trim().length > 0;
-versionData.worker_source_sha256 = createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'cf_worker.js'))).digest('hex');
+// P2 split: the deployed worker is the entry plus worker/*.mjs; the identity
+// hash covers all of them (sorted) so the smoke check pins the whole set.
+// scripts/audit_production_smoke.mjs computes the identical byte stream.
+const workerModDir = path.join(__dirname, 'worker');
+const workerModFiles = fs.readdirSync(workerModDir).filter((f) => f.endsWith('.mjs')).sort();
+versionData.worker_source_sha256 = createHash('sha256').update(Buffer.concat([
+  fs.readFileSync(path.join(__dirname, 'cf_worker.js')),
+  ...workerModFiles.map((f) => fs.readFileSync(path.join(workerModDir, f))),
+])).digest('hex');
 
 fs.writeFileSync(path.join(distRoot, 'version.json'), JSON.stringify(versionData, null, 2));
 
@@ -108,6 +116,7 @@ const testSeams = [
   'export { QUOTA_UPLOADS_PER_DAY, QUOTA_UPLOAD_BYTES_PER_DAY, QUOTA_ROOMS_PER_DAY, quotaWouldExceed };',
   'export { TRANSLATE_MAX_CHARS, TRANSLATE_PER_MINUTE, TRANSLATE_CHARS_PER_DAY, translateProviderCalls, registerTranslateProvider };',
   'export { maskTelemetryValue, logSafe };',
+  'export { webpushEncrypt, webpushB64uDecode } from \'./worker/webpush.mjs\'; // P1-4: RFC 8291 vector test seam.',
 ];
 let stamped = workerCode.replace(buildInfoPattern, `const BUILD_INFO = ${JSON.stringify(versionData, null, 2)};`);
 for (const seam of testSeams) {
@@ -121,6 +130,8 @@ if (leftover) {
   throw new Error(`unknown named export would break workerd boot, add it to testSeams or remove it: ${leftover[0]}`);
 }
 fs.writeFileSync(workerOut, stamped, 'utf8');
+// P2 split: the deployed entry imports ./worker/*.mjs; ship the modules beside it.
+copyDir(path.join(__dirname, 'worker'), path.join(workerOutDir, 'worker'));
 
 console.log(`✅ Combined Cloudflare distribution prepared in ./dist_cf (Commit: ${versionData.short_commit})`);
 

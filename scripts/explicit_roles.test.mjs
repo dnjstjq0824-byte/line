@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { F24_CONSENT } from './test_helpers.mjs';
+import { F24_CONSENT, bundleWorkerSource } from './test_helpers.mjs';
 let serial = 0;
 function database() {
   const raw = new DatabaseSync(':memory:');
@@ -18,7 +18,9 @@ function database() {
   } };
 }
 async function isolate(db, source) {
-  const module = source ? await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${++serial}`) : await import(`./cf_worker.js?roles=${++serial}`);
+  // P2 split: patched source is bundled with worker/*.mjs before the data-URL
+  // import, because a data: URL cannot resolve relative module specifiers.
+  const module = source ? await import(`data:text/javascript;base64,${Buffer.from(await bundleWorkerSource(source)).toString('base64')}#${++serial}`) : await import(`./cf_worker.js?roles=${++serial}`);
   return async (path, token, method = 'GET', body) => module.default.fetch(new Request('http://localhost/api/v1/' + path, {
     method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body ? { body: JSON.stringify(body) } : {})
   }), { ALLOW_LOCAL_DEMO: 'true', DB: db });

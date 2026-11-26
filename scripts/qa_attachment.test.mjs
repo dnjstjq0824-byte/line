@@ -14,7 +14,7 @@ import { F24_CONSENT } from './test_helpers.mjs';
 //      mobile webviews refuse to open programmatically.
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+const { default: worker } = await import('./cf_worker.js?qa_attachment')
 
 async function api(path, token, method = 'GET', body) {
   const res = await worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
@@ -52,6 +52,7 @@ test('favorite toggle persists and restores (star path contract)', async () => {
 })
 
 const vue = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8')
+const drawers = await readFile(new URL('../apps/user-web/src/composables/useRoomDrawers.ts', import.meta.url), 'utf8')
 const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8')
 const appCss = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8')
 const v2Css = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8')
@@ -59,8 +60,9 @@ const shellCss = v2Css // lx-* shell rules live at the end of the single skin (U
 const i18n = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8')
 
 test('drawer buttons guide the user when no chat is selected', () => {
-  assert.match(vue, /function toggleDrawer[\s\S]{0,400}selectedChatId\.value/)
-  assert.match(vue, /mvDrawerNeedChat/)
+  assert.match(drawers, /function toggleDrawer[\s\S]{0,400}selectedChatId\.value/)
+  assert.match(drawers, /mvDrawerNeedChat/)
+  assert.ok(vue.includes('useRoomDrawers({ selectedChatId, chats, messages })'), 'view wires the drawers')
   const hits = i18n.split('\n').filter(l => l.includes('mvDrawerNeedChat'))
   assert.equal(hits.length, 4)
   for (const h of hits) assert.doesNotMatch(h, /mvDrawerNeedChat:\s*'mvDrawerNeedChat'/)

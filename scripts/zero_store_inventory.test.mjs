@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readWorkerSources } from './test_helpers.mjs';
 
 // §5.1 store inventory gate.
 //
 // Directive substance: no isolate-local state may die with the worker for the
-// durable domain. Every module-level store in cf_worker.js is classified:
+// durable domain. Every module-level store in cf_worker.js + scripts/worker/*.mjs
+// is classified (P2 split: the scan covers the entry and all worker modules):
 //   - static: frozen configuration, never mutated as storage
 //   - ephemeral: live transport (sockets, in-flight challenges/calls, the
 //     per-request context) — meaningless across isolates by nature
@@ -14,7 +15,7 @@ import { readFile } from 'node:fs/promises';
 //   - unbacked: memory-only domain state whose D1 migration is still queued
 // This test fails on any UNCLASSIFIED store, so no new in-memory durable
 // state can land silently, and the unbacked count may only shrink.
-const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
+const source = await readWorkerSources();
 
 const STATIC = new Set([
   'MESSAGE_KINDS', 'FORGED_CLIENT_KINDS', 'BOT_ONLY_KINDS', 'REVOKED_LEGACY_PASSWORD_HASHES', 'RESERVED_HANDLES',

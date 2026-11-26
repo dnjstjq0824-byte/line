@@ -11,7 +11,12 @@ async function probe(path, expected = 200, method = 'GET', body) {
 }
 try {
   const version = await (await probe('/api/v1/version')).json();
-  const localHash = createHash('sha256').update(fs.readFileSync('scripts/cf_worker.js')).digest('hex');
+  // P2 split: identical byte stream to scripts/build_cf.js (entry + worker/*.mjs sorted).
+  const workerFiles = fs.readdirSync('scripts/worker').filter((f) => f.endsWith('.mjs')).sort();
+  const localHash = createHash('sha256').update(Buffer.concat([
+    fs.readFileSync('scripts/cf_worker.js'),
+    ...workerFiles.map((f) => fs.readFileSync(`scripts/worker/${f}`)),
+  ])).digest('hex');
   assert.equal(version.worker_source_sha256, localHash, 'Deployed worker must match the reviewed local worker source');
   const readiness = await (await probe('/readyz')).json(); assert.equal(readiness.checks.schema, 'ready');
   for (const path of ['/', '/admin/', '/partner/', '/developer/', '/creator/', '/ads/']) await probe(path);

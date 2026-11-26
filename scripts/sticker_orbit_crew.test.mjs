@@ -13,7 +13,7 @@ const crew = [...dart.matchAll(/\{'id': '([a-z_]+)', 'emoji': '([^']+)', 'charac
 test('orbit crew stickers from the app are accepted, others still rejected', async () => {
   assert.equal(crew.length, 6);
   const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-  const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const { default: worker } = await import('./cf_worker.js?sticker_orbit_crew');
   const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' };
   const call = (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,

@@ -102,6 +102,19 @@ export type Message = {
     unsent?: boolean
   }
 }
+// P2 split: moved verbatim from user-web MessengerView.vue (news tab type).
+export interface NewsArticle {
+  id: string
+  title: string
+  press: string
+  category: string
+  published_at: string
+  image_url: string
+  summary: string
+  content: string
+  rank?: number
+  views?: string
+}
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly code?: string) { super(message); this.name = 'ApiError' }
 }

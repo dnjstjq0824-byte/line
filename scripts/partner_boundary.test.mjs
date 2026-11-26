@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { F24_CONSENT } from './test_helpers.mjs';
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { default: worker } = await import('./cf_worker.js?partner_boundary');
 const env = { ADMIN_INITIAL_PASSWORD: 'Partner#Admin1', DEMO_INITIAL_PASSWORD: 'Partner#Demo12' };
 async function api(path, token, method = 'GET', body) {
   return worker.fetch(new Request('http://localhost/api/v1/' + path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }), env);

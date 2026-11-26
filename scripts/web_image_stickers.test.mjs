@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 const shared = await import('../apps/shared/stickers.ts');
 const pane = readFileSync(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
 const view = readFileSync(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const senders = readFileSync(new URL('../apps/user-web/src/composables/useMessageSenders.ts', import.meta.url), 'utf8');
 const appCss = readFileSync(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
 const loader = readFileSync(new URL('../apps/shared/sticker_catalog.ts', import.meta.url), 'utf8');
 
@@ -54,7 +55,8 @@ test('the picker loads the catalog and sends picked ids', () => {
   assert.ok(pane.includes('loadStickerCatalog()'), 'lazy catalog load');
   assert.ok(pane.includes('imgCatItems'), 'category grid');
   assert.ok(pane.includes("emit('sticker', st.id)"), 'pick sends the id');
-  assert.ok(view.includes('imageStickerChar(stickerId)'), 'sent character resolved');
+  assert.ok(senders.includes('imageStickerChar(stickerId)'), 'sent character resolved');
+  assert.ok(view.includes('useMessageSenders({ selectedChatId, chats, messages,'), 'view wires the senders');
   assert.ok(loader.includes('/stickers/catalog.json'), 'loader url');
   assert.ok(loader.includes('inflightCatalog'), 'singleflight fetch');
 });

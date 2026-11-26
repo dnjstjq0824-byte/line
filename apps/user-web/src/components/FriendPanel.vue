@@ -7,6 +7,7 @@ import { ref } from 'vue'
 import type { Chat, User } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
 import { currentUser, t } from '../store/session'
+import { hideBrokenAvatar, taglineOf } from '../messenger-format'
 import LunoIcon from './LunoIcon.vue'
 
 export interface OfficialAccount {
@@ -64,19 +65,6 @@ function clearAllSearchKeywords() {
   recentSearchKeywords.value = []
 }
 
-// A status line worth showing: the person's own status message, or a bio they
-// wrote. The placeholder bio that older signups carry is not one.
-function taglineOf(u: User): string {
-  const bio = u.bio && u.bio !== 'New Messenger User' ? u.bio : ''
-  return u.status_message || bio
-}
-
-// FX-10: a broken avatar photo hides itself; the initial layered
-// underneath shows instead of the browser's broken-image glyph.
-function hideBrokenAvatar(ev: Event) {
-  const img = ev.target as HTMLElement | null
-  if (img) img.style.display = 'none'
-}
 </script>
 
 <template>

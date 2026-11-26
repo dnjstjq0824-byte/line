@@ -10,6 +10,8 @@ const tokens = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css',
 const appCss = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
 const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
 const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
+const format = await readFile(new URL('../apps/user-web/src/messenger-format.ts', import.meta.url), 'utf8');
+const burst = await readFile(new URL('../apps/user-web/src/composables/useBurstGroups.ts', import.meta.url), 'utf8');
 
 test('§7-2 typography tokens exist with exact values', () => {
   for (const [name, value] of [
@@ -78,9 +80,12 @@ test('§7-3 bubble tails, widths and burst wiring are applied', () => {
   assert.ok(appCss.includes('var(--bubble-max-desktop'), 'desktop max width applied');
   assert.ok(appCss.includes('.pc-msg-row.group-inner'), 'group-inner spacing rule exists');
   assert.ok(appCss.includes('.pc-continued-indent'), 'continued-indent rule exists');
-  for (const fn of ['function isSameBurst', 'function isGroupLead', 'function isGroupTail']) {
-    assert.ok(view.includes(fn), `MessengerView defines ${fn}`);
+  // P2 split: burst helpers live in messenger-format/useBurstGroups; the view wires them.
+  assert.ok(format.includes('function isSameBurst'), 'messenger-format defines function isSameBurst');
+  for (const fn of ['function isGroupLead', 'function isGroupTail']) {
+    assert.ok(burst.includes(fn), `useBurstGroups defines ${fn}`);
   }
+  assert.ok(view.includes('useBurstGroups(messages)'), 'view wires burst grouping to its messages');
   assert.ok(pane.includes(`'group-inner': !isGroupLead(msg, index)`), 'rows carry group-inner');
   assert.ok(pane.includes('isGroupLead(msg, index)" class="pc-avatar'), 'avatar only on lead');
   assert.ok(pane.includes('v-if="isGroupTail(msg, index)" class="pc-msg-meta"'), 'meta only on tail');

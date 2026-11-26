@@ -8,7 +8,7 @@ import { makeBucket, makeD1 , F24_CONSENT } from './test_helpers.mjs'
 // failures mean server drift, not client bugs.
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+const { default: worker } = await import('./cf_worker.js?cf_mobile_p1')
 
 async function api(path, token, method = 'GET', body, env = { ALLOW_LOCAL_DEMO: 'true' }) {
   const res = await worker.fetch(new Request(`http://localhost/api/v1/${path}`, {

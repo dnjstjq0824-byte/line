@@ -9,7 +9,7 @@ import { F24_CONSENT } from './test_helpers.mjs';
 // names no longer resolve (they bypassed search restrictions).
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+const { default: worker } = await import('./cf_worker.js?qa_friend_search')
 
 async function api(path, token, method = 'GET', body) {
   const res = await worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
@@ -73,8 +73,10 @@ test('user search lists Alice for substring queries', async () => {
 
 test('add-friend modal offers candidate search over GET /users', () => {
   const vue = readFileSync('apps/user-web/src/views/MessengerView.vue', 'utf8')
-  assert.match(vue, /\/api\/v1\/users\?q=/)
-  assert.match(vue, /addFriendResults/)
+  const friends = readFileSync('apps/user-web/src/composables/useFriendsGroups.ts', 'utf8')
+  assert.match(friends, /\/api\/v1\/users\?q=/)
+  assert.match(friends, /addFriendResults/)
+  assert.ok(vue.includes('<AddFriendModal'), 'view renders the add-friend modal')
 })
 
 test('add-friend copy does not promise phone search (no phone data exists)', () => {

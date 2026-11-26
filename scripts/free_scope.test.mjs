@@ -5,6 +5,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const messenger = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const shellMore = await readFile(new URL('../apps/user-web/src/composables/useShellMore.ts', import.meta.url), 'utf8');
+const shellNav = await readFile(new URL('../apps/user-web/src/components/ShellNav.vue', import.meta.url), 'utf8');
+const walletPane = await readFile(new URL('../apps/user-web/src/components/WalletPane.vue', import.meta.url), 'utf8');
 const pane = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
 const nav = await readFile(new URL('../mobile/flutter_app/lib/nav.dart', import.meta.url), 'utf8');
 const more = await readFile(new URL('../mobile/flutter_app/lib/pages/more.dart', import.meta.url), 'utf8');
@@ -14,16 +17,18 @@ const home = await readFile(new URL('../mobile/flutter_app/lib/pages/home.dart',
 const chatRoom = await readFile(new URL('../mobile/flutter_app/lib/pages/chat_room.dart', import.meta.url), 'utf8');
 
 test('P0-7: web hides the wallet entry and money buttons while off', () => {
-  assert.ok(messenger.includes('v-for="item in visibleMoreItems"'), 'more grid uses the filtered list');
+  assert.ok(shellNav.includes('v-for="item in visibleMoreItems"') || shellNav.includes('v-for="item in moreItems"'), 'more grid uses the filtered list');
+  assert.ok(messenger.includes('<ShellNav'), 'view renders the shell nav');
   assert.ok(
-    messenger.includes("MORE_ITEMS.filter(entry => entry.id !== 'wallet')"),
+    shellMore.includes("MORE_ITEMS.filter(entry => entry.id !== 'wallet')"),
     'wallet filtered while payments are off'
   );
   assert.ok(
-    messenger.includes('<div v-if="!paymentsEnabled" class="lx-scroll">') &&
-    messenger.includes("t('mvPaymentsPreparing')"),
+    walletPane.includes('<div v-if="!paymentsEnabled" class="lx-scroll">') &&
+    walletPane.includes("t('mvPaymentsPreparing')"),
     'direct /wallet links land on a preparing panel'
   );
+  assert.ok(messenger.includes('<WalletPane'), 'view renders the wallet pane');
   assert.ok(
     pane.includes('<button v-if="paymentsEnabled" class="attach-panel-item" @click="emit(\'send-money\')'),
     'attach-panel send-money gated'

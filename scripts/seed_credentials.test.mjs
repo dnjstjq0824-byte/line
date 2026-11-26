@@ -6,8 +6,8 @@
 // accounts do not exist at all, and an empty/non-string override seeds nothing.
 //
 // boot() memoizes the seed, so each case needs its own module instance. Node caches
-// module imports by URL, and a base64 data: URL of the same source is the same URL,
-// so a unique trailing comment per instance is what actually forces a fresh module.
+// module imports by URL, so a unique query per instance is what actually forces
+// a fresh module (P2 split: data-URL imports cannot resolve ./worker/*.mjs).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,8 +17,7 @@ const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8'
 
 let instanceCount = 0;
 async function freshWorker() {
-  const unique = `${source}\n// fresh worker instance ${++instanceCount}\n`;
-  const mod = await import(`data:text/javascript;base64,${Buffer.from(unique).toString('base64')}`);
+  const mod = await import(`./cf_worker.js?seedcred=${++instanceCount}`);
   return mod.default;
 }
 

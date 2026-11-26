@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const reportModal = await readFile(new URL('../apps/user-web/src/components/ReportModal.vue', import.meta.url), 'utf8');
+const reportFlow = await readFile(new URL('../apps/user-web/src/composables/useMessengerReport.ts', import.meta.url), 'utf8');
 const i18n = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
 const consoleApp = await readFile(new URL('../apps/admin-console/src/App.vue', import.meta.url), 'utf8');
 const consoleI18n = await readFile(new URL('../apps/shared/console-i18n.ts', import.meta.url), 'utf8');
@@ -13,9 +15,10 @@ const F29_NEW = ['illegal_filming', 'child_exploitation', 'violence'];
 
 test('web report modal offers every server category', () => {
   for (const cat of ['spam', 'abuse', 'harassment', ...F29_NEW, 'other']) {
-    assert.ok(view.includes(`<option value="${cat}">`), `option ${cat} present`);
+    assert.ok(reportModal.includes(`<option value="${cat}">`), `option ${cat} present`);
   }
-  assert.ok(view.includes('category: reportCategory.value'), 'selected category posted');
+  assert.ok(reportFlow.includes('category: reportCategory.value'), 'selected category posted');
+  assert.ok(view.includes('<ReportModal'), 'view renders the report modal');
 });
 
 test('web report category labels exist in all four locales', () => {

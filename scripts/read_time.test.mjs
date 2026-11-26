@@ -10,6 +10,7 @@ import { makeD1 , F24_CONSENT } from './test_helpers.mjs';
 const timeSource = await readFile(new URL('../apps/shared/list_time.ts', import.meta.url), 'utf8');
 const { listRowTime } = await import(`data:text/javascript;base64,${Buffer.from(timeSource).toString('base64')}`);
 const viewSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const formatSource = await readFile(new URL('../apps/user-web/src/messenger-format.ts', import.meta.url), 'utf8');
 const appCssSource = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
 const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
@@ -49,7 +50,7 @@ test('list rows show clock time today, dates otherwise', () => {
 });
 
 test('chat list binds the day-aware row formatter', () => {
-  assert.match(viewSource, /function formatListTime\(iso: string\)[\s\S]{0,400}?listRowTime/);
+  assert.match(formatSource, /function formatListTime\(iso: string\)[\s\S]{0,400}?listRowTime/);
   assert.ok(viewSource.includes(':format-time="formatListTime"'));
 });
 
@@ -59,7 +60,7 @@ test('mvYesterday is translated in all four locales', () => {
 });
 
 test('N badge derives from unread: read-all clears it for good', async () => {
-  const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`);
+  const { default: worker } = await import('./cf_worker.js?readtimemem');
   const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12', DEMO_MODE: 'true' };
   const call = (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,

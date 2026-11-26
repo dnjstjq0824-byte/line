@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { F24_CONSENT } from './test_helpers.mjs';
+import { F24_CONSENT, readWorkerSources } from './test_helpers.mjs';
 
 // Item 1: profile / new-chat 'start chat' must open a real 1:1 room.
 // The client reuses the listed direct room when one exists (mirroring the
@@ -35,9 +35,12 @@ test('findDirectChatId returns null when no direct room matches', () => {
   assert.equal(findDirectChatId([{ id: 'dm', kind: 'direct', members: [{ id: 'me' }, { id: 'peer' }] }], '', 'peer'), null);
 });
 
-test('startDirectChat reuses the existing room and fails honestly when the new room is unreachable', () => {
-  assert.match(viewSource, /function startDirectChat[\s\S]{0,2500}?findDirectChatId/);
-  assert.ok(viewSource.includes('mvDirectOpenFailed'));
+test('startDirectChat reuses the existing room and fails honestly when the new room is unreachable', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const friends = await readFile(new URL('../apps/user-web/src/composables/useFriendsGroups.ts', import.meta.url), 'utf8');
+  assert.match(friends, /function startDirectChat[\s\S]{0,2500}?findDirectChatId/);
+  assert.ok(friends.includes('mvDirectOpenFailed'));
+  assert.ok(viewSource.includes('useFriendsGroups({ chats, activeNav, selectedChatId, selectChat, loadChats })'), 'view wires friends/groups');
 });
 
 test('mvDirectOpenFailed is translated in all four locales', () => {
@@ -47,7 +50,7 @@ test('mvDirectOpenFailed is translated in all four locales', () => {
 
 test('worker POST direct returns a top-level id the client can select immediately', async () => {
   const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-  const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const { default: worker } = await import('./cf_worker.js?direct_chat');
   const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' };
   const call = (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,
@@ -75,7 +78,7 @@ test('durable conversations flag is on only because the worker creates its own t
   // Both tables now ride ensureSchema, so "true" is safe exactly as long as
   // the two CREATE statements stay in the worker.
   assert.ok(/"DURABLE_CONVERSATIONS"\s*:\s*"true"/.test(wranglerSource));
-  const workerSource = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
+  const workerSource = await readWorkerSources();
   assert.ok(workerSource.includes('CREATE TABLE IF NOT EXISTS luno_conversations ('), 'runtime schema creates luno_conversations');
   assert.ok(workerSource.includes('CREATE TABLE IF NOT EXISTS luno_conversation_members ('), 'runtime schema creates luno_conversation_members');
 });

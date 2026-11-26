@@ -9,15 +9,17 @@ import { F24_CONSENT } from './test_helpers.mjs';
 // honor msg.unsent instead of showing blank bubbles.
 // Windows checkouts (core.autocrlf) give CRLF; the regexes below expect \n.
 const viewSource = (await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const actionsSource = (await readFile(new URL('../apps/user-web/src/composables/useMessageActions.ts', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const paneSource = (await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const listSource = (await readFile(new URL('../apps/user-web/src/components/ChatList.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 
 test('unsend mirrors the server locally: flag set, body and metadata cleared', () => {
-  const body = viewSource.match(/async function unsendMessage[\s\S]*?\n}\n/)?.[0] || '';
+  const body = actionsSource.match(/async function unsendMessage[\s\S]*?\n}\n/)?.[0] || '';
   assert.ok(body.length > 0);
   assert.ok(body.includes('target.unsent = true'));
   assert.ok(body.includes("target.body = ''"));
   assert.ok(body.includes('target.metadata = undefined'));
+  assert.ok(viewSource.includes('useMessageActions({ selectedChatId, chats, messages, replyToMessage, e2eeClient })'), 'view wires message actions');
 });
 
 test('room renders the unsent marker before any kind-specific branch', () => {
@@ -39,7 +41,7 @@ test('chat list preview shows the unsent marker for recalled last messages', () 
 
 test('worker sticker unsend clears art payload and persists the recall', async () => {
   const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-  const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  const { default: worker } = await import('./cf_worker.js?sticker_unsend');
   const env = { ADMIN_INITIAL_PASSWORD: 'Worker#Admin1', DEMO_INITIAL_PASSWORD: 'Worker#Demo12' };
   const call = (path, token, method = 'GET', body) => worker.fetch(new Request(`http://localhost/api/v1/${path}`, {
     method,

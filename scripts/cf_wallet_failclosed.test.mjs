@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { default: worker } = await import('./cf_worker.js?cf_wallet_failclosed');
 
 test('money-in endpoints fail closed without a verified provider', async () => {
   for (const path of ['/api/v1/store/orders', '/api/v1/wallet/charge']) {

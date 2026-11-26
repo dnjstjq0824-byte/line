@@ -9,6 +9,8 @@ import test from 'node:test';
 const appCss = await readFile(new URL('../apps/user-web/src/App.vue', import.meta.url), 'utf8');
 const v2Css = await readFile(new URL('../apps/user-web/src/styles/luno-v2.css', import.meta.url), 'utf8');
 const viewSrc = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const callsSrc = await readFile(new URL('../apps/user-web/src/composables/useCallHistory.ts', import.meta.url), 'utf8');
+const drawersSrc = await readFile(new URL('../apps/user-web/src/composables/useRoomDrawers.ts', import.meta.url), 'utf8');
 const paneSrc = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
 const workerSrc = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
 
@@ -83,7 +85,8 @@ test('FX-16 call dialog name stays white', () => {
 
 // ---- FX-19: in-room search answers ----
 test('FX-19 search reads the server messages key', () => {
-  assert.ok(viewSrc.includes('res.results || res.messages') || viewSrc.includes('res.messages || res.results'), 'search accepts both keys');
+  assert.ok(drawersSrc.includes('res.results || res.messages') || drawersSrc.includes('res.messages || res.results'), 'search accepts both keys');
+  assert.ok(viewSrc.includes('useRoomDrawers({ selectedChatId, chats, messages })'), 'view wires the drawers');
 });
 
 test('FX-19 search hits jump to the message', () => {
@@ -120,12 +123,15 @@ test('FX-17 new call opens a contact picker, never dials blind', () => {
 
 // ---- FX-18: redial matches the record kind ----
 test('FX-18 call kind is normalized on every entry', () => {
-  assert.ok(viewSrc.includes('normalizeCallKind') || paneSrc.includes('normalizeCallKind'), 'a kind normalizer exists');
-  assert.ok(viewSrc.includes("normalizeCallKind(log.call_type)") || viewSrc.includes('normalizeCallKind('), 'redial normalizes the record kind');
+  assert.ok(callsSrc.includes('normalizeCallKind') || paneSrc.includes('normalizeCallKind'), 'a kind normalizer exists');
+  assert.ok(callsSrc.includes("normalizeCallKind(log.call_type)") || callsSrc.includes('normalizeCallKind('), 'redial normalizes the record kind');
 });
 
-test('FX-18 history rows show their kind icon', () => {
-  assert.ok(viewSrc.includes('call-kind-icon') || viewSrc.includes('call_kind_icon'), 'history rows carry a kind icon');
+test('FX-18 history rows show their kind icon', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const callsPane = await readFile(new URL('../apps/user-web/src/components/CallsPane.vue', import.meta.url), 'utf8');
+  assert.ok(callsPane.includes('call-kind-icon') || callsPane.includes('call_kind_icon'), 'history rows carry a kind icon');
+  assert.ok(viewSrc.includes('<CallsPane'), 'view renders the calls pane');
 });
 
 test('FX-18 server defaults missing kinds to voice', () => {
@@ -134,9 +140,12 @@ test('FX-18 server defaults missing kinds to voice', () => {
 });
 
 // ---- FX-15: cached lists and rooms render instantly ----
-test('FX-15 list snapshots render before the network answers', () => {
-  assert.ok(viewSrc.includes('luno-chats-snapshot'), 'chat list snapshot key exists');
-  assert.ok(viewSrc.includes('luno-calls-snapshot'), 'call history snapshot key exists');
+test('FX-15 list snapshots render before the network answers', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const loader = await readFile(new URL('../apps/user-web/src/composables/useChatLoader.ts', import.meta.url), 'utf8');
+  assert.ok(loader.includes('luno-chats-snapshot'), 'chat list snapshot key exists');
+  assert.ok(callsSrc.includes('luno-calls-snapshot'), 'call history snapshot key exists');
+  assert.ok(viewSrc.includes('useChatLoader({ chats })'), 'view wires the chat loader');
 });
 
 test('FX-15 rooms show cached messages while refreshing', () => {
@@ -144,8 +153,11 @@ test('FX-15 rooms show cached messages while refreshing', () => {
 });
 
 // ---- FX-10: avatars and initials never render broken ----
-test('FX-10 avatar images fall back on load failure', () => {
-  assert.ok(viewSrc.includes('@error="hideBrokenAvatar"') || viewSrc.includes('onAvatarError'), 'MessengerView avatars handle errors');
+test('FX-10 avatar images fall back on load failure', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const shell = await readFile(new URL('../apps/user-web/src/components/ShellNav.vue', import.meta.url), 'utf8');
+  assert.ok(shell.includes('@error="hideBrokenAvatar"') || shell.includes('onAvatarError'), 'shell avatars handle errors');
+  assert.ok(viewSrc.includes('<ShellNav'), 'view renders the shell');
 });
 
 test('FX-10 initials reject surrogates and blanks', async () => {

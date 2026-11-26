@@ -302,6 +302,32 @@ export { rotateSignedPreKey, replenishOneTimePreKeys }
 export function isKeepRoomId(id: string | undefined | null): boolean {
   return typeof id === 'string' && id.startsWith('conv-keep-')
 }
+// P2 split: photo downscale for uploads, extracted verbatim from
+// views/MessengerView.vue. Pure over the file (browser canvas only).
+export async function shrinkPhotoForUpload(file: File): Promise<File> {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') return file
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
+      if (scale >= 1) return file
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) return file
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+      if (!blob) return file
+      return new File([blob], file.name.replace(/\.[a-z0-9]+$/i, '') + '.jpg', { type: 'image/jpeg' })
+    } finally {
+      bitmap.close()
+    }
+  } catch {
+    return file
+  }
+}
+
 export function keepSeedText(
   msg: { id?: string; client_id?: string; body?: string | null } | null | undefined,
   tr: (key: string) => string,
@@ -313,4 +339,20 @@ export function keepSeedText(
     return tr('keepSeedPc').replace('{url}', url)
   }
   return null
+}
+
+// P2 split: offline list snapshots, extracted verbatim from
+// views/MessengerView.vue. Shared by the chat list and call history.
+export function readSnapshot<T>(key: string): T[] | null {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { items?: unknown }
+    if (!parsed || !Array.isArray(parsed.items)) return null
+    return parsed.items as T[]
+  } catch { return null }
+}
+
+export function writeSnapshot(key: string, items: unknown) {
+  try { localStorage.setItem(key, JSON.stringify({ saved_at: Date.now(), items })) } catch {}
 }

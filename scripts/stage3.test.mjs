@@ -119,16 +119,18 @@ test('U1: demo flags stay out of the deployed defaults', () => {
 // ---------- U2: no fake web displays ----------
 
 const messengerSource = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+const walletSource = await readFile(new URL('../apps/user-web/src/composables/useMessengerWallet.ts', import.meta.url), 'utf8');
 const friendPanelSource = await readFile(new URL('../apps/user-web/src/components/FriendPanel.vue', import.meta.url), 'utf8');
 const chatListSource = await readFile(new URL('../apps/user-web/src/components/ChatList.vue', import.meta.url), 'utf8');
 const messagePaneSource = await readFile(new URL('../apps/user-web/src/components/MessagePane.vue', import.meta.url), 'utf8');
 const webI18nSource = await readFile(new URL('../apps/user-web/src/luno-i18n.ts', import.meta.url), 'utf8');
 
 test('U2: wallet starts at zero, never seeded', () => {
-  assert.ok(!messengerSource.includes('ref(3450)'), 'no seeded points');
-  assert.ok(!messengerSource.includes('ref(50000)'), 'no seeded balance');
-  assert.ok(messengerSource.includes('walletPoints = ref(0)'), 'points start at zero');
-  assert.ok(messengerSource.includes('walletBalance = ref(0)'), 'balance starts at zero');
+  assert.ok(!walletSource.includes('ref(3450)'), 'no seeded points');
+  assert.ok(!walletSource.includes('ref(50000)'), 'no seeded balance');
+  assert.ok(walletSource.includes('walletPoints = ref(0)'), 'points start at zero');
+  assert.ok(walletSource.includes('walletBalance = ref(0)'), 'balance starts at zero');
+  assert.ok(messengerSource.includes('useMessengerWallet({ loadChats })'), 'view wires the wallet');
 });
 
 test('U2: recent searches start empty and record real input', () => {
@@ -141,8 +143,11 @@ test('U2: chat list carries no ad banner', () => {
   assert.ok(!chatListSource.includes('CapCom'), 'no ad copy');
 });
 
-test('U2: charge options stay inactive with preparing guidance', () => {
-  assert.ok(messengerSource.includes('mvPreparing'), 'preparing guidance wired');
+test('U2: charge options stay inactive with preparing guidance', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const chargeSource = await readFile(new URL('../apps/user-web/src/components/ChargeModal.vue', import.meta.url), 'utf8');
+  assert.ok(chargeSource.includes('mvPreparing'), 'preparing guidance wired');
+  assert.ok(messengerSource.includes('<ChargeModal'), 'view renders the charge modal');
   const hits = webI18nSource.match(/mvPreparing\b/g) || [];
   assert.equal(hits.length, 4, 'mvPreparing in all four locales');
 });

@@ -4,7 +4,7 @@ import test, { after } from 'node:test';
 import { makeBucket, makeD1 , F24_CONSENT } from './test_helpers.mjs';
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
-const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { default: worker } = await import('./cf_worker.js?cf_worker');
 const nativeResponse = globalThis.Response;
 const nativeWebSocketPair = Object.getOwnPropertyDescriptor(globalThis, 'WebSocketPair');
 after(() => {

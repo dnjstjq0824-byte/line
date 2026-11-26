@@ -136,9 +136,11 @@ test('F3: export carries read, write and delete records', async () => {
 
 test('F3: clients send reason and confirm, show recovery', async () => {
   const view = await readFile(new URL('../apps/user-web/src/views/MessengerView.vue', import.meta.url), 'utf8');
+  const danger = await readFile(new URL('../apps/user-web/src/composables/useAccountDanger.ts', import.meta.url), 'utf8');
   const auth = await readFile(new URL('../apps/user-web/src/views/AuthView.vue', import.meta.url), 'utf8');
   const session = await readFile(new URL('../mobile/flutter_app/lib/state/session.dart', import.meta.url), 'utf8');
-  assert.ok(view.includes('confirm_text') && view.includes('deletion_scheduled'), 'web confirm flow');
+  assert.ok(danger.includes('confirm_text') && danger.includes('deletion_scheduled'), 'web confirm flow');
+  assert.ok(view.includes('useAccountDanger({ logout })'), 'view wires the danger zone');
   assert.ok(auth.includes('recovered'), 'web recovery note');
   // F20: the app notice rides the ARB key, not a hardcoded string.
   assert.ok(session.includes('confirm_text') && session.includes('msgDeleteScheduled'), 'app confirm flow');
