@@ -199,7 +199,11 @@ class _GroupSettingsPageState extends State<GroupSettingsPage> {
           ],
           const SizedBox(height: 24),
           OutlinedButton(
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).brightness == Brightness.dark
+                  ? HarborDark.danger
+                  : HarborLight.danger,
+            ),
             onPressed: () => _confirm(context, context.l10n.gsLeaveConfirm, () async {
               await session.leaveChat(widget.conversationId);
               if (context.mounted) context.go('/chats');

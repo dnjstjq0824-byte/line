@@ -81,9 +81,9 @@ class MorePage extends StatelessWidget {
                   crossAxisCount: columns,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 4,
+                  mainAxisSpacing: 6,
                   crossAxisSpacing: 4,
-                  childAspectRatio: 0.9,
+                  childAspectRatio: 0.82,
                   children: [
                     for (final d in items) _MoreTile(destination: d),
                   ],
@@ -91,14 +91,15 @@ class MorePage extends StatelessWidget {
               },
             ),
             const SizedBox(height: 16),
-            OutlinedButton(
+            OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
                 foregroundColor: dark ? HarborDark.danger : HarborLight.danger,
                 side: BorderSide(color: line),
               ),
               onPressed: () => SessionScope.of(context, listen: false).logout(),
-              child: Text(context.l10n.mvLogout,
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: Text(context.l10n.mvLogout,
                   style: const TextStyle(fontWeight: FontWeight.w700)),
             ),
           ],

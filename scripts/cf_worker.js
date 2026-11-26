@@ -2450,71 +2450,43 @@ function publicBaseOrigin(env) {
 function requestOrigin(request) {
   try { return new URL(request.url).origin; } catch { return ''; }
 }
-// CORS is allowlisted: same-origin requests plus env.ALLOWED_ORIGINS.
-// Anything else gets no ACAO header, so browsers block the read.
+// CORS is allowlisted: same-origin requests, public base origin (and its
+// first-party web/api/ws subdomains), plus env.ALLOWED_ORIGINS.
+// Wildcard '*' is forbidden; unknown origins get no ACAO header.
 function corsOrigin(request, env) {
   const origin = request.headers.get('Origin') || '';
   if (!origin) return '';
   if (origin === requestOrigin(request)) return origin;
-  if (origin === publicBaseOrigin(env)) return origin;
+  const baseOrigin = publicBaseOrigin(env);
+  if (origin === baseOrigin) return origin;
+  try {
+    const baseUrl = new URL(baseOrigin);
+    const reqUrl = new URL(origin);
+    const baseHost = classifyHost(baseUrl.hostname);
+    const origHost = classifyHost(reqUrl.hostname);
+    if (
+      reqUrl.protocol === baseUrl.protocol &&
+      baseHost.apexDomain &&
+      origHost.apexDomain === baseHost.apexDomain &&
+      ['apex', 'web', 'api', 'ws'].includes(origHost.role)
+    ) {
+      return origin;
+    }
+  } catch { /* ignore malformed origin */ }
   const list = String((env && env.ALLOWED_ORIGINS) || '').split(',').map(s => s.trim()).filter(Boolean);
   return list.includes(origin) ? origin : '';
 }
 // ---------- Front page language (lunotalk.com) ----------
 // Kept equal to apps/user-web/src/site-i18n.ts SITE_LANGS (scripts/site_lang.test.mjs).
 const SITE_LANGS = ['ko', 'en', 'ja', 'zh', 'zh-tw', 'th', 'vi', 'id', 'ms', 'hi', 'ar', 'es', 'pt', 'fr', 'de', 'it', 'ru', 'tr'];
-// Countries with one clear language. Multilingual or English-first markets
-// (IN, PH, SG, CA, CH, BE, LU, ...) are left out on purpose: the browser
-// language decides there.
-const COUNTRY_SITE_LANG = (() => {
-  const map = {};
-  const put = (lang, codes) => { for (const c of codes.split(' ')) map[c] = lang; };
-  put('ko', 'KR');
-  put('ja', 'JP');
-  put('zh', 'CN');
-  put('zh-tw', 'TW HK MO');
-  put('th', 'TH');
-  put('vi', 'VN');
-  put('id', 'ID');
-  put('ms', 'MY BN');
-  put('ar', 'SA AE EG QA KW BH OM JO LB IQ SY YE PS LY TN DZ MA SD MR');
-  put('es', 'ES MX AR CO CL PE VE EC GT CU BO DO HN PY SV NI CR PA UY PR GQ');
-  put('pt', 'BR PT AO MZ CV GW ST TL');
-  put('fr', 'FR MC SN CI CM ML BF NE TG BJ GA CG CD MG HT GN TD CF DJ KM');
-  put('de', 'DE AT LI');
-  put('it', 'IT SM VA');
-  put('ru', 'RU BY KZ KG TJ');
-  put('tr', 'TR');
-  put('en', 'US GB AU NZ IE ZA NG KE GH UG TZ ZW ZM JM TT');
-  return map;
-})();
-function siteLangFromTag(tag) {
-  const t = String(tag || '').toLowerCase().trim();
-  if (!t) return null;
-  if (t.startsWith('zh')) return /(tw|hk|mo|hant)/.test(t) ? 'zh-tw' : 'zh';
-  if (SITE_LANGS.includes(t)) return t;
-  const primary = t.split('-')[0];
-  if (primary === 'fil' || primary === 'tl') return 'en';
-  return SITE_LANGS.includes(primary) ? primary : null;
+function siteLangFor(request, env = CURRENT_ENV) {
+  return resolveTargetLang(request, env || {});
 }
-function siteLangFor(request) {
-  const saved = cookieValue(request, 'luno_lang');
-  if (saved && SITE_LANGS.includes(saved)) return saved;
-  // The lunotalk.com relay forwards the visitor's country (its own fetch to
-  // this worker would otherwise geolocate to the relay's data centre).
-  const country = String(request.headers.get('X-Luno-Country') || (request.cf && request.cf.country) || request.headers.get('CF-IPCountry') || '').toUpperCase();
-  if (COUNTRY_SITE_LANG[country]) return COUNTRY_SITE_LANG[country];
-  const accept = String(request.headers.get('Accept-Language') || '');
-  const tags = accept.split(',').map(part => { const [tag, q] = part.trim().split(';q='); return { tag, q: q === undefined ? 1 : Number(q) || 0 }; })
-    .filter(x => x.tag && x.q > 0).sort((a, b) => b.q - a.q);
-  for (const { tag } of tags) { const lang = siteLangFromTag(tag); if (lang) return lang; }
-  return 'en';
-}
-function siteLangRedirect(request) {
+function siteLangRedirect(request, env = CURRENT_ENV) {
   const url = new URL(request.url);
   return new Response(null, {
     status: 302,
-    headers: { Location: `/${siteLangFor(request)}${url.search}`, 'Cache-Control': 'no-store', Vary: 'Cookie, Accept-Language' },
+    headers: { Location: `/${siteLangFor(request, env)}${url.search}`, 'Cache-Control': 'no-store', Vary: 'Cookie, Accept-Language, CF-IPCountry' },
   });
 }
 
@@ -2528,14 +2500,21 @@ function cookieValue(request, name) {
   return '';
 }
 // I-2: refresh tokens travel as httpOnly cookies. Secure is set on https
-// origins only so http://localhost development keeps working.
+// origins only so http://localhost development keeps working. On custom
+// apex/subdomain hosts, Domain=.{apex} shares auth across web/api subdomains.
 function refreshCookie(token, request, maxAge = 30 * 86400) {
   let secure = false;
-  try { secure = new URL(request.url).protocol === 'https:'; } catch { secure = false; }
+  let domainAttr = '';
+  try {
+    const parsed = new URL(request.url);
+    secure = parsed.protocol === 'https:';
+    const dom = rootDomainForCookie(parsed.hostname);
+    if (dom) domainAttr = `; Domain=${dom}`;
+  } catch { secure = false; }
   // F19: null/undefined maxAge yields a session cookie (no Max-Age) for
   // logins without "stay signed in"; 0 still expires (logout).
   const age = (maxAge === null || maxAge === undefined) ? '' : `; Max-Age=${maxAge}`;
-  return `luno_refresh=${token}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict; Path=/${age}`;
+  return `luno_refresh=${token}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict${domainAttr}; Path=/${age}`;
 }
 // I-3: hardening headers on every response. The strict CSP applies to API
 // payloads only; hosted app assets keep their own document policy.
@@ -2546,9 +2525,17 @@ async function withSecurityHeaders(request, res) {
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('X-Frame-Options', 'DENY');
   try {
-    const path = new URL(request.url).pathname;
-    if (path.startsWith('/api/') || path === '/metrics') {
+    const parsed = new URL(request.url);
+    const path = parsed.pathname;
+    const { role } = classifyHost(parsed.hostname);
+    if ((role === 'web' || role === 'api' || role === 'ws' || role === 'cdn') && !headers.has('X-Robots-Tag')) {
+      headers.set('X-Robots-Tag', 'noindex, nofollow');
+    }
+    if (path.startsWith('/api/') || path.startsWith('/v1/') || path === '/metrics') {
       headers.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+      if (!headers.has('Content-Language') && request.headers.get('Accept-Language')) {
+        headers.set('Content-Language', resolveRequestLocale(request));
+      }
     } else if ((res.headers.get('Content-Type') || '').toLowerCase().includes('text/html')) {
       // F19: shipped HTML (app shell, consoles, landing) runs scripts and
       // styles from self only, never frames, and leaks no referrer path.
@@ -2565,6 +2552,7 @@ async function withCors(request, env, res) {
   if (!origin || res.headers.has('Access-Control-Allow-Origin')) return res;
   const headers = new Headers(res.headers);
   headers.set('Access-Control-Allow-Origin', origin);
+  headers.set('Access-Control-Allow-Credentials', 'true');
   headers.set('Vary', 'Origin');
   const nullBody = res.status === 204 || res.status === 304 || res.status === 101;
   return new Response(nullBody ? null : res.body, { status: res.status, statusText: res.statusText, headers });
@@ -2572,6 +2560,14 @@ async function withCors(request, env, res) {
 
 // P2 split: pure mail/SMS transports live in scripts/worker/mail.mjs.
 import { resolveMailDriver, resolveSmsDriver, resendSend, twilioSend } from './worker/mail.mjs';
+// Edge routing middleware: Geo-IP landing, deep links, .well-known, SEO & subdomains.
+import {
+  handleMessengerEdgeRouting,
+  classifyHost,
+  rootDomainForCookie,
+  resolveTargetLang,
+  resolveRequestLocale,
+} from './worker/edge_routing.mjs';
 // Deliver one code; returns false on none (caller decides quiet vs closed).
 // Real sends push a redacted record (provider id only — never the
 // recipient or code) and the outbox is capped so production never grows it.
@@ -7863,12 +7859,12 @@ async function downloadPage(env, url) {
 const LATEST_ANDROID_BUILD = {
   platform: 'android',
   version: '2.0.0',
-  build: 23,
+  build: 24,
   package: 'com.lunotalk.messenger',
   assets: [
-    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44477194, sha256: '3A97EBADFEB503B7056F2AEBC4394DB7F42A028D0050C0DACC669EEA8EE2F048', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build23/luno-messenger-arm64.apk' },
-    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35546494, sha256: '65E50C60D3C971D51B2A8557B643A676E56CD4551D02465A7A43C09515A0CE2C', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build23/luno-messenger-arm32.apk' },
-    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50998018, sha256: '20C1C19866BACB1511F4086DC5859CD1C3E327081A82081F417C7CD2CCCA0257', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build23/luno-messenger-x86_64.apk' },
+    { abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk', size_bytes: 44477270, sha256: '162E7FB3722CB7D191847445920F5EABE5AE1A52A5525026F01863A73B7ABAE5', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build24/luno-messenger-arm64.apk' },
+    { abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk', size_bytes: 35546570, sha256: 'BD2E292FEF08BE630D9C5B5DEE733C1C78CF50835FB19740B937DC14E109627A', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build24/luno-messenger-arm32.apk' },
+    { abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk', size_bytes: 50998094, sha256: '51AD228D2AAEC7FD4DC04D8A0AA1FA270E09ABC52787732414023519F5AF0B32', url: 'https://github.com/dnjstjq0824-byte/line/releases/download/v2.0.0-build24/luno-messenger-x86_64.apk' },
   ],
 };
 
@@ -7926,14 +7922,77 @@ function gatewayOriginFor(request, env) {
 const workerCore = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-	if ((url.pathname === '/api/v1/store/orders' || url.pathname === '/api/v1/wallet/charge') && request.method === 'POST' && env.PAYMENTS_ENABLED !== 'true') {
-	  return json({ error: 'payments unavailable: verified provider integration required', code: 'PAYMENTS_DISABLED' }, 503);
-	}
-    // Route the complete API to one persistent backend; never mix its identities
-    // with the isolate-local demo or fall back to demo data on upstream failure.
-    // lunotalk.com front page: the bare root picks the visitor's language.
-    if (url.pathname === '/' && (request.method === 'GET' || request.method === 'HEAD')) return siteLangRedirect(request);
-    const backendRoute = url.pathname.startsWith('/api/') || ['/healthz', '/readyz', '/metrics'].includes(url.pathname);
+    const hostInfo = classifyHost(url.hostname);
+    // Support both /api/v1/* and api.{domain}/v1/* versioned API prefix.
+    const apiPath = url.pathname.startsWith('/api/v1/')
+      ? url.pathname.slice('/api/v1/'.length)
+      : (url.pathname.startsWith('/v1/') && url.pathname !== '/v1/connect' ? url.pathname.slice('/v1/'.length) : null);
+    if ((apiPath === 'store/orders' || apiPath === 'wallet/charge') && request.method === 'POST' && env.PAYMENTS_ENABLED !== 'true') {
+      return json({ error: 'payments unavailable: verified provider integration required', code: 'PAYMENTS_DISABLED' }, 503);
+    }
+    // Edge routing: www 301, .well-known direct 200 JSON, robots/sitemap/llms,
+    // SSR deep links (/invite/*, /@*, /join/*), /{LANG} 301 normalization,
+    // store-review localized pages, and Geo-IP 302 landing redirect.
+    const edgeResponse = await handleMessengerEdgeRouting(request, env, {
+      legalVersions: LEGAL_VERSIONS,
+      lookupInvite: async (code) => {
+        const db = env && env.DB;
+        if (db) {
+          const row = await db.prepare(
+            `SELECT i.conversation_id, COALESCE(lc.title, c.title) AS title,
+                    COALESCE(
+                      NULLIF((SELECT COUNT(*) FROM luno_conversation_members lm WHERE lm.conversation_id = i.conversation_id), 0),
+                      (SELECT COUNT(*) FROM conversation_members cm WHERE cm.conversation_id = i.conversation_id)
+                    ) AS members
+             FROM luno_invites i
+             LEFT JOIN luno_conversations lc ON lc.id = i.conversation_id
+             LEFT JOIN conversations c ON c.id = i.conversation_id
+             WHERE i.token = ? AND i.revoked = 0 LIMIT 1`,
+          ).bind(code).first().catch(() => null);
+          if (row) {
+            const mem = conversations.get(row.conversation_id);
+            return {
+              title: row.title || (mem && mem.title) || '',
+              memberCount: Number(row.members || (mem && mem.members ? mem.members.length : 0)),
+            };
+          }
+        }
+        return null;
+      },
+      lookupProfile: async (handle) => {
+        const clean = String(handle || '').toLowerCase();
+        const db = env && env.DB;
+        if (db) {
+          const row = await db.prepare(
+            'SELECT display_name, bio, avatar_url FROM users WHERE LOWER(handle) = ? LIMIT 1',
+          ).bind(clean).first().catch(() => null);
+          if (row) return { displayName: row.display_name || `@${handle}`, bio: row.bio || '', avatarUrl: row.avatar_url || '' };
+        }
+        for (const u of users.values()) {
+          if (u && String(u.handle || '').toLowerCase() === clean) {
+            return { displayName: u.display_name || `@${handle}`, bio: u.bio || '', avatarUrl: u.avatar_url || '' };
+          }
+        }
+        return null;
+      },
+    });
+    if (edgeResponse) return edgeResponse;
+    // CDN subdomain static/media delivery (R2 MEDIA_BUCKET or static ASSETS).
+    if (hostInfo.role === 'cdn' && (request.method === 'GET' || request.method === 'HEAD')) {
+      const mediaMatch = url.pathname.match(/^\/(?:media|attachments|avatars)\/([A-Za-z0-9._/-]+)$/);
+      if (mediaMatch && env && env.MEDIA_BUCKET) {
+        const obj = await env.MEDIA_BUCKET.get(mediaMatch[1]).catch(() => null);
+        if (!obj) return new Response('Not Found', { status: 404 });
+        const headers = new Headers();
+        if (obj.httpMetadata && obj.httpMetadata.contentType) headers.set('Content-Type', obj.httpMetadata.contentType);
+        headers.set('Cache-Control', 'public, max-age=86400, immutable');
+        headers.set('X-Robots-Tag', 'noindex, nofollow');
+        return new Response(request.method === 'HEAD' ? null : obj.body, { status: 200, headers });
+      }
+      if (env && env.ASSETS) return env.ASSETS.fetch(request);
+      return new Response('Not Found', { status: 404 });
+    }
+    const backendRoute = url.pathname.startsWith('/api/') || url.pathname.startsWith('/v1/') || ['/healthz', '/readyz', '/metrics'].includes(url.pathname);
     // Valid origins are proxied transparently by the export wrapper (no edge
     // header rewrites); only a misconfigured origin fails closed here.
     if (gatewayOriginFor(request, env) === 'invalid') {
@@ -7954,26 +8013,8 @@ const workerCore = {
     }
     // Liveness does not imply that persistence is ready. These checks must not
     // boot the service or run schema/seed writes just to answer a probe.
-    if (url.pathname === '/healthz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health') {
+    if (url.pathname === '/healthz' || url.pathname === '/api/v1/health' || url.pathname === '/api/health' || url.pathname === '/v1/health') {
       return json({ status: 'ok', brand: 'LUNO', runtime: 'cloudflare-worker' });
-    }
-    // F21: Android App Links verification. Public by design (no boot,
-    // no auth): the OS fetches this to bind the package to the host.
-    // Audit P0-4: luno-release-2 (current prod, apksigner-verified) +
-    // legacy release (installed base) + androiddebugkey (dev builds).
-    if (url.pathname === '/.well-known/assetlinks.json' && request.method === 'GET') {
-      return new Response(JSON.stringify([{
-        relation: ['delegate_permission/common.handle_all_urls'],
-        target: {
-          namespace: 'android_app',
-          package_name: 'com.lunotalk.messenger',
-          sha256_cert_fingerprints: [
-            'F2:D7:2C:CC:80:54:A2:FA:EB:42:3F:18:5F:5F:F7:7B:A3:1D:EF:4B:90:2C:31:5E:07:1B:A8:D7:0B:4C:97:7C',
-            '6D:CD:CD:38:DB:6A:48:5C:E9:99:FE:EC:9D:B5:8F:E5:CD:C7:80:63:16:AA:63:6A:56:90:8B:FD:F0:BA:64:F0',
-            '15:09:C9:EE:A6:53:6E:9C:F4:9C:53:61:47:E0:66:27:0A:A9:B2:EC:93:C3:35:43:65:CF:2F:BD:D9:6C:BE:A9',
-          ],
-        },
-      }]), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
     }
     if (url.pathname === '/readyz') {
       if (!env.DB) return json({ status: 'not_ready', checks: { database: 'not_configured' } }, 503);
@@ -8003,7 +8044,8 @@ const workerCore = {
         status: 204,
         headers: origin ? {
           'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept-Language, X-App-Build',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
           'Vary': 'Origin',
         } : {},
@@ -8016,27 +8058,27 @@ const workerCore = {
     {
       const minBuild = Number.parseInt(String(env.APP_MIN_BUILD || '0'), 10) || 0;
       const buildHdr = request.headers.get('X-App-Build');
-      const openApi = ['/api/v1/version', '/api/version', '/api/v1/app/latest', '/api/v1/legal'];
-      if (minBuild > 0 && url.pathname.startsWith('/api/') && !openApi.includes(url.pathname) && buildHdr !== null) {
+      const openApi = ['version', 'app/latest', 'legal'];
+      if (minBuild > 0 && (url.pathname.startsWith('/api/') || apiPath !== null) && url.pathname !== '/api/version' && !openApi.includes(apiPath || '') && buildHdr !== null) {
         const build = Number.parseInt(String(buildHdr), 10) || 0;
         if (build < minBuild) return json({ error: 'update required', code: 'APP_UPGRADE_REQUIRED', min_build: minBuild }, 426);
       }
     }
 
     // Health / Readyz / Metrics / Version
-    if (url.pathname === '/api/v1/version' || url.pathname === '/api/version') {
+    if (apiPath === 'version' || url.pathname === '/api/version') {
       return json({ ...BUILD_INFO, payments_enabled: !!(env && env.PAYMENTS_ENABLED === 'true') });
     }
     // F24: current legal versions, public so signup screens (and tests) pin
     // the consent they submit to exactly what the gates demand.
-    if (url.pathname === '/api/v1/legal' && request.method === 'GET') {
+    if (apiPath === 'legal' && request.method === 'GET') {
       return json({ terms_version: LEGAL_VERSIONS.terms, privacy_version: LEGAL_VERSIONS.privacy });
     }
-    if (url.pathname === '/api/v1/app/latest' && request.method === 'GET') {
+    if (apiPath === 'app/latest' && request.method === 'GET') {
       const b = LATEST_ANDROID_BUILD;
       return json({ platform: b.platform, version: b.version, build: b.build, package: b.package, assets: b.assets });
     }
-    if (url.pathname === '/api/v1/channel/slot' && request.method === 'GET') {
+    if (apiPath === 'channel/slot' && request.method === 'GET') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
       if (userKind(auth) === 'bot') return json({ error: 'forbidden' }, 403);
@@ -8051,7 +8093,7 @@ const workerCore = {
       if (!active) return json({ slot: null });
       return json({ slot: { id: active.id, title: active.title, body: active.body } });
     }
-    if (url.pathname === '/api/v1/translate' && request.method === 'POST') {
+    if (apiPath === 'translate' && request.method === 'POST') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
       if (userKind(auth) === 'bot') return json({ error: 'forbidden' }, 403);
@@ -8078,7 +8120,7 @@ const workerCore = {
       await translateCachePut(hash, target, out.translated, out.source_lang, out.engine);
       return json({ translated: out.translated, source_lang: out.source_lang, target_lang: target, engine: out.engine });
     }
-    if (url.pathname === '/api/v1/translate/languages' && request.method === 'GET') {
+    if (apiPath === 'translate/languages' && request.method === 'GET') {
       const auth = await getAuthUser(request);
       if (!auth) return json({ error: 'unauthorized' }, 401);
       if (userKind(auth) === 'bot') return json({ error: 'forbidden' }, 403);
@@ -8148,13 +8190,51 @@ const workerCore = {
       return new Response(out.join('\n') + '\n', { headers: { 'Content-Type': 'text/plain; version=0.0.4' } });
     }
 
-    // WebSocket real-time connection upgrade
-    if (url.pathname === '/api/v1/ws') {
+    // WebSocket real-time connection upgrade (/api/v1/ws and wss://ws.{domain}/v1/connect)
+    if (url.pathname === '/api/v1/ws' || url.pathname === '/v1/connect') {
       const upgradeHeader = request.headers.get('Upgrade');
       if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
         return new Response('Expected Upgrade: websocket', { status: 426 });
       }
       const ticket = url.searchParams.get('ticket');
+      const authMode = url.searchParams.get('auth');
+      // Optional first-frame auth mode (?auth=frame): socket upgrades without
+      // putting the ticket in the URL and expects `{ type: 'auth', ticket }` first.
+      if (!ticket && authMode === 'frame') {
+        const pair = new WebSocketPair();
+        const [client, server] = Object.values(pair);
+        server.accept();
+        let authedUserId = null;
+        server.addEventListener('message', async event => {
+          try {
+            const d = JSON.parse(event.data);
+            if (!authedUserId) {
+              if (d && d.type === 'auth' && typeof d.ticket === 'string') {
+                const uidRes = await redeemWsTicket(d.ticket).catch(() => null);
+                if (!uidRes) {
+                  server.send(JSON.stringify({ type: 'auth.error', error: 'invalid or expired websocket ticket' }));
+                  server.close(4401, 'unauthorized');
+                  return;
+                }
+                authedUserId = uidRes;
+                activeSockets.set(server, authedUserId);
+                server.send(JSON.stringify({ type: 'auth.ok', user_id: authedUserId }));
+              } else {
+                server.close(4401, 'auth frame required');
+              }
+              return;
+            }
+            if (d && d.type === 'ping') server.send(JSON.stringify({ type: 'pong' }));
+          } catch {}
+        });
+        server.addEventListener('close', function onAuthFrameClose() {
+          if (authedUserId) {
+            activeSockets.delete(server);
+            groupCallSeatSweep(env, authedUserId).catch(() => {});
+          }
+        });
+        return new Response(null, { status: 101, webSocket: client });
+      }
       let grantedUserId = null;
       try {
         grantedUserId = await redeemWsTicket(ticket);
@@ -8200,9 +8280,9 @@ const workerCore = {
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    // If API route
-    if (url.pathname.startsWith('/api/v1/')) {
-      const p = url.pathname.replace('/api/v1/', '');
+    // If API route (/api/v1/* or api.{domain}/v1/*)
+    if (apiPath !== null) {
+      const p = apiPath;
 
       // 1. Auth: Register
       if (p === 'auth/register' && request.method === 'POST') {

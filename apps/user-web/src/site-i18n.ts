@@ -5,6 +5,12 @@
 // "/" is redirected by the server: cookie > Geo-IP country > Accept-Language
 // > English. pickSiteLang is the client fallback (cookie > browser languages).
 import type { LunoLocale } from './luno-i18n'
+import {
+  PREF_LANG_COOKIE,
+  LEGACY_LANG_COOKIE,
+  buildPrefLangCookie,
+  readPrefLangFromCookie,
+} from '../../shared/locale.config'
 
 export const SITE_LANGS = [
   'ko', 'en', 'ja', 'zh', 'zh-tw', 'th', 'vi', 'id', 'ms', 'hi',
@@ -26,7 +32,7 @@ export const SITE_LANG_ALIASES: Record<string, SiteLang> = {
   tha: 'th', vn: 'vi', ind: 'id', my: 'ms', msa: 'ms', sa: 'ar', ae: 'ar',
   mx: 'es', br: 'pt', 'pt-br': 'pt', 'pt-pt': 'pt', us: 'en', gb: 'en', eng: 'en',
 }
-export const SITE_LANG_COOKIE = 'luno_lang'
+export const SITE_LANG_COOKIE = PREF_LANG_COOKIE
 
 export function isSiteLang(v: unknown): v is SiteLang {
   return typeof v === 'string' && (SITE_LANGS as readonly string[]).includes(v)
@@ -50,13 +56,18 @@ export function appLocaleFor(lang: SiteLang): LunoLocale {
 
 function cookieLang(): SiteLang | null {
   try {
-    const m = document.cookie.match(/(?:^|;\s*)luno_lang=([a-z-]{2,5})/)
-    return m && isSiteLang(m[1]) ? m[1] : null
+    const picked = readPrefLangFromCookie(document.cookie)
+    return picked && isSiteLang(picked) ? picked : null
   } catch { return null }
 }
 
 export function rememberSiteLang(lang: SiteLang) {
-  try { document.cookie = `${SITE_LANG_COOKIE}=${lang}; path=/; max-age=31536000; SameSite=Lax` } catch {}
+  try {
+    const hostname = typeof location !== 'undefined' ? location.hostname : ''
+    const secure = typeof location !== 'undefined' ? location.protocol === 'https:' : true
+    document.cookie = buildPrefLangCookie(lang, hostname, secure, PREF_LANG_COOKIE)
+    document.cookie = buildPrefLangCookie(lang, hostname, secure, LEGACY_LANG_COOKIE)
+  } catch {}
 }
 
 /** Client fallback when the server did not redirect "/" (dev, cached shell). */
@@ -75,6 +86,27 @@ export function pickSiteLang(): SiteLang {
 export function legalSuffixFor(lang: SiteLang): string {
   if (lang === 'ko') return ''
   return lang === 'ja' || lang === 'th' ? `.${lang}` : '.en'
+}
+
+export const SITE_FOOTER_SUPPORT: Record<SiteLang, { support: string; deletion: string }> = {
+  ko: { support: '고객 지원', deletion: '계정 삭제' },
+  en: { support: 'Support', deletion: 'Account Deletion' },
+  ja: { support: 'サポート', deletion: 'アカウント削除' },
+  zh: { support: '客户支持', deletion: '删除账号' },
+  'zh-tw': { support: '客戶支援', deletion: '帳號刪除' },
+  th: { support: 'ฝ่ายสนับสนุน', deletion: 'ลบบัญชี' },
+  vi: { support: 'Hỗ trợ', deletion: 'Xóa tài khoản' },
+  id: { support: 'Dukungan', deletion: 'Hapus Akun' },
+  ms: { support: 'Sokongan', deletion: 'Padam Akaun' },
+  hi: { support: 'सहायता', deletion: 'खाता हटाएं' },
+  ar: { support: 'الدعم', deletion: 'حذف الحساب' },
+  es: { support: 'Soporte', deletion: 'Eliminar cuenta' },
+  pt: { support: 'Suporte', deletion: 'Excluir conta' },
+  fr: { support: 'Assistance', deletion: 'Supprimer le compte' },
+  de: { support: 'Support', deletion: 'Konto löschen' },
+  it: { support: 'Supporto', deletion: 'Elimina account' },
+  ru: { support: 'Поддержка', deletion: 'Удаление аккаунта' },
+  tr: { support: 'Destek', deletion: 'Hesap Silme' },
 }
 
 export type SiteCopy = Record<

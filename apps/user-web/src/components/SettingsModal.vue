@@ -106,20 +106,6 @@ async function saveLinkPreviews() {
   })
 }
 
-const editProfileName = ref('')
-const editProfileBio = ref('')
-const editProfileHandle = ref('')
-const profileSaving = ref(false)
-const profileSaveError = ref('')
-const profileSaved = ref(false)
-
-// Accounts made before the server stopped filling a placeholder bio still carry it; show it as empty.
-function storedBio() {
-  const bio = currentUser.value?.status_message || currentUser.value?.bio || ''
-  return bio === 'New Messenger User' ? '' : bio
-}
-const profileDirty = computed(() => editProfileName.value.trim() !== (currentUser.value?.display_name || '') || editProfileHandle.value.trim() !== (currentUser.value?.handle || '') || editProfileBio.value.trim() !== storedBio())
-
 async function approveQrLogin() {
   if (!approveChallengeInput.value.trim() || !approveTokenInput.value.trim()) return
   await wrap(async () => {
@@ -133,27 +119,7 @@ async function approveQrLogin() {
   })
 }
 
-async function saveProfileSettings() {
-  if (!editProfileName.value.trim() || profileSaving.value || !profileDirty.value) return
-  profileSaving.value = true
-  profileSaveError.value = ''
-  profileSaved.value = false
-  try {
-    const textBio = editProfileBio.value.trim()
-    await api('/api/v1/me', 'PATCH', {
-      display_name: editProfileName.value.trim(),
-      bio: textBio,
-      ...(currentUser.value && 'status_message' in currentUser.value ? { status_message: textBio } : {}),
-      handle: editProfileHandle.value.trim()
-    })
-    currentUser.value = await api<User>('/api/v1/me')
-    profileSaved.value = true
-  } catch (err) {
-    profileSaveError.value = err instanceof Error ? err.message : t('profile_save_error')
-  } finally {
-    profileSaving.value = false
-  }
-}
+
 
 const passkeyBusy = ref(false)
 const passkeyNote = ref('')
@@ -307,11 +273,6 @@ async function submitSupportTicket() {
 }
 
 onMounted(() => {
-  profileSaved.value = false
-  profileSaveError.value = ''
-  editProfileName.value = currentUser.value?.display_name || ''
-  editProfileBio.value = storedBio()
-  editProfileHandle.value = currentUser.value?.handle || ''
   refreshNotifyState()
   void fetchPasskeys()
   void fetchSupportTickets()
@@ -491,17 +452,6 @@ onMounted(() => {
             <div v-if="tk.answer" class="approval-row-body">{{ tk.answer }}</div>
           </div>
         </div>
-
-        <form class="setting-group ln-profile-editor" :aria-busy="profileSaving" @submit.prevent="saveProfileSettings" @input="profileSaved = false; profileSaveError = ''">
-          <div class="ln-section-heading"><strong>{{ t('profileEdit') }}</strong><span>{{ t('profile_details') }}</span></div>
-          <div class="ln-profile-fields">
-            <label for="profile-name">{{ t('profile_name_label') }}<input id="profile-name" v-model="editProfileName" autocomplete="name" required :disabled="profileSaving" /></label>
-            <label for="profile-handle">LUNO ID<input id="profile-handle" v-model="editProfileHandle" autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="profileSaving" /></label>
-            <label for="profile-bio" class="ln-profile-bio">{{ t('profile_bio_label') }}<textarea id="profile-bio" v-model="editProfileBio" rows="3" :disabled="profileSaving" /></label>
-          </div>
-          <p v-if="profileSaveError" class="ln-profile-error" role="alert">{{ profileSaveError }}</p>
-          <div class="ln-profile-save"><span role="status">{{ profileSaved ? t('profile_saved') : '' }}</span><button type="submit" class="btn-primary" :disabled="profileSaving || !profileDirty || !editProfileName.trim()">{{ profileSaving ? t('profile_saving') : t('profile_save') }}</button></div>
-        </form>
 
         <div class="setting-group" style="margin-top:8px">
           <strong>{{ t('mvQrApproveTitle') }}</strong>

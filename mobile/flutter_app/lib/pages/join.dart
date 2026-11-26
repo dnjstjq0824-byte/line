@@ -33,39 +33,95 @@ class _JoinPageState extends State<JoinPage> {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final line = dark ? HarborDark.channel : HarborLight.channel;
+    final accent = dark ? HarborDark.harbor : HarborLight.harbor;
+    final danger = dark ? HarborDark.danger : HarborLight.danger;
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.joinTitle)),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.group_add_outlined, size: 56),
-              const SizedBox(height: 16),
-              Text(context.l10n.joinDesc, textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              Text(widget.token,
-                  style: TextStyle(
-                      fontSize: HarborType.small,
-                      color: dark ? HarborDark.drift : HarborLight.drift)),
-              if (session.notice.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(session.notice,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.red)),
-              ],
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: session.busy ? null : _join,
-                child: _joining
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(context.l10n.joinConfirm),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: dark ? HarborDark.surface : HarborLight.surface,
+                borderRadius: BorderRadius.circular(HarborRadius.card),
+                border: Border.all(color: line),
               ),
-            ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 68,
+                    height: 68,
+                    decoration: BoxDecoration(
+                      color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.group_add_outlined, size: 34, color: accent),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    context.l10n.joinDesc,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: dark ? HarborDark.chart : HarborLight.chart,
+                      borderRadius: BorderRadius.circular(HarborRadius.lamp),
+                    ),
+                    child: Text(
+                      widget.token,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: HarborType.small,
+                        fontWeight: FontWeight.w700,
+                        color: dark ? HarborDark.ink : HarborLight.ink,
+                      ),
+                    ),
+                  ),
+                  if (session.notice.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      session.notice,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: HarborType.small,
+                        fontWeight: FontWeight.w600,
+                        color: danger,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: session.busy ? null : _join,
+                      child: _joining
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : Text(context.l10n.joinConfirm),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: _joining ? null : () => context.go('/chats'),
+                      child: Text(context.l10n.mvCancel),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

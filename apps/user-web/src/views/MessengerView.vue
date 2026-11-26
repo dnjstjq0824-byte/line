@@ -1700,7 +1700,6 @@ onBeforeUnmount(() => {
       :photo-saving="photoSaving"
       :photo-error="photoError"
       @close="activeProfileUser = null"
-      @open-settings="showSettingsModal = true; activeProfileUser = null"
       @open-password="showPasswordModal = true; activeProfileUser = null"
       @direct-chat="startDirectChat($event); activeProfileUser = null"
       @voice-call="startDirectChat($event); startCall('voice'); activeProfileUser = null"

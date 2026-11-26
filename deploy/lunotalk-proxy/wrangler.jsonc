@@ -6,10 +6,14 @@
   "account_id": "f5c363135efe9b22ca66eb39f2f8e1da",
   "main": "worker.js",
   "compatibility_date": "2026-01-01",
-  // Only the domain serves this relay; no stray workers.dev copy.
+  // Only custom domains serve this relay; no stray workers.dev copy.
   "workers_dev": false,
   "routes": [
     { "pattern": "lunotalk.com", "custom_domain": true },
-    { "pattern": "www.lunotalk.com", "custom_domain": true }
+    { "pattern": "www.lunotalk.com", "custom_domain": true },
+    { "pattern": "web.lunotalk.com", "custom_domain": true },
+    { "pattern": "api.lunotalk.com", "custom_domain": true },
+    { "pattern": "ws.lunotalk.com", "custom_domain": true },
+    { "pattern": "cdn.lunotalk.com", "custom_domain": true }
   ]
 }

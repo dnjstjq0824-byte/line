@@ -6,6 +6,7 @@ import { ref } from 'vue'
 import { t } from '../store/session'
 import { initialOf } from '../../../shared/avatar_initial'
 import { hideBrokenAvatar, taglineOf } from '../messenger-format'
+import { useProfileEditor } from '../composables/useProfileEditor'
 import type { User } from '../../../shared/api'
 
 defineProps<{
@@ -17,7 +18,6 @@ defineProps<{
 
 const emit = defineEmits<{
   close: []
-  openSettings: []
   openPassword: []
   directChat: [user: User]
   voiceCall: [user: User]
@@ -31,6 +31,24 @@ const emit = defineEmits<{
 
 const photoInput = ref<HTMLInputElement | null>(null)
 const coverInput = ref<HTMLInputElement | null>(null)
+
+const {
+  editProfileName,
+  editProfileBio,
+  editProfileHandle,
+  profileSaving,
+  profileSaveError,
+  profileSaved,
+  profileDirty,
+  saveProfileSettings,
+} = useProfileEditor()
+
+const editorForm = ref<HTMLFormElement | null>(null)
+const editorNameInput = ref<HTMLInputElement | null>(null)
+function focusProfileEditor() {
+  editorForm.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  editorNameInput.value?.focus({ preventScroll: true })
+}
 </script>
 
 <template>
@@ -58,8 +76,18 @@ const coverInput = ref<HTMLInputElement | null>(null)
         <p class="user-status-text">{{ taglineOf(user) || t('profile_empty') }}</p>
         <p v-if="user.id === currentUser?.id && currentUser?.email" class="user-handle">{{ currentUser?.email }}</p>
       </div>
+      <form v-if="user.id === currentUser?.id" ref="editorForm" class="setting-group ln-profile-editor" :aria-busy="profileSaving" @submit.prevent="saveProfileSettings" @input="profileSaved = false; profileSaveError = ''">
+        <div class="ln-section-heading"><strong>{{ t('profileEdit') }}</strong><span>{{ t('profile_details') }}</span></div>
+        <div class="ln-profile-fields">
+          <label for="profile-name">{{ t('profile_name_label') }}<input id="profile-name" ref="editorNameInput" v-model="editProfileName" autocomplete="name" required :disabled="profileSaving" /></label>
+          <label for="profile-handle">LUNO ID<input id="profile-handle" v-model="editProfileHandle" autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="profileSaving" /></label>
+          <label for="profile-bio" class="ln-profile-bio">{{ t('profile_bio_label') }}<textarea id="profile-bio" v-model="editProfileBio" rows="3" :disabled="profileSaving" /></label>
+        </div>
+        <p v-if="profileSaveError" class="ln-profile-error" role="alert">{{ profileSaveError }}</p>
+        <div class="ln-profile-save"><span role="status">{{ profileSaved ? t('profile_saved') : '' }}</span><button type="submit" class="btn-primary" :disabled="profileSaving || !profileDirty || !editProfileName.trim()">{{ profileSaving ? t('profile_saving') : t('profile_save') }}</button></div>
+      </form>
       <div v-if="user.id === currentUser?.id" class="profile-actions-footer">
-        <button class="btn-profile-action" @click="emit('openSettings')">{{ t('profileEdit') }}</button>
+        <button class="btn-profile-action" @click="focusProfileEditor">{{ t('profileEdit') }}</button>
         <button class="btn-profile-action" @click="emit('openPassword')">{{ t('profile_account') }}</button>
       </div>
       <div v-else class="profile-actions-footer">

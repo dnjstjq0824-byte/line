@@ -53,6 +53,8 @@ export function useChatSocket(deps: ChatSocketDeps) {
   const realtimeState = ref<'connecting' | 'connected' | 'reconnecting' | 'offline'>('connecting')
   let realtimeGeneration = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  const HEARTBEAT_INTERVAL_MS = 25000
   let reconnectAttempts = 0
   let messageSyncTimer: ReturnType<typeof setInterval> | null = null
   let messageSyncInFlight: Promise<void> | null = null
@@ -65,8 +67,23 @@ export function useChatSocket(deps: ChatSocketDeps) {
   let lastMessageSyncAt = 0
   let lastMessageSyncOk = false
   const reportedReadSequence = new Map<string, number>()
+  function stopHeartbeat() {
+    if (heartbeatTimer) clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+  function startHeartbeat(connection: WebSocket, generation: number) {
+    stopHeartbeat()
+    heartbeatTimer = setInterval(() => {
+      if (generation !== realtimeGeneration || connection.readyState !== WebSocket.OPEN) {
+        stopHeartbeat()
+        return
+      }
+      try { connection.send(JSON.stringify({ type: 'ping' })) } catch { connection.close() }
+    }, HEARTBEAT_INTERVAL_MS)
+  }
   function stopRealtime() {
     realtimeGeneration++
+    stopHeartbeat()
     if (reconnectTimer) clearTimeout(reconnectTimer)
     reconnectTimer = null
     socket?.close()
@@ -95,12 +112,16 @@ export function useChatSocket(deps: ChatSocketDeps) {
       if (generation !== realtimeGeneration || sessionToken !== token.value) return
       const connection = new WebSocket(wsURL(ticket))
       socket = connection
-      connection.onclose = () => scheduleReconnect(generation)
+      connection.onclose = () => {
+        stopHeartbeat()
+        scheduleReconnect(generation)
+      }
       connection.onerror = () => connection.close()
       connection.onopen = () => {
         if (generation !== realtimeGeneration) return
         realtimeState.value = 'connected'
         reconnectAttempts = 0
+        startHeartbeat(connection, generation)
         void processOfflineQueue()
       }
       connection.onmessage = (event) => {

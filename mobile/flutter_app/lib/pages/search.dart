@@ -89,7 +89,7 @@ class _SearchPageState extends State<SearchPage> {
                       filled: true,
                       fillColor: dark
                           ? HarborDark.chart
-                          : const Color(0xFFF1F3F4),
+                          : HarborLight.chart,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
                         borderSide: BorderSide.none,

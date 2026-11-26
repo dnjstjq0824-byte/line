@@ -2415,7 +2415,7 @@ class _Composer extends StatelessWidget {
                     isDense: true,
                     filled: true,
                     fillColor:
-                        dark ? HarborDark.chart : const Color(0xFFF1F3F4),
+                        dark ? HarborDark.chart : HarborLight.chart,
                     contentPadding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(HarborRadius.sheet),

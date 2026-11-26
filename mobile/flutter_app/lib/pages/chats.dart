@@ -311,7 +311,7 @@ class _SearchEntry extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: dark ? HarborDark.chart : const Color(0xFFF1F3F4),
+            color: dark ? HarborDark.chart : HarborLight.chart,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
@@ -321,12 +321,16 @@ class _SearchEntry extends StatelessWidget {
                   color:
                       dark ? HarborDark.drift : HarborLight.drift),
               const SizedBox(width: 8),
-              Text(context.l10n.chatsSearchHint,
-                  style: TextStyle(
-                      fontSize: 14,
-                      color: dark
-                          ? HarborDark.drift
-                          : HarborLight.drift)),
+              Expanded(
+                child: Text(context.l10n.chatsSearchHint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: dark
+                            ? HarborDark.drift
+                            : HarborLight.drift)),
+              ),
             ],
           ),
         ),

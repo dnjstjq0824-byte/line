@@ -1,4 +1,9 @@
 User-agent: *
-Allow: /
+Allow: /ko/
+Allow: /en/
+Allow: /ja/
+Allow: /zh-tw/
+Disallow: /invite/
+Disallow: /join/
 Disallow: /api/
 Sitemap: __LUNO_PUBLIC_BASE__/sitemap.xml

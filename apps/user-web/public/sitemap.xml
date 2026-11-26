@@ -1,10 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>__LUNO_PUBLIC_BASE__/</loc></url>
-  <url><loc>__LUNO_PUBLIC_BASE__/download.html</loc></url>
-  <url><loc>__LUNO_PUBLIC_BASE__/admin/</loc></url>
-  <url><loc>__LUNO_PUBLIC_BASE__/partner/</loc></url>
-  <url><loc>__LUNO_PUBLIC_BASE__/developer/</loc></url>
-  <url><loc>__LUNO_PUBLIC_BASE__/creator/</loc></url>
-  <url><loc>__LUNO_PUBLIC_BASE__/ads/</loc></url>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>__LUNO_PUBLIC_BASE__/ko/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="__LUNO_PUBLIC_BASE__/ko/" />
+    <xhtml:link rel="alternate" hreflang="en" href="__LUNO_PUBLIC_BASE__/en/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="__LUNO_PUBLIC_BASE__/ja/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="__LUNO_PUBLIC_BASE__/zh-tw/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="__LUNO_PUBLIC_BASE__/en/" />
+  </url>
+  <url>
+    <loc>__LUNO_PUBLIC_BASE__/en/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="__LUNO_PUBLIC_BASE__/ko/" />
+    <xhtml:link rel="alternate" hreflang="en" href="__LUNO_PUBLIC_BASE__/en/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="__LUNO_PUBLIC_BASE__/ja/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="__LUNO_PUBLIC_BASE__/zh-tw/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="__LUNO_PUBLIC_BASE__/en/" />
+  </url>
+  <url>
+    <loc>__LUNO_PUBLIC_BASE__/ja/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="__LUNO_PUBLIC_BASE__/ko/" />
+    <xhtml:link rel="alternate" hreflang="en" href="__LUNO_PUBLIC_BASE__/en/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="__LUNO_PUBLIC_BASE__/ja/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="__LUNO_PUBLIC_BASE__/zh-tw/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="__LUNO_PUBLIC_BASE__/en/" />
+  </url>
+  <url>
+    <loc>__LUNO_PUBLIC_BASE__/zh-tw/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="__LUNO_PUBLIC_BASE__/ko/" />
+    <xhtml:link rel="alternate" hreflang="en" href="__LUNO_PUBLIC_BASE__/en/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="__LUNO_PUBLIC_BASE__/ja/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="__LUNO_PUBLIC_BASE__/zh-tw/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="__LUNO_PUBLIC_BASE__/en/" />
+  </url>
+  <url><loc>__LUNO_PUBLIC_BASE__/ko/privacy</loc></url>
+  <url><loc>__LUNO_PUBLIC_BASE__/en/privacy</loc></url>
+  <url><loc>__LUNO_PUBLIC_BASE__/ko/terms</loc></url>
+  <url><loc>__LUNO_PUBLIC_BASE__/en/terms</loc></url>
+  <url><loc>__LUNO_PUBLIC_BASE__/ko/support</loc></url>
+  <url><loc>__LUNO_PUBLIC_BASE__/en/support</loc></url>
+  <url><loc>__LUNO_PUBLIC_BASE__/ko/account-deletion</loc></url>
+  <url><loc>__LUNO_PUBLIC_BASE__/en/account-deletion</loc></url>
 </urlset>

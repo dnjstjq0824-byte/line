@@ -124,15 +124,19 @@ class _HomePageState extends State<HomePage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 decoration: BoxDecoration(
-                  color: dark ? HarborDark.chart : const Color(0xFFF1F3F4),
+                  color: dark ? HarborDark.chart : HarborLight.chart,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   children: [
                     const Icon(Icons.search, size: 20),
                     const SizedBox(width: 8),
-                    Text(context.l10n.mvSearch,
-                        style: Theme.of(context).textTheme.bodySmall),
+                    Expanded(
+                      child: Text(context.l10n.mvSearch,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ),
                   ],
                 ),
               ),

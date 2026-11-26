@@ -21,7 +21,7 @@
     // page itself for the download paths. Once this list exists, ONLY listed
     // paths reach the worker: every worker route has to be on it (leaving
     // out /api/* answers every API call with 405 from the asset layer).
-    "run_worker_first": ["/download", "/download/", "/download.html", "/app", "/mobile", "/apk", "/api/*", "/healthz", "/readyz", "/metrics", "/.well-known/*", "/"]
+    "run_worker_first": ["/download", "/download/", "/download.html", "/app", "/mobile", "/apk", "/api/*", "/v1/*", "/healthz", "/readyz", "/metrics", "/.well-known/*", "/invite/*", "/join/*", "/@*", "/robots.txt", "/sitemap.xml", "/llms.txt", "/features", "/privacy", "/terms", "/support", "/account-deletion", "/ko/*", "/en/*", "/ja/*", "/zh-tw/*", "/"]
   },
   "d1_databases": [
     {
@@ -52,15 +52,15 @@
   "env": {
     "dev": {
       "vars": {
-        "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,https://lunotalk.com,https://www.lunotalk.com,http://localhost:5173,http://localhost:8080"
+        "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,https://lunotalk.com,https://www.lunotalk.com,https://web.lunotalk.com,https://api.lunotalk.com,http://localhost:5173,http://localhost:8080"
       }
     }
   },
   "vars": {
     // Preserve the existing standalone service on its one approved hostname.
     // All other public hosts still fail closed. Demo-account policy is unchanged.
-    "STANDALONE_HOSTS": "luno-messenger.dnjstjqppk.workers.dev,lunotalk.com,www.lunotalk.com",
-    "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,https://lunotalk.com,https://www.lunotalk.com",
+    "STANDALONE_HOSTS": "luno-messenger.dnjstjqppk.workers.dev,lunotalk.com,www.lunotalk.com,web.lunotalk.com,api.lunotalk.com,ws.lunotalk.com,cdn.lunotalk.com",
+    "ALLOWED_ORIGINS": "https://luno-messenger.dnjstjqppk.workers.dev,https://lunotalk.com,https://www.lunotalk.com,https://web.lunotalk.com,https://api.lunotalk.com",
     // Rooms persist in D1. The two tables behind this flag are part of the
     // worker's runtime schema (ensureSchema), so no hand-applied migration
     // is needed first. Pinned by scripts/direct_chat.test.mjs.

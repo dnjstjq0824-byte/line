@@ -1,4 +1,4 @@
-# Installs the always-on pieces for the current Windows user (no admin, no
+﻿# Installs the always-on pieces for the current Windows user (no admin, no
 # stored password): power settings, a 5-minute watchdog task, and a logon
 # task. Both tasks only call start-agent.ps1, which is a no-op while a runner
 # is alive. They run in the logged-on session, so after a reboot the runner
@@ -6,8 +6,10 @@
 # hands-off recovery).
 $ErrorActionPreference = 'Stop'
 $watchdog = Join-Path $PSScriptRoot 'watchdog.ps1'
+$conhost = "$env:SystemRoot\System32\conhost.exe"
 $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-$run = "`"$ps`" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdog`""
+$headlessArgs = "--headless `"$ps`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$watchdog`""
+$run = "`"$conhost`" $headlessArgs"
 
 & (Join-Path $PSScriptRoot 'power-setup.ps1')
 
@@ -25,8 +27,8 @@ if (-not $logonOk) {
   # ONLOGON needs elevation on some systems; the Startup folder does the same job.
   $startup = [Environment]::GetFolderPath('Startup')
   $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startup 'LUNO pc-agent.lnk'))
-  $lnk.TargetPath = $ps
-  $lnk.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdog`""
+  $lnk.TargetPath = $conhost
+  $lnk.Arguments = $headlessArgs
   $lnk.WindowStyle = 7
   $lnk.Save()
   Write-Output 'logon start: Startup folder shortcut'

@@ -3107,14 +3107,25 @@ export const UI_DICTIONARY: Record<LunoLocale, Record<string, string>> = {
 };
 
 export function detectInitialLocale(): LunoLocale {
-  if (typeof window === 'undefined') return 'ko';
+  if (typeof window === 'undefined') return 'en';
+  // 1. Account / explicit local preference
   const saved = localStorage.getItem('luno.locale') as LunoLocale | null;
   if (saved && ['ko', 'en', 'th', 'ja'].includes(saved)) return saved;
-  const nav = (navigator.language || 'ko').toLowerCase();
+  // 2. Shared cross-subdomain pref_lang cookie (with luno_lang fallback)
+  try {
+    const m = document.cookie.match(/(?:^|;\s*)(?:pref_lang|luno_lang)=([a-z-]{2,5})/i);
+    if (m) {
+      const c = m[1].toLowerCase();
+      if (c === 'ko' || c === 'ja' || c === 'th') return c;
+      if (c) return 'en';
+    }
+  } catch { /* ignore cookie access errors */ }
+  // 3. Browser navigator.language -> fallback 'en'
+  const nav = (navigator.language || 'en').toLowerCase();
+  if (nav.startsWith('ko')) return 'ko';
   if (nav.startsWith('th')) return 'th';
   if (nav.startsWith('ja')) return 'ja';
-  if (nav.startsWith('en')) return 'en';
-  return 'ko';
+  return 'en';
 }
 
 export function formatLocalizedTime(iso: string, locale: LunoLocale): string {

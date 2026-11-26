@@ -1,0 +1,17 @@
+# LUNO Global Messenger
+
+> Multilingual real-time messenger with E2EE, voice/video calls, and live translation.
+
+## Landing & Store Policy Pages
+- __LUNO_PUBLIC_BASE__/ko/
+- __LUNO_PUBLIC_BASE__/en/
+- __LUNO_PUBLIC_BASE__/ja/
+- __LUNO_PUBLIC_BASE__/zh-tw/
+- __LUNO_PUBLIC_BASE__/en/privacy
+- __LUNO_PUBLIC_BASE__/ko/privacy
+- __LUNO_PUBLIC_BASE__/en/terms
+- __LUNO_PUBLIC_BASE__/ko/terms
+- __LUNO_PUBLIC_BASE__/en/support
+- __LUNO_PUBLIC_BASE__/ko/support
+- __LUNO_PUBLIC_BASE__/en/account-deletion
+- __LUNO_PUBLIC_BASE__/ko/account-deletion

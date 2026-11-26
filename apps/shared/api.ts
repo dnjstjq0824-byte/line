@@ -1,8 +1,15 @@
+import { classifyHost } from './locale.config'
+
 function resolveApiUrl(): string {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL
   }
   if (typeof window !== 'undefined') {
+    const { role, apexDomain } = classifyHost(window.location.hostname)
+    // Dedicated web subdomain talks to api.{domain} over HTTPS with strict CORS.
+    if (role === 'web' && apexDomain) {
+      return `${window.location.protocol}//api.${apexDomain}`
+    }
     // When hosted on Cloudflare (or any remote domain), use same origin so API goes to Cloudflare Worker
     if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
       return window.location.origin
@@ -126,6 +133,7 @@ export async function request<T>(path: string, token: string | null = null, meth
   const started = timed ? performance.now() : 0
   const resp = await fetch(API_URL + path, {
     method,
+    credentials: 'include',
     ...(signal ? { signal } : {}),
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -147,6 +155,16 @@ export function newClientID(): string {
   return crypto.randomUUID()
 }
 export function wsURL(ticket: string): string {
+  if (import.meta.env.VITE_WS_URL) {
+    return `${String(import.meta.env.VITE_WS_URL).replace(/\/+$/, '')}/v1/connect?ticket=${encodeURIComponent(ticket)}`
+  }
+  if (typeof window !== 'undefined') {
+    const { role, apexDomain } = classifyHost(window.location.hostname)
+    if (role === 'web' && apexDomain) {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      return `${proto}//ws.${apexDomain}/v1/connect?ticket=${encodeURIComponent(ticket)}`
+    }
+  }
   const base = API_URL.startsWith('http')
     ? API_URL.replace(/^http/, 'ws')
     : `${typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${typeof window !== 'undefined' ? window.location.host : 'localhost:8080'}`

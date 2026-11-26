@@ -8,8 +8,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ensureSession, setLocale } from '../store/session'
 import {
-  RTL_LANGS, SITE_COPY, SITE_LANGS, SITE_LANG_LABELS, appLocaleFor, demoOriginal,
-  isSiteLang, legalSuffixFor, rememberSiteLang, type SiteLang,
+  RTL_LANGS, SITE_COPY, SITE_FOOTER_SUPPORT, SITE_LANGS, SITE_LANG_LABELS, appLocaleFor, demoOriginal,
+  isSiteLang, rememberSiteLang, type SiteLang,
 } from '../site-i18n'
 
 const route = useRoute()
@@ -21,13 +21,19 @@ onMounted(async () => {
 
 const lang = computed<SiteLang>(() => (isSiteLang(route.params.lang) ? route.params.lang : 'en'))
 const c = computed(() => SITE_COPY[lang.value])
+const footExtra = computed(() => SITE_FOOTER_SUPPORT[lang.value] || SITE_FOOTER_SUPPORT.en)
 const rtl = computed(() => RTL_LANGS.includes(lang.value))
-const legalSuffix = computed(() => legalSuffixFor(lang.value))
 const original = computed(() => demoOriginal(lang.value))
 const peerName = computed(() => (lang.value === 'th' ? 'Minji' : 'Somchai'))
 const languages = SITE_LANGS.map((code) => ({ code, label: SITE_LANG_LABELS[code] }))
 
-// <html lang/dir>, title and hreflang alternates follow the URL language.
+const subpath = computed(() => {
+  const segs = route.path.split('/').filter(Boolean)
+  const rest = segs.slice(1).join('/')
+  return rest ? `/${rest}` : ''
+})
+
+// <html lang/dir>, title, self-referencing canonical and hreflang alternates follow the URL language.
 function syncHead(l: SiteLang) {
   const html = document.documentElement
   html.lang = l
@@ -35,6 +41,7 @@ function syncHead(l: SiteLang) {
   document.title = SITE_COPY[l].title
   document.querySelectorAll('link[data-luno-alt]').forEach((n) => n.remove())
   const origin = location.origin
+  const sub = subpath.value
   const add = (rel: string, href: string, hreflang?: string) => {
     const link = document.createElement('link')
     link.rel = rel
@@ -43,19 +50,19 @@ function syncHead(l: SiteLang) {
     link.setAttribute('data-luno-alt', '')
     document.head.appendChild(link)
   }
-  for (const code of SITE_LANGS) add('alternate', `${origin}/${code}`, code === 'zh' ? 'zh-Hans' : code === 'zh-tw' ? 'zh-Hant' : code)
-  add('alternate', `${origin}/`, 'x-default')
+  for (const code of SITE_LANGS) add('alternate', `${origin}/${code}${sub || '/'}`, code === 'zh' ? 'zh-Hans' : code === 'zh-tw' ? 'zh-Hant' : code)
+  add('alternate', `${origin}/en${sub || '/'}`, 'x-default')
   const canonical = document.querySelector('link[rel=canonical]')
-  if (canonical) canonical.setAttribute('href', `${origin}/${l}`)
+  if (canonical) canonical.setAttribute('href', `${origin}/${l}${sub || '/'}`)
 }
-watch(lang, syncHead, { immediate: true })
+watch([lang, subpath], ([l]) => syncHead(l), { immediate: true })
 
 function chooseLanguage(ev: Event) {
   const next = (ev.target as HTMLSelectElement).value
   if (!isSiteLang(next)) return
   rememberSiteLang(next)
   setLocale(appLocaleFor(next))
-  void router.push(`/${next}`)
+  void router.push(`/${next}${subpath.value}`)
 }
 
 const features = computed(() => [
@@ -192,9 +199,11 @@ function enter() {
         <nav class="lh-footer-langs" :aria-label="c.language">
           <RouterLink v-for="l in languages" :key="l.code" :to="`/${l.code}`" :class="{ on: l.code === lang }" @click="rememberSiteLang(l.code)">{{ l.label }}</RouterLink>
         </nav>
-        <nav>
-          <a :href="`/legal/terms${legalSuffix}.html`" target="_blank" rel="noopener">{{ c.footTerms }}</a>
-          <a :href="`/legal/privacy${legalSuffix}.html`" target="_blank" rel="noopener">{{ c.footPrivacy }}</a>
+        <nav class="lh-footer-legal">
+          <a :href="`/${lang}/terms`">{{ c.footTerms }}</a>
+          <a :href="`/${lang}/privacy`">{{ c.footPrivacy }}</a>
+          <a :href="`/${lang}/support`">{{ footExtra.support }}</a>
+          <a :href="`/${lang}/account-deletion`">{{ footExtra.deletion }}</a>
         </nav>
       </div>
     </footer>
@@ -284,7 +293,7 @@ function enter() {
 
 .lh-footer { border-top: 1px solid var(--lh-line); padding: 24px 0 calc(24px + env(safe-area-inset-bottom)); color: #64748b; font-size: 13px; }
 .lh-footer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.lh-footer nav { display: flex; gap: 16px; }
+.lh-footer nav { display: flex; gap: 10px 16px; flex-wrap: wrap; }
 .lh-footer a { color: inherit; text-decoration: none; }
 .lh-footer a:hover { color: var(--lh-ink); }
 .lh-footer-langs { flex-basis: 100%; order: -1; flex-wrap: wrap; gap: 6px 14px !important; padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--lh-line); }
@@ -293,6 +302,27 @@ function enter() {
 .lh-lang select { appearance: none; -webkit-appearance: none; border: 1px solid var(--lh-line); background: #fff; color: var(--lh-ink); font: inherit; font-size: 16px; height: 38px; padding: 0 10px; border-radius: 10px; max-width: 150px; cursor: pointer; }
 .lh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .lh-page.rtl .lh-hero-copy h1, .lh-page.rtl .lh-hero-copy p { letter-spacing: 0; }
+
+:global([data-theme="dark"]) .lh-page {
+  --lh-blue: #6b93ff;
+  --lh-blue-2: #4f7cff;
+  --lh-ink: #f1f5f9;
+  --lh-muted: #94a3b8;
+  --lh-line: #1e293b;
+  --lh-soft: #111c30;
+  background: #0b1220;
+}
+:global([data-theme="dark"]) .lh-header { background: rgba(11, 18, 32, 0.92); }
+:global([data-theme="dark"]) .lh-hero { background: linear-gradient(180deg, #111c30 0%, #0b1220 100%); }
+:global([data-theme="dark"]) .lh-btn-ghost { background: #111c30; color: #93b4ff; border-color: #2a3e66; }
+:global([data-theme="dark"]) .lh-card { background: #111c30; }
+:global([data-theme="dark"]) .lh-lang select { background: #111c30; color: #f1f5f9; border-color: #24324a; }
+:global([data-theme="dark"]) .lh-phone-screen { background: #0f1b2e; }
+:global([data-theme="dark"]) .lh-phone-top { border-bottom-color: #1e293b; color: #f1f5f9; }
+:global([data-theme="dark"]) .lh-bubble.in,
+:global([data-theme="dark"]) .lh-call { background: #192842; color: #f1f5f9; }
+:global([data-theme="dark"]) .lh-bubble.in em { border-top-color: #293e63; color: #8fb0ff; }
+:global([data-theme="dark"]) .lh-phone-input span { background: #192842; }
 
 @media (max-width: 1099px) {
   .lh-hero { padding: 36px 0 48px; }
