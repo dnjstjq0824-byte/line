@@ -59,6 +59,7 @@ import {
   type User,
 } from '../../../shared/api'
 import {
+  isKeepRoomId,
   queueOfflineMessage
 } from '../messenger-utils'
 import { useChatSocket } from '../composables/useChatSocket'
@@ -984,13 +985,15 @@ function openFriendContextMenu(e: MouseEvent, friend: User) {
       label: t('mvViewProfile'),
       action: () => { activeProfileUser.value = friend }
     },
-    {
+    // Audit P0-7: money actions stay out of menus while payments are off.
+    ...(paymentsEnabled.value ? [{
       label: t('mvSendMoneyAction'),
       separator: true,
       action: () => openSendMoneyModal(friend)
-    },
+    }] : []),
     {
       label: isBlk ? t('mvUnblock') : t('mvBlock'),
+      separator: !paymentsEnabled.value,
       danger: !isBlk,
       action: () => toggleFriendBlock(friend)
     },
@@ -1203,16 +1206,20 @@ function writeSnapshot(key: string, items: unknown) {
   try { localStorage.setItem(key, JSON.stringify({ saved_at: Date.now(), items })) } catch {}
 }
 
+// The server names the Keep room in Korean; show it in the app language.
+function localizeKeepRoom(c: Chat): Chat {
+  return isKeepRoomId(c.id) ? { ...c, title: t('keepMemo') } : c
+}
 async function loadChats() {
   const sessionToken = token.value
   if (!chats.value.length) {
     const snap = readSnapshot<Chat>(CHATS_SNAPSHOT_KEY)
-    if (snap && snap.length) chats.value = snap
+    if (snap && snap.length) chats.value = snap.map(localizeKeepRoom)
   }
   try {
     const res = await api<{ conversations: Chat[] }>('/api/v1/conversations')
     if (sessionToken === token.value) {
-      chats.value = res.conversations || []
+      chats.value = (res.conversations || []).map(localizeKeepRoom)
       writeSnapshot(CHATS_SNAPSHOT_KEY, chats.value)
     }
   } catch {}
@@ -3346,7 +3353,7 @@ onBeforeUnmount(() => {
                   <h3 class="lx-page-subtitle">{{ t('mvTodayPopular') }}</h3>
                   <div v-if="!filteredPopularNews.length" class="lx-list-empty lx-empty-illustrated">
                     <span class="lx-empty-icon" aria-hidden="true"><LunoIcon name="news" :size="28" /></span>
-                    <p>{{ t('lxNoNews') }}</p>
+                    <p>{{ heroNewsSlides.length || popularNewsList.length ? t('lxNoNews') : t('lxNoNewsYet') }}</p>
                   </div>
                   <button
                     v-for="article in filteredPopularNews"
@@ -3823,7 +3830,7 @@ onBeforeUnmount(() => {
                 <LunoIcon name="call-video" :size="16" />
                 <span>{{ t('mvVideoCallLabel') }}</span>
               </button>
-              <button type="button" class="btn-subaction-pill" :title="t('mvSendMoney')" @click="openSendMoneyModal(selectedFriendProfile)">
+              <button v-if="paymentsEnabled" type="button" class="btn-subaction-pill" :title="t('mvSendMoney')" @click="openSendMoneyModal(selectedFriendProfile)">
                 <LunoIcon name="money" :size="16" />
                 <span>{{ t('mvSendMoney') }}</span>
               </button>
@@ -4014,7 +4021,6 @@ onBeforeUnmount(() => {
         <div v-if="activeProfileUser.id === currentUser?.id" class="profile-actions-footer">
           <button class="btn-profile-action" @click="showSettingsModal = true; activeProfileUser = null">{{ t('profileEdit') }}</button>
           <button class="btn-profile-action" @click="showPasswordModal = true; activeProfileUser = null">{{ t('profile_account') }}</button>
-          <p class="ln-profile-preparing">{{ t('profile_visibility_preparing') }}</p>
         </div>
         <div v-else class="profile-actions-footer">
           <button class="btn-profile-action" @click="startDirectChat(activeProfileUser); activeProfileUser = null">

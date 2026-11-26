@@ -392,8 +392,19 @@ class _DeckHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // Neutral bar (same as the web room head and the tab headers): the
+    // brand blue stays for actions and own bubbles, not the whole bar.
+    final ink = dark ? HarborDark.ink : HarborLight.ink;
+    final memberCount = session.kindOf(conversationId) == 'group'
+        ? session.memberCountOf(conversationId)
+        : 0;
     return Container(
-      color: dark ? HarborDark.surface : HarborLight.harbor,
+      decoration: BoxDecoration(
+        color: dark ? HarborDark.surface : HarborLight.surface,
+        border: Border(
+            bottom: BorderSide(
+                color: dark ? HarborDark.channel : HarborLight.channel)),
+      ),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -403,7 +414,7 @@ class _DeckHeader extends StatelessWidget {
               IconButton(
                 tooltip: context.l10n.roomListTitle,
                 icon: Icon(Icons.arrow_back,
-                    color: dark ? HarborDark.ink : Colors.white),
+                    color: ink),
                 onPressed: () => context.go('/chats'),
               ),
               Expanded(
@@ -416,19 +427,30 @@ class _DeckHeader extends StatelessWidget {
                             : session.selectedTitle,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: dark ? HarborDark.ink : Colors.white,
+                            color: ink,
                             fontWeight: LunoType.titleWeight,
                             fontSize: LunoType.titleSize,
                             height: LunoType.titleHeight),
                       ),
                     ),
+                    if (memberCount > 0)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(start: 6),
+                        child: Text('$memberCount',
+                            style: TextStyle(
+                                color: dark
+                                    ? HarborDark.drift
+                                    : HarborLight.drift,
+                                fontSize: LunoType.titleSize,
+                                height: LunoType.titleHeight)),
+                      ),
                   ],
                 ),
               ),
               IconButton(
                 tooltip: context.l10n.callVoice,
                 icon: Icon(Icons.phone,
-                    color: dark ? HarborDark.ink : Colors.white),
+                    color: ink),
                 onPressed: () => withPermissions(
                   context,
                   permissions: [
@@ -446,7 +468,7 @@ class _DeckHeader extends StatelessWidget {
               IconButton(
                 tooltip: context.l10n.callVideo,
                 icon: Icon(Icons.videocam,
-                    color: dark ? HarborDark.ink : Colors.white),
+                    color: ink),
                 onPressed: () => withPermissions(
                   context,
                   permissions: [
@@ -471,7 +493,7 @@ class _DeckHeader extends StatelessWidget {
               PopupMenuButton<String>(
                 tooltip: context.l10n.mvMoreActions,
                 icon: Icon(Icons.more_vert,
-                    color: dark ? HarborDark.ink : Colors.white),
+                    color: ink),
                 onSelected: (value) {
                   switch (value) {
                     case 'pay':
@@ -1282,18 +1304,16 @@ class _SignalBubble extends StatelessWidget {
               bubbleBody,
             ],
           )),
-          // Build 20: read count above the time, beside the bubble.
-          if (!mine && ((groupTail && readCount > 0) || time.isNotEmpty))
+          // Incoming bubbles carry only the time: a read count belongs to
+          // the sender's own messages (web and LINE do the same).
+          if (!mine && time.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 6, bottom: 6),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (groupTail && readCount > 0)
-                    Text(context.l10n.roomReadCount(readCount),
-                        style: timeStyle),
-                  if (time.isNotEmpty) Text(time, style: timeStyle),
+                  Text(time, style: timeStyle),
                 ],
               ),
             ),

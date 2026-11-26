@@ -4688,17 +4688,28 @@ function ensureKeepMemo(userId) {
   // 0. Keep 메모 (Self-chat memo room)
   const keepCid = `conv-keep-${userId}`;
   if (!conversations.has(keepCid)) {
+    // The seed is rebuilt per isolate, so its times must be stable: they
+    // follow the account's own creation time (never a fixed calendar date,
+    // which showed every new user an "Aug 1" memo they never wrote).
+    const u = usersById.get(userId);
+    // users.created_at comes from SQLite datetime('now'): UTC without a zone
+    // marker ("2026-11-26 02:21:00"), which Date.parse would read as local.
+    const rawBorn = String((u && u.created_at) || '');
+    const bornIso = /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(rawBorn) ? rawBorn.replace(' ', 'T') + 'Z' : rawBorn;
+    const born = (bornIso && !Number.isNaN(Date.parse(bornIso))) ? new Date(Date.parse(bornIso)) : new Date(Date.UTC(2026, 0, 1));
+    const t1 = born.toISOString();
+    const t2 = new Date(born.getTime() + 1000).toISOString();
     conversations.set(keepCid, {
       id: keepCid,
       kind: 'direct',
       title: 'Keep 메모',
       members: [userId],
       last_sequence: 2,
-      updated_at: '2026-08-01T11:30:00Z'
+      updated_at: t2
     });
     messages.set(keepCid, [
-      { id: `m-keep-${userId}-1`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-1', sequence: 1, kind: 'text', body: '나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.', read_count: 1, created_at: '2026-08-01T11:00:00Z' },
-      { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: `${publicBaseUrl()}/ 프로덕션 점검 완료`, read_count: 1, created_at: '2026-08-01T11:30:00Z' }
+      { id: `m-keep-${userId}-1`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-1', sequence: 1, kind: 'text', body: '나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.', read_count: 1, created_at: t1 },
+      { id: `m-keep-${userId}-2`, conversation_id: keepCid, sender_id: userId, client_id: 'keep-2', sequence: 2, kind: 'text', body: `PC에서도 같은 대화를 이어갈 수 있어요: ${publicBaseUrl()}/login`, read_count: 1, created_at: t2 }
     ]);
   }
 }

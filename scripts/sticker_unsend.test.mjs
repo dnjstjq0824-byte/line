@@ -34,7 +34,7 @@ test('edit and unsend actions hide on unsent messages', () => {
 });
 
 test('chat list preview shows the unsent marker for recalled last messages', () => {
-  assert.match(listSource, /last_message\?\.unsent \? t\('mvMsgUnsent'\)/);
+  assert.match(listSource, /if \(last\.unsent\) return t\('mvMsgUnsent'\)/);
 });
 
 test('worker sticker unsend clears art payload and persists the recall', async () => {

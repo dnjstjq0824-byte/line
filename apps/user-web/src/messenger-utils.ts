@@ -295,3 +295,22 @@ async function replenishOneTimePreKeys(count: number): Promise<Array<{ key: Json
 }
 
 export { rotateSignedPreKey, replenishOneTimePreKeys }
+
+// Keep memo seed: the server writes the room title and its two welcome
+// notes in Korean (it does not know the viewer's language), so the client
+// shows them in the app language. Matched by the server's fixed ids.
+export function isKeepRoomId(id: string | undefined | null): boolean {
+  return typeof id === 'string' && id.startsWith('conv-keep-')
+}
+export function keepSeedText(
+  msg: { id?: string; client_id?: string; body?: string | null } | null | undefined,
+  tr: (key: string) => string,
+): string | null {
+  if (!msg || typeof msg.id !== 'string' || !msg.id.startsWith('m-keep-')) return null
+  if (msg.client_id === 'keep-1' || msg.id.endsWith('-1')) return tr('keepSeedWelcome')
+  if (msg.client_id === 'keep-2' || msg.id.endsWith('-2')) {
+    const url = (String(msg.body || '').match(/https?:\/\/\S+/) || [''])[0]
+    return tr('keepSeedPc').replace('{url}', url)
+  }
+  return null
+}

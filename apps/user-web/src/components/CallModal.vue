@@ -60,7 +60,7 @@ const callSubtitles = ref(t('mvLiveCaptionsOn'))
         class="call-remote-video"
       ></video>
       <div v-if="activeCall.kind !== 'video'" class="call-avatar-pulse call-avatar-stage">
-        <div class="avatar-circle lg" style="background:#315BCD">{{ initialOf(activeCall.title) }}</div>
+        <div class="avatar-circle lg" style="background:var(--ln-accent)">{{ initialOf(activeCall.title) }}</div>
       </div>
       <video
         v-if="activeCall.kind === 'video'"

@@ -1182,17 +1182,17 @@ abstract class AppLocalizations {
   /// **'투표·일정·앨범'**
   String get authPollsEtc;
 
-  /// authPaySend (F20)
+  /// authTranslateCalls (2026-11-26: pay is off, panel promotes translation)
   ///
   /// In ko, this message translates to:
-  /// **'LUNO Pay 송금'**
-  String get authPaySend;
+  /// **'실시간 번역 · 무료 통화'**
+  String get authTranslateCalls;
 
-  /// authRightInRoom (F20)
+  /// authAcrossLanguages (2026-11-26)
   ///
   /// In ko, this message translates to:
-  /// **'대화방에서 바로'**
-  String get authRightInRoom;
+  /// **'언어가 달라도 바로 통해요'**
+  String get authAcrossLanguages;
 
   /// authHarborGate (F20)
   ///
@@ -2151,7 +2151,7 @@ abstract class AppLocalizations {
   /// keepTitle (F20)
   ///
   /// In ko, this message translates to:
-  /// **'보관한 신호 모음'**
+  /// **'보관한 메시지 모음'**
   String get keepTitle;
 
   /// keepEmpty (F20)
@@ -2262,11 +2262,11 @@ abstract class AppLocalizations {
   /// **'표시할 뉴스가 없습니다'**
   String get newsEmpty;
 
-  /// newsPullRefresh (F20)
+  /// newsEmptyHint (2026-11-26: pull-to-refresh was removed in build 17)
   ///
   /// In ko, this message translates to:
-  /// **'아래로 당겨 새로고침하세요'**
-  String get newsPullRefresh;
+  /// **'새 소식이 발행되면 여기에 표시됩니다'**
+  String get newsEmptyHint;
 
   /// newsArticleWord (F20)
   ///
@@ -4187,6 +4187,96 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'이미 끝난 통화입니다'**
   String get callAlreadyEnded;
+
+  /// chatsPrevEncrypted (2026-11-26 UX sweep)
+  ///
+  /// In ko, this message translates to:
+  /// **'암호화된 메시지'**
+  String get chatsPrevEncrypted;
+
+  /// chatsPrevLocation (2026-11-26 UX sweep)
+  ///
+  /// In ko, this message translates to:
+  /// **'위치'**
+  String get chatsPrevLocation;
+
+  /// settingsAutoTranslateDesc (2026-11-26 UX sweep)
+  ///
+  /// In ko, this message translates to:
+  /// **'받은 메시지를 선택한 언어로 자동 번역합니다.'**
+  String get settingsAutoTranslateDesc;
+
+  /// authRecoverTitle (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'비밀번호 찾기'**
+  String get authRecoverTitle;
+
+  /// authRecoverEmail (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'가입 이메일'**
+  String get authRecoverEmail;
+
+  /// authRecoverSend (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'인증코드 받기'**
+  String get authRecoverSend;
+
+  /// authRecoverCode (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'인증코드'**
+  String get authRecoverCode;
+
+  /// authRecoverCodeHint (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'이메일로 발송된 인증코드를 15분 안에 입력해 주세요.'**
+  String get authRecoverCodeHint;
+
+  /// authRecoverUnavailable (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 비밀번호 찾기를 제공하지 않습니다'**
+  String get authRecoverUnavailable;
+
+  /// authRecoverNewPw (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'새 비밀번호 (10자 이상)'**
+  String get authRecoverNewPw;
+
+  /// authRecoverDone (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'비밀번호를 변경했습니다. 새 비밀번호로 로그인해 주세요.'**
+  String get authRecoverDone;
+
+  /// authPasswordLabel (2026-11-26 app password recovery)
+  ///
+  /// In ko, this message translates to:
+  /// **'비밀번호'**
+  String get authPasswordLabel;
+
+  /// keepRoomTitle (2026-11-26 Keep seed localization)
+  ///
+  /// In ko, this message translates to:
+  /// **'Keep 메모'**
+  String get keepRoomTitle;
+
+  /// keepSeedWelcome (2026-11-26 Keep seed localization)
+  ///
+  /// In ko, this message translates to:
+  /// **'나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.'**
+  String get keepSeedWelcome;
+
+  /// keepSeedPc (2026-11-26 Keep seed localization)
+  ///
+  /// In ko, this message translates to:
+  /// **'PC에서도 같은 대화를 이어갈 수 있어요: {url}'**
+  String keepSeedPc(String url);
 }
 
 class _AppLocalizationsDelegate

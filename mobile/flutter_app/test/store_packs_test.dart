@@ -66,7 +66,7 @@ void main() {
     expect(storePriceLabel(const StorePack(id: 'a', title: 'A')), equals('무료'));
     expect(
       storePriceLabel(const StorePack(id: 'b', title: 'B', priceMinor: 2500, currency: 'KRW')),
-      equals('2500 KRW'),
+      equals('2,500 KRW'),
     );
   });
 
@@ -88,7 +88,7 @@ void main() {
       ),
     ));
     expect(find.text('유료팩'), findsOneWidget);
-    expect(find.text('2500 KRW'), findsOneWidget);
+    expect(find.text('2,500 KRW'), findsOneWidget);
     expect(find.text('기본팩'), findsOneWidget);
     expect(find.text('보유 중'), findsOneWidget);
   });

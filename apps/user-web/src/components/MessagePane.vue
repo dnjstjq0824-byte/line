@@ -13,6 +13,7 @@ import { loadStickerCatalog, type StickerCatalogCategory } from '../../../shared
 import type { LunoSticker } from '../luno-stickers'
 import type { LunoLocale } from '../luno-i18n'
 import LinkPreview from './LinkPreview.vue'
+import { keepSeedText } from '../messenger-utils'
 import { currentUser, t, token, currentLocale, paymentsEnabled } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import MessageAttachment from './MessageAttachment.vue'
@@ -477,10 +478,10 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
     <!-- Slide-Over Conversation Drawer (Notes / Albums / Events / Media / Search) -->
     <div v-if="activeDrawer !== 'none'" class="pc-drawer-panel">
       <div class="drawer-tabs-bar">
-        <button :class="{ active: activeDrawer === 'notes' }" @click="emit('drawer', 'notes')">{{ t('mvDrawerNotes') }}</button>
-        <button :class="{ active: activeDrawer === 'albums' }" @click="emit('drawer', 'albums')">{{ t('mvDrawerAlbums') }}</button>
-        <button :class="{ active: activeDrawer === 'events' }" @click="emit('drawer', 'events')">{{ t('mvDrawerEvents') }}</button>
-        <button :class="{ active: activeDrawer === 'media' }" @click="emit('drawer', 'media')">{{ t('mvDrawerMedia') }}</button>
+        <button :class="{ active: activeDrawer === 'notes' }" @click="emit('drawer', 'notes')"><LunoIcon name="edit" :size="15" /><span>{{ t('mvDrawerNotes') }}</span></button>
+        <button :class="{ active: activeDrawer === 'albums' }" @click="emit('drawer', 'albums')"><LunoIcon name="photo" :size="15" /><span>{{ t('mvDrawerAlbums') }}</span></button>
+        <button :class="{ active: activeDrawer === 'events' }" @click="emit('drawer', 'events')"><LunoIcon name="calendar" :size="15" /><span>{{ t('mvDrawerEvents') }}</span></button>
+        <button :class="{ active: activeDrawer === 'media' }" @click="emit('drawer', 'media')"><LunoIcon name="drawer" :size="15" /><span>{{ t('mvDrawerMedia') }}</span></button>
         <button class="btn-drawer-close" @click="activeDrawer = 'none'" :aria-label="t('mvClose')">✕</button>
       </div>
       <div class="drawer-search-bar">
@@ -622,7 +623,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             :data-message-id="msg.id"
             :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index), 'searched-flash': flashedMessageId === msg.id }"
           >
-            <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
+            <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:var(--ln-accent)">
               <span>{{ initialOf(headerName(msg), 'U') }}</span>
               <img v-if="senderPhoto(msg)" :src="senderPhoto(msg)" alt="" class="ln-profile-photo" @error="hideBrokenPhoto" />
             </div>
@@ -666,7 +667,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
             :class="{ mine: msg.sender_id === currentUser?.id, other: msg.sender_id !== currentUser?.id, 'group-inner': !isGroupLead(msg, index), 'searched-flash': flashedMessageId === msg.id }"
           >
             <!-- Other User Avatar (group lead only; continuations keep a 44px indent) -->
-            <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:#315BCD">
+            <div v-if="msg.sender_id !== currentUser?.id && isGroupLead(msg, index)" class="pc-avatar circle-34 other-avatar is-group-lead" style="background:var(--ln-accent)">
               <span>{{ initialOf(headerName(msg), 'U') }}</span>
               <img v-if="senderPhoto(msg)" :src="senderPhoto(msg)" alt="" class="ln-profile-photo" @error="hideBrokenPhoto" />
             </div>
@@ -727,7 +728,7 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                 <div v-else-if="msg.kind === 'proposal' && proposalState(msg) !== 'pending'" class="bubble-decided-mark">
                   {{ proposalState(msg) === 'approved' ? t('apprApprovedState') : t('apprRejectedState') }}
                 </div>
-                <div v-else class="bubble-text-content"><template v-if="msg._e2eeError">{{ t('mvE2eeUnreadable') }}</template><template v-else><template v-for="(part, pi) in linkParts(msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></template></div>
+                <div v-else class="bubble-text-content"><template v-if="msg._e2eeError">{{ t('mvE2eeUnreadable') }}</template><template v-else><template v-for="(part, pi) in linkParts(keepSeedText(msg, t) ?? msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></template></div>
                 <LinkPreview v-if="msg.kind === 'text' && !msg.unsent && !msg._e2eeError" :text="msg.body" :enabled="linkPreviewsEnabled" :sealed="msg._e2ee === true" :room="selectedChatId" />
 
                 <!-- A15: voice-AI result box (STT transcript, TTS/STT guidance) -->

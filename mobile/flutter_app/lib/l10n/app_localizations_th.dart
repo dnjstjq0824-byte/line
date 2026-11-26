@@ -557,10 +557,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get authPollsEtc => 'โหวต นัดหมาย อัลบั้ม';
 
   @override
-  String get authPaySend => 'โอนเงิน LUNO Pay';
+  String get authTranslateCalls => 'แปลแบบเรียลไทม์ · โทรฟรี';
 
   @override
-  String get authRightInRoom => 'ทำได้ทันทีในห้องแชท';
+  String get authAcrossLanguages => 'คุยกันได้แม้ต่างภาษา';
 
   @override
   String get authHarborGate => 'ฮาร์เบอร์เกต v3';
@@ -1069,7 +1069,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get homeDetailOptional => 'รายละเอียด (ไม่บังคับ)';
 
   @override
-  String get keepTitle => 'สัญญาณที่บันทึกไว้';
+  String get keepTitle => 'ข้อความที่บันทึกไว้';
 
   @override
   String get keepEmpty => 'ยังไม่มีรายการที่บันทึก';
@@ -1128,7 +1128,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get newsEmpty => 'ไม่มีข่าวแสดง';
 
   @override
-  String get newsPullRefresh => 'ดึงลงเพื่อรีเฟรช';
+  String get newsEmptyHint => 'ข่าวใหม่จะแสดงที่นี่เมื่อเผยแพร่';
 
   @override
   String get newsArticleWord => 'บทความ';
@@ -2185,4 +2185,55 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get callAlreadyEnded => 'การโทรนี้สิ้นสุดแล้ว';
+
+  @override
+  String get chatsPrevEncrypted => 'ข้อความที่เข้ารหัส';
+
+  @override
+  String get chatsPrevLocation => 'ตำแหน่ง';
+
+  @override
+  String get settingsAutoTranslateDesc =>
+      'แปลข้อความที่ได้รับเป็นภาษาที่เลือกโดยอัตโนมัติ';
+
+  @override
+  String get authRecoverTitle => 'รีเซ็ตรหัสผ่าน';
+
+  @override
+  String get authRecoverEmail => 'อีเมลที่ใช้สมัคร';
+
+  @override
+  String get authRecoverSend => 'ส่งรหัสกู้คืน';
+
+  @override
+  String get authRecoverCode => 'รหัสกู้คืน';
+
+  @override
+  String get authRecoverCodeHint =>
+      'กรุณากรอกรหัสที่ส่งไปยังอีเมลของคุณภายใน 15 นาที';
+
+  @override
+  String get authRecoverUnavailable => 'ขณะนี้ยังไม่ให้บริการกู้คืนรหัสผ่าน';
+
+  @override
+  String get authRecoverNewPw => 'รหัสผ่านใหม่ (10 ตัวอักษรขึ้นไป)';
+
+  @override
+  String get authRecoverDone =>
+      'เปลี่ยนรหัสผ่านแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่';
+
+  @override
+  String get authPasswordLabel => 'รหัสผ่าน';
+
+  @override
+  String get keepRoomTitle => 'Keep เมโม';
+
+  @override
+  String get keepSeedWelcome =>
+      'นี่คือ Keep เมโม แชทกับตัวเอง เก็บข้อความ ลิงก์ รูปภาพ และไฟล์ได้ที่นี่';
+
+  @override
+  String keepSeedPc(String url) {
+    return 'ใช้งานแชทเดียวกันบนคอมพิวเตอร์ได้ที่: $url';
+  }
 }

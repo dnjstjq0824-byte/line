@@ -20,7 +20,12 @@ void main() {
       await tester.pumpWidget(const MessengerApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('LUNO'), findsWidgets);
+      // Brand: the side panel's wordmark (wide) or the card logo (phone).
+      expect(
+          find.byWidgetPredicate((w) =>
+              (w is Text && w.data == 'LUNO') ||
+              (w is Image && w.semanticLabel == 'LUNO')),
+          findsWidgets);
       expect(find.text('로그인'), findsWidgets);
 
       await tester.tap(find.text('새 LUNO 계정 만들기'));

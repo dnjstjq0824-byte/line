@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../widgets/harbor_empty.dart';
 import '../widgets/no_pull_refresh.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
@@ -96,17 +97,12 @@ class _NewsPageState extends State<NewsPage> {
             PageColumn(
               children: [
                 Masthead(title: context.l10n.mvNews),
-                const SizedBox(height: 64),
-                Icon(Icons.newspaper_outlined,
-                    size: 48, color: dark ? HarborDark.drift : HarborLight.drift),
-                const SizedBox(height: 12),
-                Text(context.l10n.newsEmpty,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                Text(context.l10n.newsPullRefresh,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall),
+                // Same tinted tile as every other empty tab.
+                HarborEmpty(
+                  title: context.l10n.newsEmpty,
+                  hint: context.l10n.newsEmptyHint,
+                  icon: Icons.newspaper_outlined,
+                ),
               ],
             ),
           ],

@@ -554,10 +554,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authPollsEtc => '투표·일정·앨범';
 
   @override
-  String get authPaySend => 'LUNO Pay 송금';
+  String get authTranslateCalls => '실시간 번역 · 무료 통화';
 
   @override
-  String get authRightInRoom => '대화방에서 바로';
+  String get authAcrossLanguages => '언어가 달라도 바로 통해요';
 
   @override
   String get authHarborGate => '하버 게이트 v3';
@@ -1064,7 +1064,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeDetailOptional => '상세 내용 (선택)';
 
   @override
-  String get keepTitle => '보관한 신호 모음';
+  String get keepTitle => '보관한 메시지 모음';
 
   @override
   String get keepEmpty => '보관한 항목이 없습니다';
@@ -1123,7 +1123,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get newsEmpty => '표시할 뉴스가 없습니다';
 
   @override
-  String get newsPullRefresh => '아래로 당겨 새로고침하세요';
+  String get newsEmptyHint => '새 소식이 발행되면 여기에 표시됩니다';
 
   @override
   String get newsArticleWord => '기사';
@@ -2173,4 +2173,52 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get callAlreadyEnded => '이미 끝난 통화입니다';
+
+  @override
+  String get chatsPrevEncrypted => '암호화된 메시지';
+
+  @override
+  String get chatsPrevLocation => '위치';
+
+  @override
+  String get settingsAutoTranslateDesc => '받은 메시지를 선택한 언어로 자동 번역합니다.';
+
+  @override
+  String get authRecoverTitle => '비밀번호 찾기';
+
+  @override
+  String get authRecoverEmail => '가입 이메일';
+
+  @override
+  String get authRecoverSend => '인증코드 받기';
+
+  @override
+  String get authRecoverCode => '인증코드';
+
+  @override
+  String get authRecoverCodeHint => '이메일로 발송된 인증코드를 15분 안에 입력해 주세요.';
+
+  @override
+  String get authRecoverUnavailable => '현재 비밀번호 찾기를 제공하지 않습니다';
+
+  @override
+  String get authRecoverNewPw => '새 비밀번호 (10자 이상)';
+
+  @override
+  String get authRecoverDone => '비밀번호를 변경했습니다. 새 비밀번호로 로그인해 주세요.';
+
+  @override
+  String get authPasswordLabel => '비밀번호';
+
+  @override
+  String get keepRoomTitle => 'Keep 메모';
+
+  @override
+  String get keepSeedWelcome =>
+      '나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.';
+
+  @override
+  String keepSeedPc(String url) {
+    return 'PC에서도 같은 대화를 이어갈 수 있어요: $url';
+  }
 }

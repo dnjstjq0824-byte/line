@@ -75,13 +75,13 @@ test('F27: seeds link the configured base', async () => {
   const keep = convs.conversations.find((c) => c.id === `conv-keep-${d.userId}`);
   assert.ok(keep, 'keep room seeded');
   const msgs = await (await d.api(`conversations/${keep.id}/messages?limit=10`, 'GET', null, d.token)).json();
-  assert.ok(msgs.messages.some((m) => String(m.body).startsWith(`${BASE}/`)), 'keep seed uses the default base');
+  assert.ok(msgs.messages.some((m) => String(m.body).includes(`${BASE}/`)), 'keep seed uses the default base');
 
   const o = await registerLogin('f27-oseed@luno-test.local', { PUBLIC_BASE_URL: 'https://example.com' });
   const oconvs = await (await o.api('conversations', 'GET', null, o.token)).json();
   const okeep = oconvs.conversations.find((c) => c.id === `conv-keep-${o.userId}`);
   const omsgs = await (await o.api(`conversations/${okeep.id}/messages?limit=10`, 'GET', null, o.token)).json();
-  assert.ok(omsgs.messages.some((m) => String(m.body).startsWith('https://example.com/')), 'keep seed follows the override');
+  assert.ok(omsgs.messages.some((m) => String(m.body).includes('https://example.com/')), 'keep seed follows the override');
   assert.ok(!JSON.stringify(omsgs.messages).includes(HOST), 'no default leak under override');
 });
 

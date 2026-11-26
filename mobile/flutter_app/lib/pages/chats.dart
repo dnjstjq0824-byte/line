@@ -19,10 +19,12 @@ import '../util/app_l10n.dart';
 String previewOfLastMessage(dynamic last, [String locale = 'ko']) {
   final s = stringsFor(locale);
   if (last is Map) {
-    final body = '${last['body'] ?? ''}';
-    if (body.isNotEmpty && body != 'null') return body;
+    if (last['unsent'] == true) return s.chatsTypeHint;
+    // Non-text kinds always show a label: their body is a file name, a
+    // media key or (for unopened E2EE) base64 ciphertext, never prose.
     switch ('${last['kind'] ?? ''}') {
       case 'call_status':
+      case 'call':
         return s.mvCall;
       case 'sticker':
         return s.mvSticker;
@@ -32,9 +34,19 @@ String previewOfLastMessage(dynamic last, [String locale = 'ko']) {
         return s.camVideo;
       case 'file':
         return s.fileWord;
+      case 'voice':
+        return s.voiceMsgWord;
+      case 'location':
+        return s.chatsPrevLocation;
+      case 'contact':
+        return s.contactWord;
+      case 'ciphertext':
+        return s.chatsPrevEncrypted;
       case 'security_notice':
         return s.notifWord;
     }
+    final body = '${last['body'] ?? ''}';
+    if (body.isNotEmpty && body != 'null') return body;
     return s.chatsTypeHint;
   }
   final text = '$last';

@@ -73,6 +73,10 @@ const deletePasswordInput = defineModel<string>('deletePasswordInput', { require
 const deleteReasonInput = defineModel<string>('deleteReasonInput', { required: true })
 const deleteConfirmInput = defineModel<string>('deleteConfirmInput', { required: true })
 
+// Legal pages exist per app language (terms.html = ko, terms.en.html, ...).
+function legalDocUrl(doc: 'terms' | 'privacy') {
+  return currentLocale.value === 'ko' ? `/legal/${doc}.html` : `/legal/${doc}.${currentLocale.value}.html`
+}
 function enableLightMode() {
   if (isDarkMode.value) toggleDarkMode()
 }
@@ -334,7 +338,7 @@ onMounted(() => {
               :class="{ active: currentLocale === loc.code }"
               @click="setLocale(loc.code)"
             >
-              <span>{{ loc.flag }}</span> {{ loc.nativeName }} ({{ loc.code.toUpperCase() }})
+              {{ loc.nativeName }}
             </button>
           </div>
         </div>
@@ -350,7 +354,7 @@ onMounted(() => {
               :class="{ active: targetTranslateLang === loc.code }"
               @click="targetTranslateLang = loc.code"
             >
-              <span>{{ loc.flag }}</span> {{ loc.nativeName }}
+              {{ loc.nativeName }}
             </button>
           </div>
           <span v-else class="muted">{{ t('mvTranslatePending') }}</span>
@@ -495,7 +499,6 @@ onMounted(() => {
             <label for="profile-handle">LUNO ID<input id="profile-handle" v-model="editProfileHandle" autocomplete="off" autocapitalize="none" spellcheck="false" :disabled="profileSaving" /></label>
             <label for="profile-bio" class="ln-profile-bio">{{ t('profile_bio_label') }}<textarea id="profile-bio" v-model="editProfileBio" rows="3" :disabled="profileSaving" /></label>
           </div>
-          <p class="ln-profile-hint">{{ t('profile_visibility_preparing') }}</p>
           <p v-if="profileSaveError" class="ln-profile-error" role="alert">{{ profileSaveError }}</p>
           <div class="ln-profile-save"><span role="status">{{ profileSaved ? t('profile_saved') : '' }}</span><button type="submit" class="btn-primary" :disabled="profileSaving || !profileDirty || !editProfileName.trim()">{{ profileSaving ? t('profile_saving') : t('profile_save') }}</button></div>
         </form>
@@ -530,18 +533,16 @@ onMounted(() => {
         <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
           <strong>{{ t('mvLegal') }}</strong>
           <div style="margin-top:4px; display:flex; gap:12px;">
-            <a href="./legal/terms.html" target="_blank" rel="noopener">{{ t('mvTerms') }}</a>
-            <a href="./legal/privacy.html" target="_blank" rel="noopener">{{ t('mvPrivacy') }}</a>
+            <a :href="legalDocUrl('terms')" target="_blank" rel="noopener">{{ t('mvTerms') }}</a>
+            <a :href="legalDocUrl('privacy')" target="_blank" rel="noopener">{{ t('mvPrivacy') }}</a>
           </div>
         </div>
 
         <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
           <strong>{{ t('mvVersionInfo') }}</strong>
           <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
-            <span><b>LUNO Messenger:</b> {{ appVersion.worker_version || '—' }}</span>
-            <span><b>Git Commit:</b> <code>{{ appVersion.commit || t('checkingText') }}</code></span>
-            <span><b>Build Time:</b> {{ appVersion.build_time || '—' }}</span>
-            <span><b>Environment:</b> {{ appVersion.env || '—' }}</span>
+            <span>LUNO {{ (appVersion.worker_version || '').replace(/^v/, '').replace(/-.*$/, '') || '—' }}<template v-if="appVersion.short_commit"> · <code>{{ appVersion.short_commit }}</code></template></span>
+            <span v-if="appVersion.build_time">{{ String(appVersion.build_time).slice(0, 10) }}</span>
           </div>
         </div>
 

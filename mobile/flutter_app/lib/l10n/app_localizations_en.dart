@@ -559,10 +559,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authPollsEtc => 'Polls, schedules, albums';
 
   @override
-  String get authPaySend => 'LUNO Pay transfers';
+  String get authTranslateCalls => 'Live translation · free calls';
 
   @override
-  String get authRightInRoom => 'Right inside the chat room';
+  String get authAcrossLanguages => 'Talk across languages';
 
   @override
   String get authHarborGate => 'Harbor Gate v3';
@@ -1073,7 +1073,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeDetailOptional => 'Details (optional)';
 
   @override
-  String get keepTitle => 'Saved signals';
+  String get keepTitle => 'Saved messages';
 
   @override
   String get keepEmpty => 'Nothing saved yet';
@@ -1132,7 +1132,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newsEmpty => 'No news to show';
 
   @override
-  String get newsPullRefresh => 'Pull down to refresh';
+  String get newsEmptyHint => 'New stories will appear here once published';
 
   @override
   String get newsArticleWord => 'Article';
@@ -2196,4 +2196,56 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get callAlreadyEnded => 'This call has already ended';
+
+  @override
+  String get chatsPrevEncrypted => 'Encrypted message';
+
+  @override
+  String get chatsPrevLocation => 'Location';
+
+  @override
+  String get settingsAutoTranslateDesc =>
+      'Automatically translates incoming messages into your chosen language.';
+
+  @override
+  String get authRecoverTitle => 'Reset password';
+
+  @override
+  String get authRecoverEmail => 'Account email';
+
+  @override
+  String get authRecoverSend => 'Send recovery code';
+
+  @override
+  String get authRecoverCode => 'Recovery code';
+
+  @override
+  String get authRecoverCodeHint =>
+      'Enter the code sent to your email within 15 minutes.';
+
+  @override
+  String get authRecoverUnavailable =>
+      'Password recovery is currently unavailable';
+
+  @override
+  String get authRecoverNewPw => 'New password (10+ characters)';
+
+  @override
+  String get authRecoverDone =>
+      'Password changed. Please sign in with the new password.';
+
+  @override
+  String get authPasswordLabel => 'Password';
+
+  @override
+  String get keepRoomTitle => 'Keep memo';
+
+  @override
+  String get keepSeedWelcome =>
+      'This is your Keep memo — a chat with yourself. Save notes, links, photos and files here.';
+
+  @override
+  String keepSeedPc(String url) {
+    return 'Pick up the same chats on your computer: $url';
+  }
 }

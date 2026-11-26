@@ -554,10 +554,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authPollsEtc => '投票・予定・アルバム';
 
   @override
-  String get authPaySend => 'LUNO Pay送金';
+  String get authTranslateCalls => 'リアルタイム翻訳・無料通話';
 
   @override
-  String get authRightInRoom => 'トークルームですぐに';
+  String get authAcrossLanguages => '言語が違ってもすぐ通じる';
 
   @override
   String get authHarborGate => 'ハーバーゲートv3';
@@ -1064,7 +1064,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeDetailOptional => '詳細内容（任意）';
 
   @override
-  String get keepTitle => '保存した信号一覧';
+  String get keepTitle => '保存したメッセージ';
 
   @override
   String get keepEmpty => '保存した項目がありません';
@@ -1123,7 +1123,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get newsEmpty => '表示するニュースがありません';
 
   @override
-  String get newsPullRefresh => '下に引いて更新してください';
+  String get newsEmptyHint => '新しいニュースが公開されるとここに表示されます';
 
   @override
   String get newsArticleWord => '記事';
@@ -2173,4 +2173,51 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get callAlreadyEnded => 'この通話はすでに終了しています';
+
+  @override
+  String get chatsPrevEncrypted => '暗号化されたメッセージ';
+
+  @override
+  String get chatsPrevLocation => '位置情報';
+
+  @override
+  String get settingsAutoTranslateDesc => '受信したメッセージを選んだ言語に自動で翻訳します。';
+
+  @override
+  String get authRecoverTitle => 'パスワードの再設定';
+
+  @override
+  String get authRecoverEmail => '登録メールアドレス';
+
+  @override
+  String get authRecoverSend => '認証コードを送信';
+
+  @override
+  String get authRecoverCode => '認証コード';
+
+  @override
+  String get authRecoverCodeHint => 'メールで送信されたコードを15分以内に入力してください';
+
+  @override
+  String get authRecoverUnavailable => '現在パスワードの再設定はご利用いただけません';
+
+  @override
+  String get authRecoverNewPw => '新しいパスワード（10文字以上）';
+
+  @override
+  String get authRecoverDone => 'パスワードを変更しました。新しいパスワードでログインしてください';
+
+  @override
+  String get authPasswordLabel => 'パスワード';
+
+  @override
+  String get keepRoomTitle => 'Keepメモ';
+
+  @override
+  String get keepSeedWelcome => '自分専用のKeepメモです。テキスト、リンク、写真、ファイルを自由に保存できます。';
+
+  @override
+  String keepSeedPc(String url) {
+    return 'PCでも同じ会話を続けられます: $url';
+  }
 }

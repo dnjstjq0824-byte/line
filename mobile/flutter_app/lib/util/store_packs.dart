@@ -57,7 +57,18 @@ List<StorePack> storePacksOf(dynamic json) {
 String storePriceLabel(StorePack pack, [String locale = 'ko']) =>
     pack.priceMinor <= 0
         ? stringsFor(locale).shopFree
-        : '${pack.priceMinor} ${pack.currency}';
+        : '${groupThousands(pack.priceMinor)} ${pack.currency}';
+
+/// 2500 -> "2,500" (the web shop shows the same grouping).
+String groupThousands(int n) {
+  final digits = n.abs().toString();
+  final out = StringBuffer(n < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+    out.write(digits[i]);
+  }
+  return out.toString();
+}
 
 /// One shelf card: title, sticker strip, price or owned badge.
 /// No purchase button: checkout is 503 fail-closed on both backends until a

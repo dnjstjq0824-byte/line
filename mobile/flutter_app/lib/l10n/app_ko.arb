@@ -712,13 +712,13 @@
   "@authPollsEtc": {
     "description": "authPollsEtc (F20)"
   },
-  "authPaySend": "LUNO Pay 송금",
-  "@authPaySend": {
-    "description": "authPaySend (F20)"
+  "authTranslateCalls": "실시간 번역 · 무료 통화",
+  "@authTranslateCalls": {
+    "description": "authTranslateCalls (2026-11-26: pay is off, panel promotes translation)"
   },
-  "authRightInRoom": "대화방에서 바로",
-  "@authRightInRoom": {
-    "description": "authRightInRoom (F20)"
+  "authAcrossLanguages": "언어가 달라도 바로 통해요",
+  "@authAcrossLanguages": {
+    "description": "authAcrossLanguages (2026-11-26)"
   },
   "authHarborGate": "하버 게이트 v3",
   "@authHarborGate": {
@@ -1397,7 +1397,7 @@
   "@homeDetailOptional": {
     "description": "homeDetailOptional (F20)"
   },
-  "keepTitle": "보관한 신호 모음",
+  "keepTitle": "보관한 메시지 모음",
   "@keepTitle": {
     "description": "keepTitle (F20)"
   },
@@ -1481,9 +1481,9 @@
   "@newsEmpty": {
     "description": "newsEmpty (F20)"
   },
-  "newsPullRefresh": "아래로 당겨 새로고침하세요",
-  "@newsPullRefresh": {
-    "description": "newsPullRefresh (F20)"
+  "newsEmptyHint": "새 소식이 발행되면 여기에 표시됩니다",
+  "@newsEmptyHint": {
+    "description": "newsEmptyHint (2026-11-26: pull-to-refresh was removed in build 17)"
   },
   "newsArticleWord": "기사",
   "@newsArticleWord": {
@@ -2030,8 +2030,12 @@
   "@e2eeBkStatus": {
     "description": "e2eeBkStatus (E9)",
     "placeholders": {
-      "date": {"type": "String"},
-      "size": {"type": "String"}
+      "date": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
     }
   },
   "e2eeBkPassPh": "복원 문구 (8자 이상)",
@@ -2996,5 +3000,70 @@
   "callAlreadyEnded": "이미 끝난 통화입니다",
   "@callAlreadyEnded": {
     "description": "callAlreadyEnded (build 18 real calls)"
+  },
+  "chatsPrevEncrypted": "암호화된 메시지",
+  "@chatsPrevEncrypted": {
+    "description": "chatsPrevEncrypted (2026-11-26 UX sweep)"
+  },
+  "chatsPrevLocation": "위치",
+  "@chatsPrevLocation": {
+    "description": "chatsPrevLocation (2026-11-26 UX sweep)"
+  },
+  "settingsAutoTranslateDesc": "받은 메시지를 선택한 언어로 자동 번역합니다.",
+  "@settingsAutoTranslateDesc": {
+    "description": "settingsAutoTranslateDesc (2026-11-26 UX sweep)"
+  },
+  "authRecoverTitle": "비밀번호 찾기",
+  "@authRecoverTitle": {
+    "description": "authRecoverTitle (2026-11-26 app password recovery)"
+  },
+  "authRecoverEmail": "가입 이메일",
+  "@authRecoverEmail": {
+    "description": "authRecoverEmail (2026-11-26 app password recovery)"
+  },
+  "authRecoverSend": "인증코드 받기",
+  "@authRecoverSend": {
+    "description": "authRecoverSend (2026-11-26 app password recovery)"
+  },
+  "authRecoverCode": "인증코드",
+  "@authRecoverCode": {
+    "description": "authRecoverCode (2026-11-26 app password recovery)"
+  },
+  "authRecoverCodeHint": "이메일로 발송된 인증코드를 15분 안에 입력해 주세요.",
+  "@authRecoverCodeHint": {
+    "description": "authRecoverCodeHint (2026-11-26 app password recovery)"
+  },
+  "authRecoverUnavailable": "현재 비밀번호 찾기를 제공하지 않습니다",
+  "@authRecoverUnavailable": {
+    "description": "authRecoverUnavailable (2026-11-26 app password recovery)"
+  },
+  "authRecoverNewPw": "새 비밀번호 (10자 이상)",
+  "@authRecoverNewPw": {
+    "description": "authRecoverNewPw (2026-11-26 app password recovery)"
+  },
+  "authRecoverDone": "비밀번호를 변경했습니다. 새 비밀번호로 로그인해 주세요.",
+  "@authRecoverDone": {
+    "description": "authRecoverDone (2026-11-26 app password recovery)"
+  },
+  "authPasswordLabel": "비밀번호",
+  "@authPasswordLabel": {
+    "description": "authPasswordLabel (2026-11-26 app password recovery)"
+  },
+  "keepRoomTitle": "Keep 메모",
+  "@keepRoomTitle": {
+    "description": "keepRoomTitle (2026-11-26 Keep seed localization)"
+  },
+  "keepSeedWelcome": "나에게 보내는 Keep 메모입니다. 텍스트, 링크, 사진, 파일을 자유롭게 보관하세요.",
+  "@keepSeedWelcome": {
+    "description": "keepSeedWelcome (2026-11-26 Keep seed localization)"
+  },
+  "keepSeedPc": "PC에서도 같은 대화를 이어갈 수 있어요: {url}",
+  "@keepSeedPc": {
+    "description": "keepSeedPc (2026-11-26 Keep seed localization)",
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
   }
 }

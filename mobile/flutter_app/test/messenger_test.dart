@@ -12,7 +12,9 @@ void main() {
     expect(find.text('Connect Beyond Borders'), findsWidgets);
     expect(find.text('로그인'), findsWidgets);
     expect(find.text('이메일'), findsOneWidget);
-    expect(find.text('비밀번호 (12자 이상 권장)'), findsOneWidget);
+    // Sign-in shows a plain label; the length advice is for sign-up only.
+    expect(find.text('비밀번호'), findsOneWidget);
+    expect(find.text('비밀번호 찾기'), findsOneWidget);
 
     // Switch to Register form
     await tester.tap(find.text('새 LUNO 계정 만들기'));

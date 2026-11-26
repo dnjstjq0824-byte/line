@@ -43,7 +43,9 @@ void main() {
     expect(find.text('대화'), findsOneWidget);
     expect(find.text('새 메시지 자동 번역'), findsOneWidget);
     expect(find.text('번역 대상 언어'), findsOneWidget);
-    expect(find.text('종단간 암호화 (E2EE)'), findsOneWidget);
+    // E2EE is listed once, under privacy.
+    expect(find.text('종단 간 암호화'), findsOneWidget);
+    expect(find.text('종단간 암호화 (E2EE)'), findsNothing);
     expect(find.text('기기'), findsOneWidget);
     expect(find.text('데스크톱 QR 로그인 승인'), findsOneWidget);
     expect(find.text('계정'), findsOneWidget);

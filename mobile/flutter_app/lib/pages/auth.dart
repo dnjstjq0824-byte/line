@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../api/client.dart';
 import '../design/responsive.dart';
 import '../design/v3.dart';
 import '../state/session.dart';
@@ -160,8 +161,13 @@ class _LoginPageState extends State<LoginPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const HarborWordmark(compact: false),
-                          const SizedBox(height: 12),
+                          // The sign-in card carries the logo itself; the
+                          // wordmark heads only the cards that have none.
+                          if (session.needsReconsent ||
+                              session.needsEmailVerify) ...[
+                            const HarborWordmark(compact: false),
+                            const SizedBox(height: 12),
+                          ],
                           if (session.needsReconsent)
                             _ReconsentCard(
                               agreeTerms: agreeTerms,
@@ -247,7 +253,7 @@ class _GatePanel extends StatelessWidget {
             for (final row in [
               ('01', context.l10n.authFastChat, context.l10n.authRealtimeSync),
               ('02', context.l10n.authGroups, context.l10n.authPollsEtc),
-              ('03', context.l10n.authPaySend, context.l10n.authRightInRoom),
+              ('03', context.l10n.authTranslateCalls, context.l10n.authAcrossLanguages),
             ])
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -392,12 +398,18 @@ class _GateForm extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Image.asset(
-              'assets/brand/luno-logo-horizontal-512.png',
-              width: 150,
-              height: 52,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const HarborWordmark(compact: false),
+            // Flush-left with the title (stretch would centre the mark).
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Image.asset(
+                'assets/brand/luno-logo-horizontal-512.png',
+                width: 150,
+                height: 52,
+                fit: BoxFit.contain,
+                alignment: AlignmentDirectional.centerStart,
+                semanticLabel: 'LUNO',
+                errorBuilder: (_, __, ___) => const HarborWordmark(compact: false),
+              ),
             ),
             const SizedBox(height: 10),
             Text(register ? context.l10n.createAccount : context.l10n.signInBtn, style: text.headlineSmall),
@@ -459,9 +471,22 @@ class _GateForm extends StatelessWidget {
             TextField(
               controller: password,
               obscureText: true,
-              decoration: InputDecoration(labelText: context.l10n.authPasswordHint),
+              // The length advice only matters when choosing a password.
+              decoration: InputDecoration(
+                  labelText: register
+                      ? context.l10n.authPasswordHint
+                      : context.l10n.authPasswordLabel),
               onSubmitted: (_) => onSubmit(),
             ),
+            if (!register)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  key: const Key('gate-recover'),
+                  onPressed: () => showRecoverDialog(context, email.text),
+                  child: Text(context.l10n.authRecoverTitle),
+                ),
+              ),
             const SizedBox(height: 16),
             // The form's own error line, right above the button, so a
             // refused submit is never silent.
@@ -600,4 +625,119 @@ class _ReconsentCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Password recovery (same API as the web login): email -> code by mail ->
+/// code + new password. Answers 501 when no mail sender is configured.
+Future<void> showRecoverDialog(BuildContext context, String presetEmail) {
+  final email = TextEditingController(text: presetEmail.trim());
+  final code = TextEditingController();
+  final next = TextEditingController();
+  String challenge = '';
+  String error = '';
+  bool busy = false;
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (ctx, setState) {
+        final session = SessionScope.of(ctx, listen: false);
+        final l10n = ctx.l10n;
+        Future<void> run(Future<void> Function() body) async {
+          setState(() {
+            busy = true;
+            error = '';
+          });
+          try {
+            await body();
+          } on ApiException catch (e) {
+            error = e.statusCode == 501
+                ? l10n.authRecoverUnavailable
+                : e.message;
+          } catch (e) {
+            error = '$e';
+          }
+          if (ctx.mounted) setState(() => busy = false);
+        }
+
+        return AlertDialog(
+          title: Text(ctx.l10n.authRecoverTitle),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: email,
+                  enabled: challenge.isEmpty,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration:
+                      InputDecoration(labelText: ctx.l10n.authRecoverEmail),
+                ),
+                if (challenge.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(ctx.l10n.authRecoverCodeHint,
+                      style: Theme.of(ctx).textTheme.bodySmall),
+                  TextField(
+                    controller: code,
+                    autofillHints: const [AutofillHints.oneTimeCode],
+                    decoration:
+                        InputDecoration(labelText: ctx.l10n.authRecoverCode),
+                  ),
+                  TextField(
+                    controller: next,
+                    obscureText: true,
+                    decoration:
+                        InputDecoration(labelText: ctx.l10n.authRecoverNewPw),
+                  ),
+                ],
+                if (error.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(error,
+                      style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(ctx.l10n.mvRecoverCancel),
+            ),
+            FilledButton(
+              onPressed: busy
+                  ? null
+                  : challenge.isEmpty
+                      ? () => run(() async {
+                            if (!email.text.contains('@')) {
+                              throw l10n.authRecoverEmail;
+                            }
+                            final res = await session.api.call(
+                                '/api/v1/auth/recover',
+                                method: 'POST',
+                                data: {'email': email.text.trim()});
+                            challenge = '${res['challenge_id'] ?? ''}';
+                          })
+                      : () => run(() async {
+                            await session.api.call(
+                                '/api/v1/auth/recover/verify',
+                                method: 'POST',
+                                data: {
+                                  'challenge_id': challenge,
+                                  'recovery_code': code.text.trim(),
+                                  'new_password': next.text,
+                                });
+                            session.showNotice(l10n.authRecoverDone);
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                          }),
+              child: Text(challenge.isEmpty
+                  ? ctx.l10n.authRecoverSend
+                  : ctx.l10n.mvRecoverReset),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }

@@ -55,6 +55,46 @@ double reconnectDelaySeconds(int attempt, {double Function()? jitter}) {
 
 double _defaultJitter() => Random().nextDouble();
 
+// Keep memo seed: the server names the room and writes its two welcome
+// notes in Korean (it does not know the viewer's language), so the app
+// shows them in the app language. Matched by the server's fixed ids.
+bool isKeepRoomId(Object? id) => '$id'.startsWith('conv-keep-');
+
+String? keepSeedText(Map m, AppLocalizations s) {
+  final id = '${m['id'] ?? ''}';
+  if (!id.startsWith('m-keep-')) return null;
+  final cid = '${m['client_id'] ?? ''}';
+  if (cid == 'keep-1' || id.endsWith('-1')) return s.keepSeedWelcome;
+  if (cid == 'keep-2' || id.endsWith('-2')) {
+    final url =
+        RegExp(r'https?://\S+').firstMatch('${m['body'] ?? ''}')?.group(0) ?? '';
+    return s.keepSeedPc(url);
+  }
+  return null;
+}
+
+List<dynamic> localizeKeepSeeds(List<dynamic> list, AppLocalizations s) {
+  for (final m in list) {
+    if (m is! Map) continue;
+    final text = keepSeedText(m, s);
+    if (text != null) m['body'] = text;
+  }
+  return list;
+}
+
+List<dynamic> localizeKeepRooms(List<dynamic> list, AppLocalizations s) {
+  for (final c in list) {
+    if (c is! Map || !isKeepRoomId(c['id'])) continue;
+    c['title'] = s.keepRoomTitle;
+    final last = c['last_message'];
+    if (last is Map) {
+      final text = keepSeedText(last, s);
+      if (text != null) last['body'] = text;
+    }
+  }
+  return list;
+}
+
 /// A-23: merge a GET .../sync delta page into the cached message list.
 /// Dedupes by message id and restores ascending sequence order.
 /// Item 3: recalled messages never render — the server keeps the tombstone
@@ -391,6 +431,11 @@ class SessionController extends ChangeNotifier {
 
   bool get authed => selfId.isNotEmpty;
 
+  void showNotice(String text) {
+    notice = text;
+    notifyListeners();
+  }
+
   void clearStatus() {
     error = '';
     notice = '';
@@ -678,7 +723,7 @@ class SessionController extends ChangeNotifier {
       api.call('/api/v1/channel/slot').catchError((_) => <String, dynamic>{}),
       api.call('/api/v1/store/stickers').catchError((_) => <String, dynamic>{}),
     ]);
-    chats = resultsList[0]['conversations'] ?? [];
+    chats = localizeKeepRooms(resultsList[0]['conversations'] ?? [], strings);
     friends = resultsList[1]['friends'] ?? [];
     officialAccounts = officialAccountsOf(resultsList[2]);
     feedPosts = feedPostsOf(resultsList[3]);
@@ -702,7 +747,7 @@ class SessionController extends ChangeNotifier {
   // already appended by the caller.
   Future<void> refreshChatList() async {
     final res = await api.call('/api/v1/conversations');
-    chats = res['conversations'] ?? [];
+    chats = localizeKeepRooms(res['conversations'] ?? [], strings);
     // E5: list previews of E2EE rooms decrypt best-effort.
     final client = e2eeClient;
     if (client != null) {
@@ -901,7 +946,7 @@ class SessionController extends ChangeNotifier {
     }
     try {
       final res = await api.call('/api/v1/conversations');
-      chats = res['conversations'] ?? chats;
+      chats = localizeKeepRooms(res['conversations'] ?? chats, strings);
     } catch (_) {}
     notifyListeners();
   }
@@ -1142,7 +1187,7 @@ class SessionController extends ChangeNotifier {
           api.call('/api/v1/friends'),
           if (who == selfId) api.call('/api/v1/me'),
         ]);
-        chats = res[0]['conversations'] ?? chats;
+        chats = localizeKeepRooms(res[0]['conversations'] ?? chats, strings);
         friends = res[1]['friends'] ?? friends;
         if (res.length > 2) {
           final me = res[2];
@@ -1276,6 +1321,20 @@ class SessionController extends ChangeNotifier {
     return strings.mvChatFallback;
   }
 
+  /// Member count from the list row (0 when unknown), shown beside a
+  /// group's name in the room header.
+  int memberCountOf(String conversationId) {
+    for (final c in chats) {
+      if (c is Map && c['id'] == conversationId) {
+        final n = c['member_count'];
+        if (n is num) return n.toInt();
+        final members = c['members'];
+        return members is List ? members.length : 0;
+      }
+    }
+    return 0;
+  }
+
   // F6: room kind for entry gating (group settings only exist for groups).
   String kindOf(String conversationId) {
     for (final c in chats) {
@@ -1343,7 +1402,9 @@ class SessionController extends ChangeNotifier {
         api.call('/api/v1/conversations/$id/albums').catchError((_) => <String, dynamic>{'albums': []}),
         api.call('/api/v1/conversations/$id/proposals').catchError((_) => <String, dynamic>{'proposals': []}),
       ]);
-      messages = withoutUnsent(List<dynamic>.from(resultsList[0]['messages'] ?? []));
+      messages = localizeKeepSeeds(
+          withoutUnsent(List<dynamic>.from(resultsList[0]['messages'] ?? [])),
+          strings);
       await decryptMessages(messages);
       // E9: restored backup rows fill history the fresh chains cannot open.
       final restored = restoredHistory[id];

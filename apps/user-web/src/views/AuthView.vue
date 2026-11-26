@@ -10,11 +10,9 @@ import { ageOnDate, todayUTC } from '../../../shared/legal'
 import { makeLoginQrSvg } from '../../../shared/login_qr'
 import {
   api,
-  appVersion,
   currentUser,
   currentLocale,
   error,
-  fetchAppVersion,
   isDarkMode,
   note,
   setLocale,
@@ -401,7 +399,7 @@ async function passkeyLogin() {
   })
 }
 
-onMounted(() => { void fetchAppVersion(); void startQrLoginChallenge(); void loadLegalVersions() })
+onMounted(() => { void startQrLoginChallenge(); void loadLegalVersions() })
 onBeforeUnmount(() => {
   if (qrPollInterval) clearInterval(qrPollInterval)
   if (qrCountdownInterval) clearInterval(qrCountdownInterval)
@@ -509,8 +507,8 @@ onBeforeUnmount(() => {
                   autocomplete="current-password"
                   class="pc-login-input"
                 />
-                <button type="button" class="btn-eye-toggle" @click="showPassword = !showPassword" tabindex="-1" :aria-label="t('passwordPlaceholder')">
-                  {{ showPassword ? '🙈' : '👁️' }}
+                <button type="button" class="btn-eye-toggle" @click="showPassword = !showPassword" :aria-pressed="showPassword" :title="showPassword ? t('pwHide') : t('pwShow')" :aria-label="showPassword ? t('pwHide') : t('pwShow')">
+                  <LunoIcon :name="showPassword ? 'eye-off' : 'eye'" :size="18" />
                 </button>
               </div>
 
@@ -544,8 +542,8 @@ onBeforeUnmount(() => {
 
               <!-- Switch to Phone Login (Matching Screenshot 2 & 3) -->
               <div class="pc-login-bottom-switch">
-                <p v-if="!phoneAuthAvailable" class="ln-charge-notice" role="note">{{ t('phoneSealedNote') }}</p>
-                <button v-else type="button" class="btn-switch-auth-link" @click="authMethod = 'phone'">
+                <!-- Phone login stays hidden (no operator notice for users) until an SMS provider is live. -->
+                <button v-if="phoneAuthAvailable" type="button" class="btn-switch-auth-link" @click="authMethod = 'phone'">
                   {{ t('loginPhoneTab') }} &gt;
                 </button>
               </div>
@@ -615,9 +613,12 @@ onBeforeUnmount(() => {
               <p class="pc-qr-instruction">
                 {{ qrChallengeID ? t('qrScanNote') : t('qr_preparing') }}
               </p>
-              <p v-if="qrChallengeID" class="pc-qr-manual">
-                {{ t('qrManualLabel') }}: <code>{{ qrChallengeID }}</code> / <code>{{ qrToken }}</code>
-              </p>
+              <!-- Camera-less phones type this in (app QR screen → manual entry);
+                   folded so the raw ids never crowd the QR for everyone else. -->
+              <details v-if="qrChallengeID" class="pc-qr-manual">
+                <summary>{{ t('lxQrCantScan') }}</summary>
+                <p>{{ t('qrManualLabel') }}: <code>{{ qrChallengeID }}</code> / <code>{{ qrToken }}</code></p>
+              </details>
 
               <!-- Expiry & Reload Pill -->
               <div v-if="qrChallengeID" class="pc-qr-timer-pill">
@@ -625,10 +626,6 @@ onBeforeUnmount(() => {
                 <button type="button" class="btn-qr-reload" @click="refreshQr" :title="t('reloadBtn')" :aria-label="t('reloadBtn')">
                   {{ t('reloadBtn') }} ↻
                 </button>
-              </div>
-              <div class="pc-qr-session-id">
-                <small v-if="qrChallengeID">Session: {{ qrChallengeID.slice(0, 8) }}... | </small>
-                <small>LUNO v2.0.0 (commit: <code>{{ appVersion.short_commit || t('checkingText') }}</code>)</small>
               </div>
             </div>
           </div>

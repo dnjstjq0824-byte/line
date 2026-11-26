@@ -154,8 +154,9 @@ class SettingsPage extends StatelessWidget {
                 _ToggleRow(
                   switchKey: const ValueKey('auto-translate-toggle'),
                   title: context.l10n.settingsAutoTranslate,
-                  description:
-                      context.l10n.settingsTranslatePreparing,
+                  description: session.translateConfigured
+                      ? context.l10n.settingsAutoTranslateDesc
+                      : context.l10n.settingsTranslatePreparing,
                   value: session.autoTranslate,
                   enabled: true,
                   ink: ink,
@@ -217,17 +218,7 @@ class SettingsPage extends StatelessWidget {
                     },
                   ),
                 ),
-                const _RowDivider(),
-                _ActionRow(
-                  icon: Icons.lock_outline,
-                  title: context.l10n.privacyE2ee,
-                  subtitle: context.l10n.privacyE2eeLive,
-                  ink: ink,
-                  sub: sub,
-                  dark: dark,
-                  chevron: true,
-                  onTap: () => context.go('/e2ee'),
-                ),
+                // E2EE lives once, under privacy (it was listed twice).
               ],
             ),
             _Section(

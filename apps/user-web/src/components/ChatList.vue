@@ -14,11 +14,30 @@ function rowPhoto(c: Chat): string {
   const peer = ((c as any).members || []).find((m: any) => m && m.id !== me)
   return (peer && peer.avatar_url) || ''
 }
+// List preview: text shows as-is; other kinds (sticker, photo, call, ...)
+// get a short label instead of falling back to "no messages". Ciphertext
+// that could not be opened never shows as raw base64.
+const KIND_PREVIEW: Record<string, string> = {
+  sticker: 'mvSticker', image: 'lxPrevPhoto', video: 'lxPrevVideo', voice: 'lxPrevVoice',
+  file: 'lxPrevFile', location: 'lxPrevLocation', contact: 'lxPrevContact',
+  call_status: 'lxPrevCall', call: 'lxPrevCall', ciphertext: 'lxPrevEncrypted',
+}
+function previewOf(c: Chat): string {
+  const last = c.last_message
+  if (!last) return t('mvNoMessages')
+  if (last.unsent) return t('mvMsgUnsent')
+  const seed = keepSeedText(last, t)
+  if (seed) return seed
+  const key = KIND_PREVIEW[String(last.kind || '')]
+  if (key) return t(key)
+  return last.body || t('mvNoMessages')
+}
 function hideBroken(ev: Event) {
   const img = ev.target as HTMLElement | null
   if (img) img.style.display = 'none'
 }
 import LunoIcon from './LunoIcon.vue'
+import { keepSeedText } from '../messenger-utils'
 
 export type ChatFilter = 'all' | 'direct' | 'group' | 'unread'
 export type DrawerTab = 'notes' | 'albums' | 'events' | 'media'
@@ -126,7 +145,7 @@ const showListMenu = ref(false)
             <span class="lx-row-time">{{ formatTime(c.updated_at || '') }}</span>
           </span>
           <span class="lx-row-line">
-            <span class="lx-row-preview">{{ c.last_message?.unsent ? t('mvMsgUnsent') : (c.last_message?.body || t('mvNoMessages')) }}</span>
+            <span class="lx-row-preview">{{ previewOf(c) }}</span>
             <span v-if="c.badge_n" class="lx-badge inline">N</span>
             <span v-else-if="c.unread_count && c.unread_count > 0" class="lx-badge inline">{{ c.unread_count > 999 ? '999+' : c.unread_count }}</span>
           </span>
