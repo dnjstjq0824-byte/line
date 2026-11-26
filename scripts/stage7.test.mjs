@@ -129,7 +129,7 @@ test('N2-L: web takes ICE from the server and arms ring policy', async () => {
   const rtc = await readFile(new URL('../apps/user-web/src/composables/useWebRTC.ts', import.meta.url), 'utf8');
   const sock = await readFile(new URL('../apps/user-web/src/composables/useChatSocket.ts', import.meta.url), 'utf8');
   assert.ok(utils.includes('/api/v1/calls/ice-servers'), 'outgoing flow fetches ICE');
-  assert.ok(rtc.includes('fetchIceServers(request, token.value)'), 'incoming flow fetches ICE');
+  assert.ok(rtc.includes('fetchIceServers('), 'incoming flow fetches ICE');
   assert.ok(!rtc.includes("iceServers: [{ urls: 'stun:"), 'no hardcoded peer config remains');
   assert.ok(rtc.includes('decideIncomingRing') && rtc.includes("armNoAnswerTimer(webrtc.id, 'caller')"), 'caller policy wired');
   assert.ok(rtc.includes("armNoAnswerTimer(data.call_id, 'callee')"), 'callee policy wired');

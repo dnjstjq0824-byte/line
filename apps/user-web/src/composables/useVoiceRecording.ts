@@ -2,7 +2,7 @@
 // chunks; selection, upload flag, attachment picker and sender are injected.
 // Extracted verbatim from views/MessengerView.vue.
 import { ref, type Ref } from 'vue'
-import { note, t, token, wrap } from '../store/session'
+import { currentUser, note, t, token, wrap } from '../store/session'
 
 export interface VoiceRecordingDeps {
   selectedChatId: Ref<string>
@@ -31,9 +31,9 @@ export function useVoiceRecording(deps: VoiceRecordingDeps) {
     }
     try {
       const conversation = deps.selectedChatId.value
-      const sessionToken = token.value
+      const ownerId = currentUser.value?.id
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      if (sessionToken !== token.value) { stream.getTracks().forEach(track => track.stop()); return }
+      if (!ownerId || currentUser.value?.id !== ownerId) { stream.getTracks().forEach(track => track.stop()); return }
       recordedChunks = []
       mediaRecorderInstance = new MediaRecorder(stream)
       mediaRecorderInstance.ondataavailable = (e) => {
@@ -41,11 +41,14 @@ export function useVoiceRecording(deps: VoiceRecordingDeps) {
       }
       mediaRecorderInstance.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
-        const mime = mediaRecorderInstance?.mimeType || 'audio/webm'
-        const blob = new Blob(recordedChunks, { type: mime })
+        const rawMime = mediaRecorderInstance?.mimeType || 'audio/webm'
+        const cleanMime = rawMime.split(';')[0].trim().toLowerCase() || 'audio/webm'
+        const blob = new Blob(recordedChunks, { type: cleanMime })
+        if (blob.size === 0) { isRecordingVoice.value = false; return }
+        const ext = cleanMime.includes('mp4') || cleanMime.includes('m4a') ? 'm4a' : cleanMime.includes('ogg') ? 'ogg' : 'webm'
         const durationSec = Math.max(1, Math.min(300, Math.round((Date.now() - voiceRecordStartedAt) / 1000)))
         deps.uploading.value = true
-        try { await wrap(() => deps.sendAttachment(new File([blob], `voice-${Date.now()}.${mime.includes('mp4') ? 'm4a' : 'webm'}`, { type: mime }), conversation, sessionToken, durationSec)) }
+        try { await wrap(() => deps.sendAttachment(new File([blob], `voice-${Date.now()}.${ext}`, { type: cleanMime }), conversation, token.value, durationSec)) }
         finally { deps.uploading.value = false; isRecordingVoice.value = false }
       }
       voiceRecordStartedAt = Date.now()

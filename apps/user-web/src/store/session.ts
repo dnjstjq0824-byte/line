@@ -124,6 +124,20 @@ export const api = async <T,>(path: string, method = 'GET', body?: unknown, sign
     throw e
   }
 }
+export async function authedFetch(pathOrUrl: string, init: RequestInit = {}): Promise<Response> {
+  const url = /^https?:\/\//i.test(pathOrUrl) ? pathOrUrl : API_URL + pathOrUrl
+  const run = (tok: string) => {
+    const headers = new Headers(init.headers || {})
+    if (tok) headers.set('Authorization', `Bearer ${tok}`)
+    return fetch(url, { ...init, credentials: 'include', headers })
+  }
+  let res = await run(token.value)
+  if (res.status === 401 && !url.includes('/api/v1/auth/')) {
+    const fresh = await tryRefresh()
+    if (fresh) res = await run(fresh)
+  }
+  return res
+}
 export const wrap = async (job: () => Promise<void>) => {
   error.value = ''
   note.value = ''

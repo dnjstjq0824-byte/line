@@ -83,7 +83,10 @@ export function useMessengerCamera(deps: MessengerCameraDeps) {
       const stream = await navigator.mediaDevices.getUserMedia(mode === 'video' ? { video: true, audio: true } : { video: true })
       if (!showCameraModal.value) { stream.getTracks().forEach(tr => tr.stop()); return }
       cameraStream.value = stream
-      if (cameraVideoRef.value) cameraVideoRef.value.srcObject = stream
+      if (cameraVideoRef.value) {
+        cameraVideoRef.value.srcObject = stream
+        void cameraVideoRef.value.play?.()?.catch(() => {})
+      }
     } catch {
       cameraError.value = t('camFailed')
     }
@@ -126,9 +129,10 @@ export function useMessengerCamera(deps: MessengerCameraDeps) {
       if (videoTimer) { clearInterval(videoTimer); videoTimer = null }
       videoRecording.value = false
       videoRecorder = null
-      const mime = rec.mimeType || 'video/webm'
-      const ext = mime.includes('mp4') ? 'mp4' : mime.includes('ogg') ? 'ogv' : 'webm'
-      const file = new File(videoChunks, `video-${Date.now()}.${ext}`, { type: mime })
+      const rawMime = rec.mimeType || 'video/webm'
+      const cleanMime = rawMime.split(';')[0].trim().toLowerCase() || 'video/webm'
+      const ext = cleanMime.includes('mp4') ? 'mp4' : 'webm'
+      const file = new File(videoChunks, `video-${Date.now()}.${ext}`, { type: cleanMime === 'video/ogg' ? 'video/webm' : cleanMime })
       videoChunks = []
       closeCamera()
       if (file.size === 0) return

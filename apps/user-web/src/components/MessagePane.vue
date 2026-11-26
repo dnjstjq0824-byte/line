@@ -14,7 +14,7 @@ import type { LunoSticker } from '../luno-stickers'
 import type { LunoLocale } from '../luno-i18n'
 import LinkPreview from './LinkPreview.vue'
 import { keepSeedText } from '../messenger-utils'
-import { currentUser, t, token, currentLocale, paymentsEnabled } from '../store/session'
+import { authedFetch, currentUser, t, token, currentLocale, paymentsEnabled } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
 import MessageAttachment from './MessageAttachment.vue'
 import PcAgentBar from './PcAgentBar.vue'
@@ -167,8 +167,7 @@ async function transcribeVoice(msg: Message) {
   if (msg._e2ee && !window.confirm(t('mvE2eeAiNotice'))) return
   voiceAiText.value[msg.id] = { loading: true, text: '', error: '' }
   try {
-    const dl = await fetch(`${API_URL}/api/v1/attachments/${encodeURIComponent(id)}/content`, {
-      headers: { Authorization: `Bearer ${token.value}` },
+    const dl = await authedFetch(`/api/v1/attachments/${encodeURIComponent(id)}/content`, {
       cache: 'no-store',
     })
     if (!dl.ok) throw new Error('voice download failed')
@@ -184,9 +183,9 @@ async function transcribeVoice(msg: Message) {
     }
     let bin = ''
     for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192))
-    const res = await fetch(`${API_URL}/api/v1/ai/stt`, {
+    const res = await authedFetch('/api/v1/ai/stt', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.value}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audio_base64: btoa(bin), mime_type: mime, lang: voiceAiLang() }),
     })
     if (res.status === 503 || res.status === 502) {
@@ -205,9 +204,9 @@ async function readAloud(msg: Message) {
   voiceAiText.value[msg.id] = { loading: true, text: '', error: '' }
   ttsPlaying.value[msg.id] = true
   try {
-    const res = await fetch(`${API_URL}/api/v1/ai/tts`, {
+    const res = await authedFetch('/api/v1/ai/tts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.value}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: msg.body, lang: voiceAiLang() }),
     })
     if (res.status === 503) {
@@ -721,14 +720,14 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
                   <span class="badge-kind">{{ msg.kind === 'proposal' ? t('msgKindProposal') : msg.kind === 'decision' ? t('msgKindDecision') : t('msgKindReport') }}</span>
                   {{ msg.body }}
                 </div>
-                <div v-if="msg.kind === 'proposal' && canDecide && proposalState(msg) === 'pending'" class="bubble-decide-row">
+                <div v-else class="bubble-text-content"><template v-if="msg._e2eeError">{{ t('mvE2eeUnreadable') }}</template><template v-else><template v-for="(part, pi) in linkParts(keepSeedText(msg, t) ?? msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></template></div>
+                <div v-if="!msg.unsent && msg.kind === 'proposal' && canDecide && proposalState(msg) === 'pending'" class="bubble-decide-row">
                   <button class="btn-decide-approve" @click="emit('decide', msg, 'approved')">{{ t('apprApprove') }}</button>
                   <button class="btn-decide-reject" @click="emit('decide', msg, 'rejected')">{{ t('apprReject') }}</button>
                 </div>
-                <div v-else-if="msg.kind === 'proposal' && proposalState(msg) !== 'pending'" class="bubble-decided-mark">
+                <div v-else-if="!msg.unsent && msg.kind === 'proposal' && proposalState(msg) !== 'pending'" class="bubble-decided-mark">
                   {{ proposalState(msg) === 'approved' ? t('apprApprovedState') : t('apprRejectedState') }}
                 </div>
-                <div v-else class="bubble-text-content"><template v-if="msg._e2eeError">{{ t('mvE2eeUnreadable') }}</template><template v-else><template v-for="(part, pi) in linkParts(keepSeedText(msg, t) ?? msg.body)" :key="pi"><a v-if="part.href" class="bubble-link" :href="part.href" target="_blank" rel="noopener noreferrer nofollow" @click.stop>{{ part.text }}</a><template v-else>{{ part.text }}</template></template></template></div>
                 <LinkPreview v-if="msg.kind === 'text' && !msg.unsent && !msg._e2eeError" :text="msg.body" :enabled="linkPreviewsEnabled" :sealed="msg._e2ee === true" :room="selectedChatId" />
 
                 <!-- A15: voice-AI result box (STT transcript, TTS/STT guidance) -->

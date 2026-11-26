@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { API_URL, type Message } from '../../../shared/api'
+import type { Message } from '../../../shared/api'
+import { authedFetch } from '../store/session'
 const props = defineProps<{ message: Message; token: string; labels: { download: string; retry: string; loading: string; error: string } }>()
 const url = ref(''), loading = ref(false), failed = ref(false)
 let controller: AbortController | null = null
 let generation = 0
 const mime = computed(() => String(props.message.metadata?.mime_type || '').split(';')[0].trim().toLowerCase())
-const media = computed(() => /^(image\/(png|jpeg|gif|webp)|audio\/(mpeg|mp4|ogg|wav|webm)|video\/(mp4|webm|ogg))$/i.test(mime.value))
+const media = computed(() => /^(image\/(png|jpeg|gif|webp|avif)|audio\/(mpeg|mp4|x-m4a|m4a|aac|ogg|wav|webm|flac)|video\/(mp4|webm|ogg|quicktime))$/i.test(mime.value))
 function release() { if (url.value) URL.revokeObjectURL(url.value); url.value = '' }
 async function load() {
   if (loading.value) return
@@ -16,7 +17,7 @@ async function load() {
   controller?.abort(); controller = new AbortController()
   loading.value = true; failed.value = false
   try {
-    const response = await fetch(`${API_URL}/api/v1/attachments/${encodeURIComponent(id)}/content`, { headers: { Authorization: `Bearer ${props.token}` }, signal: controller.signal, cache: 'no-store' })
+    const response = await authedFetch(`/api/v1/attachments/${encodeURIComponent(id)}/content`, { signal: controller.signal, cache: 'no-store' })
     if (!response.ok) throw new Error('Attachment unavailable')
     let bytes = await response.arrayBuffer()
     // E7: sealed bytes open with the key that rode inside the message.
@@ -45,10 +46,13 @@ async function download() {
   const link = document.createElement('a')
   link.href = url.value; link.download = props.message.body || 'attachment'; link.click()
 }
-watch(() => [props.message.metadata?.attachment_id, props.message.unsent, props.token], () => {
+watch(() => [props.message.metadata?.attachment_id, props.message.unsent], () => {
   generation++; controller?.abort(); release(); loading.value = false; failed.value = false
-  if (media.value && !props.message.unsent) void load()
+  if (media.value && !props.message.unsent && props.token) void load()
 }, { immediate: true })
+watch(() => props.token, (nextToken) => {
+  if (nextToken && media.value && !props.message.unsent && !url.value && !loading.value) void load()
+})
 onBeforeUnmount(() => { generation++; controller?.abort(); release() })
 </script>
 

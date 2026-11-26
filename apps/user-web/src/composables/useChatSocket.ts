@@ -104,12 +104,12 @@ export function useChatSocket(deps: ChatSocketDeps) {
     stopRealtime()
     if (!token.value) return
     const generation = realtimeGeneration
-    const sessionToken = token.value
+    const ownerId = currentUser.value?.id || ''
     realtimeState.value = navigator.onLine ? 'connecting' : 'offline'
     if (!navigator.onLine) return
     try {
       const { ticket } = await api<{ ticket: string }>('/api/v1/ws-ticket', 'POST')
-      if (generation !== realtimeGeneration || sessionToken !== token.value) return
+      if (generation !== realtimeGeneration || !token.value || (ownerId && currentUser.value?.id !== ownerId)) return
       const connection = new WebSocket(wsURL(ticket))
       socket = connection
       connection.onclose = () => {

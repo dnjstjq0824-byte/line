@@ -8,8 +8,10 @@
 import { ref, type Ref } from 'vue'
 
 import { api, currentUser, note, t, token } from '../store/session'
-import { request } from '../../../shared/api'
 import { fetchIceServers, endWebRTCCall } from '../messenger-utils'
+
+const apiRequest = <T = any>(path: string, _tok?: string | null, method = 'GET', body?: unknown) =>
+  api<T>(path, method, body)
 
 export interface GroupPeer {
   id: string
@@ -38,6 +40,7 @@ export function useGroupCall(deps: GroupCallDeps) {
   const localStream = ref<MediaStream | null>(null)
 
   let peerSessions = new Map<string, RTCPeerConnection>()
+  let pendingPeerIce = new Map<string, RTCIceCandidateInit[]>()
   let groupTimer: ReturnType<typeof setInterval> | null = null
 
   function upsertPeer(id: string, name: string, avatarColor: string): GroupPeer {
@@ -55,23 +58,38 @@ export function useGroupCall(deps: GroupCallDeps) {
       try { pc.close() } catch {}
       peerSessions.delete(id)
     }
+    pendingPeerIce.delete(id)
     groupPeers.value = groupPeers.value.filter(p => p.id !== id)
+  }
+
+  async function flushPeerIce(peerId: string, pc: RTCPeerConnection) {
+    if (!pc.remoteDescription) return
+    const queued = pendingPeerIce.get(peerId)
+    if (!queued?.length) return
+    pendingPeerIce.delete(peerId)
+    for (const c of queued) {
+      try { await pc.addIceCandidate(c) } catch {}
+    }
   }
 
   async function makePeerConnection(peerId: string): Promise<RTCPeerConnection | null> {
     const call = groupCall.value
     if (!call) return null
-    const iceServers = await fetchIceServers(request, token.value)
+    const iceServers = await fetchIceServers(apiRequest, token.value)
     const pc = new RTCPeerConnection({ iceServers })
     if (localStream.value) {
       localStream.value.getTracks().forEach(track => pc.addTrack(track, localStream.value!))
     }
     pc.ontrack = (ev) => {
-      if (ev.streams[0]) {
-        const peer = upsertPeer(peerId, peerId, '#315BCD')
+      const peer = upsertPeer(peerId, peerId, '#315BCD')
+      if (ev.streams && ev.streams[0]) {
         peer.stream = ev.streams[0]
-        groupPeers.value = [...groupPeers.value]
+      } else if (ev.track) {
+        const s = peer.stream || new MediaStream()
+        if (!s.getTracks().some(t => t.id === ev.track.id)) s.addTrack(ev.track)
+        peer.stream = s
       }
+      groupPeers.value = [...groupPeers.value]
     }
     pc.onicecandidate = (ev) => {
       if (ev.candidate && groupCall.value?.roomId === call.roomId) {
@@ -177,6 +195,7 @@ export function useGroupCall(deps: GroupCallDeps) {
       }
       if (signal.type === 'offer' && signal.sdp) {
         await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp })
+        await flushPeerIce(fromId, pc)
         const answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
         await api('/api/v1/calls/group/signal', 'POST', {
@@ -186,8 +205,16 @@ export function useGroupCall(deps: GroupCallDeps) {
         }).catch(() => {})
       } else if (signal.type === 'answer' && signal.sdp) {
         await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp })
+        await flushPeerIce(fromId, pc)
       } else if (signal.type === 'ice-candidate' && signal.candidate) {
-        await pc.addIceCandidate(signal.candidate)
+        const cand = typeof signal.candidate === 'string' ? JSON.parse(signal.candidate) : signal.candidate
+        if (!pc.remoteDescription) {
+          const list = pendingPeerIce.get(fromId) || []
+          list.push(cand)
+          pendingPeerIce.set(fromId, list)
+        } else {
+          await pc.addIceCandidate(cand)
+        }
       }
     } catch {}
   }
@@ -235,6 +262,7 @@ export function useGroupCall(deps: GroupCallDeps) {
       try { pc.close() } catch {}
     }
     peerSessions = new Map()
+    pendingPeerIce = new Map()
     endWebRTCCall(null, localStream.value)
     localStream.value = null
     groupPeers.value = []

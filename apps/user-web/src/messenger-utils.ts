@@ -2,6 +2,16 @@
 
 export type WebRTCSession = { id: string; pc: RTCPeerConnection; stream: MediaStream | null; mediaFailed: boolean }
 
+// Capture ICE candidates gathered between setLocalDescription(offer) and
+// the caller attaching its live onicecandidate listener so direct routes
+// are never lost.
+const earlyIceByPc = new WeakMap<RTCPeerConnection, RTCIceCandidate[]>()
+export function drainEarlyIceCandidates(pc: RTCPeerConnection): RTCIceCandidate[] {
+  const list = earlyIceByPc.get(pc) || []
+  earlyIceByPc.delete(pc)
+  return list
+}
+
 // A-14: the peer connection AND the mic/camera stream are returned to the
 // caller, which owns their lifetime (endWebRTCCall). Any failure path closes
 // what was already acquired, so nothing leaks on a failed call.
@@ -18,6 +28,11 @@ export async function startWebRTCCall(convId: string, kind: 'voice' | 'video', t
       mediaFailed = true
     }
     pc = new RTCPeerConnection({ iceServers: await fetchIceServers(requestFn, token) })
+    const early: RTCIceCandidate[] = []
+    earlyIceByPc.set(pc, early)
+    pc.onicecandidate = (ev) => {
+      if (ev.candidate) early.push(ev.candidate)
+    }
     if (stream) stream.getTracks().forEach(track => pc!.addTrack(track, stream!))
     const offer = await pc.createOffer()
     await pc.setLocalDescription(offer)

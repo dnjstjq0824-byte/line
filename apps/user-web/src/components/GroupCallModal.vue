@@ -43,32 +43,40 @@ const GroupTile = defineComponent({
   setup(tileProps) {
     const tileVideo = ref<HTMLVideoElement | null>(null)
     const bind = () => {
-      if (tileVideo.value) tileVideo.value.srcObject = tileProps.stream
+      if (tileVideo.value) {
+        tileVideo.value.srcObject = tileProps.stream
+        if (tileProps.stream) void tileVideo.value.play?.()?.catch(() => {})
+      }
     }
     onMounted(bind)
     watch(() => tileProps.stream, bind)
-    return () =>
-      h('div', { class: 'group-tile', role: 'listitem' }, [
+    return () => {
+      const hasVideo = Boolean(tileProps.stream && tileProps.stream.getVideoTracks().some(tr => tr.readyState === 'live' && tr.enabled))
+      return h('div', { class: 'group-tile', role: 'listitem' }, [
         tileProps.stream
           ? h('video', {
               ref: tileVideo,
               autoplay: true,
               playsinline: true,
               muted: tileProps.self,
-              class: 'group-tile-video',
+              class: hasVideo ? 'group-tile-video' : 'group-tile-video group-tile-audio-only',
               onVnodeMounted: bind,
               onVnodeUpdated: bind,
             })
-          : h('div', { class: 'group-tile-avatar' }, [
+          : null,
+        !hasVideo
+          ? h('div', { class: 'group-tile-avatar' }, [
               h('div', { class: 'avatar-circle lg', style: { background: tileProps.color } },
                 initialOf(tileProps.name, '?')),
-            ]),
+            ])
+          : null,
         h('div', { class: 'group-tile-name' }, [
           tileProps.muted ? h('span', { class: 'group-tile-mute' }, '🔇 ') : null,
           tileProps.name,
           tileProps.self ? ` (${t('mvMe')})` : '',
         ]),
       ])
+    }
   },
 })
 </script>
@@ -173,6 +181,12 @@ const GroupTile = defineComponent({
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.group-tile-audio-only {
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 .group-tile-avatar {
   position: absolute;

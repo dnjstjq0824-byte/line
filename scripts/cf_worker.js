@@ -87,10 +87,15 @@ const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const BOT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 const MAX_ATTACHMENT_B64 = 14_000_000;
 const ATTACHMENT_MIME_ALLOW = new Set([
-  'image/png', 'image/jpeg', 'image/gif', 'image/webp',
-  'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav',
-  'video/mp4', 'video/webm', 'video/quicktime',
-  'application/pdf', 'text/plain',
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/heic', 'image/heif',
+  'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac', 'audio/mpeg', 'audio/wav', 'audio/flac', 'audio/3gpp',
+  'video/mp4', 'video/webm', 'video/quicktime', 'video/ogg', 'video/3gpp',
+  'application/pdf', 'text/plain', 'text/csv', 'text/markdown', 'application/json',
+  'application/zip', 'application/x-zip-compressed', 'application/gzip', 'application/octet-stream',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/x-hwp', 'application/haansofthwp', 'application/vnd.hancom.hwp', 'application/vnd.hancom.hwpx',
 ]);
 const MAX_BODY = 20000;
 // H2: daily per-user quotas. All three defaults live here and nowhere else.
@@ -3885,7 +3890,7 @@ const REACTIONS = ['❤️', '😍', '😂', '😮', '😢', '👍'];
 // Smart-channel slot: served from D1 luno_notices (no hardcoded content).
 
 
-const INLINE_MIME = /^(image\/(png|jpeg|gif|webp)|audio\/(webm|ogg|mp4|mpeg|wav)|video\/(mp4|webm))$/;
+const INLINE_MIME = /^(image\/(png|jpeg|gif|webp|avif)|audio\/(webm|ogg|mp4|x-m4a|m4a|aac|mpeg|wav|flac)|video\/(mp4|webm|ogg|quicktime))$/;
 
 /**
  * Extended LUNO-class messenger API. Returns a Response when a route is handled, otherwise null.
@@ -5857,7 +5862,10 @@ async function deleteAttachmentEverywhere(attId) {
     if (rawBody.length > MAX_ATTACHMENT_B64 + 4096) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
     let b = {};
     try { const v = JSON.parse(rawBody || '{}'); if (v && typeof v === 'object') b = v; } catch { b = {}; }
-    const conv = conversations.get(b.conversation_id);
+    let conv = conversations.get(b.conversation_id);
+    if (!conv || (userKind(me) !== 'bot' && !conv.members.includes(myId))) {
+      conv = await hydrateDurableConversation(b.conversation_id).catch(() => null);
+    }
     if (!conv) return bad('대화방을 찾을 수 없습니다', 404);
     if (userKind(me) === 'bot') {
       if (!botScopeAllows(me, 'post', conv.id)) return json({ error: 'forbidden' }, 403);
@@ -5865,7 +5873,7 @@ async function deleteAttachmentEverywhere(attId) {
       return bad('대화방을 찾을 수 없습니다', 404);
     }
     if (typeof b.content_base64 !== 'string' || !b.content_base64 || b.content_base64.length > MAX_ATTACHMENT_B64 || !/^[A-Za-z0-9+/=]+$/.test(b.content_base64)) return bad('파일이 비어 있거나 너무 큽니다 (최대 10MB)', 413);
-    const mime = typeof b.mime_type === 'string' ? b.mime_type.toLowerCase() : '';
+    const mime = typeof b.mime_type === 'string' ? b.mime_type.split(';')[0].trim().toLowerCase() : '';
     if (!ATTACHMENT_MIME_ALLOW.has(mime)) return json({ error: '허용되지 않은 파일 형식입니다', code: 'MIME_NOT_ALLOWED' }, 415);
     if (userKind(me) === 'bot' && !mime.startsWith('image/')) return json({ error: '허용되지 않은 파일 형식입니다', code: 'MIME_NOT_ALLOWED' }, 415);
     const bucket = mediaBucketOf();
@@ -5899,7 +5907,12 @@ async function deleteAttachmentEverywhere(attId) {
   }
   if ((m = p.match(/^attachments\/([\w-]+)(?:\/content)?$/)) && method === 'GET') {
     const att = await loadAttachment(m[1]);
-    if (!att || !conversations.get(att.conversation_id)?.members.includes(myId)) return bad('파일을 찾을 수 없습니다', 404);
+    if (!att) return bad('파일을 찾을 수 없습니다', 404);
+    let attConv = conversations.get(att.conversation_id);
+    if (!attConv || !attConv.members.includes(myId)) {
+      attConv = await hydrateDurableConversation(att.conversation_id).catch(() => null);
+    }
+    if (!attConv || !attConv.members.includes(myId)) return bad('파일을 찾을 수 없습니다', 404);
     const bytes = att.bytes;
     const inline = INLINE_MIME.test(att.mime);
     const acao = corsOrigin(request, typeof CURRENT_ENV !== 'undefined' ? CURRENT_ENV : null);
@@ -5909,7 +5922,7 @@ async function deleteAttachmentEverywhere(attId) {
         'Content-Type': inline ? att.mime : 'application/octet-stream',
         'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(att.name)}`,
         'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox",
-        'Cache-Control': 'private, max-age=3600', ...(acao ? { 'Access-Control-Allow-Origin': acao, 'Vary': 'Origin' } : {})
+        'Cache-Control': 'private, max-age=3600', ...(acao ? { 'Access-Control-Allow-Origin': acao, 'Access-Control-Allow-Credentials': 'true', 'Vary': 'Origin' } : {})
       }
     });
   }
@@ -9244,10 +9257,11 @@ const workerCore = {
       const callSigMatch = p.match(/^calls\/([a-zA-Z0-9_-]+)\/signal$/);
       if (callSigMatch && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
+        const sigCall = callSessions.get(callSigMatch[1]) || await loadCallSession(callSigMatch[1]);
         broadcast({
           type: 'call.signal',
           call_id: callSigMatch[1],
-          conversation_id: callSessions.get(callSigMatch[1])?.conversation_id,
+          conversation_id: sigCall?.conversation_id,
           from_user_id: authUser.id,
           signal_type: body.signal_type,
           sdp: body.sdp,

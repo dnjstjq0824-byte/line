@@ -4,11 +4,14 @@
 import { ref, watch, type ComputedRef, type Ref } from 'vue'
 
 import { api, currentUser, note, t, token, wrap } from '../store/session'
-import { request, type Chat } from '../../../shared/api'
+import type { Chat } from '../../../shared/api'
 import { callRecordingName } from '../../../shared/call-fx'
 import { CALL_NO_ANSWER_MS, decideIncomingRing, noAnswerState } from '../../../shared/call_policy'
-import { endWebRTCCall, fetchIceServers, startWebRTCCall } from '../messenger-utils'
+import { drainEarlyIceCandidates, endWebRTCCall, fetchIceServers, startWebRTCCall } from '../messenger-utils'
 import { maybeWebNotify } from '../web_notify'
+
+const apiRequest = <T = any>(path: string, _tok?: string | null, method = 'GET', body?: unknown) =>
+  api<T>(path, method, body)
 
 export interface CallRecord {
   id: string
@@ -60,18 +63,68 @@ export function useWebRTC(deps: WebRTCDeps) {
   let callTimer: ReturnType<typeof setInterval> | null = null
   let noAnswerTimer: ReturnType<typeof setTimeout> | null = null
   let callRemoteStream: MediaStream | null = null
+  let callLocalStream: MediaStream | null = null
+  let screenShareStream: MediaStream | null = null
+  let pendingIceCandidates: RTCIceCandidateInit[] = []
+  let ringingSignals: any[] = []
+  let appliedOffer = false
+
+  function attachLocal(stream: MediaStream | null) {
+    callLocalStream = stream
+    const el = localVideoRef.value
+    if (!el) return
+    el.srcObject = stream
+    if (stream) void el.play?.()?.catch(() => {})
+  }
+  watch(localVideoRef, (el) => {
+    const activeLocal = screenShareStream || callLocalStream
+    if (el && activeLocal && el.srcObject !== activeLocal) {
+      el.srcObject = activeLocal
+      void el.play?.()?.catch(() => {})
+    }
+  })
   // The remote track can land before the call screen mounts its player
   // (ontrack only assigns when the element exists): attach it on mount.
   watch(remoteVideoRef, (el) => {
+    if (el) el.muted = !isCallSpeakerOn.value
     if (el && callRemoteStream && el.srcObject !== callRemoteStream) attachRemote(callRemoteStream)
+  })
+  watch(isCallSpeakerOn, (on) => {
+    if (remoteVideoRef.value) remoteVideoRef.value.muted = !on
   })
   // iOS Safari does not always start a late-assigned stream on its own.
   function attachRemote(stream: MediaStream) {
     callRemoteStream = stream
     const el = remoteVideoRef.value
     if (!el) return
+    el.muted = !isCallSpeakerOn.value
     el.srcObject = stream
     void el.play?.()?.catch(() => {})
+  }
+  function handleRemoteTrack(ev: RTCTrackEvent) {
+    if (ev.streams && ev.streams[0]) {
+      attachRemote(ev.streams[0])
+    } else if (ev.track) {
+      const stream = callRemoteStream || new MediaStream()
+      if (!stream.getTracks().some(t => t.id === ev.track.id)) stream.addTrack(ev.track)
+      attachRemote(stream)
+    }
+  }
+  async function flushPendingIce(pc: RTCPeerConnection) {
+    if (!pc.remoteDescription) return
+    const queued = pendingIceCandidates
+    pendingIceCandidates = []
+    for (const c of queued) {
+      try { await pc.addIceCandidate(c) } catch {}
+    }
+  }
+  function parseCandidate(raw: unknown): RTCIceCandidateInit | null {
+    if (!raw) return null
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw) } catch { return null }
+    }
+    if (typeof raw === 'object') return raw as RTCIceCandidateInit
+    return null
   }
   let callRecorder: { mr: MediaRecorder; ctx: AudioContext; chunks: BlobPart[]; callId: string } | null = null
 
@@ -80,7 +133,7 @@ export function useWebRTC(deps: WebRTCDeps) {
 
   async function initPeerSession(callId: string, kind: 'voice' | 'video') {
     // N2-L: ICE from the server; mute-while-ringing applies to late media too.
-    const iceServers = await fetchIceServers(request, token.value)
+    const iceServers = await fetchIceServers(apiRequest, token.value)
     const pc = new RTCPeerConnection({ iceServers })
     let stream: MediaStream | null = null
     if (navigator.mediaDevices?.getUserMedia) {
@@ -89,14 +142,12 @@ export function useWebRTC(deps: WebRTCDeps) {
         stream.getAudioTracks().forEach(track => { track.enabled = !isCallMuted.value })
         stream.getVideoTracks().forEach(track => { track.enabled = !isCallVideoOff.value })
         stream.getTracks().forEach(track => pc.addTrack(track, stream!))
-        if (localVideoRef.value) localVideoRef.value.srcObject = stream
-      } catch {}
-    }
-    pc.ontrack = (ev) => {
-      if (ev.streams[0]) {
-        attachRemote(ev.streams[0])
+        attachLocal(stream)
+      } catch {
+        callMediaIssue.value = true
       }
     }
+    pc.ontrack = handleRemoteTrack
     pc.onicecandidate = (ev) => {
       if (ev.candidate) {
         void api(`/api/v1/calls/${callId}/signal`, 'POST', {
@@ -127,28 +178,32 @@ export function useWebRTC(deps: WebRTCDeps) {
       // Outgoing screen first: a mic/camera failure must never strand the
       // caller on a bare toast with no call UI. Media is opportunistic; only
       // a server session failure aborts the call.
+      pendingIceCandidates = []
+      ringingSignals = []
+      appliedOffer = false
       activeCall.value = { id: '', kind, state: 'ringing', title: convTitle, direction: 'outgoing' }
       callDuration.value = 0
       callMediaIssue.value = false
       // Single media acquisition: the util returns the live session, so the
       // microphone is opened once and endCallLocally owns its teardown.
-      const webrtc = await startWebRTCCall(targetConvId, kind, token.value, request)
+      const webrtc = await startWebRTCCall(targetConvId, kind, token.value, apiRequest)
       if (!webrtc) {
         endCallLocally()
         note.value = t('mvCallStartFailed')
         return
       }
-      activeCall.value!.id = webrtc.id
+      if (!activeCall.value) {
+        endWebRTCCall(webrtc.pc, webrtc.stream)
+        return
+      }
+      activeCall.value.id = webrtc.id
       callMediaIssue.value = webrtc.mediaFailed
       if (webrtc.mediaFailed) note.value = t('callMediaFailed')
       rtcSession = { pc: webrtc.pc, stream: webrtc.stream }
       armNoAnswerTimer(webrtc.id, 'caller')
-      if (localVideoRef.value) localVideoRef.value.srcObject = webrtc.stream
-      webrtc.pc.ontrack = (ev) => {
-        if (ev.streams[0]) {
-          attachRemote(ev.streams[0])
-        }
-      }
+      attachLocal(webrtc.stream)
+      webrtc.pc.ontrack = handleRemoteTrack
+      const earlyIce = drainEarlyIceCandidates(webrtc.pc)
       webrtc.pc.onicecandidate = (ev) => {
         if (ev.candidate) {
           void api(`/api/v1/calls/${webrtc.id}/signal`, 'POST', {
@@ -161,6 +216,12 @@ export function useWebRTC(deps: WebRTCDeps) {
         signal_type: 'offer',
         sdp: webrtc.pc.localDescription?.sdp || ''
       }).catch(() => {})
+      for (const cand of earlyIce) {
+        await api(`/api/v1/calls/${webrtc.id}/signal`, 'POST', {
+          signal_type: 'ice-candidate',
+          candidate: JSON.stringify(cand)
+        }).catch(() => {})
+      }
     })
   }
 
@@ -195,6 +256,9 @@ export function useWebRTC(deps: WebRTCDeps) {
       note.value = t('mvCallBusy')
       return
     }
+    pendingIceCandidates = []
+    ringingSignals = []
+    appliedOffer = false
     activeCall.value = { id: data.call_id, kind: data.kind || 'voice', state: 'ringing', title: data.caller_name || data.caller_handle || t('mvIncomingTitle'), direction: 'incoming' }
     maybeWebNotify(
       data.caller_name || data.caller_handle || t('mvIncomingTitle'),
@@ -206,6 +270,13 @@ export function useWebRTC(deps: WebRTCDeps) {
 
   async function handleIncomingCallSignal(data: any) {
     if (!activeCall.value || data.from_user_id === currentUser.value?.id) return
+    if (data.call_id && activeCall.value.id && data.call_id !== activeCall.value.id) return
+    // Hold incoming signals while the callee is still ringing so we never
+    // open mic/camera or answer before the user accepts.
+    if (activeCall.value.direction === 'incoming' && activeCall.value.state === 'ringing') {
+      ringingSignals.push(data)
+      return
+    }
     try {
       if (!rtcSession) {
         rtcSession = await initPeerSession(activeCall.value.id, activeCall.value.kind)
@@ -213,7 +284,10 @@ export function useWebRTC(deps: WebRTCDeps) {
       const sess = rtcSession
       if (!sess) return
       if (data.signal_type === 'offer' && data.sdp) {
+        if (appliedOffer && sess.pc.signalingState !== 'stable') return
+        appliedOffer = true
         await sess.pc.setRemoteDescription({ type: 'offer', sdp: data.sdp })
+        await flushPendingIce(sess.pc)
         const answer = await sess.pc.createAnswer()
         await sess.pc.setLocalDescription(answer)
         await api(`/api/v1/calls/${activeCall.value.id}/signal`, 'POST', {
@@ -222,8 +296,15 @@ export function useWebRTC(deps: WebRTCDeps) {
         }).catch(() => {})
       } else if (data.signal_type === 'answer' && data.sdp) {
         await sess.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp })
+        await flushPendingIce(sess.pc)
       } else if (data.signal_type === 'ice-candidate' && data.candidate) {
-        await sess.pc.addIceCandidate(JSON.parse(data.candidate))
+        const cand = parseCandidate(data.candidate)
+        if (!cand) return
+        if (!sess.pc.remoteDescription) {
+          pendingIceCandidates.push(cand)
+        } else {
+          await sess.pc.addIceCandidate(cand)
+        }
       }
     } catch {}
   }
@@ -238,12 +319,46 @@ export function useWebRTC(deps: WebRTCDeps) {
     rtcSession?.stream?.getVideoTracks().forEach(t => { t.enabled = !isCallVideoOff.value })
   }
 
+  async function stopScreenShare() {
+    if (screenShareStream) {
+      screenShareStream.getTracks().forEach(tr => tr.stop())
+      screenShareStream = null
+    }
+    isScreenSharing.value = false
+    const sess = rtcSession
+    if (sess) {
+      const camTrack = sess.stream?.getVideoTracks()[0] || null
+      const sender = sess.pc.getSenders().find(s => s.track?.kind === 'video')
+      if (sender && camTrack) await sender.replaceTrack(camTrack).catch(() => {})
+      attachLocal(sess.stream)
+    }
+  }
+
   async function toggleScreenShare() {
+    if (isScreenSharing.value) {
+      await stopScreenShare()
+      return
+    }
     if (!navigator.mediaDevices?.getDisplayMedia) return
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+      const screenTrack = screenStream.getVideoTracks()[0]
+      if (!screenTrack) {
+        screenStream.getTracks().forEach(tr => tr.stop())
+        return
+      }
+      screenShareStream = screenStream
       isScreenSharing.value = true
-      if (localVideoRef.value) localVideoRef.value.srcObject = screenStream
+      const sess = rtcSession
+      if (sess) {
+        const sender = sess.pc.getSenders().find(s => s.track?.kind === 'video')
+        if (sender) await sender.replaceTrack(screenTrack).catch(() => {})
+      }
+      if (localVideoRef.value) {
+        localVideoRef.value.srcObject = screenStream
+        void localVideoRef.value.play?.()?.catch(() => {})
+      }
+      screenTrack.onended = () => { void stopScreenShare() }
       if (activeCall.value) {
         await api(`/api/v1/calls/${activeCall.value.id}/signal`, 'POST', { signal_type: 'screen-share' }).catch(() => {})
       }
@@ -283,6 +398,35 @@ export function useWebRTC(deps: WebRTCDeps) {
         activeCall.value.state = 'connected'
         clearNoAnswerTimer()
         startCallTimer()
+        if (!rtcSession) {
+          rtcSession = await initPeerSession(cid, activeCall.value.kind)
+        }
+        // Replay buffered WS signals plus any missed server-stored signals
+        // (offer + ICE candidates) so cross-isolate / late-accept calls connect cleanly.
+        const held = ringingSignals.splice(0, ringingSignals.length)
+        let serverSignals: any[] = []
+        try {
+          const res = await api<{ signals?: any[] }>(`/api/v1/calls/${cid}/signals`)
+          if (Array.isArray(res?.signals)) serverSignals = res.signals
+        } catch {}
+        const combined = [...held, ...serverSignals]
+        const seenCand = new Set<string>()
+        let sawOffer = false
+        for (const sig of combined) {
+          if (sig.signal_type === 'offer') {
+            if (sawOffer) continue
+            sawOffer = true
+            await handleIncomingCallSignal(sig)
+          }
+        }
+        for (const sig of combined) {
+          if (sig.signal_type === 'ice-candidate') {
+            const key = typeof sig.candidate === 'string' ? sig.candidate : JSON.stringify(sig.candidate || '')
+            if (seenCand.has(key)) continue
+            seenCand.add(key)
+            await handleIncomingCallSignal(sig)
+          }
+        }
       }
     })
   }
@@ -376,6 +520,14 @@ export function useWebRTC(deps: WebRTCDeps) {
     stopCallRecording(true)
     clearNoAnswerTimer()
     callRemoteStream = null
+    callLocalStream = null
+    if (screenShareStream) {
+      screenShareStream.getTracks().forEach(tr => tr.stop())
+      screenShareStream = null
+    }
+    pendingIceCandidates = []
+    ringingSignals = []
+    appliedOffer = false
     if (callTimer) {
       clearInterval(callTimer)
       callTimer = null

@@ -32,7 +32,9 @@ export function useAttachments(deps: AttachmentsDeps) {
     const ownerId = currentUser.value?.id
     if (!ownerId) return
     if (voiceDurationSec === undefined) file = await shrinkPhotoForUpload(file)
-    if (file.size === 0 || file.size > 512 * 1024) throw new Error(t('attachment_size_limit'))
+    const maxBytes = 10 * 1024 * 1024
+    if (file.size === 0 || file.size > maxBytes) throw new Error(t('attachment_size_limit'))
+    const normalizedMime = (file.type || 'application/octet-stream').split(';')[0].trim().toLowerCase() || 'application/octet-stream'
     const room = deps.chats.value.find((c) => c.id === conversation)
     // E7: seal bytes first in E2EE rooms; R2 only ever sees ciphertext.
     let uploadBytes = new Uint8Array(await file.arrayBuffer())
@@ -46,15 +48,17 @@ export function useAttachments(deps: AttachmentsDeps) {
     }
     const bytes = uploadBytes
     let binary = ''
-    for (const byte of bytes) binary += String.fromCharCode(byte)
+    for (let i = 0; i < bytes.length; i += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+    }
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
     const checksum = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('')
-    const kind = voiceDurationSec !== undefined ? 'voice' : file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'file'
+    const kind = voiceDurationSec !== undefined ? 'voice' : normalizedMime.startsWith('image/') ? 'image' : normalizedMime.startsWith('audio/') ? 'audio' : normalizedMime.startsWith('video/') ? 'video' : 'file'
     if (currentUser.value?.id !== ownerId) return
     const att = await api<{ id: string; original_name: string }>('/api/v1/attachments', 'POST', {
       conversation_id: conversation,
       original_name: file.name,
-      mime_type: file.type || 'application/octet-stream',
+      mime_type: normalizedMime,
       size_bytes: file.size,
       checksum_sha256: checksum,
       content_base64: btoa(binary),
@@ -63,14 +67,14 @@ export function useAttachments(deps: AttachmentsDeps) {
     if (currentUser.value?.id !== ownerId) return
     let wireKind = kind
     let wireBody = att.original_name
-    let meta: Record<string, unknown> = { attachment_id: att.id, mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}) }
+    let meta: Record<string, unknown> = { attachment_id: att.id, mime_type: normalizedMime, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}) }
     if (sealed && room) {
       const c = deps.e2eeClient()
       if (!c) return
       try {
         const out = await c.encryptOutbound(room, kind, att.original_name, {
           attachment_id: att.id, fileKey: sealed.key, fileIv: sealed.iv, fileHash: sealed.hash,
-          mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}),
+          mime_type: normalizedMime, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}),
         })
         wireKind = out.kind
         wireBody = out.body
@@ -90,7 +94,7 @@ export function useAttachments(deps: AttachmentsDeps) {
       if (wireKind === 'ciphertext') {
         res.message.kind = kind
         res.message.body = att.original_name
-        res.message.metadata = { attachment_id: att.id, mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}), ...(sealed ? { fileKey: sealed.key, fileIv: sealed.iv, fileHash: sealed.hash } : {}) }
+        res.message.metadata = { attachment_id: att.id, mime_type: normalizedMime, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}), ...(sealed ? { fileKey: sealed.key, fileIv: sealed.iv, fileHash: sealed.hash } : {}) }
         res.message._e2ee = true
       }
       deps.messages.value.push(res.message)
