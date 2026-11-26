@@ -864,24 +864,24 @@ async function selectChat(convId: string) {
 
 async function loadEarlierMessages() {
   if (!selectedChatId.value || earlierMessagesLoading.value || !hasEarlierMessages.value) return
-  const convId = selectedChatId.value, sessionToken = token.value, version = chatSelectVersion
+  const convId = selectedChatId.value, ownerId = currentUser.value?.id, version = chatSelectVersion
   const cursor = messages.value.reduce((lowest, message) => Math.min(lowest, message.sequence), Infinity)
   if (!Number.isFinite(cursor)) return
   const canvas = messagesCanvasRef.value, oldHeight = canvas?.scrollHeight || 0, oldTop = canvas?.scrollTop || 0
   earlierMessagesLoading.value = true; earlierMessagesError.value = ''
   try {
-    const result = await request<{ messages: Message[] }>(`/api/v1/conversations/${convId}/messages?limit=50&before=${cursor}&before_sequence=${cursor}`, sessionToken)
-    if (sessionToken !== token.value || convId !== selectedChatId.value || version !== chatSelectVersion) return
+    const result = await api<{ messages: Message[] }>(`/api/v1/conversations/${convId}/messages?limit=50&before=${cursor}&before_sequence=${cursor}`)
+    if (currentUser.value?.id !== ownerId || convId !== selectedChatId.value || version !== chatSelectVersion) return
     const earlier = (result.messages || []).filter(message => message.sequence < cursor)
     const combined = new Map([...earlier, ...messages.value].map(message => [message.id, message]))
     messages.value = [...combined.values()].sort((a, b) => a.sequence - b.sequence)
     hasEarlierMessages.value = earlier.length === 50
     await nextTick()
-    if (canvas && convId === selectedChatId.value && sessionToken === token.value && version === chatSelectVersion) canvas.scrollTop = oldTop + canvas.scrollHeight - oldHeight
+    if (canvas && convId === selectedChatId.value && currentUser.value?.id === ownerId && version === chatSelectVersion) canvas.scrollTop = oldTop + canvas.scrollHeight - oldHeight
   } catch (error) {
-    if (sessionToken === token.value && convId === selectedChatId.value && version === chatSelectVersion) earlierMessagesError.value = error instanceof Error ? error.message : t('history_error')
+    if (currentUser.value?.id === ownerId && convId === selectedChatId.value && version === chatSelectVersion) earlierMessagesError.value = error instanceof Error ? error.message : t('history_error')
   } finally {
-    if (sessionToken === token.value && convId === selectedChatId.value && version === chatSelectVersion) earlierMessagesLoading.value = false
+    if (currentUser.value?.id === ownerId && convId === selectedChatId.value && version === chatSelectVersion) earlierMessagesLoading.value = false
   }
 }
 
@@ -900,7 +900,6 @@ async function sendMessage() {
   const convId = selectedChatId.value
   const clientId = newClientID()
   const senderId = currentUser.value?.id
-  const sessionToken = token.value
   if (!senderId) return
   // E5: E2EE rooms send ciphertext; groups wait for E6 sender keys.
   let kind = 'text'
@@ -927,13 +926,13 @@ async function sendMessage() {
   replyToMessage.value = null
   try {
     error.value = ''
-    const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
+    const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
       client_id: clientId,
       kind,
       body: wireBody,
       ...(replyId ? { reply_to: replyId } : {})
     }, controller.signal)
-    if (sessionToken !== token.value) return
+    if (currentUser.value?.id !== senderId) return
     if (selectedChatId.value === convId && !messages.value.some(m => m.id === res.message.id)) {
       // E5: our own send echoes ciphertext; stitch the plaintext we just sealed.
       if (kind === 'ciphertext') {
@@ -947,8 +946,11 @@ async function sendMessage() {
     scrollToBottom()
     await loadChats()
   } catch (e) {
-    if (sessionToken !== token.value) return
-    if (!(e instanceof ApiError)) {
+    if (currentUser.value?.id !== senderId) return
+    if (e instanceof ApiError && e.status === 401) {
+      error.value = t('session_expired')
+      void router.push('/login')
+    } else if (!(e instanceof ApiError)) {
       try {
         await queueOfflineMessage({ owner_id: senderId, client_id: clientId, conversation_id: convId, kind: 'text', body, ...(replyId ? { reply_to: replyId } : {}) })
         note.value = t('message_queued')

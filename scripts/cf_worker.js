@@ -2507,8 +2507,9 @@ function refreshCookie(token, request, maxAge = 30 * 86400) {
   let domainAttr = '';
   try {
     const parsed = new URL(request.url);
-    secure = parsed.protocol === 'https:';
-    const dom = rootDomainForCookie(parsed.hostname);
+    const proto = String(request.headers.get('X-Forwarded-Proto') || '').toLowerCase();
+    secure = parsed.protocol === 'https:' || proto === 'https';
+    const dom = rootDomainForCookie(effectiveHostname(request));
     if (dom) domainAttr = `; Domain=${dom}`;
   } catch { secure = false; }
   // F19: null/undefined maxAge yields a session cookie (no Max-Age) for
@@ -2564,6 +2565,7 @@ import { resolveMailDriver, resolveSmsDriver, resendSend, twilioSend } from './w
 import {
   handleMessengerEdgeRouting,
   classifyHost,
+  effectiveHostname,
   rootDomainForCookie,
   resolveTargetLang,
   resolveRequestLocale,

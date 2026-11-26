@@ -4,7 +4,7 @@
 import { ref, type Ref } from 'vue'
 
 import { api, currentUser, error, t, token } from '../store/session'
-import { ApiError, request, wsURL, type Message } from '../../../shared/api'
+import { ApiError, wsURL, type Message } from '../../../shared/api'
 import { flushOfflineQueue } from '../messenger-utils'
 import { playReceiveSound } from '../sound-effects'
 import { maybeWebNotify, webNotifyKindLabel } from '../web_notify'
@@ -222,7 +222,6 @@ export function useChatSocket(deps: ChatSocketDeps) {
 
   async function synchronizeMessages() {
     if (!token.value || !currentUser.value) return
-    const sessionToken = token.value
     const ownerId = currentUser.value.id
     const recoveryConvId = selectedChatId.value
     const recoveryAfter = messages.value.reduce((highest, msg) => Math.max(highest, msg.sequence), 0)
@@ -230,26 +229,26 @@ export function useChatSocket(deps: ChatSocketDeps) {
     lastMessageSyncOk = false
     try {
       await flushOfflineQueue(ownerId, async (msg) => {
-        if (sessionToken !== token.value) throw new Error('Session changed')
+        if (currentUser.value?.id !== ownerId) throw new Error('Session changed')
         // E5: plaintext waits in the queue; encryption happens at send time
         // so failed sends never burn ratchet steps on the peer side.
         const out = encryptQueued
           ? await encryptQueued(msg.conversation_id, msg.kind, msg.body)
           : { kind: msg.kind, body: msg.body }
-        await request(`/api/v1/conversations/${msg.conversation_id}/messages`, sessionToken, 'POST', {
+        await api(`/api/v1/conversations/${msg.conversation_id}/messages`, 'POST', {
           client_id: msg.client_id,
           kind: out.kind,
           body: out.body,
           ...(msg.reply_to ? { reply_to: msg.reply_to } : {})
         })
       })
-      if (sessionToken !== token.value) return
+      if (currentUser.value?.id !== ownerId) return
       if (selectedChatId.value) {
         const convId = selectedChatId.value
         // Replay every missed sequence, including gaps larger than the latest-page size.
         const missed: Message[] = []
         let after = convId === recoveryConvId ? recoveryAfter : 0
-        while (sessionToken === token.value && selectedChatId.value === convId) {
+        while (currentUser.value?.id === ownerId && selectedChatId.value === convId) {
           const delta = await api<{ messages?: Message[]; delta_messages?: Message[] }>(`/api/v1/conversations/${convId}/sync?after_sequence=${after}&since_sequence=${after}&limit=500`)
           const batch = delta.messages || delta.delta_messages || []
           missed.push(...batch)
@@ -258,7 +257,7 @@ export function useChatSocket(deps: ChatSocketDeps) {
           after = next
         }
         const { messages: recovered } = await api<{ messages: Message[] }>(`/api/v1/conversations/${convId}/messages?limit=50`)
-        if (sessionToken === token.value && selectedChatId.value === convId) {
+        if (currentUser.value?.id === ownerId && selectedChatId.value === convId) {
           const byId = new Map(messages.value.map(m => [m.id, m]))
           for (const message of [...missed, ...(recovered || [])]) byId.set(message.id, message)
           messages.value = [...byId.values()].sort((a, b) => a.sequence - b.sequence)

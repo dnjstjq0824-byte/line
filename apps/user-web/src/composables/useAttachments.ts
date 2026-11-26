@@ -3,10 +3,10 @@
 // client and the list refresh are injected (deps precedent).
 // Extracted verbatim from views/MessengerView.vue.
 import { ref, type Ref } from 'vue'
-import { api, error, t, token } from '../store/session'
+import { api, currentUser, error, t } from '../store/session'
 import type { getE2ee } from '../e2ee/client'
 import { shrinkPhotoForUpload } from '../messenger-utils'
-import { newClientID, request } from '../../../shared/api'
+import { newClientID } from '../../../shared/api'
 import type { Chat, Message } from '../../../shared/api'
 
 export interface AttachmentsDeps {
@@ -28,7 +28,9 @@ export function useAttachments(deps: AttachmentsDeps) {
     }
   }
 
-  async function sendAttachmentFile(file: File, conversation: string, sessionToken: string, voiceDurationSec?: number) {
+  async function sendAttachmentFile(file: File, conversation: string, _sessionToken: string, voiceDurationSec?: number) {
+    const ownerId = currentUser.value?.id
+    if (!ownerId) return
     if (voiceDurationSec === undefined) file = await shrinkPhotoForUpload(file)
     if (file.size === 0 || file.size > 512 * 1024) throw new Error(t('attachment_size_limit'))
     const room = deps.chats.value.find((c) => c.id === conversation)
@@ -48,8 +50,8 @@ export function useAttachments(deps: AttachmentsDeps) {
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
     const checksum = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('')
     const kind = voiceDurationSec !== undefined ? 'voice' : file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'file'
-    if (sessionToken !== token.value) return
-    const att = await request<{ id: string; original_name: string }>('/api/v1/attachments', sessionToken, 'POST', {
+    if (currentUser.value?.id !== ownerId) return
+    const att = await api<{ id: string; original_name: string }>('/api/v1/attachments', 'POST', {
       conversation_id: conversation,
       original_name: file.name,
       mime_type: file.type || 'application/octet-stream',
@@ -58,7 +60,7 @@ export function useAttachments(deps: AttachmentsDeps) {
       content_base64: btoa(binary),
       ...(sealed ? { encrypted: true } : {})
     })
-    if (sessionToken !== token.value) return
+    if (currentUser.value?.id !== ownerId) return
     let wireKind = kind
     let wireBody = att.original_name
     let meta: Record<string, unknown> = { attachment_id: att.id, mime_type: file.type, size_bytes: file.size, ...(voiceDurationSec !== undefined ? { duration: voiceDurationSec } : {}) }
@@ -78,13 +80,13 @@ export function useAttachments(deps: AttachmentsDeps) {
         return
       }
     }
-    const res = await request<{ message: Message }>(`/api/v1/conversations/${conversation}/messages`, sessionToken, 'POST', {
+    const res = await api<{ message: Message }>(`/api/v1/conversations/${conversation}/messages`, 'POST', {
       client_id: newClientID(),
       kind: wireKind,
       body: wireBody,
       metadata: meta
     })
-    if (sessionToken === token.value && deps.selectedChatId.value === conversation && !deps.messages.value.some(m => m.id === res.message.id)) {
+    if (currentUser.value?.id === ownerId && deps.selectedChatId.value === conversation && !deps.messages.value.some(m => m.id === res.message.id)) {
       if (wireKind === 'ciphertext') {
         res.message.kind = kind
         res.message.body = att.original_name

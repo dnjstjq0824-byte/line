@@ -4,8 +4,8 @@
 // client, scroller, list refresh and the file sender are injected.
 // Extracted verbatim from views/MessengerView.vue.
 import type { Ref } from 'vue'
-import { api, error, note, t, token, wrap } from '../store/session'
-import { newClientID, request } from '../../../shared/api'
+import { api, currentUser, error, note, t, token, wrap } from '../store/session'
+import { newClientID } from '../../../shared/api'
 import type { getE2ee } from '../e2ee/client'
 import { LUNO_STICKERS } from '../luno-stickers'
 import { imageStickerChar } from '../../../shared/sticker_catalog'
@@ -81,11 +81,12 @@ export function useMessageSenders(deps: MessageSendersDeps) {
   async function sendLocationMessage() {
     if (!deps.selectedChatId.value) return
     const convId = deps.selectedChatId.value
-    const sessionToken = token.value
+    const ownerId = currentUser.value?.id
+    if (!ownerId) return
     await wrap(async () => {
       if (!navigator.geolocation) throw new Error(t('location_unavailable'))
       const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }))
-      if (sessionToken !== token.value) return
+      if (currentUser.value?.id !== ownerId) return
       let kind = 'location'
       let wireBody = t('location_shared')
       let meta: Record<string, unknown> = {
@@ -107,13 +108,13 @@ export function useMessageSenders(deps: MessageSendersDeps) {
           return
         }
       }
-      const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
+      const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
         client_id: newClientID(),
         kind,
         body: wireBody,
         metadata: meta
       })
-      if (sessionToken === token.value && deps.selectedChatId.value === convId && !deps.messages.value.some(m => m.id === res.message.id)) {
+      if (currentUser.value?.id === ownerId && deps.selectedChatId.value === convId && !deps.messages.value.some(m => m.id === res.message.id)) {
         if (kind === 'ciphertext') {
           res.message.kind = 'location'
           res.message.body = t('location_shared')
@@ -137,7 +138,8 @@ export function useMessageSenders(deps: MessageSendersDeps) {
   async function shareContact(f: User) {
     if (!deps.selectedChatId.value) return
     const convId = deps.selectedChatId.value
-    const sessionToken = token.value
+    const ownerId = currentUser.value?.id
+    if (!ownerId) return
     await wrap(async () => {
       let kind = 'contact'
       let wireBody = f.display_name
@@ -160,13 +162,13 @@ export function useMessageSenders(deps: MessageSendersDeps) {
           return
         }
       }
-      const res = await request<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, sessionToken, 'POST', {
+      const res = await api<{ message: Message }>(`/api/v1/conversations/${convId}/messages`, 'POST', {
         client_id: newClientID(),
         kind,
         body: wireBody,
         metadata: meta
       })
-      if (sessionToken === token.value && deps.selectedChatId.value === convId && !deps.messages.value.some(m => m.id === res.message.id)) {
+      if (currentUser.value?.id === ownerId && deps.selectedChatId.value === convId && !deps.messages.value.some(m => m.id === res.message.id)) {
         if (kind === 'ciphertext') {
           res.message.kind = 'contact'
           res.message.body = f.display_name

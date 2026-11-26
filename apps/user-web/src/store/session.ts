@@ -113,13 +113,13 @@ export async function ensureSession(): Promise<boolean> {
   if (token.value) return true
   return (await tryRefresh()) !== null
 }
-export const api = async <T,>(path: string, method = 'GET', body?: unknown): Promise<T> => {
+export const api = async <T,>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> => {
   try {
-    return await request<T>(path, token.value || null, method, body)
+    return await request<T>(path, token.value || null, method, body, signal)
   } catch (e) {
     if (e instanceof ApiError && e.status === 401 && !path.startsWith('/api/v1/auth/')) {
       const fresh = await tryRefresh()
-      if (fresh) return await request<T>(path, fresh, method, body)
+      if (fresh) return await request<T>(path, fresh, method, body, signal)
     }
     throw e
   }
