@@ -1,18 +1,17 @@
 <script setup lang="ts">
-// I-4: settings modal, extracted verbatim from MessengerView.vue. Owns theme,
+// I-4: settings modal, extracted from MessengerView.vue. Owns theme,
 // profile, passkey, QR-approve and push-test state; account deletion and data
 // export stay in the view (auth-touching), devices arrive as props.
 import { computed, onMounted, ref } from 'vue'
 
-import type { User } from '../../../shared/api'
 import E2eeSettings from './E2eeSettings.vue'
+import LunoIcon from './LunoIcon.vue'
 import { SUPPORTED_LOCALES, type LunoLocale } from '../luno-i18n'
 import { requestWebNotifyPermission, syncWebPushSubscription, webNotifyEnabled } from '../web_notify'
 import {
   api,
   appVersion,
   currentLocale,
-  currentUser,
   isDarkMode,
   note,
   setLocale,
@@ -73,6 +72,8 @@ const deletePasswordInput = defineModel<string>('deletePasswordInput', { require
 const deleteReasonInput = defineModel<string>('deleteReasonInput', { required: true })
 const deleteConfirmInput = defineModel<string>('deleteConfirmInput', { required: true })
 
+const activeTab = ref<'general' | 'security' | 'support' | 'about'>('general')
+
 // Legal pages exist per app language (terms.html = ko, terms.en.html, ...).
 function legalDocUrl(doc: 'terms' | 'privacy') {
   return currentLocale.value === 'ko' ? `/legal/${doc}.html` : `/legal/${doc}.${currentLocale.value}.html`
@@ -118,8 +119,6 @@ async function approveQrLogin() {
     note.value = t('mvQrApproved')
   })
 }
-
-
 
 const passkeyBusy = ref(false)
 const passkeyNote = ref('')
@@ -282,224 +281,402 @@ onMounted(() => {
 
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
-    <div class="standard-modal-box settings-modal">
+    <div class="standard-modal-box settings-modal ln-settings-shell" role="dialog" aria-modal="true" :aria-label="t('settingsTitle')">
       <div class="modal-header">
-        <h3>⚙️ {{ t('settingsTitle') }}</h3>
-        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
+        <h3 class="ln-modal-title">
+          <LunoIcon name="settings" :size="18" />
+          <span>{{ t('settingsTitle') }}</span>
+        </h3>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">
+          <LunoIcon name="close" :size="18" />
+        </button>
       </div>
-      <div class="modal-body-form">
-        <!-- 1. Language Selector (Article 11) -->
-        <div class="setting-group">
-          <strong>🌐 {{ t('languageLabel') }}</strong>
-          <div class="locale-choice-grid">
-            <button
-              v-for="loc in SUPPORTED_LOCALES"
-              :key="loc.code"
-              class="btn-locale-pill"
-              :class="{ active: currentLocale === loc.code }"
-              @click="setLocale(loc.code)"
-            >
-              {{ loc.nativeName }}
-            </button>
-          </div>
-        </div>
 
-        <!-- 2. AI Translation Target Language (Article 10) -->
-        <div class="setting-group">
-          <strong>✨ {{ t('targetLangLabel') }}</strong>
-          <div v-if="translateConfigured" class="locale-choice-grid">
-            <button
-              v-for="loc in SUPPORTED_LOCALES.filter((l) => translateLanguages.includes(l.code))"
-              :key="'pref-target-' + loc.code"
-              class="btn-locale-pill"
-              :class="{ active: targetTranslateLang === loc.code }"
-              @click="targetTranslateLang = loc.code"
-            >
-              {{ loc.nativeName }}
-            </button>
-          </div>
-          <span v-else class="muted">{{ t('mvTranslatePending') }}</span>
-        </div>
+      <div class="ln-settings-tabs" role="tablist">
+        <button type="button" role="tab" :aria-selected="activeTab === 'general'" class="ln-settings-tab" :class="{ active: activeTab === 'general' }" @click="activeTab = 'general'">
+          <LunoIcon name="globe" :size="15" />
+          <span>{{ t('languageLabel') }}</span>
+        </button>
+        <button type="button" role="tab" :aria-selected="activeTab === 'security'" class="ln-settings-tab" :class="{ active: activeTab === 'security' }" @click="activeTab = 'security'">
+          <LunoIcon name="shield" :size="15" />
+          <span>{{ t('securitySection') }}</span>
+        </button>
+        <button type="button" role="tab" :aria-selected="activeTab === 'support'" class="ln-settings-tab" :class="{ active: activeTab === 'support' }" @click="activeTab = 'support'">
+          <LunoIcon name="help" :size="15" />
+          <span>{{ t('supportTitle') }}</span>
+        </button>
+        <button type="button" role="tab" :aria-selected="activeTab === 'about'" class="ln-settings-tab" :class="{ active: activeTab === 'about' }" @click="activeTab = 'about'">
+          <LunoIcon name="smartphone" :size="15" />
+          <span>{{ t('mvVersionInfo') }}</span>
+        </button>
+      </div>
 
-        <!-- 3. Accessible Font Scale (Article 6.2 & 17.3) -->
-        <div class="setting-group">
-          <strong>🔤 {{ t('fontScaleLabel') }}</strong>
-          <div class="font-scale-buttons">
-            <button class="btn-scale-chip" :class="{ active: fontScale === 'normal' }" @click="setFontScale('normal')">{{ t('mvFontNormal') }}</button>
-            <button class="btn-scale-chip" :class="{ active: fontScale === 'large' }" @click="setFontScale('large')">{{ t('mvFontLarge') }}</button>
-            <button class="btn-scale-chip" :class="{ active: fontScale === 'xlarge' }" @click="setFontScale('xlarge')">{{ t('mvFontXLarge') }}</button>
-          </div>
-        </div>
-
-        <!-- 4. Design Theme & Dark Mode (Article 4 & 4.5) -->
-        <div class="setting-group">
-          <strong>{{ t('mvDesignMode') }}</strong>
-          <div class="theme-choice-buttons">
-            <button class="btn-theme-swatch default" :class="{ active: !isDarkMode }" @click="enableLightMode">{{ t('mvThemeLightSwatch') }}</button>
-            <button class="btn-theme-swatch dark" :class="{ active: isDarkMode }" @click="enableDarkMode">{{ t('mvThemeDarkSwatch') }}</button>
-          </div>
-        </div>
-
-        <!-- 5. Honest Security (Article 14 & 17.4) -->
-        <div class="setting-group">
-          <strong>🛡️ {{ t('securitySection') }}</strong>
-          <div class="setting-toggle-row">
-            <span>{{ t('mvConnSecurity') }}</span>
-            <span class="badge-status-on">{{ t('mvServerVerify') }}</span>
-          </div>
-          <label class="setting-toggle-row setting-check-row">
-            <span>{{ t('mvReadReceipts') }}</span>
-            <input type="checkbox" checked />
-          </label>
-          <label class="setting-toggle-row setting-check-row">
-            <span>{{ t('mvLinkPreviews') }}</span>
-            <input v-model="linkPreviews" type="checkbox" @change="saveLinkPreviews" />
-          </label>
-          <label class="setting-toggle-row setting-check-row">
-            <span>{{ t('mvSoundNotif') }}</span>
-            <input type="checkbox" checked />
-          </label>
-          <!-- Phase 1: Push Notifications -->
-          <div class="setting-toggle-row">
-            <span>{{ t('mvPushNotif') }}</span>
-            <button class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="testPushNotification">{{ t('mvTestSend') }}</button>
-          </div>
-          <!-- N1-L: hidden-tab browser notifications (permission only here) -->
-          <div class="setting-toggle-row">
-            <span>{{ t('mvNotifyTitle') }}</span>
-            <button v-if="notifyState === 'off'" class="btn-secondary" style="font-size:12px;padding:3px 8px" @click="enableWebNotify">{{ t('mvNotifyEnable') }}</button>
-            <span v-else-if="notifyState === 'on'" class="badge-status-on">{{ t('mvNotifyOn') }}</span>
-            <span v-else class="muted">{{ t('mvNotifyBlocked') }}</span>
-          </div>
-
-          <!-- E9: E2EE devices + passphrase backup -->
-          <E2eeSettings :busy="e2eeBusy" @backup="emit('e2ee-backup', $event)" @restore="emit('e2ee-restore', $event)" />
-        </div>
-
-        <!-- 5b. Passkey registration -->
-        <div class="setting-group" style="margin-top:8px">
-          <strong>🔑 {{ t('mvPasskeyTitle') }}</strong>
-          <div class="setting-toggle-row">
-            <span>{{ t('mvPasskeyDesc') }}</span>
-            <button class="btn-secondary" style="font-size:12px;padding:3px 8px" :disabled="passkeyBusy" @click="registerPasskey">{{ t('mvPasskeyRegister') }}</button>
-          </div>
-          <div v-if="passkeyNote" class="muted" style="font-size:12px;margin-top:4px" role="status">{{ passkeyNote }}</div>
-          <div v-if="passkeyList.length" style="margin-top:6px;display:flex;flex-direction:column;gap:4px">
-            <div v-for="k in passkeyList" :key="k.id" class="setting-toggle-row" style="font-size:12px">
-              <span class="muted">🔑 {{ k.id.slice(0, 8) }}… · {{ (k.created_at || '').slice(0, 10) }}</span>
-              <button class="btn-secondary" style="font-size:11px;padding:2px 8px" @click="deletePasskey(k.id)">{{ t('mvPasskeyDelete') }}</button>
+      <div class="modal-body-form ln-settings-body">
+        <!-- TAB 1: General (Language, Translate, Font, Theme) -->
+        <template v-if="activeTab === 'general'">
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="globe" :size="15" /><span>{{ t('languageLabel') }}</span></strong>
+            <div class="locale-choice-grid">
+              <button
+                v-for="loc in SUPPORTED_LOCALES"
+                :key="loc.code"
+                class="btn-locale-pill"
+                :class="{ active: currentLocale === loc.code }"
+                @click="setLocale(loc.code)"
+              >
+                {{ loc.nativeName }}
+              </button>
             </div>
           </div>
-          <div v-else-if="passkeyLoaded" class="muted" style="font-size:12px;margin-top:4px">{{ t('mvPasskeyNoKeys') }}</div>
-        </div>
 
-        <!-- Phase 6: GDPR Data Portability & Deletion -->
-        <div class="setting-group" style="margin-top:8px">
-          <strong>{{ t('mvBackupPrivacy') }}</strong>
-          <input v-model="deletePasswordInput" type="password" autocomplete="current-password" :placeholder="t('mvDeletePwPh')" :aria-label="t('mvDeletePwAria')" class="pc-login-input" style="margin:2px 0 6px" />
-          <label class="pc-input-row" style="margin-top:4px">
-            <span>{{ t('mvDeleteReason') }}</span>
-            <select v-model="deleteReasonInput" class="pc-login-input">
-              <option value="">{{ t('mvDeleteReasonSkip') }}</option>
-              <option value="not_using">{{ t('mvDeleteReasonNotUsing') }}</option>
-              <option value="privacy">{{ t('mvDeleteReasonPrivacy') }}</option>
-              <option value="hard_to_use">{{ t('mvDeleteReasonHardToUse') }}</option>
-              <option value="other">{{ t('mvDeleteReasonOther') }}</option>
-            </select>
-          </label>
-          <input v-model="deleteConfirmInput" type="email" autocomplete="email" :placeholder="t('mvDeleteConfirmPh')" :aria-label="t('mvDeleteConfirmAria')" class="pc-login-input" style="margin:2px 0 6px" />
-          <p class="muted" style="font-size:12px">{{ t('mvDeleteGraceNote') }}</p>
-          <div class="flex-row" style="margin-top:6px;gap:8px">
-            <button class="btn-secondary" style="flex:1" @click="emit('export')">{{ t('mvBackupData') }}</button>
-            <button class="btn-secondary" style="flex:1;color:#ef4444" @click="emit('delete')">{{ t('mvDeleteAccount') }}</button>
-          </div>
-        </div>
-        <div class="setting-group" style="margin-top:8px">
-          <strong>{{ t('reportHistoryTitle') }}</strong>
-          <p v-if="!props.myReports.length" class="muted" style="font-size:12px">{{ t('reportHistoryEmpty') }}</p>
-          <div v-for="r in props.myReports" :key="r.id" class="approval-row" style="margin-top:6px">
-            <div class="approval-row-head">
-              <span class="badge-kind">{{ r.category }}</span>
-              <span>{{ r.state === 'resolved' ? t('reportStateResolved') : r.state === 'dismissed' ? t('reportStateDismissed') : t('reportStateOpen') }}</span>
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="translate" :size="15" /><span>{{ t('targetLangLabel') }}</span></strong>
+            <div v-if="translateConfigured" class="locale-choice-grid">
+              <button
+                v-for="loc in SUPPORTED_LOCALES.filter((l) => translateLanguages.includes(l.code))"
+                :key="'pref-target-' + loc.code"
+                class="btn-locale-pill"
+                :class="{ active: targetTranslateLang === loc.code }"
+                @click="targetTranslateLang = loc.code"
+              >
+                {{ loc.nativeName }}
+              </button>
             </div>
-            <div v-if="r.details" class="approval-row-body">{{ r.details }}</div>
+            <span v-else class="muted">{{ t('mvTranslatePending') }}</span>
           </div>
-        </div>
 
-        <div class="setting-group" style="margin-top:8px">
-          <strong>{{ t('supportTitle') }}</strong>
-          <label class="pc-input-row" style="margin-top:4px">
-            <span>{{ t('supportCategory') }}</span>
-            <select v-model="supportCategory" class="pc-login-input">
-              <option v-for="opt in supportCategoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
-          </label>
-          <textarea v-model="supportBody" rows="3" :placeholder="t('supportBodyPh')" :aria-label="t('supportBodyPh')" class="pc-login-input" style="margin:2px 0 6px" />
-          <div class="flex-row" style="margin-top:6px;gap:8px">
-            <button class="btn-secondary" style="flex:1" :disabled="supportBusy || !supportBody.trim()" @click="submitSupportTicket">{{ t('supportSubmit') }}</button>
-          </div>
-          <div v-if="supportNote" class="muted" style="font-size:12px;margin-top:4px" role="status">{{ supportNote }}</div>
-        </div>
-        <div class="setting-group" style="margin-top:8px">
-          <strong>{{ t('supportHistoryTitle') }}</strong>
-          <p v-if="supportLoaded && !supportTickets.length" class="muted" style="font-size:12px">{{ t('supportHistoryEmpty') }}</p>
-          <div v-for="tk in supportTickets" :key="tk.id" class="approval-row" style="margin-top:6px">
-            <div class="approval-row-head">
-              <span class="badge-kind">{{ supportCategoryLabel(tk.category) }}</span>
-              <span>{{ tk.status === 'answered' ? t('supportStateAnswered') : t('supportStateOpen') }}</span>
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="type" :size="15" /><span>{{ t('fontScaleLabel') }}</span></strong>
+            <div class="font-scale-buttons">
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'normal' }" @click="setFontScale('normal')">{{ t('mvFontNormal') }}</button>
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'large' }" @click="setFontScale('large')">{{ t('mvFontLarge') }}</button>
+              <button class="btn-scale-chip" :class="{ active: fontScale === 'xlarge' }" @click="setFontScale('xlarge')">{{ t('mvFontXLarge') }}</button>
             </div>
-            <div class="approval-row-body">{{ tk.body }}</div>
-            <div v-if="tk.answer" class="approval-row-body">{{ tk.answer }}</div>
           </div>
-        </div>
 
-        <div class="setting-group" style="margin-top:8px">
-          <strong>{{ t('mvQrApproveTitle') }}</strong>
-          <div class="flex-row" style="margin-top:6px">
-            <input v-model="approveChallengeInput" placeholder="Challenge ID" style="flex:1" />
-            <input v-model="approveTokenInput" placeholder="QR Token" style="flex:1" />
-            <button class="btn-secondary" @click="approveQrLogin">{{ t('mvApprove') }}</button>
-          </div>
-        </div>
-
-        <div v-if="devicesList.length" class="setting-group" style="margin-top:8px">
-          <strong>{{ t('mvDevicesTitle').replace('{n}', String(devicesList.length)) }}</strong>
-          <div v-for="dv in devicesList" :key="dv.id" class="setting-toggle-row">
-            <span>{{ dv.name }} ({{ dv.platform }})</span>
-            <button class="btn-delete-keep" @click="emit('revoke-device', dv.id)">{{ t('mvRevoke') }}</button>
-          </div>
-        </div>
-
-        <div class="setting-group" style="margin-top:12px; background: #eaf1ff; padding: 12px; border-radius: 12px; border: 1px solid #d9e1ec;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <strong style="color:#315BCD; font-size:13px;">{{ t('mvMobileApp') }}</strong>
-              <p style="font-size:11px; color:#5b6475; margin-top:2px;">{{ t('mvMobileAppDesc') }}</p>
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon :name="isDarkMode ? 'moon' : 'sun'" :size="15" /><span>{{ t('mvDesignMode') }}</span></strong>
+            <div class="theme-choice-buttons">
+              <button class="btn-theme-swatch default" :class="{ active: !isDarkMode }" @click="enableLightMode">{{ t('mvThemeLightSwatch') }}</button>
+              <button class="btn-theme-swatch dark" :class="{ active: isDarkMode }" @click="enableDarkMode">{{ t('mvThemeDarkSwatch') }}</button>
             </div>
-            <a href="./download.html" target="_blank" class="btn-primary" style="text-decoration:none; font-size:12px; padding:6px 12px; display:inline-block;">{{ t('mvApkDownload') }}</a>
           </div>
-        </div>
+        </template>
 
-        <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
-          <strong>{{ t('mvLegal') }}</strong>
-          <div style="margin-top:4px; display:flex; gap:12px;">
-            <a :href="legalDocUrl('terms')" target="_blank" rel="noopener">{{ t('mvTerms') }}</a>
-            <a :href="legalDocUrl('privacy')" target="_blank" rel="noopener">{{ t('mvPrivacy') }}</a>
+        <!-- TAB 2: Security, Notifications, Passkeys, Devices, Privacy -->
+        <template v-else-if="activeTab === 'security'">
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="shield" :size="15" /><span>{{ t('securitySection') }}</span></strong>
+            <div class="setting-toggle-row">
+              <span>{{ t('mvConnSecurity') }}</span>
+              <span class="badge-status-on">{{ t('mvServerVerify') }}</span>
+            </div>
+            <label class="setting-toggle-row setting-check-row">
+              <span>{{ t('mvReadReceipts') }}</span>
+              <input type="checkbox" checked />
+            </label>
+            <label class="setting-toggle-row setting-check-row">
+              <span>{{ t('mvLinkPreviews') }}</span>
+              <input v-model="linkPreviews" type="checkbox" @change="saveLinkPreviews" />
+            </label>
+            <label class="setting-toggle-row setting-check-row">
+              <span>{{ t('mvSoundNotif') }}</span>
+              <input type="checkbox" checked />
+            </label>
+            <div class="setting-toggle-row">
+              <span>{{ t('mvPushNotif') }}</span>
+              <button class="btn-secondary ln-btn-xs" @click="testPushNotification">{{ t('mvTestSend') }}</button>
+            </div>
+            <div class="setting-toggle-row">
+              <span>{{ t('mvNotifyTitle') }}</span>
+              <button v-if="notifyState === 'off'" class="btn-secondary ln-btn-xs" @click="enableWebNotify">{{ t('mvNotifyEnable') }}</button>
+              <span v-else-if="notifyState === 'on'" class="badge-status-on">{{ t('mvNotifyOn') }}</span>
+              <span v-else class="muted">{{ t('mvNotifyBlocked') }}</span>
+            </div>
+
+            <E2eeSettings :busy="e2eeBusy" @backup="emit('e2ee-backup', $event)" @restore="emit('e2ee-restore', $event)" />
           </div>
-        </div>
 
-        <div class="setting-group" style="margin-top:8px; font-size:12px; color:#64748b;">
-          <strong>{{ t('mvVersionInfo') }}</strong>
-          <div style="margin-top:4px; display:flex; flex-direction:column; gap:2px;">
-            <span>LUNO {{ (appVersion.worker_version || '').replace(/^v/, '').replace(/-.*$/, '') || '—' }}<template v-if="appVersion.short_commit"> · <code>{{ appVersion.short_commit }}</code></template></span>
-            <span v-if="appVersion.build_time">{{ String(appVersion.build_time).slice(0, 10) }}</span>
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="key" :size="15" /><span>{{ t('mvPasskeyTitle') }}</span></strong>
+            <div class="setting-toggle-row">
+              <span>{{ t('mvPasskeyDesc') }}</span>
+              <button class="btn-secondary ln-btn-xs" :disabled="passkeyBusy" @click="registerPasskey">{{ t('mvPasskeyRegister') }}</button>
+            </div>
+            <div v-if="passkeyNote" class="muted ln-small-note" role="status">{{ passkeyNote }}</div>
+            <div v-if="passkeyList.length" class="ln-passkey-list">
+              <div v-for="k in passkeyList" :key="k.id" class="setting-toggle-row ln-small-row">
+                <span class="muted">{{ k.id.slice(0, 8) }}… · {{ (k.created_at || '').slice(0, 10) }}</span>
+                <button class="btn-secondary ln-btn-xs" @click="deletePasskey(k.id)">{{ t('mvPasskeyDelete') }}</button>
+              </div>
+            </div>
+            <div v-else-if="passkeyLoaded" class="muted ln-small-note">{{ t('mvPasskeyNoKeys') }}</div>
           </div>
-        </div>
 
-        <div class="modal-actions-right">
-          <button class="btn-primary" @click="emit('close')">{{ t('mvDone') }}</button>
-        </div>
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="scan" :size="15" /><span>{{ t('mvQrApproveTitle') }}</span></strong>
+            <div class="flex-row ln-qr-approve-row">
+              <input v-model="approveChallengeInput" placeholder="Challenge ID" class="pc-login-input" />
+              <input v-model="approveTokenInput" placeholder="QR Token" class="pc-login-input" />
+              <button class="btn-secondary" @click="approveQrLogin">{{ t('mvApprove') }}</button>
+            </div>
+          </div>
+
+          <div v-if="devicesList.length" class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="smartphone" :size="15" /><span>{{ t('mvDevicesTitle').replace('{n}', String(devicesList.length)) }}</span></strong>
+            <div v-for="dv in devicesList" :key="dv.id" class="setting-toggle-row">
+              <span>{{ dv.name }} ({{ dv.platform }})</span>
+              <button class="btn-delete-keep" @click="emit('revoke-device', dv.id)">{{ t('mvRevoke') }}</button>
+            </div>
+          </div>
+
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="trash" :size="15" /><span>{{ t('mvBackupPrivacy') }}</span></strong>
+            <input v-model="deletePasswordInput" type="password" autocomplete="current-password" :placeholder="t('mvDeletePwPh')" :aria-label="t('mvDeletePwAria')" class="pc-login-input" />
+            <label class="pc-input-row">
+              <span>{{ t('mvDeleteReason') }}</span>
+              <select v-model="deleteReasonInput" class="pc-login-input">
+                <option value="">{{ t('mvDeleteReasonSkip') }}</option>
+                <option value="not_using">{{ t('mvDeleteReasonNotUsing') }}</option>
+                <option value="privacy">{{ t('mvDeleteReasonPrivacy') }}</option>
+                <option value="hard_to_use">{{ t('mvDeleteReasonHardToUse') }}</option>
+                <option value="other">{{ t('mvDeleteReasonOther') }}</option>
+              </select>
+            </label>
+            <input v-model="deleteConfirmInput" type="email" autocomplete="email" :placeholder="t('mvDeleteConfirmPh')" :aria-label="t('mvDeleteConfirmAria')" class="pc-login-input" />
+            <p class="muted ln-small-note">{{ t('mvDeleteGraceNote') }}</p>
+            <div class="flex-row ln-action-pair">
+              <button class="btn-secondary" @click="emit('export')">{{ t('mvBackupData') }}</button>
+              <button class="btn-secondary ln-danger-btn" @click="emit('delete')">{{ t('mvDeleteAccount') }}</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- TAB 3: Support & Reports -->
+        <template v-else-if="activeTab === 'support'">
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><LunoIcon name="help" :size="15" /><span>{{ t('supportTitle') }}</span></strong>
+            <label class="pc-input-row">
+              <span>{{ t('supportCategory') }}</span>
+              <select v-model="supportCategory" class="pc-login-input">
+                <option v-for="opt in supportCategoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </label>
+            <textarea v-model="supportBody" rows="3" :placeholder="t('supportBodyPh')" :aria-label="t('supportBodyPh')" class="pc-login-input" />
+            <button class="btn-primary" :disabled="supportBusy || !supportBody.trim()" @click="submitSupportTicket">{{ t('supportSubmit') }}</button>
+            <div v-if="supportNote" class="muted ln-small-note" role="status">{{ supportNote }}</div>
+          </div>
+
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><span>{{ t('supportHistoryTitle') }}</span></strong>
+            <p v-if="supportLoaded && !supportTickets.length" class="muted ln-small-note">{{ t('supportHistoryEmpty') }}</p>
+            <div v-for="tk in supportTickets" :key="tk.id" class="approval-row">
+              <div class="approval-row-head">
+                <span class="badge-kind">{{ supportCategoryLabel(tk.category) }}</span>
+                <span>{{ tk.status === 'answered' ? t('supportStateAnswered') : t('supportStateOpen') }}</span>
+              </div>
+              <div class="approval-row-body">{{ tk.body }}</div>
+              <div v-if="tk.answer" class="approval-row-body">{{ tk.answer }}</div>
+            </div>
+          </div>
+
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><span>{{ t('reportHistoryTitle') }}</span></strong>
+            <p v-if="!props.myReports.length" class="muted ln-small-note">{{ t('reportHistoryEmpty') }}</p>
+            <div v-for="r in props.myReports" :key="r.id" class="approval-row">
+              <div class="approval-row-head">
+                <span class="badge-kind">{{ r.category }}</span>
+                <span>{{ r.state === 'resolved' ? t('reportStateResolved') : r.state === 'dismissed' ? t('reportStateDismissed') : t('reportStateOpen') }}</span>
+              </div>
+              <div v-if="r.details" class="approval-row-body">{{ r.details }}</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- TAB 4: Mobile App, Legal & Version Info -->
+        <template v-else>
+          <div class="setting-group ln-app-download-card">
+            <div class="ln-app-download-row">
+              <div class="ln-app-download-brand">
+                <LunoIcon name="luno-logo" :size="40" />
+                <div>
+                  <strong>{{ t('mvMobileApp') }}</strong>
+                  <p>{{ t('mvMobileAppDesc') }}</p>
+                </div>
+              </div>
+              <a href="./download.html" target="_blank" class="btn-primary ln-app-dl-btn">{{ t('mvApkDownload') }}</a>
+            </div>
+          </div>
+
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><span>{{ t('mvLegal') }}</span></strong>
+            <div class="ln-legal-links">
+              <a :href="legalDocUrl('terms')" target="_blank" rel="noopener">{{ t('mvTerms') }}</a>
+              <a :href="legalDocUrl('privacy')" target="_blank" rel="noopener">{{ t('mvPrivacy') }}</a>
+            </div>
+          </div>
+
+          <div class="setting-group ln-setting-card">
+            <strong class="ln-setting-heading"><span>{{ t('mvVersionInfo') }}</span></strong>
+            <div class="ln-version-meta">
+              <span>LUNO {{ (appVersion.worker_version || '').replace(/^v/, '').replace(/-.*$/, '') || '—' }}<template v-if="appVersion.short_commit"> · <code>{{ appVersion.short_commit }}</code></template></span>
+              <span v-if="appVersion.build_time" class="muted">{{ String(appVersion.build_time).slice(0, 10) }}</span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="ln-settings-footer">
+        <button class="btn-primary" @click="emit('close')">{{ t('mvDone') }}</button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.ln-settings-shell {
+  width: min(560px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+.ln-modal-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ln-settings-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ln-line);
+  background: var(--ln-bg);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ln-settings-tabs::-webkit-scrollbar { display: none; }
+.ln-settings-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ln-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+.ln-settings-tab:hover {
+  background: var(--ln-surface);
+  color: var(--ln-text);
+}
+.ln-settings-tab.active {
+  background: var(--ln-accent);
+  color: var(--ln-on-accent, #ffffff);
+}
+.ln-settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ln-setting-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--ln-bg);
+  border: 1px solid var(--ln-line);
+}
+.ln-setting-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ln-text);
+}
+.ln-btn-xs {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+.ln-small-note { font-size: 12px; margin: 0; }
+.ln-small-row { font-size: 12px; }
+.ln-passkey-list { display: flex; flex-direction: column; gap: 6px; }
+.ln-qr-approve-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ln-qr-approve-row input { flex: 1 1 120px; min-width: 0; }
+.ln-action-pair { display: flex; gap: 8px; }
+.ln-action-pair > button { flex: 1; }
+.ln-danger-btn { color: var(--ln-danger, #ef4444); }
+.ln-app-download-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--ln-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--ln-accent) 28%, transparent);
+}
+.ln-app-download-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ln-app-download-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.ln-app-download-brand strong {
+  display: block;
+  color: var(--ln-accent);
+  font-size: 14px;
+}
+.ln-app-download-brand p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ln-muted);
+}
+.ln-app-dl-btn {
+  text-decoration: none;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.ln-legal-links {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+}
+.ln-legal-links a {
+  color: var(--ln-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.ln-legal-links a:hover { text-decoration: underline; }
+.ln-version-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ln-text);
+}
+.ln-settings-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--ln-line);
+  display: flex;
+  justify-content: flex-end;
+  background: var(--ln-surface);
+}
+</style>

@@ -1,19 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="omIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#22C7E8" />
-      <stop offset="50%" stop-color="#2563EB" />
-      <stop offset="100%" stop-color="#7C3AED" />
+    <linearGradient id="liBg" x1="56" y1="32" x2="456" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#08DC61"/>
+      <stop offset="52%" stop-color="#06C755"/>
+      <stop offset="100%" stop-color="#049B41"/>
     </linearGradient>
-    <filter id="omShadow" x="-10%" y="-10%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#2563EB" flood-opacity="0.35"/>
-    </filter>
+    <radialGradient id="liGloss" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(148 96) rotate(48) scale(360 280)">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <rect x="8" y="8" width="112" height="112" rx="32" fill="url(#omIconGrad)" filter="url(#omShadow)"/>
-  <!-- Scanner Aperture + Chat Bubble -->
-  <path d="M40 38h48a18 18 0 0 1 18 18v22a18 18 0 0 1-18 18H58l-18 12v-12h-0a18 18 0 0 1-18-18V56a18 18 0 0 1 18-18z" fill="#FFFFFF" fill-opacity="0.95"/>
-  <circle cx="64" cy="67" r="16" fill="url(#omIconGrad)" fill-opacity="0.2"/>
-  <circle cx="64" cy="67" r="9" fill="#2563EB"/>
-  <circle cx="76" cy="55" r="4.5" fill="#22C7E8"/>
+  <rect width="512" height="512" rx="116" fill="url(#liBg)"/>
+  <rect width="512" height="512" rx="116" fill="url(#liGloss)"/>
+  
+  <g transform="translate(20.48 20.48) scale(0.92)">
+    <!-- Pure white rounded speech bubble with smooth bottom-left tail -->
+    <path
+      d="M256 102
+         C156 102 82 167 82 248
+         C82 292 104 331 139 357
+         C137 379 128 399 114 414
+         C109 419 113 427 120 426
+         C153 422 184 409 205 391
+         C221 395 238 397 256 397
+         C356 397 430 331 430 248
+         C430 167 356 102 256 102 Z"
+      fill="#FFFFFF"
+    />
+    <!-- Clean geometric L monogram inside bubble -->
+    <path
+      d="M196 186
+         C196 174 206 164 218 164
+         C230 164 240 174 240 186
+         V284
+         H306
+         C318 284 328 294 328 306
+         C328 318 318 328 306 328
+         H218
+         C206 328 196 318 196 306
+         V186 Z"
+      fill="#059B42"
+    />
+    <!-- Vibrant mint-green spark dot (represents live global messaging) -->
+    <circle cx="308" cy="206" r="22" fill="#07D45D" />
+  </g>
 </svg>
-

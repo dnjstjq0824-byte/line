@@ -364,19 +364,92 @@
       <line x1="1" y1="1" x2="23" y2="23" />
     </svg>
 
+    <svg v-else-if="name === 'mic-off'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="1" y1="1" x2="23" y2="23" />
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+
+    <svg v-else-if="name === 'video-off'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+
+    <svg v-else-if="name === 'camera-switch'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+      <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="m18 22-3-3 3-3" />
+      <path d="m6 2 3 3-3 3" />
+    </svg>
+
+    <svg v-else-if="name === 'volume-on'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+
+    <svg v-else-if="name === 'volume-off'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <line x1="23" y1="9" x2="17" y2="15" />
+      <line x1="17" y1="9" x2="23" y2="15" />
+    </svg>
+
+    <svg v-else-if="name === 'screen-share'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+      <polyline points="9 10 12 7 15 10" />
+      <line x1="12" y1="7" x2="12" y2="13" />
+    </svg>
+
+    <svg v-else-if="name === 'record'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+    </svg>
+
+    <svg v-else-if="name === 'phone-off'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
+      <line x1="23" y1="1" x2="1" y2="23" />
+    </svg>
+
+    <svg v-else-if="name === 'key'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="7.5" cy="15.5" r="4.5" />
+      <path d="m21 2-9.6 9.6" />
+      <path d="m15.5 7.5 3 3L22 7l-3-3" />
+    </svg>
+
+    <svg v-else-if="name === 'smartphone'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+      <line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.4" />
+    </svg>
+
+    <svg v-else-if="name === 'help'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" stroke-width="2.4" />
+    </svg>
+
+    <svg v-else-if="name === 'type'" :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="4 7 4 4 20 4 20 7" />
+      <line x1="9" y1="20" x2="15" y2="20" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+    </svg>
+
     <svg v-else-if="name === 'open-messenger-logo' || name === 'luno-logo'" :width="size" :height="size" viewBox="0 0 64 64" fill="none">
       <defs>
-        <linearGradient id="iconOmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#22C7E8" />
-          <stop offset="50%" stop-color="#2563EB" />
-          <stop offset="100%" stop-color="#7C3AED" />
+        <linearGradient id="iconLunoGrad" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#08DC61" />
+          <stop offset="52%" stop-color="#06C755" />
+          <stop offset="100%" stop-color="#049B41" />
         </linearGradient>
       </defs>
-      <rect width="64" height="64" rx="18" fill="url(#iconOmGrad)" />
-      <path d="M16 22a8 8 0 0 1 14.93-3.92L33 22l-3.92 1.07A8 8 0 0 1 16 22z" fill="#FFFFFF" />
-      <circle cx="32" cy="32" r="14" fill="#FFFFFF" fill-opacity="0.25" />
-      <circle cx="32" cy="32" r="5" fill="#FFFFFF" />
-      <circle cx="42" cy="44" r="3" fill="#22C7E8" />
+      <rect width="64" height="64" rx="15" fill="url(#iconLunoGrad)" />
+      <path d="M32 13.5C20.5 13.5 12 21 12 30.3C12 35.4 14.5 39.9 18.6 42.9C18.3 45.4 17.3 47.7 15.7 49.4C15.1 50 15.6 50.9 16.4 50.8C20.2 50.3 23.7 48.8 26.1 46.8C28 47.2 30 47.5 32 47.5C43.5 47.5 52 39.9 52 30.3C52 21 43.5 13.5 32 13.5Z" fill="#FFFFFF" />
+      <path d="M25 23.2C25 21.8 26.1 20.7 27.5 20.7C28.9 20.7 30 21.8 30 23.2V34.5H37.6C39 34.5 40.1 35.6 40.1 37C40.1 38.4 39 39.5 37.6 39.5H27.5C26.1 39.5 25 38.4 25 37V23.2Z" fill="#059B42" />
+      <circle cx="38" cy="25.5" r="2.6" fill="#07D45D" />
     </svg>
   </span>
 </template>

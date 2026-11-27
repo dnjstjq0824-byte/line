@@ -1,22 +1,60 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 64" width="320" height="64" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="160" viewBox="0 0 560 160" fill="none">
   <defs>
-    <linearGradient id="omGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#22C7E8" />
-      <stop offset="50%" stop-color="#2563EB" />
-      <stop offset="100%" stop-color="#7C3AED" />
+    <linearGradient id="lhBg" x1="16" y1="8" x2="132" y2="148" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#08DC61"/>
+      <stop offset="55%" stop-color="#06C755"/>
+      <stop offset="100%" stop-color="#049B41"/>
     </linearGradient>
+    <radialGradient id="lhGloss" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(46 32) rotate(48) scale(110 85)">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <!-- Open Scanner Aperture / Bubble Symbol -->
-  <g transform="translate(4, 8)">
-    <rect width="48" height="48" rx="14" fill="url(#omGrad)" />
-    <!-- Scanner Eye / Chat Bubble Aperture -->
-    <circle cx="24" cy="24" r="14" fill="#FFFFFF" fill-opacity="0.2" />
-    <path d="M16 22a8 8 0 0 1 14.93-3.92L33 22l-3.92 1.07A8 8 0 0 1 16 22z" fill="#FFFFFF" />
-    <circle cx="24" cy="24" r="4.5" fill="#FFFFFF" />
-    <circle cx="31" cy="33" r="2.5" fill="#22C7E8" />
+  <rect x="8" y="14" width="132" height="132" rx="34" fill="url(#lhBg)"/>
+  <rect x="8" y="14" width="132" height="132" rx="34" fill="url(#lhGloss)"/>
+  <g transform="translate(8 14) scale(0.2578125)">
+    
+  <g transform="translate(20.48 20.48) scale(0.92)">
+    <!-- Pure white rounded speech bubble with smooth bottom-left tail -->
+    <path
+      d="M256 102
+         C156 102 82 167 82 248
+         C82 292 104 331 139 357
+         C137 379 128 399 114 414
+         C109 419 113 427 120 426
+         C153 422 184 409 205 391
+         C221 395 238 397 256 397
+         C356 397 430 331 430 248
+         C430 167 356 102 256 102 Z"
+      fill="#FFFFFF"
+    />
+    <!-- Clean geometric L monogram inside bubble -->
+    <path
+      d="M196 186
+         C196 174 206 164 218 164
+         C230 164 240 174 240 186
+         V284
+         H306
+         C318 284 328 294 328 306
+         C328 318 318 328 306 328
+         H218
+         C206 328 196 318 196 306
+         V186 Z"
+      fill="#059B42"
+    />
+    <!-- Vibrant mint-green spark dot (represents live global messaging) -->
+    <circle cx="308" cy="206" r="22" fill="#07D45D" />
   </g>
-  <!-- Text: OPEN MESSENGER -->
-  <text x="64" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Pretendard', 'Inter', sans-serif" font-weight="900" font-size="20" fill="#0B1020" letter-spacing="-0.5">OPEN <tspan fill="#2563EB">MESSENGER</tspan></text>
-  <text x="64" y="47" font-family="-apple-system, BlinkMacSystemFont, 'Pretendard', 'Inter', sans-serif" font-weight="600" font-size="11" fill="#64748B" letter-spacing="0.5">OPEN SCANNER ECOSYSTEM</text>
+  </g>
+  
+  <g transform="translate(170 38) scale(0.86)" fill="#111827">
+    <!-- L -->
+    <path d="M0 10 C0 4.5 4.5 0 10 0 H14 C19.5 0 24 4.5 24 10 V76 H58 C63.5 76 68 80.5 68 86 V88 C68 93.5 63.5 98 58 98 H10 C4.5 98 0 93.5 0 88 V10 Z"/>
+    <!-- U -->
+    <path d="M84 10 C84 4.5 88.5 0 94 0 H98 C103.5 0 108 4.5 108 10 V56 C108 70.5 117 78 130 78 C143 78 152 70.5 152 56 V10 C152 4.5 156.5 0 162 0 H166 C171.5 0 176 4.5 176 10 V57 C176 84 157.5 100 130 100 C102.5 100 84 84 84 57 V10 Z"/>
+    <!-- N -->
+    <path d="M198 10 C198 4.5 202.5 0 208 0 H214.5 C218.5 0 222.2 2.1 224.3 5.5 L268 72 V10 C268 4.5 272.5 0 278 0 H282 C287.5 0 292 4.5 292 10 V88 C292 93.5 287.5 98 282 98 H275.5 C271.5 98 267.8 95.9 265.7 92.5 L222 26 V88 C222 93.5 217.5 98 212 98 H208 C202.5 98 198 93.5 198 88 V10 Z"/>
+    <!-- O -->
+    <path fill-rule="evenodd" d="M362 0 C392 0 414 21 414 50 C414 79 392 100 362 100 C332 100 310 79 310 50 C310 21 332 0 362 0 Z M362 22 C345 22 334 33.8 334 50 C334 66.2 345 78 362 78 C379 78 390 66.2 390 50 C390 33.8 379 22 362 22 Z"/>
+  </g>
 </svg>
-

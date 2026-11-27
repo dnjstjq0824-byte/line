@@ -1352,8 +1352,12 @@ html, body {
   touch-action: pan-y pinch-zoom;
 }
 .standard-modal-box, .fx-modal, .modal-card, .pc-modal-card, .profile-modal-card,
-.settings-modal, .call-dialog-box {
+.settings-modal {
   max-width: calc(100% - 24px) !important;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+.call-dialog-box {
   overflow-x: hidden;
   overscroll-behavior: contain;
 }
@@ -1465,8 +1469,8 @@ html, body {
 /* Login brand mark sits flush with the title instead of floating centred in
    a fixed 144px box. */
 .luno-desktop-app .pc-om-logo { width: auto !important; max-width: 180px; object-position: left center; padding: 6px 0 !important; background: transparent !important; }
-/* The wordmark is dark ink: on the dark theme it keeps a white plate. */
-[data-theme="dark"] .luno-desktop-app .pc-om-logo, .luno-desktop-app[data-theme="dark"] .pc-om-logo { background: #fff !important; padding: 6px 10px !important; }
+/* The wordmark is dark ink: on the dark theme it keeps a crisp white pill. */
+[data-theme="dark"] .luno-desktop-app .pc-om-logo, .luno-desktop-app[data-theme="dark"] .pc-om-logo { background: #fff !important; padding: 6px 12px !important; border-radius: 12px !important; }
 /* Phone login is hidden until SMS is live: drop its empty divider row. */
 .luno-desktop-app .pc-login-bottom-switch:empty { display: none !important; }
 /* Password eye: a real icon button with a 40px target. */

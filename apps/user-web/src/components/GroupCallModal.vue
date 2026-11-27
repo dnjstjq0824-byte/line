@@ -2,13 +2,12 @@
 // F15: group call tile screen. One tile per participant (self + up to 7
 // remotes, server-capped at 8 seats): live video when a remote stream is
 // flowing, avatar + name otherwise. Grid follows the 11장 spec breakpoints
-// (2 columns on phones, 3 on tablet, 4 on desktop). Same control bar shape
-// as the 1:1 CallModal (mic, camera, camera-switch, hangup) minus ringing,
-// recording and captions — a group room has no ring state to record from.
+// (2 columns on phones, 3 on tablet, 4 on desktop).
 import { defineComponent, h, onMounted, ref, watch, type PropType } from 'vue'
 
 import { initialOf } from '../../../shared/avatar_initial'
 import { t } from '../store/session'
+import LunoIcon from './LunoIcon.vue'
 import type { GroupCallState, GroupPeer } from '../composables/useGroupCall'
 
 defineProps<{
@@ -29,8 +28,6 @@ defineEmits<{
   hangup: []
 }>()
 
-// Local tile subcomponent: binds its stream imperatively (no template
-// binding exists for srcObject) on mount and on every stream swap.
 const GroupTile = defineComponent({
   name: 'GroupTile',
   props: {
@@ -52,7 +49,7 @@ const GroupTile = defineComponent({
     watch(() => tileProps.stream, bind)
     return () => {
       const hasVideo = Boolean(tileProps.stream && tileProps.stream.getVideoTracks().some(tr => tr.readyState === 'live' && tr.enabled))
-      return h('div', { class: 'group-tile', role: 'listitem' }, [
+      return h('div', { class: ['group-tile', tileProps.self ? 'is-self' : ''], role: 'listitem' }, [
         tileProps.stream
           ? h('video', {
               ref: tileVideo,
@@ -66,14 +63,13 @@ const GroupTile = defineComponent({
           : null,
         !hasVideo
           ? h('div', { class: 'group-tile-avatar' }, [
-              h('div', { class: 'avatar-circle lg', style: { background: tileProps.color } },
+              h('div', { class: 'group-avatar-badge', style: { background: tileProps.color } },
                 initialOf(tileProps.name, '?')),
             ])
           : null,
         h('div', { class: 'group-tile-name' }, [
-          tileProps.muted ? h('span', { class: 'group-tile-mute' }, '🔇 ') : null,
-          tileProps.name,
-          tileProps.self ? ` (${t('mvMe')})` : '',
+          tileProps.muted ? h('span', { class: 'group-tile-mute', 'aria-label': 'muted' }, 'MIC OFF') : null,
+          h('span', { class: 'group-tile-label' }, `${tileProps.name}${tileProps.self ? ` (${t('mvMe')})` : ''}`),
         ]),
       ])
     }
@@ -83,22 +79,24 @@ const GroupTile = defineComponent({
 
 <template>
   <div class="call-overlay-modal">
-    <div class="call-dialog-box group-call-stage">
+    <div class="call-dialog-box group-call-stage" role="dialog" aria-modal="true" :aria-label="groupCall.title">
       <div class="group-call-header">
         <h3>{{ groupCall.title }}</h3>
-        <p class="call-type-status">
-          {{ groupCall.kind === 'video' ? '📹 ' + t('callVideo') : '📞 ' + t('callVoice') }} ·
-          <span class="timer-active">{{ formatDuration(groupCallDuration) }}</span> ·
+        <div class="group-status-pill">
+          <LunoIcon :name="groupCall.kind === 'video' ? 'call-video' : 'call-voice'" :size="14" />
+          <span>{{ groupCall.kind === 'video' ? t('callVideo') : t('callVoice') }}</span>
+          <span class="group-dot">·</span>
+          <span class="timer-active">{{ formatDuration(groupCallDuration) }}</span>
+          <span class="group-dot">·</span>
           <span>{{ t('mvGroupCallSeats').replace('{n}', String(peers.length + 1)) }}</span>
-        </p>
-        <p v-if="groupCall.mediaFailed" class="caption-notice">⚠️ {{ t('callMediaFailed') }}</p>
+        </div>
+        <p v-if="groupCall.mediaFailed" class="group-media-alert">{{ t('callMediaFailed') }}</p>
       </div>
 
       <div class="group-tile-grid" role="list" :aria-label="t('mvGroupCall')">
-        <!-- Self tile first, then one tile per remote peer. -->
         <GroupTile
           :name="selfName"
-          color="#315BCD"
+          color="#06C755"
           :stream="groupCall.kind === 'video' && !isGroupVideoOff ? selfStream : null"
           :muted="isGroupMuted"
           :self="true"
@@ -115,17 +113,55 @@ const GroupTile = defineComponent({
       </div>
       <p v-if="peers.length === 0" class="group-call-waiting">{{ t('mvGroupCallWaiting') }}</p>
 
-      <div class="call-controls-row call-bottom-bar group-call-bar">
-        <button class="btn-call-circle" :class="{ off: isGroupMuted }" :title="t('mvMicMute')" @click="$emit('mute')">
-          {{ isGroupMuted ? '🔇' : '🎤' }}
-        </button>
-        <button v-if="groupCall.kind === 'video'" class="btn-call-circle" :class="{ off: isGroupVideoOff }" :title="t('mvCameraToggle')" @click="$emit('video')">
-          {{ isGroupVideoOff ? '🚫' : '📹' }}
-        </button>
-        <button v-if="groupCall.kind === 'video'" class="btn-call-circle" :title="t('mvCameraSwitch')" @click="$emit('camera-switch')">
-          🔄
-        </button>
-        <button class="btn-call-hangup" @click="$emit('hangup')">{{ t('mvEndCall') }}</button>
+      <div class="group-call-bar-wrap">
+        <div class="call-controls-row call-bottom-bar group-call-bar">
+          <div class="call-btn-unit">
+            <button
+              class="btn-call-circle"
+              :class="{ 'is-toggled': isGroupMuted }"
+              :title="t('mvMicMute')"
+              :aria-label="t('mvMicMute')"
+              @click="$emit('mute')"
+            >
+              <LunoIcon :name="isGroupMuted ? 'mic-off' : 'mic'" :size="22" />
+            </button>
+            <span class="call-btn-label">{{ t('mvMicMute') }}</span>
+          </div>
+          <div v-if="groupCall.kind === 'video'" class="call-btn-unit">
+            <button
+              class="btn-call-circle"
+              :class="{ 'is-toggled': isGroupVideoOff }"
+              :title="t('mvCameraToggle')"
+              :aria-label="t('mvCameraToggle')"
+              @click="$emit('video')"
+            >
+              <LunoIcon :name="isGroupVideoOff ? 'video-off' : 'call-video'" :size="22" />
+            </button>
+            <span class="call-btn-label">{{ t('mvCameraToggle') }}</span>
+          </div>
+          <div v-if="groupCall.kind === 'video'" class="call-btn-unit">
+            <button
+              class="btn-call-circle"
+              :title="t('mvCameraSwitch')"
+              :aria-label="t('mvCameraSwitch')"
+              @click="$emit('camera-switch')"
+            >
+              <LunoIcon name="camera-switch" :size="22" />
+            </button>
+            <span class="call-btn-label">{{ t('mvCameraSwitch') }}</span>
+          </div>
+          <div class="call-btn-unit">
+            <button
+              class="btn-call-hangup"
+              :title="t('mvEndCall')"
+              :aria-label="t('mvEndCall')"
+              @click="$emit('hangup')"
+            >
+              <LunoIcon name="phone-off" :size="22" />
+            </button>
+            <span class="call-btn-label">{{ t('mvEndCall') }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -136,44 +172,88 @@ const GroupTile = defineComponent({
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: min(78vh, 640px);
-  max-height: 92vh;
-  background: #0f172a;
+  width: min(1040px, 94vw);
+  height: min(720px, 88vh);
+  padding: 0;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(165deg, #162820 0%, #0e161a 55%, #090e11 100%);
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.58);
+  overflow: hidden;
+}
+@media (max-width: 699px) {
+  .group-call-stage {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+  }
 }
 .group-call-header {
   text-align: center;
-  padding: 12px 12px 4px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.group-call-header h3,
-.group-call-header .call-type-status {
-  color: #fff;
+.group-call-header h3 {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #ffffff;
+}
+.group-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 500;
+}
+.group-dot { opacity: 0.5; }
+.timer-active { font-variant-numeric: tabular-nums; font-weight: 600; color: #6ef5a4; }
+.group-media-alert {
+  margin: 8px auto 0;
+  max-width: 340px;
+  padding: 5px 12px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+  font-size: 12px;
 }
 .group-tile-grid {
   flex: 1;
   overflow-y: auto;
   display: grid;
-  gap: 8px;
-  padding: 8px 12px;
-  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
 }
 @media (min-width: 700px) {
   .group-tile-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @media (min-width: 1100px) {
   .group-tile-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 .group-tile {
   position: relative;
   aspect-ratio: 3 / 4;
-  max-height: 220px;
-  background: #1e293b;
-  border-radius: 12px;
+  max-height: 280px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
   overflow: hidden;
+}
+.group-tile.is-self {
+  border-color: rgba(6, 199, 85, 0.55);
 }
 .group-tile-video {
   position: absolute;
@@ -195,27 +275,114 @@ const GroupTile = defineComponent({
   align-items: center;
   justify-content: center;
 }
+.group-avatar-badge {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
 .group-tile-name {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 4px 6px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 10px;
   font-size: 12px;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.55);
-  white-space: nowrap;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(8px);
+}
+.group-tile-label {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-tile-mute {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.9);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
 }
 .group-call-waiting {
   text-align: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.72);
   font-size: 13px;
-  padding: 0 12px 4px;
+  padding: 0 16px 8px;
+  margin: 0;
+}
+.group-call-bar-wrap {
+  padding: 10px 16px max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 .group-call-bar {
-  position: static;
-  padding: 8px 0 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 0;
+  padding: 12px 18px 10px;
+  border-radius: 26px;
+  background: rgba(17, 24, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.call-btn-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 54px;
+}
+.call-btn-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+.btn-call-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-call-circle:hover { background: rgba(255, 255, 255, 0.26); }
+.btn-call-circle.is-toggled {
+  background: #ffffff;
+  color: #111827;
+}
+.btn-call-hangup {
+  width: 50px;
+  height: 50px;
+  padding: 0;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #ffffff;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.4);
 }
 </style>

@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import lunoLogo from '../../../shared/brand/luno-logo-horizontal.svg'
 import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
 import LunoIcon from '../components/LunoIcon.vue'
@@ -519,7 +519,7 @@ onBeforeUnmount(() => {
 
               <div v-if="!registerMode" class="pc-login-bottom-switch">
                 <button type="button" class="btn-switch-auth-link" :disabled="!email" @click="passkeyLogin">
-                  🔑 {{ t('passkeyLoginBtn') }}
+                  <LunoIcon name="key" :size="15" /> {{ t('passkeyLoginBtn') }}
                 </button>
               </div>
 
