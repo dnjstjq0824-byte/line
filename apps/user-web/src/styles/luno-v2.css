@@ -167,7 +167,8 @@ ul, ol {list-style:none;margin:0;padding:0}
 }
 .luno-desktop-app :is(button,input,select,textarea){font-family:var(--ln-font)}
 .luno-desktop-app :is(button,a,input,textarea,select):focus-visible{outline:3px solid var(--ln-accent);outline-offset:3px}
-.luno-desktop-app :is(input,textarea,select){color:var(--ln-text)!important;background:var(--ln-bg)!important;border-color:var(--ln-line)!important;border-radius:12px!important}
+.luno-desktop-app :is(input,textarea,select){color:var(--ln-text)!important;background:var(--ln-bg)!important;border:1px solid var(--ln-line);border-color:var(--ln-line)!important;border-radius:12px!important;box-shadow:none}
+.luno-desktop-app :is(input[type=checkbox],input[type=radio]){border:0!important;background:transparent!important;accent-color:var(--ln-accent)}
 .luno-desktop-app :is(h1,h2,h3){letter-spacing:-.5px;color:var(--ln-text)}
 .luno-desktop-app :is(.muted,.empty-muted,.modal-subtext,.user-handle,.profile-preview-bio){color:var(--ln-muted)!important}
 /* Authentication: responsive product canvas rather than simulated OS chrome. */
@@ -241,7 +242,8 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .ln-section-heading span,.luno-desktop-app .ln-profile-hint{color:var(--ln-muted);font-size:12px;line-height:1.6}
 .luno-desktop-app .ln-profile-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .luno-desktop-app .ln-profile-fields label{display:flex;flex-direction:column;gap:8px;font-size:13px;font-weight:600;min-width:0;color:var(--ln-text)}
-.luno-desktop-app .ln-profile-fields :is(input,textarea){width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:400;line-height:1.6;padding:12px 14px;border-radius:12px;resize:vertical}
+.luno-desktop-app .ln-profile-fields :is(input,textarea){width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:400;line-height:1.6;padding:12px 14px;border:1px solid var(--ln-line)!important;border-radius:12px;background:var(--surface-input, var(--ln-bg))!important;box-shadow:none!important;outline:none;resize:vertical;transition:border-color .15s ease,background .15s ease}
+.luno-desktop-app .ln-profile-fields :is(input,textarea):focus{border-color:var(--ln-accent)!important;background:var(--ln-surface)!important;box-shadow:0 0 0 3px color-mix(in srgb, var(--ln-accent) 16%, transparent)!important}
 .luno-desktop-app .ln-profile-bio{grid-column:1/-1}
 .luno-desktop-app .ln-profile-hint{margin:12px 0 16px}
 .luno-desktop-app .ln-profile-save{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px}
@@ -753,9 +755,9 @@ ul, ol {list-style:none;margin:0;padding:0}
   flex: 1;
   min-width: 0;
   height: 100%;
-  border: 0;
+  border: 0 !important;
   outline: none;
-  background: transparent;
+  background: transparent !important;
   color: var(--ln-text);
   font: inherit;
   font-size: 14px !important;
@@ -896,10 +898,10 @@ ul, ol {list-style:none;margin:0;padding:0}
   min-height: 48px;
   max-height: 180px;
   padding: 6px 6px 2px;
-  border: 0;
+  border: 0 !important;
   outline: none;
   resize: none;
-  background: transparent;
+  background: transparent !important;
   color: var(--ln-text);
   font: inherit;
   /* 16px: smaller inputs make iOS zoom the page on focus. */
