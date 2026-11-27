@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const BASE = 'https://localhost';
-const TAG = 'v2.0.0-build26';
+const TAG = 'v2.0.0-build27';
 const GH = `https://github.com/dnjstjq0824-byte/line/releases/download/${TAG}`;
 
 let isoCounter = 9600;
@@ -140,30 +140,30 @@ test('GET /app, /mobile and /apk redirect to the static download page', async ()
   }
 });
 
-test('GET /api/v1/app/latest reports the per-ABI Build 26 assets', async () => {
+test('GET /api/v1/app/latest reports the per-ABI Build 27 assets', async () => {
   const { api } = await isolate();
   const res = await api('/api/v1/app/latest');
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.platform, 'android');
   assert.equal(body.version, '2.0.0');
-  assert.equal(body.build, 26);
+  assert.equal(body.build, 27);
   assert.equal(body.package, 'com.lunotalk.messenger');
   assert.equal(body.assets.length, 3);
   const byAbi = Object.fromEntries(body.assets.map((a) => [a.abi, a]));
   assert.deepEqual(byAbi['arm64-v8a'], {
     abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk',
-    size_bytes: 44614767, sha256: '643F74077988DDF3A5F6BC9323070DD1C991B4BD9D85E994B995E7BCB55B244F',
+    size_bytes: 44614767, sha256: '6B6F5A4840DF91A2E6641A9159839C10755AC4A953878022724602A50C33DC5F',
     url: `${GH}/luno-messenger-arm64.apk`,
   });
   assert.deepEqual(byAbi['armeabi-v7a'], {
     abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk',
-    size_bytes: 35634915, sha256: 'CD6A69919A9B326A33A976618EFCD8AFE67E0513AD4A7C2EC79919C831B92E04',
+    size_bytes: 35634911, sha256: '54A465B9AE280A8A70FFC018999E6EAA1D4DB93FF8E446AFB9891AAAD34C9B76',
     url: `${GH}/luno-messenger-arm32.apk`,
   });
   assert.deepEqual(byAbi['x86_64'], {
     abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk',
-    size_bytes: 51070051, sha256: '26F24A2ADDFF651C632326E48BA9E902AFB72B4A09F33506D49882C15D50B201',
+    size_bytes: 51070055, sha256: 'C5AD0B5DB5065D11762411E98E6E6634841E64F714C95526044C22501CEE5EE7',
     url: `${GH}/luno-messenger-x86_64.apk`,
   });
 });
