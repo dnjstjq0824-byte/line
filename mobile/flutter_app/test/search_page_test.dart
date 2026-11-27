@@ -13,7 +13,7 @@ import 'package:luno_messenger/state/session.dart';
 // server user results with working add-friend.
 //
 // _SearchFake plays the server: GET /api/v1/users matches like the worker
-// (display name contains, exact ID with or without "@"), POST /friends
+// (exact ID only, with or without "@"; names never match), POST /friends
 // answers with [addStatus].
 class _SearchFake extends http.BaseClient {
   int addStatus = 500;
@@ -34,12 +34,7 @@ class _SearchFake extends http.BaseClient {
           .replaceFirst(RegExp('^@'), '');
       searches.add(q);
       body = {
-        'users': q.length < 2
-            ? []
-            : _users
-                .where((u) =>
-                    '${u['display_name']}'.contains(q) || u['handle'] == q)
-                .toList(),
+        'users': _users.where((u) => u['handle'] == q).toList(),
       };
     } else if (path == '/api/v1/friends' && request.method == 'POST') {
       status = addStatus;
@@ -179,11 +174,10 @@ void main() {
         (WidgetTester tester) async {
       final s = _fixture();
       await _pumpSearch(tester, s);
-      await tester.enterText(find.byType(TextField), '새친구');
+      await tester.enterText(find.byType(TextField), 'newbie');
       await tester.pumpAndSettle();
       expect(find.text('사용자'), findsOneWidget);
-      // Field query plus the result row.
-      expect(find.text('새친구'), findsNWidgets(2));
+      expect(find.text('새친구'), findsOneWidget);
       await tester.tap(find.text('추가'));
       await tester.pumpAndSettle();
       expect(s.error, isNotEmpty);
@@ -227,6 +221,17 @@ void main() {
       expect(find.text('도천재'), findsWidgets);
       expect(find.text('추가'), findsNothing);
       expect(find.widgetWithText(FilledButton, '친구'), findsOneWidget);
+    });
+
+    testWidgets('names do not find strangers; the ID hint is shown',
+        (WidgetTester tester) async {
+      await _pumpSearch(tester, _fixture());
+      expect(find.byKey(const ValueKey('search-add-by-id-hint')), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '새친구');
+      await tester.pumpAndSettle();
+      expect(find.text('사용자'), findsNothing);
+      expect(find.text('추가'), findsNothing);
+      expect(find.text('검색 결과가 없습니다'), findsOneWidget);
     });
   });
 }

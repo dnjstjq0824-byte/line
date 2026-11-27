@@ -695,5 +695,6 @@
   "authPasswordLabel": "Password",
   "keepRoomTitle": "Keep memo",
   "keepSeedWelcome": "This is your Keep memo — a chat with yourself. Save notes, links, photos and files here.",
-  "keepSeedPc": "Pick up the same chats on your computer: {url}"
+  "keepSeedPc": "Pick up the same chats on your computer: {url}",
+  "searchAddByIdHint": "Add a friend: enter their exact ID."
 }

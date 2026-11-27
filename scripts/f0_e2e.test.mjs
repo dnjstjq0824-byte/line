@@ -171,7 +171,7 @@ test('F0: user, room and global search hit', async () => {
     const b = await registerAndLoginFull(api, 'f0-searchbuddy@luno-test.local');
     const room2 = await (await api('conversations', 'POST', { kind: 'group', title: 'Pineapple Club', member_ids: [b.id] }, a.token)).json();
     await api(`conversations/${room2.id}/messages`, 'POST', { body: 'the pineapple password is tangy' }, a.token);
-    const users = await (await api('users?q=zelda', 'GET', null, a.token)).json();
+    const users = await (await api('users?q=zeldasearch', 'GET', null, a.token)).json();
     assert.ok((users.users || []).some((u) => u.handle === 'zeldasearch'), 'user search hits');
     const inRoom = await (await api(`conversations/${room2.id}/search?q=pineapple`, 'GET', null, a.token)).json();
     assert.ok((inRoom.messages || []).length >= 1, 'room search hits');

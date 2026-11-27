@@ -215,7 +215,7 @@ test('H4: display names no longer add friends', async () => {
   } finally { db.raw.close(); }
 });
 
-test('H4: QR and opted-in email still add friends', async () => {
+test('H4 (ID-only since 2026-11-27): QR adds friends, email never does', async () => {
   const db = makeD1();
   try {
     const { api } = await stage5Isolate(db);
@@ -230,8 +230,10 @@ test('H4: QR and opted-in email still add friends', async () => {
     const patched = await api('me/settings', 'PATCH', { searchable_by_email: true }, mailTarget.token);
     assert.equal(patched.status, 200);
     const viaMail = await api('friends', 'POST', { handle: 'h4m-t@luno-test.local' }, adder.token);
-    assert.equal(viaMail.status, 201, 'opted-in email resolves');
-    assert.equal((await viaMail.json()).friend.id, mailTarget.id);
+    assert.equal(viaMail.status, 404, 'even an opted-in email does not resolve: ID only');
+    const viaId = await api('friends', 'POST', { handle: 'h4_mail' }, adder.token);
+    assert.equal(viaId.status, 201, 'the same person is added by ID');
+    assert.equal((await viaId.json()).friend.id, mailTarget.id);
   } finally { db.raw.close(); }
 });
 

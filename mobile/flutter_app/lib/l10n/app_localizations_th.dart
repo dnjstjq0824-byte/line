@@ -2236,4 +2236,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String keepSeedPc(String url) {
     return 'ใช้งานแชทเดียวกันบนคอมพิวเตอร์ได้ที่: $url';
   }
+
+  @override
+  String get searchAddByIdHint =>
+      'เพิ่มเพื่อน: ป้อน ID ของเพื่อนให้ตรงทุกตัวอักษร';
 }

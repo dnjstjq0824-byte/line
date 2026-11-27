@@ -113,8 +113,9 @@ export function useFriendsGroups(deps: FriendsGroupsDeps) {
   }
 
   async function searchUsersForAdd() {
-    const q = addFriendHandleInput.value.trim()
-    if (q.length < 2) return
+    // Search is by exact ID only (3-20 chars, the server's handle shape).
+    const q = addFriendHandleInput.value.trim().replace(/^@/, '')
+    if (q.length < 3) return
     await wrap(async () => {
       const res = await api<{ users: User[] }>(`/api/v1/users?q=${encodeURIComponent(q)}`)
       addFriendResults.value = res.users || []

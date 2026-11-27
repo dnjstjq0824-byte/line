@@ -2221,4 +2221,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String keepSeedPc(String url) {
     return 'PC에서도 같은 대화를 이어갈 수 있어요: $url';
   }
+
+  @override
+  String get searchAddByIdHint => '친구 추가: 상대의 ID를 정확히 입력하세요.';
 }

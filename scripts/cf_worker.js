@@ -2710,18 +2710,14 @@ async function hydrateUsersByIds(ids) {
 // D7: D1 fallback for friend-add lookup now that boot no longer caches all
 // users. Preference order mirrors the memory path (handle, searchable
 // email, display name); H4 removes the display-name leg.
-async function findUserByHandleOrEmail(h) {
+// Friend lookup is by ID (handle) only: no email or display-name
+// resolution (user decision 2026-11-27: "ID로만 검색").
+async function findUserByHandle(h) {
   const db = dbOf();
   if (!db || !h) return null;
   await ensureSchema();
   const byHandle = await db.prepare('SELECT id FROM users WHERE LOWER(handle) = ?').bind(h).first().catch(() => null);
   if (byHandle) return loadUserFromD1(byHandle.id, undefined);
-  const byEmail = await db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').bind(h).first().catch(() => null);
-  if (byEmail) {
-    const u = await loadUserFromD1(byEmail.id, undefined);
-    if (u && prefsOf(u.id).searchable_by_email) return u;
-  }
-  // H4: no display-name fallback — the function finally matches its name.
   return null;
 }
 async function loadUserFromD1ByLogin(identifier) {
@@ -4755,11 +4751,10 @@ async function fetchLinkPreview(target) {
       } else if (b.handle || b.qr_code) {
         const h = String(b.handle || String(b.qr_code).replace(/^(LINE-FRIEND|LUNO-FRIEND):/i, '')).trim().toLowerCase().replace(/^@/, '');
         const all = Array.from(users.values());
-        // H4: display-name matching is gone — friend-add resolves by handle,
-        // QR (same handle after prefix strip), or opted-in email only.
-        target = all.find(u => u.handle === h)
-          || all.find(u => u.email && u.email.toLowerCase() === h && prefsOf(u.id).searchable_by_email);
-        if (!target && dbOf()) target = await findUserByHandleOrEmail(h);
+        // Friend-add resolves by ID (handle) or QR (same handle after the
+        // prefix strip) only: no display-name (H4) or email matching.
+        target = all.find(u => u.handle === h);
+        if (!target && dbOf()) target = await findUserByHandle(h);
       }
       if (!target || target.state === 'suspended') return bad('사용자를 찾을 수 없습니다', 404);
       if (target.id === myId) return bad('자기 자신은 친구로 추가할 수 없습니다');
@@ -4823,29 +4818,19 @@ async function fetchLinkPreview(target) {
   }
   if (p === 'users' && method === 'GET') {
     await hydrateSocialGraph(myId);
-    const q = clip(url.searchParams.get('q') || url.searchParams.get('search') || '', 50).toLowerCase().replace(/^@/, '');
-    if (q.length < 2) return json({ users: [] });
-    const matches = (u) => {
-      if (u.id === myId || u.state === 'suspended' || u.role === 'admin') return false;
-      const pr = prefsOf(u.id);
-      return u.display_name.toLowerCase().includes(q) || (pr.searchable_by_id && u.handle === q) || (pr.searchable_by_email && u.email === q);
-    };
-    const seen = new Map();
-    for (const u of users.values()) if (matches(u)) seen.set(u.id, u);
-    if (dbOf() && seen.size < 20) {
-      await ensureSchema();
-      const like = `%${escapeLike(q)}%`;
-      const { results } = await dbOf().prepare(
-        `SELECT id FROM users WHERE id != ? AND (state IS NULL OR state != 'suspended') AND (LOWER(display_name) LIKE ? ESCAPE '\\' OR LOWER(handle) = ? OR LOWER(email) = ?) LIMIT 50`
-      ).bind(myId, like, q, q).all().catch(() => ({ results: [] }));
-      for (const r of results || []) {
-        if (seen.has(r.id)) continue;
-        const u = await loadUserFromD1(r.id, undefined);
-        if (u && matches(u)) seen.set(u.id, u);
-        if (seen.size >= 20) break;
-      }
+    // User search is by exact ID (handle) only (user decision 2026-11-27):
+    // no display-name or email discovery. The viewer, suspended users,
+    // admins, and people who turned off "ID로 검색 허용" never appear.
+    const q = clip(url.searchParams.get('q') || url.searchParams.get('search') || '', 50).trim().toLowerCase().replace(/^@/, '');
+    if (!/^[a-z0-9_.]{3,20}$/.test(q)) return json({ users: [] });
+    const visible = (u) => !!u && u.id !== myId && u.state !== 'suspended' && u.role !== 'admin'
+      && !!prefsOf(u.id).searchable_by_id && String(u.handle || '').toLowerCase() === q;
+    let target = Array.from(users.values()).find(visible) || null;
+    if (!target && dbOf()) {
+      const u = await findUserByHandle(q);
+      if (visible(u)) target = u;
     }
-    return json({ users: [...seen.values()].slice(0, 20).map(u => ({ ...publicUser(u), is_friend: isFriend(myId, u.id) })) });
+    return json({ users: target ? [{ ...publicUser(target), is_friend: isFriend(myId, target.id) }] : [] });
   }
   if ((m = p.match(/^users\/([\w-]+)$/)) && method === 'GET') {
     await hydrateSocialGraph(myId);
@@ -9052,9 +9037,11 @@ const workerCore = {
         }
       }
       if (p === 'users' && request.method === 'GET') {
-        const q = (url.searchParams.get('q') || url.searchParams.get('search') || '').toLowerCase();
+        // Same policy as extended(): exact ID only, never name or email.
+        const q = (url.searchParams.get('q') || url.searchParams.get('search') || '').trim().toLowerCase().replace(/^@/, '');
         const found = Array.from(users.values())
-          .filter(u => u.id !== authUser.id && (!q || u.display_name.toLowerCase().includes(q) || (u.email && u.email.includes(q))))
+          .filter(u => u.id !== authUser.id && u.role !== 'admin' && u.state !== 'suspended' && !!q
+            && String(u.handle || '').toLowerCase() === q && !!prefsOf(u.id).searchable_by_id)
           .map(u => ({ id: u.id, display_name: u.display_name, handle: u.handle, bio: u.bio }));
         return json({ users: found });
       }

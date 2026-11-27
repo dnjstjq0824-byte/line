@@ -2248,4 +2248,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String keepSeedPc(String url) {
     return 'Pick up the same chats on your computer: $url';
   }
+
+  @override
+  String get searchAddByIdHint => 'Add a friend: enter their exact ID.';
 }

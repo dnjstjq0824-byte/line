@@ -4,9 +4,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { F24_CONSENT } from './test_helpers.mjs';
 
-// QA-P0-3: the Add Friend UI promises ID-or-email search, so existing demo
-// users must be found by handle and opted-in email. Since H4, exact display
-// names no longer resolve (they bypassed search restrictions).
+// QA-P0-3, revised 2026-11-27 (user decision "ID로만 검색"): friends are
+// found and added by exact ID (handle) only. Display names (H4) and emails
+// never resolve, even for users who opted into email search.
 
 const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8')
 const { default: worker } = await import('./cf_worker.js?qa_friend_search')
@@ -40,8 +40,7 @@ test('add-friend finds Alice by handle (existing behavior)', async () => {
   assert.equal(r.data.status, 'already_friends')
 })
 
-test('add-friend by email honors searchable_by_email (private by default)', async () => {
-  // Registered users are private; the old 200 was a public-seed artifact.
+test('add-friend never resolves an email', async () => {
   const r = await api('friends', me.access_token, 'POST', { handle: 'alice@luno-test.local' })
   assert.equal(r.status, 404)
 })
@@ -56,19 +55,40 @@ test('add-friend rejects partial names (no wrong-person add)', async () => {
   assert.equal(r.status, 404)
 })
 
-test('email lookup honors searchable_by_email for ordinary users', async () => {
-  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'carol-qa@example.test', password: 'Carol#Qa2026!', display_name: 'Carol QA' })
+test('email stays unresolvable even when the owner opted into email search', async () => {
+  const reg = await api('auth/register', null, 'POST', { ...F24_CONSENT, email: 'carol-qa@example.test', password: 'Carol#Qa2026!', display_name: 'Carol QA', handle: 'carol_qa' })
   assert.equal(reg.status, 201)
+  const carol = await login('carol-qa@example.test', 'Carol#Qa2026!')
+  await api('me/settings', carol.access_token, 'PATCH', { searchable_by_email: true })
   const byEmail = await api('friends', me.access_token, 'POST', { handle: 'carol-qa@example.test' })
   assert.equal(byEmail.status, 404)
+  const search = await api('users?q=carol-qa@example.test', me.access_token)
+  assert.deepEqual(search.data.users, [])
   const byName = await api('friends', me.access_token, 'POST', { handle: 'Carol QA' })
   assert.equal(byName.status, 404, 'H4: display names stay unresolvable')
 })
 
-test('user search lists Alice for substring queries', async () => {
-  const r = await api('users?q=Alice', me.access_token)
-  assert.equal(r.status, 200)
-  assert.ok((r.data.users || []).some(u => u.display_name === 'Alice Kim'))
+test('user search finds by exact ID only (with or without @)', async () => {
+  for (const q of ['alice_kim', '@alice_kim', 'ALICE_KIM']) {
+    const r = await api(`users?q=${encodeURIComponent(q)}`, me.access_token)
+    assert.equal(r.status, 200)
+    assert.deepEqual((r.data.users || []).map(u => u.handle), ['alice_kim'], q)
+  }
+})
+
+test('user search never matches names or partial IDs', async () => {
+  for (const q of ['Alice', 'Alice Kim', 'alice', 'kim', 'ali']) {
+    const r = await api(`users?q=${encodeURIComponent(q)}`, me.access_token)
+    assert.deepEqual(r.data.users, [], q)
+  }
+})
+
+test('the source keeps user search ID-only', () => {
+  const start = source.indexOf("if (p === 'users' && method === 'GET') {")
+  const block = source.slice(start, source.indexOf('return json({ users: target', start))
+  assert.ok(start > 0 && block.length > 0)
+  assert.doesNotMatch(block, /display_name\.toLowerCase\(\)\.includes|LOWER\(email\)|searchable_by_email|\bLIKE\b/)
+  assert.match(block, /u\.role !== 'admin'/, 'admins stay hidden')
 })
 
 test('add-friend modal offers candidate search over GET /users', () => {

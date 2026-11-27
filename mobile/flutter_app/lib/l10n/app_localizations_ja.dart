@@ -2220,4 +2220,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String keepSeedPc(String url) {
     return 'PCでも同じ会話を続けられます: $url';
   }
+
+  @override
+  String get searchAddByIdHint => '友だち追加：相手のIDを正確に入力してください。';
 }

@@ -1,8 +1,7 @@
 // Route: /search — dedicated search. Empty queries show removable
 // recent searches (tapped friends/chats/users, client-side only).
-// Typed queries filter local friends/chats instantly; server users (by
-// name, exact ID, or opted-in email) load as you type (debounced) and on
-// submit. Every row acts (open chat, start chat, add friend).
+// Typed queries filter local friends/chats instantly; server users (exact
+// ID only) load as you type (debounced) and on submit. Every row acts (open chat, start chat, add friend).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -33,7 +32,7 @@ class _SearchPageState extends State<SearchPage> {
   List<Map<String, dynamic>> found = const [];
   final Set<String> added = {};
 
-  static const _minServerQuery = 2; // the server ignores shorter queries
+  static const _minServerQuery = 3; // IDs are 3-20 chars; the server ignores shorter queries
 
   @override
   void dispose() {
@@ -171,6 +170,16 @@ class _SearchPageState extends State<SearchPage> {
               ],
             ),
             if (query.isEmpty) ...[
+              // Friend search is by exact ID only: say so up front.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(context.l10n.searchAddByIdHint,
+                      key: const ValueKey('search-add-by-id-hint'),
+                      style: TextStyle(fontSize: 13, color: sub)),
+                ),
+              ),
               const SizedBox(height: 12),
               _ResultRow(
                 icon: Icons.contacts_outlined,

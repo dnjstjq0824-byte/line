@@ -4277,6 +4277,12 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'PC에서도 같은 대화를 이어갈 수 있어요: {url}'**
   String keepSeedPc(String url);
+
+  /// Search page: friend search is by exact ID only
+  ///
+  /// In ko, this message translates to:
+  /// **'친구 추가: 상대의 ID를 정확히 입력하세요.'**
+  String get searchAddByIdHint;
 }
 
 class _AppLocalizationsDelegate

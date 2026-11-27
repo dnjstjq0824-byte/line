@@ -695,5 +695,6 @@
   "authPasswordLabel": "パスワード",
   "keepRoomTitle": "Keepメモ",
   "keepSeedWelcome": "自分専用のKeepメモです。テキスト、リンク、写真、ファイルを自由に保存できます。",
-  "keepSeedPc": "PCでも同じ会話を続けられます: {url}"
+  "keepSeedPc": "PCでも同じ会話を続けられます: {url}",
+  "searchAddByIdHint": "友だち追加：相手のIDを正確に入力してください。"
 }
