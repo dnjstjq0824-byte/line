@@ -1912,3 +1912,19 @@ html.ln-dialog-open body { overflow: hidden; }
   color: var(--ln-muted);
 }
 .luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .btn-pc-submit-full { margin: 4px 0 0 !important; }
+
+/* Settings keeps one size on desktop and tablet while switching tabs:
+   short tabs no longer collapse the box, long tabs scroll inside it. */
+@media (min-width: 700px) {
+  .luno-desktop-app .settings-modal.standard-modal-box {
+    height: min(760px, calc(100dvh - 40px));
+  }
+}
+.luno-desktop-app .settings-modal.standard-modal-box { overflow: hidden; }
+/* Link-buttons (APK download) centre their label like real buttons. */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) a.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}

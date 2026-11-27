@@ -1,7 +1,10 @@
 // Route: /search — dedicated search. Empty queries show removable
 // recent searches (tapped friends/chats/users, client-side only).
-// Typed queries filter local friends/chats instantly and server users on
-// submit; every row acts (open chat, start chat, add friend).
+// Typed queries filter local friends/chats instantly; server users (by
+// name, exact ID, or opted-in email) load as you type (debounced) and on
+// submit. Every row acts (open chat, start chat, add friend).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,11 +24,66 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final field = TextEditingController();
   String query = '';
+  // Server user search state. Results belong to [searched]; while the field
+  // differs from it the page shows a spinner, never "no results".
+  Timer? _debounce;
+  String searched = '';
+  bool searching = false;
+  String searchError = '';
+  List<Map<String, dynamic>> found = const [];
+  final Set<String> added = {};
+
+  static const _minServerQuery = 2; // the server ignores shorter queries
 
   @override
   void dispose() {
+    _debounce?.cancel();
     field.dispose();
     super.dispose();
+  }
+
+  void _onChanged(String v) {
+    setState(() => query = v.trim());
+    _debounce?.cancel();
+    if (query.length >= _minServerQuery) {
+      _debounce = Timer(const Duration(milliseconds: 350), () => _search(query));
+    }
+  }
+
+  Future<void> _search(String q) async {
+    _debounce?.cancel();
+    if (q.length < _minServerQuery) return;
+    final session = SessionScope.of(context, listen: false);
+    setState(() {
+      searching = true;
+      searchError = '';
+    });
+    try {
+      final list = await session.searchUsers(q);
+      if (!mounted || q != query) return;
+      setState(() {
+        found = list;
+        searched = q;
+      });
+    } catch (e) {
+      if (!mounted || q != query) return;
+      setState(() {
+        found = const [];
+        searched = q;
+        searchError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted && q == query) setState(() => searching = false);
+    }
+  }
+
+  Future<void> _add(Map<String, dynamic> u) async {
+    final session = SessionScope.of(context, listen: false);
+    final id = '${u['id']}';
+    session.rememberSearch('user', id, '${u['display_name']}');
+    await session.addFriend(id);
+    if (!mounted) return;
+    if (session.error.isEmpty) setState(() => added.add(id));
   }
 
   bool _hit(Map<String, dynamic> e, List<String> keys) {
@@ -51,12 +109,14 @@ class _SearchPageState extends State<SearchPage> {
             .whereType<Map<String, dynamic>>()
             .where((c) => _hit(c, ['title']))
             .toList();
-    final users = query.isEmpty
-        ? const <Map<String, dynamic>>[]
-        : session.results
-            .whereType<Map<String, dynamic>>()
-            .where((u) => _hit(u, ['display_name', 'handle']))
-            .toList();
+    // Server results are already matched (name, exact ID, email): no second
+    // client filter, which used to drop "@id" and email queries. People
+    // already listed under Friends are not repeated.
+    final friendIds = friends.map((u) => '${u['id']}').toSet();
+    final users = query.isNotEmpty && query == searched
+        ? found.where((u) => !friendIds.contains('${u['id']}')).toList()
+        : const <Map<String, dynamic>>[];
+    final pending = query.length >= _minServerQuery && (searching || query != searched);
     return ListView(
       children: [
         PageColumn(
@@ -104,10 +164,8 @@ class _SearchPageState extends State<SearchPage> {
                       ),
                       isDense: true,
                     ),
-                    onChanged: (v) => setState(() => query = v.trim()),
-                    onSubmitted: (v) {
-                      if (v.trim().isNotEmpty) session.find(v.trim());
-                    },
+                    onChanged: _onChanged,
+                    onSubmitted: (v) => _search(v.trim()),
                   ),
                 ),
               ],
@@ -169,19 +227,49 @@ class _SearchPageState extends State<SearchPage> {
               if (users.isNotEmpty) ...[
                 _SectionTitle(text: context.l10n.userWord),
                 for (final u in users)
-                  _ResultRow(
-                    icon: Icons.person_add_alt,
-                    title: '${u['display_name']}',
-                    subtitle: '@${u['handle'] ?? ''}',
-                    trailingLabel: context.l10n.mvAdd,
-                    onTap: () {
-                      session.rememberSearch(
-                          'user', '${u['id']}', '${u['display_name']}');
-                      session.addFriend('${u['id']}');
-                    },
-                  ),
+                  if (u['is_friend'] == true || added.contains('${u['id']}'))
+                    _ResultRow(
+                      icon: Icons.person,
+                      title: '${u['display_name']}',
+                      subtitle: '@${u['handle'] ?? ''}',
+                      trailingLabel: context.l10n.navFriends,
+                      onTap: () async {
+                        final cid = await session.startChat(
+                            '${u['id']}', '${u['display_name']}');
+                        if (cid != null && context.mounted) {
+                          context.go('/chats/$cid');
+                        }
+                      },
+                    )
+                  else
+                    _ResultRow(
+                      icon: Icons.person_add_alt,
+                      title: '${u['display_name']}',
+                      subtitle: '@${u['handle'] ?? ''}',
+                      trailingLabel: context.l10n.mvAdd,
+                      onTap: () => _add(u),
+                    ),
               ],
-              if (friends.isEmpty && chats.isEmpty && users.isEmpty)
+              if (pending)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2.4)),
+                  ),
+                )
+              else if (searchError.isNotEmpty &&
+                  friends.isEmpty &&
+                  chats.isEmpty &&
+                  users.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text(searchError,
+                      style: TextStyle(fontSize: 13, color: sub)),
+                )
+              else if (friends.isEmpty && chats.isEmpty && users.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Text(context.l10n.searchNoResult,

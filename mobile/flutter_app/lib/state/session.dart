@@ -1277,6 +1277,16 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  /// Server user search for the add-friend screen. Not wrapped in run():
+  /// run() drops calls while another action holds `busy`, which made a
+  /// typed ID look like "no such user". Errors propagate to the caller.
+  Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    final x = await api.call('/api/v1/users?search=${Uri.encodeQueryComponent(query)}');
+    final list = (x['users'] as List?) ?? const [];
+    results = list;
+    return list.whereType<Map<String, dynamic>>().toList();
+  }
+
   Future<void> addFriend(String id) {
     return run(() async {
       await api.call('/api/v1/friends', method: 'POST', data: {'friend_id': id});

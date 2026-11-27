@@ -546,6 +546,10 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
 }
+/* The tab strip and header never give up height: on a long tab (privacy &
+   security) the flex column used to squeeze them, so the strip shrank. */
+.ln-settings-shell > .modal-header,
+.ln-settings-tabs { flex: none; }
 .ln-settings-tabs {
   display: flex;
   gap: 6px;

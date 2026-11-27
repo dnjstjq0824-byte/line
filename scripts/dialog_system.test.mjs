@@ -81,3 +81,10 @@ test('modal titles carry no decorative emoji in any locale', async () => {
   }
   assert.deepEqual(bad, []);
 });
+
+test('settings keeps its tab strip height and one box size across tabs', async () => {
+  const modal = await read('components/SettingsModal.vue');
+  assert.match(modal, /\.ln-settings-shell > \.modal-header,\s*\.ln-settings-tabs \{ flex: none; \}/, 'tab strip and header never shrink');
+  const css = await read('styles/luno-v2.css');
+  assert.match(css, /@media \(min-width: 700px\) \{\s*\.luno-desktop-app \.settings-modal\.standard-modal-box \{\s*height: min\(760px, calc\(100dvh - 40px\)\);/, 'fixed desktop height');
+});
