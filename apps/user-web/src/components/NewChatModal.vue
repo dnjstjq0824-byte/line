@@ -5,6 +5,8 @@ import { t } from '../store/session'
 import { initialOf } from '../../../shared/avatar_initial'
 import { hideBrokenAvatar, taglineOf } from '../messenger-format'
 import type { User } from '../../../shared/api'
+import { vDialog } from '../directives/dialog'
+import LunoIcon from './LunoIcon.vue'
 
 defineProps<{
   friends: User[]
@@ -19,23 +21,23 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="standard-modal-box new-chat-modal">
       <div class="modal-header">
         <h3>{{ t('mvNewConvo') }}</h3>
-        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
       </div>
       <div class="modal-body-form">
         <div class="new-chat-options-grid">
           <button class="btn-new-chat-type" @click="emit('makeGroup')">
-            <span class="type-icon">👥</span>
+            <span class="type-icon" aria-hidden="true"><LunoIcon name="friends" :size="20" /></span>
             <div class="type-text">
               <strong>{{ t('mvMakeGroup') }}</strong>
               <small>{{ t('mvMakeGroupDesc') }}</small>
             </div>
           </button>
           <button class="btn-new-chat-type" @click="emit('joinOpenChat')">
-            <span class="type-icon">🌐</span>
+            <span class="type-icon" aria-hidden="true"><LunoIcon name="openchat" :size="20" /></span>
             <div class="type-text">
               <strong>{{ t('mvJoinOpenChat') }}</strong>
               <small>{{ t('mvJoinOpenChatDesc') }}</small>
@@ -43,8 +45,8 @@ const emit = defineEmits<{
           </button>
         </div>
 
-        <label style="margin-top: 14px;">{{ t('mvStartDirectDesc') }}</label>
-        <div class="select-friends-scroll" style="max-height: 180px;">
+        <label>{{ t('mvStartDirectDesc') }}</label>
+        <div class="select-friends-scroll">
           <div
             v-for="f in friends"
             :key="'new-chat-' + f.id"

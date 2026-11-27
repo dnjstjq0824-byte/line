@@ -5,8 +5,9 @@
 // a holder (template expressions would unwrap the bare bindings).
 import { computed, nextTick, onMounted, ref, watch, type Ref } from 'vue'
 
-import { API_URL, type Chat, type Message, type User } from '../../../shared/api'
+import { type Chat, type Message, type User } from '../../../shared/api'
 import { initialOf } from '../../../shared/avatar_initial'
+import { b64uEncode } from '../../../shared/e2ee/codec'
 import { senderDisplayName } from '../../../shared/sender_name'
 import { isImageStickerId, stickerImagePath, categoryTitle } from '../../../shared/stickers'
 import { loadStickerCatalog, type StickerCatalogCategory } from '../../../shared/sticker_catalog'
@@ -16,6 +17,7 @@ import LinkPreview from './LinkPreview.vue'
 import { keepSeedText } from '../messenger-utils'
 import { authedFetch, currentUser, t, token, currentLocale, paymentsEnabled } from '../store/session'
 import LunoIcon from './LunoIcon.vue'
+import { vDialog } from '../directives/dialog'
 import MessageAttachment from './MessageAttachment.vue'
 import PcAgentBar from './PcAgentBar.vue'
 import type { DrawerTab } from './ChatList.vue'
@@ -178,7 +180,6 @@ async function transcribeVoice(msg: Message) {
     const meta = msg.metadata as Record<string, unknown> | undefined
     if (msg._e2ee && meta && typeof meta.fileKey === 'string' && typeof meta.fileIv === 'string' && typeof meta.fileHash === 'string') {
       const { openFile } = await import('../../../shared/e2ee/files.ts')
-      const { b64uEncode } = await import('../../../shared/e2ee/codec.ts')
       bytes = await openFile({ key: meta.fileKey, iv: meta.fileIv, hash: meta.fileHash, ct: b64uEncode(bytes) })
     }
     let bin = ''
@@ -842,40 +843,44 @@ const PHOTO_EFFECT_FILTER: Record<string, string> = { none: 'none', gray: 'grays
       </div>
 
       <input :ref="attachmentInput" type="file" class="file-input-hidden" tabindex="-1" aria-hidden="true" @change="emit('file-change', $event)" />
-      <div v-if="effectFile" class="fx-modal-backdrop" @click.self="emit('effect-close')">
-        <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
-          <h3>{{ t('fxTitle') }}</h3>
-          <img :src="effectPreviewUrl" class="fx-preview" :style="{ filter: PHOTO_EFFECT_FILTER[effectChoice] }" alt="" />
-          <div class="fx-options">
-            <button :class="{ active: effectChoice === 'none' }" @click="effectChoice = 'none'">{{ t('fxOriginal') }}</button>
-            <button :class="{ active: effectChoice === 'gray' }" @click="effectChoice = 'gray'">{{ t('fxGray') }}</button>
-            <button :class="{ active: effectChoice === 'sepia' }" @click="effectChoice = 'sepia'">{{ t('fxSepia') }}</button>
-          </div>
-          <div class="fx-actions">
-            <button class="btn-secondary" @click="emit('effect-close')">{{ t('mvCancel') }}</button>
-            <button class="btn-primary" :disabled="uploading" @click="emit('effect-send')">{{ t('fxSend') }}</button>
-          </div>
-        </div>
-      </div>
-      <div v-if="showCameraModal" class="fx-modal-backdrop" @click.self="emit('camera-close')">
-        <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
-          <h3>{{ t('camTitle') }}</h3>
-          <div class="cam-tabs">
-            <button :class="{ active: cameraMode === 'photo' }" :disabled="videoRecording" @click="emit('camera-mode', 'photo')">{{ t('camPhoto') }}</button>
-            <button :class="{ active: cameraMode === 'video' }" :disabled="videoRecording" @click="emit('camera-mode', 'video')">{{ t('camVideo') }}</button>
-          </div>
-          <video v-show="!cameraError" :ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
-          <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
-          <p v-if="videoRecording" class="rec-indicator">🔴 {{ videoElapsed }}s / 8s</p>
-          <div class="fx-actions">
-            <button class="btn-secondary" @click="emit('camera-close')">{{ t('mvCancel') }}</button>
-            <button v-if="cameraMode === 'photo'" class="btn-secondary" @click="emit('camera-close'); emit('attach', 'image')">{{ t('camChooseFile') }}</button>
-            <button v-if="!cameraError && cameraMode === 'photo'" class="btn-primary" @click="emit('photo')">{{ t('camCapture') }}</button>
-            <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="emit('video-start')" :aria-label="t('camVideo')">⏺️</button>
-            <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="emit('video-stop')" :aria-label="t('mvRecStop')">⏹️</button>
+      <Transition name="ln-modal">
+        <div v-if="effectFile" class="fx-modal-backdrop" v-dialog="() => emit('effect-close')" @click.self="emit('effect-close')">
+          <div class="fx-modal" role="dialog" :aria-label="t('fxTitle')">
+            <h3>{{ t('fxTitle') }}</h3>
+            <img :src="effectPreviewUrl" class="fx-preview" :style="{ filter: PHOTO_EFFECT_FILTER[effectChoice] }" alt="" />
+            <div class="fx-options">
+              <button :class="{ active: effectChoice === 'none' }" @click="effectChoice = 'none'">{{ t('fxOriginal') }}</button>
+              <button :class="{ active: effectChoice === 'gray' }" @click="effectChoice = 'gray'">{{ t('fxGray') }}</button>
+              <button :class="{ active: effectChoice === 'sepia' }" @click="effectChoice = 'sepia'">{{ t('fxSepia') }}</button>
+            </div>
+            <div class="fx-actions">
+              <button class="btn-secondary" @click="emit('effect-close')">{{ t('mvCancel') }}</button>
+              <button class="btn-primary" :disabled="uploading" @click="emit('effect-send')">{{ t('fxSend') }}</button>
+            </div>
           </div>
         </div>
-      </div>
+      </Transition>
+      <Transition name="ln-modal">
+        <div v-if="showCameraModal" class="fx-modal-backdrop" v-dialog="() => emit('camera-close')" @click.self="emit('camera-close')">
+          <div class="fx-modal" role="dialog" :aria-label="t('camTitle')">
+            <h3>{{ t('camTitle') }}</h3>
+            <div class="cam-tabs">
+              <button :class="{ active: cameraMode === 'photo' }" :disabled="videoRecording" @click="emit('camera-mode', 'photo')">{{ t('camPhoto') }}</button>
+              <button :class="{ active: cameraMode === 'video' }" :disabled="videoRecording" @click="emit('camera-mode', 'video')">{{ t('camVideo') }}</button>
+            </div>
+            <video v-show="!cameraError" :ref="cameraVideoRef" class="fx-preview" autoplay muted playsinline></video>
+            <p v-if="cameraError" class="cam-error">{{ cameraError }}</p>
+            <p v-if="videoRecording" class="rec-indicator">🔴 {{ videoElapsed }}s / 8s</p>
+            <div class="fx-actions">
+              <button class="btn-secondary" @click="emit('camera-close')">{{ t('mvCancel') }}</button>
+              <button v-if="cameraMode === 'photo'" class="btn-secondary" @click="emit('camera-close'); emit('attach', 'image')">{{ t('camChooseFile') }}</button>
+              <button v-if="!cameraError && cameraMode === 'photo'" class="btn-primary" @click="emit('photo')">{{ t('camCapture') }}</button>
+              <button v-if="!cameraError && cameraMode === 'video' && !videoRecording" class="btn-primary" @click="emit('video-start')" :aria-label="t('camVideo')">⏺️</button>
+              <button v-if="!cameraError && cameraMode === 'video' && videoRecording" class="btn-primary" @click="emit('video-stop')" :aria-label="t('mvRecStop')">⏹️</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
 
       <!-- C1: attachments collapse into the + panel; voice stays out so a
            recording can always be stopped without reopening anything. -->

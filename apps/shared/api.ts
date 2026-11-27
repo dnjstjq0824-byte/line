@@ -1,4 +1,5 @@
 import { classifyHost } from './locale.config'
+import { recordPerf } from './monitor'
 
 function resolveApiUrl(): string {
   if (import.meta.env.VITE_API_URL) {
@@ -144,7 +145,6 @@ export async function request<T>(path: string, token: string | null = null, meth
   const payload = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
   if (timed) {
     try {
-      const { recordPerf } = await import('./monitor')
       recordPerf(`${method} ${path.split('?')[0]}`, performance.now() - started)
     } catch { /* telemetry must never break the call */ }
   }

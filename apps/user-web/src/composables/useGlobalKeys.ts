@@ -1,31 +1,19 @@
-// Global keys + keyboard viewport (P2 MessengerView split). Escape closes
-// the topmost dialog; the iOS keyboard handler needs no state at all.
-// Modal flags are injected (deps precedent).
-// Extracted verbatim from views/MessengerView.vue.
+// Global keys + keyboard viewport (P2 MessengerView split).
+// Dialogs close themselves on Escape (directives/dialog.ts stops the event
+// at the topmost dialog), so this handler only sees Escape when no dialog is
+// open: it then closes the friend profile pane. The iOS keyboard handler
+// needs no state at all.
 import type { Ref } from 'vue'
-import type { NewsArticle } from '../../../shared/api'
 import type { User } from '../../../shared/api'
 
 export interface GlobalKeysDeps {
-  showSettingsModal: Ref<boolean>
-  showNewChatModal: Ref<boolean>
-  showAddFriendModal: Ref<boolean>
-  showPasswordModal: Ref<boolean>
-  activeNewsArticle: Ref<NewsArticle | null>
   selectedFriendProfile: Ref<User | null>
-  showQrModal: Ref<boolean>
 }
 
 export function useGlobalKeys(deps: GlobalKeysDeps) {
   function handleGlobalKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      if (deps.showSettingsModal.value) deps.showSettingsModal.value = false
-      if (deps.showNewChatModal.value) deps.showNewChatModal.value = false
-      if (deps.showAddFriendModal.value) deps.showAddFriendModal.value = false
-      if (deps.showPasswordModal.value) deps.showPasswordModal.value = false
-      if (deps.activeNewsArticle.value) deps.activeNewsArticle.value = null
-      if (deps.selectedFriendProfile.value) deps.selectedFriendProfile.value = null
-      if (deps.showQrModal.value) deps.showQrModal.value = false
+    if (e.key === 'Escape' && !e.isComposing && deps.selectedFriendProfile.value) {
+      deps.selectedFriendProfile.value = null
     }
   }
 

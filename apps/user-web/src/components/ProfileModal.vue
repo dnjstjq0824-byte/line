@@ -9,6 +9,7 @@ import { hideBrokenAvatar, taglineOf } from '../messenger-format'
 import { useProfileEditor } from '../composables/useProfileEditor'
 import LunoIcon from './LunoIcon.vue'
 import type { User } from '../../../shared/api'
+import { vDialog } from '../directives/dialog'
 
 defineProps<{
   user: User | null
@@ -58,7 +59,7 @@ async function toggleProfileEditor() {
 </script>
 
 <template>
-  <div v-if="user" class="modal-backdrop" @click.self="emit('close')">
+  <div v-if="user" class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="profile-modal-card ln-profile-sheet" role="dialog" aria-modal="true" :aria-label="t('profileTitle')">
       <div
         class="profile-cover-header ln-profile-cover"
@@ -220,16 +221,18 @@ async function toggleProfileEditor() {
   transition: background-color 0.14s ease;
 }
 .ln-cover-close:hover { background: rgba(0, 0, 0, 0.62); }
+/* The scroll area itself overlaps the cover, so the avatar rides over the
+   cover edge without being clipped by the scroll container. */
 .ln-profile-scroll {
+  position: relative;
+  z-index: 2;
+  margin-top: -46px;
   overflow-y: auto;
   padding: 0 20px 22px;
 }
 .ln-profile-avatar-wrap {
   display: flex;
   justify-content: center;
-  margin-top: -46px;
-  position: relative;
-  z-index: 2;
 }
 .ln-profile-avatar {
   width: 92px;

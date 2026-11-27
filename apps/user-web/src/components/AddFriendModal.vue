@@ -6,6 +6,8 @@ import { t } from '../store/session'
 import { initialOf } from '../../../shared/avatar_initial'
 import { hideBrokenAvatar } from '../messenger-format'
 import type { User } from '../../../shared/api'
+import { vDialog } from '../directives/dialog'
+import LunoIcon from './LunoIcon.vue'
 
 const handleInput = defineModel<string>('handleInput', { default: '' })
 
@@ -19,21 +21,23 @@ const emit = defineEmits<{
   search: []
   addByHandle: []
   addById: [id: string]
+  openQr: []
+  shareInvite: []
 }>()
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="standard-modal-box add-friend-modal">
       <div class="modal-header">
-        <h3>➕ {{ t('mvAddFriend') }}</h3>
-        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
+        <h3>{{ t('mvAddFriend') }}</h3>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
       </div>
       <div class="modal-body-form">
         <p class="modal-subtext">{{ t('mvAddFriendDesc') }}</p>
         <label>{{ t('mvIdSearchLabel') }}</label>
         <div class="flex-row">
-          <input v-model="handleInput" :placeholder="t('mvIdSearchPh')" @keydown.enter.prevent="emit('search')" />
+          <input v-model="handleInput" :placeholder="t('mvIdSearchPh')" :aria-label="t('mvIdSearchLabel')" enterkeyhint="search" @keydown.enter.prevent="emit('search')" />
           <button class="btn-secondary" @click="emit('search')">{{ t('mvSearch') }}</button>
           <button class="btn-primary" @click="emit('addByHandle')">{{ t('mvAdd') }}</button>
         </div>
@@ -55,20 +59,20 @@ const emit = defineEmits<{
           </div>
         </div>
         <div class="add-friend-quick-options">
-          <div class="quick-opt-item">
-            <span class="icon">📱</span>
+          <button type="button" class="quick-opt-item" @click="emit('openQr')">
+            <span class="icon" aria-hidden="true"><LunoIcon name="scan" :size="20" /></span>
             <div>
               <strong>{{ t('mvAddByQr') }}</strong>
               <small>{{ t('mvAddByQrDesc') }}</small>
             </div>
-          </div>
-          <div class="quick-opt-item">
-            <span class="icon">🔗</span>
+          </button>
+          <button type="button" class="quick-opt-item" @click="emit('shareInvite')">
+            <span class="icon" aria-hidden="true"><LunoIcon name="forward" :size="20" /></span>
             <div>
               <strong>{{ t('mvInviteLink') }}</strong>
               <small>{{ t('mvInviteLinkDesc') }}</small>
             </div>
-          </div>
+          </button>
         </div>
       </div>
     </div>

@@ -224,13 +224,9 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app .pc-speech-bubble{border-radius:18px!important;padding:10px 14px!important;box-shadow:0 1px 2px rgba(15,23,42,.08);line-height:1.48!important}
 .luno-desktop-app .pc-msg-row.mine .pc-speech-bubble{background:var(--bubble-mine-bg, #95EC69)!important;color:var(--bubble-mine-text, #111827)!important;border-bottom-right-radius:4px!important}
 .luno-desktop-app .pc-msg-row:not(.mine) .pc-speech-bubble{background:var(--bubble-theirs-bg, #FFFFFF)!important;color:var(--bubble-theirs-text, #111827)!important;border:1px solid rgba(15,23,42,.06);border-top-left-radius:4px!important;border-bottom-left-radius:18px!important}
-.luno-desktop-app :is(.pc-dropdown-menu,.context-menu,.standard-modal-box,.pc-modal-card,.pc-call-detail-card,.keep-item-card,.ecosystem-service-card){background:var(--ln-surface)!important;color:var(--ln-text)!important;border:1px solid var(--ln-line)!important;border-radius:18px!important;box-shadow:var(--ln-shadow)!important}
-.luno-desktop-app :is(.modal-backdrop,.pc-modal-backdrop){background:#10132170!important;backdrop-filter:blur(8px);padding:20px}
+.luno-desktop-app :is(.pc-dropdown-menu,.context-menu,.pc-modal-card,.pc-call-detail-card,.keep-item-card,.ecosystem-service-card){background:var(--ln-surface)!important;color:var(--ln-text)!important;border:1px solid var(--ln-line)!important;border-radius:18px!important;box-shadow:var(--ln-shadow)!important}
 .luno-desktop-app .floating-alert{z-index:120000!important;max-width:calc(100vw - 32px);border-radius:12px}
-.luno-desktop-app .standard-modal-box{max-height:calc(100dvh - 40px)!important;overflow:auto}
-.luno-desktop-app :is(.modal-header,.setting-group,.dropdown-header,.dropdown-sep){border-color:var(--ln-line)!important;background:var(--ln-surface)!important;color:var(--ln-text)!important}
-.luno-desktop-app .modal-header{padding:22px 24px!important}
-.luno-desktop-app .modal-body-form{padding:24px!important;gap:16px!important}
+.luno-desktop-app :is(.setting-group,.dropdown-header,.dropdown-sep){border-color:var(--ln-line)!important;background:var(--ln-surface)!important;color:var(--ln-text)!important}
 .luno-desktop-app :is(.btn-primary,.btn-send-message,.btn-profile-chat){background:var(--ln-accent)!important;color:var(--ln-on-accent)!important;border-radius:12px!important;box-shadow:none!important}
 .luno-desktop-app :is(.btn-secondary,.btn-profile-action,.dropdown-item,.btn-locale-pill,.btn-scale-chip,.btn-theme-swatch){background:var(--ln-subtle)!important;color:var(--ln-text)!important;border-color:var(--ln-line)!important;border-radius:10px!important;min-height:40px}
 /* Keep action rows in document flow; the legacy fixed white footer covered fields. */
@@ -260,7 +256,6 @@ ul, ol {list-style:none;margin:0;padding:0}
 /* Own profile, contact preview, edit and account settings share one visual family. */
 .luno-desktop-app .profile-modal-card{width:420px!important;max-width:100%;border-radius:24px!important;background:var(--ln-surface)!important;border:1px solid var(--ln-line);box-shadow:var(--ln-shadow)!important}
 .luno-desktop-app .profile-cover-header{height:130px!important;background:var(--ln-accent-soft)!important;position:relative}
-.luno-desktop-app .profile-avatar-center{margin-top:-44px!important;position:relative}
 .luno-desktop-app .avatar-circle.xl{width:88px!important;height:88px!important;border:6px solid var(--ln-surface);border-radius:28px!important;background:var(--ln-accent)!important;color:var(--ln-on-accent)!important;font-size:30px!important}
 .luno-desktop-app .profile-body-center{padding:20px 32px!important}
 .luno-desktop-app .profile-body-center h2{font-size:26px!important;font-weight:650;margin:0 0 8px}
@@ -292,13 +287,11 @@ ul, ol {list-style:none;margin:0;padding:0}
   .luno-desktop-app .pc-chat-messages-canvas{padding:16px!important}
   .luno-desktop-app .profile-actions-footer{padding:0 20px 20px!important}
   .luno-desktop-app .pc-profile-preview-card{padding:24px!important}
-  .luno-desktop-app .modal-body-form{padding:18px!important}
   .luno-desktop-app .setting-group .flex-row{flex-wrap:wrap}
   /* UX5: 44px minimum touch targets on finger widths. */
   .luno-desktop-app :is(.btn-subtab,.btn-profile-chip,.btn-subaction-pill,.btn-pay-action,.btn-new-call-labeled){min-height:44px!important}
   .luno-desktop-app .pc-bubble-toolbar{flex-wrap:wrap!important;max-width:calc(100vw - 32px)!important}
   .luno-desktop-app .pc-bubble-toolbar button{min-width:44px!important;min-height:44px!important}
-  .luno-desktop-app :is(.btn-modal-close){min-width:44px!important;min-height:44px!important}
   .luno-desktop-app :is(.btn-locale-pill,.btn-scale-chip){min-height:44px!important}
   .luno-desktop-app .settings-modal .btn-secondary{min-width:44px!important;min-height:44px!important}
   .luno-desktop-app :is(.btn-primary,.btn-delete-keep){min-height:44px!important}
@@ -1497,3 +1490,425 @@ html, body {
 .luno-desktop-app .drawer-tabs-bar button { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; min-height: 34px; background: var(--ln-subtle); color: var(--ln-text); }
 .luno-desktop-app .drawer-tabs-bar button.active { background: var(--ln-accent); color: var(--ln-on-accent); }
 .luno-desktop-app .drawer-tabs-bar .btn-drawer-close { margin-left: auto; }
+
+/* LUNO dialog system (build 27).
+   One look for every popup on a .modal-backdrop: a calm centred card on
+   desktop and tablet, a bottom sheet on phones. Behaviour (Escape, focus,
+   scroll lock) lives in src/directives/dialog.ts; open/close motion comes
+   from <Transition name="ln-modal"> around each dialog.
+
+   Brand points stay small: LINE green (#06C755) is the LUNO accent and
+   marks the primary action and focus; KakaoTalk yellow (#FEE500) with its
+   ink (#191919) only tints notices, so nothing reads as an ad banner. */
+
+:root {
+  --ln-brand-line: #06c755;
+  --ln-brand-kakao: #fee500;
+  --ln-brand-kakao-ink: #191919;
+  --ln-dialog-dim: rgb(0 0 0 / 44%);
+  --ln-dialog-radius: var(--ln-sheet-radius, 22px);
+  --ln-dialog-shadow: 0 18px 48px rgb(17 24 20 / 16%), 0 2px 6px rgb(17 24 20 / 6%);
+  --ln-dialog-edge: transparent;
+  --ln-dialog-notice-bg: #fffbd9;
+  --ln-dialog-notice-line: #f6e58c;
+  --ln-dialog-notice-ink: var(--ln-brand-kakao-ink);
+  --ln-dialog-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+:root[data-theme='dark'] {
+  --ln-dialog-dim: rgb(0 0 0 / 62%);
+  --ln-dialog-shadow: 0 18px 48px rgb(0 0 0 / 55%);
+  --ln-dialog-edge: var(--ln-line);
+  --ln-dialog-notice-bg: rgb(254 229 0 / 9%);
+  --ln-dialog-notice-line: rgb(254 229 0 / 26%);
+  --ln-dialog-notice-ink: #fff0a0;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    --ln-dialog-dim: rgb(0 0 0 / 62%);
+    --ln-dialog-shadow: 0 18px 48px rgb(0 0 0 / 55%);
+    --ln-dialog-edge: var(--ln-line);
+    --ln-dialog-notice-bg: rgb(254 229 0 / 9%);
+    --ln-dialog-notice-line: rgb(254 229 0 / 26%);
+    --ln-dialog-notice-ink: #fff0a0;
+  }
+}
+
+/* The page behind an open dialog stays put. */
+html.ln-dialog-open,
+html.ln-dialog-open body { overflow: hidden; }
+
+/* ---------- Backdrop ---------- */
+.luno-desktop-app :is(.modal-backdrop, .fx-modal-backdrop) {
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  background: var(--ln-dialog-dim) !important;
+  backdrop-filter: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- Panel ---------- */
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: min(760px, calc(100dvh - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--ln-surface) !important;
+  color: var(--ln-text) !important;
+  border: 1px solid var(--ln-dialog-edge) !important;
+  border-radius: var(--ln-dialog-radius) !important;
+  box-shadow: var(--ln-dialog-shadow) !important;
+  outline: none;
+  scrollbar-width: thin;
+}
+.luno-desktop-app :is(.add-friend-modal, .new-chat-modal, .password-modal, .keep-modal, .new-call-modal) {
+  width: min(440px, 100%) !important;
+  max-width: 100% !important;
+}
+.luno-desktop-app .fx-modal { padding: 20px 22px 22px; gap: 14px; }
+.luno-desktop-app .fx-modal h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+
+/* ---------- Header: title left, quiet close right ---------- */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) > .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 60px;
+  padding: 12px 12px 4px 22px !important;
+  background: var(--ln-surface) !important;
+  border-bottom: 0 !important;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) > .modal-header :is(h2, h3) {
+  margin: 0;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.2px;
+  color: var(--ln-text);
+  overflow-wrap: anywhere;
+}
+.luno-desktop-app .btn-modal-close {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ln-muted);
+  background: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.luno-desktop-app .btn-modal-close:hover { background: var(--ln-subtle); color: var(--ln-text); }
+.luno-desktop-app :is(.btn-modal-close, .standard-modal-box button, .modal-card button, .fx-modal button):focus-visible {
+  outline: 2px solid var(--ln-accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Body ---------- */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px !important;
+  padding: 8px 22px 22px !important;
+  overflow: visible;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form > label:not(.friend-check-item):not(.pc-custom-check):not(.pc-input-row) {
+  margin-bottom: -4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ln-muted);
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-subtext {
+  margin: 0 0 2px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ln-muted) !important;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) :is(input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']), select, textarea) {
+  min-height: 46px;
+  padding: 11px 14px;
+  border: 1px solid var(--ln-line);
+  border-radius: 12px;
+  background: var(--ln-surface);
+  color: var(--ln-text);
+  font-size: 15px;
+  box-shadow: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) textarea { min-height: 92px; line-height: 1.55; resize: vertical; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) :is(input, select, textarea):focus {
+  border-color: var(--ln-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ln-accent) 16%, transparent);
+  outline: none;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) :is(input, select, textarea):disabled { background: var(--ln-subtle); color: var(--ln-muted); }
+
+/* Notices use a light KakaoTalk-yellow tint; errors use the danger token. */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.ln-charge-notice, .ln-dialog-notice) {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ln-dialog-notice-line);
+  border-radius: 12px;
+  background: var(--ln-dialog-notice-bg);
+  color: var(--ln-dialog-notice-ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.ln-dialog-error, .error-text) {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ln-danger) 9%, transparent);
+  color: var(--ln-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.luno-desktop-app .ln-dialog-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 0;
+  color: var(--ln-muted);
+  font-size: 13px;
+}
+.luno-desktop-app .ln-dialog-loading::before,
+.luno-desktop-app :is(.btn-primary, .btn-pc-submit-full)[aria-busy='true']::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: ln-dialog-spin 0.8s linear infinite;
+}
+.luno-desktop-app :is(.btn-primary, .btn-pc-submit-full)[aria-busy='true'] { display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: progress; }
+@keyframes ln-dialog-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Actions ---------- */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-actions-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) :is(.btn-primary, .btn-secondary, .btn-pc-submit-full) {
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 12px !important;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) .btn-secondary {
+  border: 0 !important;
+  background: var(--ln-subtle) !important;
+  color: var(--ln-text) !important;
+  font-weight: 600;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) .btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ln-text) 9%, var(--ln-subtle)) !important;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) :is(.btn-primary, .btn-secondary, .btn-pc-submit-full):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .btn-pc-submit-full { margin-top: 2px; }
+
+/* ---------- Lists and choices inside dialogs ---------- */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .select-friends-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--ln-line);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .friend-check-item {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ln-text);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .friend-check-item:hover { background: var(--ln-subtle); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .friend-check-item input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--ln-accent); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .quick-pick-friend-row {
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .quick-pick-friend-row:hover { background: var(--ln-subtle); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .friend-pick-meta strong { font-size: 15px; font-weight: 600; color: var(--ln-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .friend-pick-meta small { font-size: 12.5px; color: var(--ln-muted); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .btn-mini-chat {
+  flex: none;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--ln-accent-soft);
+  color: var(--ln-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.btn-new-chat-type, .quick-opt-item) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--ln-subtle);
+  color: var(--ln-text);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.btn-new-chat-type, .quick-opt-item):hover { background: var(--ln-accent-soft); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.type-icon, .quick-opt-item .icon) {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ln-surface);
+  color: var(--ln-accent);
+  font-size: 0;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.type-text, .quick-opt-item > div) { min-width: 0; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.type-text strong, .quick-opt-item strong) { display: block; font-size: 14px; font-weight: 700; color: var(--ln-text); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.type-text small, .quick-opt-item small) { display: block; margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--ln-muted); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .add-friend-quick-options { grid-template-columns: 1fr; gap: 8px; margin-top: 4px; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .new-chat-options-grid { display: flex; flex-direction: column; gap: 8px; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .new-chat-options-grid > .btn-new-chat-type { flex: none; width: 100%; }
+/* Field + buttons on one line: the field takes the room, labels never wrap. */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .flex-row { gap: 8px; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .flex-row > input { flex: 1 1 auto; min-width: 0; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .flex-row > button { flex: none; white-space: nowrap; padding: 0 16px; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .keep-item-card { background: var(--ln-subtle) !important; border: 0 !important; border-radius: 14px !important; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .badge-keep-type { background: var(--ln-surface); color: var(--ln-muted); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .keep-body-text { color: var(--ln-text); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.btn-charge-option, .quick-amounts button) {
+  min-height: 48px;
+  border: 1px solid var(--ln-line);
+  border-radius: 12px;
+  background: var(--ln-surface);
+  color: var(--ln-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) :is(.btn-charge-option, .quick-amounts button):hover:not(:disabled) { border-color: var(--ln-accent); color: var(--ln-accent); }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .send-target-info { border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .setting-group { border-radius: 14px; }
+
+/* ---------- Phones: bottom sheet ---------- */
+@media (max-width: 699px) {
+  .luno-desktop-app :is(.modal-backdrop, .fx-modal-backdrop) {
+    align-items: flex-end;
+    padding: max(24px, env(safe-area-inset-top)) 0 0 !important;
+  }
+  .luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - max(24px, env(safe-area-inset-top))) !important;
+    border-radius: var(--ln-dialog-radius) var(--ln-dialog-radius) 0 0 !important;
+    border-bottom: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* Grab handle: tells the eye this is a sheet. */
+  .luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal)::before {
+    content: '';
+    flex: none;
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    margin: 8px 0 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ln-muted) 35%, transparent);
+  }
+  .luno-desktop-app :is(.standard-modal-box, .modal-card) > .modal-header { padding: 2px 8px 2px 20px !important; min-height: 52px; }
+  .luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form { padding: 6px 20px 20px !important; }
+  .luno-desktop-app .btn-modal-close { width: 44px; height: 44px; }
+  /* Actions span the sheet, like a native confirm. */
+  .luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-actions-right { justify-content: stretch; }
+  .luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-actions-right > button { flex: 1 1 0; }
+  /* 16px stops iOS from zooming into a focused field. */
+  .luno-desktop-app :is(.standard-modal-box, .modal-card, .fx-modal) :is(input, select, textarea) { font-size: 16px; }
+}
+
+/* ---------- Motion ---------- */
+.ln-modal-enter-active,
+.ln-modal-enter-active > * {
+  transition: opacity 0.26s ease, transform 0.26s var(--ln-dialog-ease);
+}
+.ln-modal-leave-active,
+.ln-modal-leave-active > * {
+  transition: opacity 0.18s ease, transform 0.18s ease-in;
+}
+.ln-modal-enter-from,
+.ln-modal-leave-to { opacity: 0; }
+.ln-modal-enter-from > *,
+.ln-modal-leave-to > * { opacity: 0; transform: translateY(8px) scale(0.97); }
+@media (max-width: 699px) {
+  .ln-modal-enter-from > *,
+  .ln-modal-leave-to > * { opacity: 1; transform: translateY(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ln-modal-enter-active,
+  .ln-modal-enter-active > *,
+  .ln-modal-leave-active,
+  .ln-modal-leave-active > * { transition: none !important; }
+  .luno-desktop-app :is(.btn-primary, .btn-pc-submit-full)[aria-busy='true']::before,
+  .luno-desktop-app .ln-dialog-loading::before { animation-duration: 2s; }
+}
+@media (max-width: 699px) {
+  /* On a phone the field gets its own line; the buttons share the next. */
+  .luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .flex-row { flex-wrap: wrap; }
+  .luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .flex-row > input { flex: 1 1 100%; }
+  .luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .flex-row > button { flex: 1 1 0; }
+}
+
+/* Login-page dialogs reuse the login field rows; inside a dialog the row's
+   own outer margin would double the gap. */
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .pc-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 !important;
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .pc-input-row > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ln-muted);
+}
+.luno-desktop-app :is(.standard-modal-box, .modal-card) .modal-body-form .btn-pc-submit-full { margin: 4px 0 0 !important; }

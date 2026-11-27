@@ -8,6 +8,7 @@ import { hideBrokenAvatar } from '../messenger-format'
 import type { User } from '../../../shared/api'
 import type { NavItem } from '../router'
 import LunoIcon from './LunoIcon.vue'
+import { vDialog } from '../directives/dialog'
 
 const showMore = defineModel<boolean>('showMore', { default: false })
 
@@ -91,7 +92,7 @@ const emit = defineEmits<{
   </nav>
 
   <!-- More: every secondary destination, each with a name -->
-  <div v-if="showMore" class="lx-more-layer" @click.self="showMore = false">
+  <div v-if="showMore" class="lx-more-layer" v-dialog="() => (showMore = false)" @click.self="showMore = false">
     <section class="lx-more" role="dialog" :aria-label="t('lxMore')">
       <header class="lx-more-head">
         <h2>{{ t('lxMore') }}</h2>

@@ -12,6 +12,8 @@
   ],
   "scripts": {
     "build": "node scripts/build_cf.js",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "node --test \"scripts/*.test.mjs\"",
     "deploy": "node --test \"scripts/*.test.mjs\" && node scripts/pre_deploy_gate.mjs && node scripts/build_cf.js && npx wrangler deploy",
     "postdeploy": "node scripts/post_deploy_gate.mjs https://luno-messenger.dnjstjqppk.workers.dev",
     "rebuild:deploy": "npm run deploy",

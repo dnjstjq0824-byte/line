@@ -1705,7 +1705,6 @@ import { activeTheme, darkMode, error, note, t } from './store/session'
 .timer-active { color: #4ade80; font-weight: 700; font-variant-numeric: tabular-nums; }
 .caption-stream { margin-top: 4px; }
 .profile-modal-card { width: 340px; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.25); }
-.profile-avatar-center { display: flex; justify-content: center; margin-top: -42px; }
 .profile-body-center { text-align: center; padding: 12px 20px; }
 .user-handle { font-size: 12px; color: #64748b; margin-top: 2px; }
 .user-status-text { font-size: 13px; color: #334155; margin-top: 8px; }

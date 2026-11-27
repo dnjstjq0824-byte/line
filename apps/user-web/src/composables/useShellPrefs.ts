@@ -2,7 +2,7 @@
 // Self-contained over the session store; no view bindings.
 // Extracted verbatim from views/MessengerView.vue.
 import { ref } from 'vue'
-import { activeTheme, darkMode, note, t } from '../store/session'
+import { note, t } from '../store/session'
 
 export function useShellPrefs() {
   const notificationsEnabled = ref(true)
@@ -20,18 +20,10 @@ export function useShellPrefs() {
     note.value = t('mvWallpaperChanged').replace('{name}', names[next])
   }
 
-  // --- Settings & Themes ---
-  function switchTheme(theme: 'mint' | 'ocean' | 'sunset' | 'sakura' | 'midnight') {
-    activeTheme.value = theme
-    darkMode.value = theme === 'midnight'
-    note.value = t('mvThemeChanged').replace('{name}', theme.toUpperCase())
-  }
-
   return {
     notificationsEnabled,
     toggleNotifications,
     chatWallpaper,
     cycleWallpaper,
-    switchTheme,
   }
 }

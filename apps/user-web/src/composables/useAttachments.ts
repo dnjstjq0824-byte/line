@@ -7,6 +7,7 @@ import { api, currentUser, error, t } from '../store/session'
 import type { getE2ee } from '../e2ee/client'
 import { shrinkPhotoForUpload } from '../messenger-utils'
 import { newClientID } from '../../../shared/api'
+import { b64uDecode } from '../../../shared/e2ee/codec'
 import type { Chat, Message } from '../../../shared/api'
 
 export interface AttachmentsDeps {
@@ -42,7 +43,6 @@ export function useAttachments(deps: AttachmentsDeps) {
     if (room?.e2ee) {
       const { sealFile } = await import('../../../shared/e2ee/files.ts')
       const s = await sealFile(uploadBytes)
-      const { b64uDecode } = await import('../../../shared/e2ee/codec.ts')
       uploadBytes = b64uDecode(s.ct)
       sealed = { key: s.key, iv: s.iv, hash: s.hash }
     }

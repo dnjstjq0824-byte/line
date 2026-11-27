@@ -4,6 +4,8 @@
 // the quoted message is read-only; visibility stays outside.
 import { t } from '../store/session'
 import type { Message } from '../../../shared/api'
+import { vDialog } from '../directives/dialog'
+import LunoIcon from './LunoIcon.vue'
 
 const reportCategory = defineModel<string>('reportCategory', { default: 'spam' })
 const reportDetails = defineModel<string>('reportDetails', { default: '' })
@@ -20,11 +22,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="standard-modal-box" role="dialog" :aria-label="t('reportTitle')">
       <div class="modal-header">
         <h3>{{ t('reportTitle') }}</h3>
-        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
       </div>
       <div class="modal-body-form">
         <label class="pc-input-row">
@@ -47,7 +49,7 @@ const emit = defineEmits<{
           <input v-model="reportE2eeConsent" type="checkbox" />
           <span>{{ t('reportE2eeConsent') }}</span>
         </label>
-        <p v-if="reportMessage" style="margin: 0; padding: 8px 10px; border-left: 3px solid #888; background: rgb(0 0 0 / 5%); font-size: 13px; white-space: pre-wrap; word-break: break-word;">{{ reportMessage.body }}</p>
+        <p v-if="reportMessage" style="margin: 0; padding: 10px 12px; border-left: 3px solid var(--ln-line); border-radius: 0 12px 12px 0; background: var(--ln-subtle); color: var(--ln-text); font-size: 13px; white-space: pre-wrap; word-break: break-word;">{{ reportMessage.body }}</p>
         <button class="btn-pc-submit-full" type="button" @click="emit('submit')">
           {{ t('reportSubmit') }}
         </button>

@@ -2,6 +2,7 @@
 import lunoLogo from '../../../shared/brand/luno-logo-horizontal.svg'
 import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
 import LunoIcon from '../components/LunoIcon.vue'
+import { vDialog } from '../directives/dialog'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SUPPORTED_LOCALES } from '../luno-i18n'
@@ -633,89 +634,95 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Password recovery dialog -->
-      <div v-if="showRecoverModal" class="modal-backdrop" @click.self="showRecoverModal = false">
-        <div class="standard-modal-box" role="dialog" :aria-label="t('mvRecoverTitle')">
-          <div class="modal-header">
-            <h3>{{ t('mvRecoverTitle') }}</h3>
-            <button class="btn-modal-close" @click="showRecoverModal = false" :aria-label="t('mvClose')">✕</button>
+      <Transition name="ln-modal">
+        <div v-if="showRecoverModal" class="modal-backdrop" v-dialog="() => (showRecoverModal = false)" @click.self="showRecoverModal = false">
+          <div class="standard-modal-box" role="dialog" :aria-label="t('mvRecoverTitle')">
+            <div class="modal-header">
+              <h3>{{ t('mvRecoverTitle') }}</h3>
+              <button class="btn-modal-close" @click="showRecoverModal = false" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
+            </div>
+            <div class="modal-body-form">
+              <label class="pc-input-row">
+                <span>{{ t('mvRecoverEmail') }}</span>
+                <input v-model="recoverEmail" type="email" class="pc-login-input" :disabled="recoverSent" />
+              </label>
+              <button v-if="!recoverSent" class="btn-pc-submit-full" type="button" :disabled="!recoverEmail.includes('@')" @click="sendRecoverCode">
+                {{ t('mvRecoverSend') }}
+              </button>
+              <template v-else>
+                <p class="ln-charge-notice" role="note">
+                  {{ t('mvRecoverCodeHint') }}
+                </p>
+                <label class="pc-input-row">
+                  <span>{{ t('mvRecoverCode') }}</span>
+                  <input v-model="recoverCodeInput" type="text" class="pc-login-input" autocomplete="one-time-code" />
+                </label>
+                <label class="pc-input-row">
+                  <span>{{ t('mvRecoverNewPw') }}</span>
+                  <input v-model="recoverNewPassword" type="password" class="pc-login-input" autocomplete="new-password" />
+                </label>
+                <button class="btn-pc-submit-full" type="button" :disabled="!recoverCodeInput.trim() || recoverNewPassword.length < 10" @click="verifyRecoverCode">
+                  {{ t('mvRecoverReset') }}
+                </button>
+              </template>
+              <button class="btn-secondary" type="button" @click="showRecoverModal = false">{{ t('mvRecoverCancel') }}</button>
+            </div>
           </div>
-          <div class="modal-body-form">
-            <label class="pc-input-row">
-              <span>{{ t('mvRecoverEmail') }}</span>
-              <input v-model="recoverEmail" type="email" class="pc-login-input" :disabled="recoverSent" />
-            </label>
-            <button v-if="!recoverSent" class="btn-pc-submit-full" type="button" :disabled="!recoverEmail.includes('@')" @click="sendRecoverCode">
-              {{ t('mvRecoverSend') }}
-            </button>
-            <template v-else>
+        </div>
+      </Transition>
+      <Transition name="ln-modal">
+        <div v-if="showVerifyModal" class="modal-backdrop" v-dialog="() => (showVerifyModal = false)" @click.self="showVerifyModal = false">
+          <div class="standard-modal-box" role="dialog" :aria-label="t('verifyTitle')">
+            <div class="modal-header">
+              <h3>{{ t('verifyTitle') }}</h3>
+              <button class="btn-modal-close" @click="showVerifyModal = false" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
+            </div>
+            <div class="modal-body-form">
               <p class="ln-charge-notice" role="note">
-                {{ t('mvRecoverCodeHint') }}
+                {{ t('verifyPrompt') }}
               </p>
               <label class="pc-input-row">
-                <span>{{ t('mvRecoverCode') }}</span>
-                <input v-model="recoverCodeInput" type="text" class="pc-login-input" autocomplete="one-time-code" />
+                <span>{{ t('verifyEmailLabel') }}</span>
+                <input v-model="verifyEmail" type="email" class="pc-login-input" disabled />
               </label>
               <label class="pc-input-row">
-                <span>{{ t('mvRecoverNewPw') }}</span>
-                <input v-model="recoverNewPassword" type="password" class="pc-login-input" autocomplete="new-password" />
+                <span>{{ t('verifyCodeLabel') }}</span>
+                <input v-model="verifyCodeInput" type="text" class="pc-login-input" autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
               </label>
-              <button class="btn-pc-submit-full" type="button" :disabled="!recoverCodeInput.trim() || recoverNewPassword.length < 10" @click="verifyRecoverCode">
-                {{ t('mvRecoverReset') }}
+              <button class="btn-pc-submit-full" type="button" :disabled="verifyCodeInput.trim().length < 6" @click="submitVerifyCode">
+                {{ t('verifySubmit') }}
               </button>
-            </template>
-            <button class="btn-secondary" type="button" @click="showRecoverModal = false">{{ t('mvRecoverCancel') }}</button>
+              <button class="btn-secondary" type="button" @click="resendVerifyCode">{{ t('verifyResend') }}</button>
+            </div>
           </div>
         </div>
-      </div>
-      <div v-if="showVerifyModal" class="modal-backdrop" @click.self="showVerifyModal = false">
-        <div class="standard-modal-box" role="dialog" :aria-label="t('verifyTitle')">
-          <div class="modal-header">
-            <h3>{{ t('verifyTitle') }}</h3>
-            <button class="btn-modal-close" @click="showVerifyModal = false" :aria-label="t('mvClose')">✕</button>
-          </div>
-          <div class="modal-body-form">
-            <p class="ln-charge-notice" role="note">
-              {{ t('verifyPrompt') }}
-            </p>
-            <label class="pc-input-row">
-              <span>{{ t('verifyEmailLabel') }}</span>
-              <input v-model="verifyEmail" type="email" class="pc-login-input" disabled />
-            </label>
-            <label class="pc-input-row">
-              <span>{{ t('verifyCodeLabel') }}</span>
-              <input v-model="verifyCodeInput" type="text" class="pc-login-input" autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
-            </label>
-            <button class="btn-pc-submit-full" type="button" :disabled="verifyCodeInput.trim().length < 6" @click="submitVerifyCode">
-              {{ t('verifySubmit') }}
-            </button>
-            <button class="btn-secondary" type="button" @click="resendVerifyCode">{{ t('verifyResend') }}</button>
-          </div>
-        </div>
-      </div>
-      <div v-if="showConsentModal" class="modal-backdrop" @click.self="showConsentModal = false">
-        <div class="standard-modal-box" role="dialog" :aria-label="t('consentStaleTitle')">
-          <div class="modal-header">
-            <h3>{{ t('consentStaleTitle') }}</h3>
-            <button class="btn-modal-close" @click="showConsentModal = false" :aria-label="t('mvClose')">✕</button>
-          </div>
-          <div class="modal-body-form">
-            <p class="ln-charge-notice" role="note">{{ t('consentStaleNote') }}</p>
-            <label class="pc-custom-check">
-              <input type="checkbox" v-model="agreeTerms" />
-              <span>{{ t('consentTerms') }}</span>
-              <a :href="legalUrl('terms')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewTerms') }}</a>
-            </label>
-            <label class="pc-custom-check">
-              <input type="checkbox" v-model="agreePrivacy" />
-              <span>{{ t('consentPrivacy') }}</span>
-              <a :href="legalUrl('privacy')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewPrivacy') }}</a>
-            </label>
-            <button class="btn-pc-submit-full" type="button" :disabled="!agreeTerms || !agreePrivacy" @click="submitReconsent">
-              {{ t('signInBtn') }}
-            </button>
-            <button class="btn-secondary" type="button" @click="showConsentModal = false">{{ t('mvRecoverCancel') }}</button>
+      </Transition>
+      <Transition name="ln-modal">
+        <div v-if="showConsentModal" class="modal-backdrop" v-dialog="() => (showConsentModal = false)" @click.self="showConsentModal = false">
+          <div class="standard-modal-box" role="dialog" :aria-label="t('consentStaleTitle')">
+            <div class="modal-header">
+              <h3>{{ t('consentStaleTitle') }}</h3>
+              <button class="btn-modal-close" @click="showConsentModal = false" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
+            </div>
+            <div class="modal-body-form">
+              <p class="ln-charge-notice" role="note">{{ t('consentStaleNote') }}</p>
+              <label class="pc-custom-check">
+                <input type="checkbox" v-model="agreeTerms" />
+                <span>{{ t('consentTerms') }}</span>
+                <a :href="legalUrl('terms')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewTerms') }}</a>
+              </label>
+              <label class="pc-custom-check">
+                <input type="checkbox" v-model="agreePrivacy" />
+                <span>{{ t('consentPrivacy') }}</span>
+                <a :href="legalUrl('privacy')" target="_blank" rel="noopener" class="btn-subtle-link" style="margin-left:auto">{{ t('consentViewPrivacy') }}</a>
+              </label>
+              <button class="btn-pc-submit-full" type="button" :disabled="!agreeTerms || !agreePrivacy" @click="submitReconsent">
+                {{ t('signInBtn') }}
+              </button>
+              <button class="btn-secondary" type="button" @click="showConsentModal = false">{{ t('mvRecoverCancel') }}</button>
+            </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </main>
 </template>

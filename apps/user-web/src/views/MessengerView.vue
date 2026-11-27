@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import lunoMark from '../../../shared/brand/luno-logo-appicon.svg'
 import LunoIcon from '../components/LunoIcon.vue'
-import MessageAttachment from '../components/MessageAttachment.vue'
 import LunoContextMenu, { type ContextMenuItem } from '../components/LunoContextMenu.vue'
 import CallModal from '../components/CallModal.vue'
 import GroupCallModal from '../components/GroupCallModal.vue'
@@ -42,41 +41,26 @@ import OpenChatRoomPane from '../components/OpenChatRoomPane.vue'
 import PhoneTabBar from '../components/PhoneTabBar.vue'
 import FriendDetailPane from '../components/FriendDetailPane.vue'
 import ShellNav from '../components/ShellNav.vue'
-import { LUNO_STICKERS } from '../luno-stickers'
-import { imageStickerChar } from '../../../shared/sticker_catalog'
-import { findDirectChatId } from '../../../shared/direct_chat'
 import { makeFriendQrSvg } from '../../../shared/friend_qr'
-import { initialOf } from '../../../shared/avatar_initial'
 import { playSendSound } from '../sound-effects'
 import { syncWebPushSubscription } from '../web_notify'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   api,
-  appVersion,
-  currentLocale,
   currentUser,
   error,
   fetchAppVersion,
-  isDarkMode,
   note,
   paymentsEnabled,
   ensureSession,
   readStoredDeviceId,
-  setLocale,
   t,
-  toggleDarkMode,
   token,
   wrap,
 } from '../store/session'
 import { NAV_PATHS, type NavItem } from '../router'
 import {
-  SUPPORTED_LOCALES,
-  type LunoLocale
-} from '../luno-i18n'
-import {
-  API_URL,
-  request,
   ApiError,
   newClientID,
   type Chat,
@@ -85,11 +69,7 @@ import {
   type User,
 } from '../../../shared/api'
 import {
-  isKeepRoomId,
   queueOfflineMessage,
-  readSnapshot,
-  shrinkPhotoForUpload,
-  writeSnapshot
 } from '../messenger-utils'
 import { useChatSocket } from '../composables/useChatSocket'
 
@@ -114,7 +94,6 @@ import { useStoreStickers } from '../composables/useStoreStickers'
 import { useFriendsGroups } from '../composables/useFriendsGroups'
 import { useCallHistory } from '../composables/useCallHistory'
 import { useRowActions } from '../composables/useRowActions'
-import { useRichMenu } from '../composables/useRichMenu'
 import { useChatListFilters } from '../composables/useChatListFilters'
 import { useMessageActions } from '../composables/useMessageActions'
 import { useAttachments } from '../composables/useAttachments'
@@ -126,19 +105,10 @@ import { useGlobalKeys } from '../composables/useGlobalKeys'
 import { useApprovalBox } from '../composables/useApprovalBox'
 import { useChatLoader } from '../composables/useChatLoader'
 import {
-  NEWS_CATEGORY_IDS,
-  RTF_LOCALE,
-  callDateText,
   formatDateDivider,
   formatDuration,
-  formatKRW,
   formatListTime,
   formatTime,
-  hideBrokenAvatar,
-  newsCatKoLabel,
-  newsCatLabel,
-  relTime,
-  taglineOf,
 } from '../messenger-format'
 
 // --- LUNO Multilingual & Accessibility & Theme State ---
@@ -159,7 +129,6 @@ const {
 
 
 // --- Auth & Session State ---
-const basePath = import.meta.env.BASE_URL
 
 // --- Navigation Tabs (Open Messenger 14 Global Nav Rail) ---
 const activeNav = ref<NavItem>('chats')
@@ -193,6 +162,32 @@ const emptyMain = computed(() => {
   if (activeNav.value === 'openchat') return { icon: 'openchat', title: t('lxPickOpenChat'), desc: t('lxPickOpenChatDesc') }
   return null
 })
+// Add-friend "share invite link": the public /@handle page (worker SSR deep
+// link) opens LUNO or the store for whoever taps it. Phones get the system
+// share sheet; desktops copy the link.
+async function shareInviteLink() {
+  const handle = currentUser.value?.handle
+  if (!handle) return
+  const url = `${window.location.origin}/@${encodeURIComponent(handle)}`
+  const touch = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+  if (touch && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title: 'LUNO', url })
+      return
+    } catch (e) {
+      // The person closed the share sheet: nothing to do. Anything else
+      // falls through to copying the link.
+      if (e instanceof DOMException && e.name === 'AbortError') return
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    note.value = t('gsLinkCopied')
+  } catch {
+    // Clipboard blocked (insecure context or denied): show the link so it can be copied by hand.
+    note.value = url
+  }
+}
 function runMoreItem(id: string) {
   showMorePanel.value = false
   const item = MORE_ITEMS.find(entry => entry.id === id)
@@ -216,7 +211,6 @@ const {
   toggleNotifications,
   chatWallpaper,
   cycleWallpaper,
-  switchTheme,
 } = useShellPrefs()
 
 // --- News Tab State (Section 10 & Screenshot 5) ---
@@ -312,8 +306,6 @@ const chats = ref<Chat[]>([])
 // P2 split: list loading lives in useChatLoader (room list injected).
 const {
   channelSlot,
-  loadChannelSlot,
-  localizeKeepRoom,
   loadChats,
 } = useChatLoader({ chats })
 const selectedChatId = ref('')
@@ -331,11 +323,9 @@ const {
   showSafetyModal,
   safetyRows,
   safetyLoading,
-  safetyPeerId,
   safetyMyCode,
   openSafetyModal,
   verifySafetyDevice,
-  openSafetyModalRefresh,
   exportDeviceChat,
 } = useMessengerE2ee({ chats, selectedChatId, messages, selectChat })
 // P2 split: attachment picker + sender live in useAttachments (chat refs injected).
@@ -368,13 +358,6 @@ const earlierMessagesLoading = ref(false)
 const earlierMessagesError = ref('')
 const draftMessage = ref('')
 const replyToMessage = ref<Message | null>(null)
-// P2 split: rich menu lives in useRichMenu (composer injected). Same names, same call sites.
-const {
-  activeRichMenu,
-  showRichMenu,
-  loadConversationRichMenu,
-  onRichMenuTileClick,
-} = useRichMenu({ draftMessage, sendMessage })
 const conversationDrafts = new Map<string, { body: string; reply: Message | null }>()
 const sendingConversations = ref(new Set<string>())
 const pendingSends = new Map<string, AbortController>()
@@ -406,15 +389,11 @@ const {
   newEventDate,
   newEventLocation,
   loadPolls,
-  loadNotes,
-  loadEvents,
   toggleDrawer,
-  loadAlbums,
   createAlbum,
   createNote,
   deleteNoteItem,
   rsvpEvent,
-  loadConversationMedia,
   runConversationSearch,
   pinMessage,
   unpinMessage,
@@ -434,7 +413,6 @@ const {
   showCreateOpenChatModal,
   showVoomCreateModal,
   newVoomBody,
-  newVoomComment,
   stories,
   voomVideos,
   newStoryText,
@@ -444,7 +422,6 @@ const {
   publishStory,
   createVoomPost,
   likeVoomPost,
-  submitVoomComment,
   createOpenChatRoom,
   selectOpenChatRoom,
   submitOpenChatPost,
@@ -631,10 +608,7 @@ const {
   activeStickerCategory,
   filteredStickers,
   getStickerSvg,
-  stickerPacks,
   showStickerPicker,
-  activeStickerTab,
-  stickersList,
   devicesList,
   storePacks,
   storeLoading,
@@ -650,10 +624,8 @@ const {
   photoSaving,
   photoError,
   changeProfilePhoto,
-  persistProfilePhoto,
   removeProfilePhoto,
   changeCoverPhoto,
-  persistCoverPhoto,
   removeCoverPhoto,
 } = useProfilePhotos({ activeProfileUser })
 const showSettingsModal = ref(false)
@@ -997,22 +969,18 @@ const {
 // P2 split: effect + camera live in useMessengerCamera (upload/selection/sender injected).
 const {
   effectFile,
-  effectConversation,
   effectChoice,
   effectPreviewUrl,
-  PHOTO_EFFECT_FILTER,
   closeEffectModal,
   sendEffectPhoto,
   openEffectModal,
   showCameraModal,
   cameraVideoRef,
-  cameraStream,
   cameraError,
   cameraMode,
   videoRecording,
   videoElapsed,
   openCamera,
-  acquireCamera,
   switchCameraMode,
   closeCamera,
   startVideoCapture,
@@ -1050,7 +1018,6 @@ const {
   saveEditMessage,
   reactToMessage,
   unsendMessage,
-  copyMessageText,
   startReply,
   showForwardModal,
   forwardTargetMsg,
@@ -1060,7 +1027,6 @@ const {
 // P2 split: report dialog + history live in useMessengerReport. Same names, same call sites.
 const {
   showReportModal,
-  reportTarget,
   reportCategory,
   reportDetails,
   reportMessage,
@@ -1070,7 +1036,6 @@ const {
   openReportForMessage,
   submitReport,
   loadMyReports,
-  reportStateLabel,
 } = useMessengerReport()
 watch(showSettingsModal, (open) => { if (open) void loadMyReports(); else void ensureLinkPreviewPref() })
 
@@ -1140,7 +1105,7 @@ const {
 const {
   handleGlobalKeydown,
   syncKeyboardOpen,
-} = useGlobalKeys({ showSettingsModal, showNewChatModal, showAddFriendModal, showPasswordModal, activeNewsArticle, selectedFriendProfile, showQrModal })
+} = useGlobalKeys({ selectedFriendProfile })
 // P2 split: list-row actions live in useRowActions (loaders/selection injected).
 const {
   toggleFriendFavorite,
@@ -1630,26 +1595,30 @@ onBeforeUnmount(() => {
     </main>
 
     <!-- QR SCANNER & MY QR CODE MODAL -->
-    <QrModal
-      v-if="showQrModal"
-      :qr-svg="myQrSvg"
-      :handle="currentUser?.handle || ''"
-      @close="showQrModal = false"
-      @search-by-id="showQrModal = false; showAddFriendModal = true"
-    />
+    <Transition name="ln-modal">
+      <QrModal
+        v-if="showQrModal"
+        :qr-svg="myQrSvg"
+        :handle="currentUser?.handle || ''"
+        @close="showQrModal = false"
+        @search-by-id="showQrModal = false; showAddFriendModal = true"
+      />
+    </Transition>
 
     <!-- ARTICLE READER MODAL (News Details from Screenshot 5) -->
-    <NewsReaderModal
-      v-if="activeNewsArticle"
-      :article="activeNewsArticle"
-      :bookmarked="newsBookmarks.has(activeNewsArticle?.id || '')"
-      :comments="newsArticleComments[activeNewsArticle?.id || ''] || []"
-      v-model:new-comment="newCommentInput"
-      @close="activeNewsArticle = null"
-      @toggle-bookmark="toggleNewsBookmark"
-      @share="shareNewsToChat"
-      @submit-comment="addNewsComment"
-    />
+    <Transition name="ln-modal">
+      <NewsReaderModal
+        v-if="activeNewsArticle"
+        :article="activeNewsArticle"
+        :bookmarked="newsBookmarks.has(activeNewsArticle?.id || '')"
+        :comments="newsArticleComments[activeNewsArticle?.id || ''] || []"
+        v-model:new-comment="newCommentInput"
+        @close="activeNewsArticle = null"
+        @toggle-bookmark="toggleNewsBookmark"
+        @share="shareNewsToChat"
+        @submit-comment="addNewsComment"
+      />
+    </Transition>
 
 <!-- CALLING OVERLAY MODAL (WebRTC Voice & Video Call with AI Live Captions) -->
 
@@ -1695,220 +1664,264 @@ onBeforeUnmount(() => {
     />
 
     <!-- PROFILE MODAL (Full LUNO User Profile View) -->
-    <ProfileModal
-      v-if="activeProfileUser"
-      :user="activeProfileUser"
-      :current-user="currentUser"
-      :photo-saving="photoSaving"
-      :photo-error="photoError"
-      @close="activeProfileUser = null"
-      @open-password="showPasswordModal = true; activeProfileUser = null"
-      @direct-chat="startDirectChat($event); activeProfileUser = null"
-      @voice-call="startCallWithUser($event, 'voice'); activeProfileUser = null"
-      @video-call="startCallWithUser($event, 'video'); activeProfileUser = null"
-      @send-money="openSendMoneyModal($event); activeProfileUser = null"
-      @photo-change="changeProfilePhoto"
-      @photo-remove="removeProfilePhoto"
-      @cover-change="changeCoverPhoto"
-      @cover-remove="removeCoverPhoto"
-    />
+    <Transition name="ln-modal">
+      <ProfileModal
+        v-if="activeProfileUser"
+        :user="activeProfileUser"
+        :current-user="currentUser"
+        :photo-saving="photoSaving"
+        :photo-error="photoError"
+        @close="activeProfileUser = null"
+        @open-password="showPasswordModal = true; activeProfileUser = null"
+        @direct-chat="startDirectChat($event); activeProfileUser = null"
+        @voice-call="startCallWithUser($event, 'voice'); activeProfileUser = null"
+        @video-call="startCallWithUser($event, 'video'); activeProfileUser = null"
+        @send-money="openSendMoneyModal($event); activeProfileUser = null"
+        @photo-change="changeProfilePhoto"
+        @photo-remove="removeProfilePhoto"
+        @cover-change="changeCoverPhoto"
+        @cover-remove="removeCoverPhoto"
+      />
+    </Transition>
 
     <!-- KEEP VAULT MODAL -->
-    <KeepModal
-      v-if="showKeepModal"
-      v-model:keep-filter="keepFilter"
-      v-model:keep-search="keepSearch"
-      :keep-items="keepItems"
-      :filtered-items="filteredKeepItems"
-      @close="showKeepModal = false"
-      @delete-item="deleteFromKeep"
-    />
+    <Transition name="ln-modal">
+      <KeepModal
+        v-if="showKeepModal"
+        v-model:keep-filter="keepFilter"
+        v-model:keep-search="keepSearch"
+        :keep-items="keepItems"
+        :filtered-items="filteredKeepItems"
+        @close="showKeepModal = false"
+        @delete-item="deleteFromKeep"
+      />
+    </Transition>
 
     <!-- SEND MONEY MODAL -->
-    <SendMoneyModal
-      v-if="showSendMoneyModal"
-      v-model:send-amount="sendAmountInput"
-      v-model:send-memo="sendMemoInput"
-      :target-friend="sendTargetFriend"
-      @close="showSendMoneyModal = false"
-      @submit="executeSendMoney"
-    />
+    <Transition name="ln-modal">
+      <SendMoneyModal
+        v-if="showSendMoneyModal"
+        v-model:send-amount="sendAmountInput"
+        v-model:send-memo="sendMemoInput"
+        :target-friend="sendTargetFriend"
+        @close="showSendMoneyModal = false"
+        @submit="executeSendMoney"
+      />
+    </Transition>
 
     <!-- CHARGE MONEY MODAL -->
-    <ChargeModal
-      v-if="showChargeModal"
-      @close="showChargeModal = false"
-      @charge="executeChargeMoney"
-    />
+    <Transition name="ln-modal">
+      <ChargeModal
+        v-if="showChargeModal"
+        @close="showChargeModal = false"
+        @charge="executeChargeMoney"
+      />
+    </Transition>
 
     <!-- CREATE POLL MODAL -->
-    <PollCreateModal
-      v-if="showPollCreateModal"
-      v-model:question="newPollQuestion"
-      v-model:option1="newPollOption1"
-      v-model:option2="newPollOption2"
-      v-model:option3="newPollOption3"
-      @close="showPollCreateModal = false"
-      @submit="createPoll"
-    />
+    <Transition name="ln-modal">
+      <PollCreateModal
+        v-if="showPollCreateModal"
+        v-model:question="newPollQuestion"
+        v-model:option1="newPollOption1"
+        v-model:option2="newPollOption2"
+        v-model:option3="newPollOption3"
+        @close="showPollCreateModal = false"
+        @submit="createPoll"
+      />
+    </Transition>
 
     <!-- CREATE EVENT MODAL -->
-    <EventCreateModal
-      v-if="showEventCreateModal"
-      v-model:event-title="newEventTitle"
-      v-model:event-date="newEventDate"
-      v-model:event-location="newEventLocation"
-      @close="showEventCreateModal = false"
-      @submit="createEvent"
-    />
+    <Transition name="ln-modal">
+      <EventCreateModal
+        v-if="showEventCreateModal"
+        v-model:event-title="newEventTitle"
+        v-model:event-date="newEventDate"
+        v-model:event-location="newEventLocation"
+        @close="showEventCreateModal = false"
+        @submit="createEvent"
+      />
+    </Transition>
 
     <!-- SETTINGS & THEMES MODAL -->
 
-    <ReportModal
-      v-if="showReportModal"
-      v-model:report-category="reportCategory"
-      v-model:report-details="reportDetails"
-      v-model:report-e2ee-consent="reportE2eeConsent"
-      :report-message="reportMessage"
-      @close="showReportModal = false"
-      @submit="submitReport"
-    />
-    <SafetyModal
-      v-if="showSafetyModal"
-      :rows="safetyRows"
-      :loading="safetyLoading"
-      :my-code="safetyMyCode"
-      @close="showSafetyModal = false"
-      @verify="verifySafetyDevice"
-    />
-    <ApprovalBox
-      v-if="showApprovalBox && selectedChat"
-      :proposals="approvalProposals"
-      :can-decide="approvalCanDecide()"
-      :room-title="selectedChat.title"
-      @close="showApprovalBox = false"
-      @decide="decideProposal"
-    />
-    <GroupSettingsModal
-      v-if="showGroupSettings && selectedChat && selectedChat.kind === 'group'"
-      :chat="selectedChat"
-      :friends="friends"
-      :my-id="currentUser?.id || ''"
-      @close="showGroupSettings = false"
-      @changed="onGroupChanged"
-      @left="onGroupLeft"
-    />
-    <SettingsModal
-      v-if="showSettingsModal"
-      :devices-list="devicesList"
-      :my-reports="myReports"
-      :translate-configured="translateConfigured"
-      :translate-languages="translateLanguages"
-      v-model:target-translate-lang="targetTranslateLang"
-      v-model:delete-password-input="deletePasswordInput"
-      v-model:delete-reason-input="deleteReasonInput"
-      v-model:delete-confirm-input="deleteConfirmInput"
-      v-model:e2ee-busy="e2eeBackupBusy"
-      @close="showSettingsModal = false"
-      @export="exportUserDataArchive"
-      @delete="deleteUserAccount"
-      @revoke-device="revokeDevice"
-      @e2ee-backup="backupE2eeNow"
-      @e2ee-restore="restoreE2eeNow"
-    />
+    <Transition name="ln-modal">
+      <ReportModal
+        v-if="showReportModal"
+        v-model:report-category="reportCategory"
+        v-model:report-details="reportDetails"
+        v-model:report-e2ee-consent="reportE2eeConsent"
+        :report-message="reportMessage"
+        @close="showReportModal = false"
+        @submit="submitReport"
+      />
+    </Transition>
+    <Transition name="ln-modal">
+      <SafetyModal
+        v-if="showSafetyModal"
+        :rows="safetyRows"
+        :loading="safetyLoading"
+        :my-code="safetyMyCode"
+        @close="showSafetyModal = false"
+        @verify="verifySafetyDevice"
+      />
+    </Transition>
+    <Transition name="ln-modal">
+      <ApprovalBox
+        v-if="showApprovalBox && selectedChat"
+        :proposals="approvalProposals"
+        :can-decide="approvalCanDecide()"
+        :room-title="selectedChat.title"
+        @close="showApprovalBox = false"
+        @decide="decideProposal"
+      />
+    </Transition>
+    <Transition name="ln-modal">
+      <GroupSettingsModal
+        v-if="showGroupSettings && selectedChat && selectedChat.kind === 'group'"
+        :chat="selectedChat"
+        :friends="friends"
+        :my-id="currentUser?.id || ''"
+        @close="showGroupSettings = false"
+        @changed="onGroupChanged"
+        @left="onGroupLeft"
+      />
+    </Transition>
+    <Transition name="ln-modal">
+      <SettingsModal
+        v-if="showSettingsModal"
+        :devices-list="devicesList"
+        :my-reports="myReports"
+        :translate-configured="translateConfigured"
+        :translate-languages="translateLanguages"
+        v-model:target-translate-lang="targetTranslateLang"
+        v-model:delete-password-input="deletePasswordInput"
+        v-model:delete-reason-input="deleteReasonInput"
+        v-model:delete-confirm-input="deleteConfirmInput"
+        v-model:e2ee-busy="e2eeBackupBusy"
+        @close="showSettingsModal = false"
+        @export="exportUserDataArchive"
+        @delete="deleteUserAccount"
+        @revoke-device="revokeDevice"
+        @e2ee-backup="backupE2eeNow"
+        @e2ee-restore="restoreE2eeNow"
+      />
+    </Transition>
 
-    <ContactPickerModal
-      v-if="showContactPicker"
-      :friends="friends"
-      @close="showContactPicker = false"
-      @share="shareContact"
-    />
+    <Transition name="ln-modal">
+      <ContactPickerModal
+        v-if="showContactPicker"
+        :friends="friends"
+        @close="showContactPicker = false"
+        @share="shareContact"
+      />
+    </Transition>
     <!-- PASSWORD CHANGE MODAL -->
-    <PasswordModal
-      v-if="showPasswordModal"
-      v-model:current-password="currentPasswordInput"
-      v-model:new-password="newPasswordInput"
-      v-model:confirm-password="confirmPasswordInput"
-      :error="passwordChangeError"
-      @close="showPasswordModal = false"
-      @submit="submitPasswordChange"
-    />
+    <Transition name="ln-modal">
+      <PasswordModal
+        v-if="showPasswordModal"
+        v-model:current-password="currentPasswordInput"
+        v-model:new-password="newPasswordInput"
+        v-model:confirm-password="confirmPasswordInput"
+        :error="passwordChangeError"
+        @close="showPasswordModal = false"
+        @submit="submitPasswordChange"
+      />
+    </Transition>
 
     <!-- NEW STORY MODAL -->
-    <StoryCreateModal
-      v-if="showNewStoryModal"
-      v-model:story-text="newStoryText"
-      @close="showNewStoryModal = false"
-      @submit="publishStory"
-    />
+    <Transition name="ln-modal">
+      <StoryCreateModal
+        v-if="showNewStoryModal"
+        v-model:story-text="newStoryText"
+        @close="showNewStoryModal = false"
+        @submit="publishStory"
+      />
+    </Transition>
 
     <!-- NEW VOOM POST MODAL -->
-    <VoomCreateModal
-      v-if="showVoomCreateModal"
-      v-model:body="newVoomBody"
-      @close="showVoomCreateModal = false"
-      @submit="createVoomPost"
-    />
+    <Transition name="ln-modal">
+      <VoomCreateModal
+        v-if="showVoomCreateModal"
+        v-model:body="newVoomBody"
+        @close="showVoomCreateModal = false"
+        @submit="createVoomPost"
+      />
+    </Transition>
 
     <!-- CREATE OPENCHAT MODAL -->
-    <OpenChatCreateModal
-      v-if="showCreateOpenChatModal"
-      v-model:room-name="newOpenChatRoomName"
-      v-model:room-desc="newOpenChatRoomDesc"
-      @close="showCreateOpenChatModal = false"
-      @submit="createOpenChatRoom"
-    />
+    <Transition name="ln-modal">
+      <OpenChatCreateModal
+        v-if="showCreateOpenChatModal"
+        v-model:room-name="newOpenChatRoomName"
+        v-model:room-desc="newOpenChatRoomDesc"
+        @close="showCreateOpenChatModal = false"
+        @submit="createOpenChatRoom"
+      />
+    </Transition>
 
     <!-- CREATE GROUP MODAL -->
-    <CreateGroupModal
-      v-if="showCreateGroupModal"
-      v-model:group-title="groupTitleInput"
-      v-model:selected-friend-ids="selectedFriendsForGroup"
-      v-model:join-link="joinLinkInput"
-      :friends="friends"
-      @close="showCreateGroupModal = false"
-      @submit="createGroupChat"
-      @join="joinByLink"
-    />
+    <Transition name="ln-modal">
+      <CreateGroupModal
+        v-if="showCreateGroupModal"
+        v-model:group-title="groupTitleInput"
+        v-model:selected-friend-ids="selectedFriendsForGroup"
+        v-model:join-link="joinLinkInput"
+        :friends="friends"
+        @close="showCreateGroupModal = false"
+        @submit="createGroupChat"
+        @join="joinByLink"
+      />
+    </Transition>
 
     <!-- F7: FORWARD PICKER MODAL -->
-    <ForwardPickerModal
-      v-if="showForwardModal"
-      :chats="chats"
-      @close="showForwardModal = false"
-      @forward="doForward"
-    />
+    <Transition name="ln-modal">
+      <ForwardPickerModal
+        v-if="showForwardModal"
+        :chats="chats"
+        @close="showForwardModal = false"
+        @forward="doForward"
+      />
+    </Transition>
 
     <!-- ADD FRIEND MODAL (Article 2.C) -->
-    <AddFriendModal
-      v-if="showAddFriendModal"
-      v-model:handle-input="addFriendHandleInput"
-      :results="addFriendResults"
-      :searched="addFriendSearched"
-      @close="showAddFriendModal = false"
-      @search="searchUsersForAdd"
-      @add-by-handle="addFriendByHandle"
-      @add-by-id="addFriendById"
-    />
+    <Transition name="ln-modal">
+      <AddFriendModal
+        v-if="showAddFriendModal"
+        v-model:handle-input="addFriendHandleInput"
+        :results="addFriendResults"
+        :searched="addFriendSearched"
+        @close="showAddFriendModal = false"
+        @search="searchUsersForAdd"
+        @add-by-handle="addFriendByHandle"
+        @add-by-id="addFriendById"
+        @open-qr="showAddFriendModal = false; showQrModal = true"
+        @share-invite="shareInviteLink"
+      />
+    </Transition>
 
     <!-- FX-17: NEW CALL contact picker (never dials blind) -->
-    <NewCallModal
-      v-if="showNewCallModal"
-      :friends="friends"
-      @close="showNewCallModal = false"
-      @voice-call="showNewCallModal = false; startCallWithUser($event, 'voice')"
-      @video-call="showNewCallModal = false; startCallWithUser($event, 'video')"
-    />
+    <Transition name="ln-modal">
+      <NewCallModal
+        v-if="showNewCallModal"
+        :friends="friends"
+        @close="showNewCallModal = false"
+        @voice-call="showNewCallModal = false; startCallWithUser($event, 'voice')"
+        @video-call="showNewCallModal = false; startCallWithUser($event, 'video')"
+      />
+    </Transition>
 
     <!-- NEW CHAT MODAL (Floating Action Button 💬+) -->
-    <NewChatModal
-      v-if="showNewChatModal"
-      :friends="friends"
-      @close="showNewChatModal = false"
-      @make-group="showNewChatModal = false; showCreateGroupModal = true"
-      @join-open-chat="showNewChatModal = false; activeNav = 'openchat'"
-      @direct-chat="startDirectChat($event); showNewChatModal = false"
-    />
+    <Transition name="ln-modal">
+      <NewChatModal
+        v-if="showNewChatModal"
+        :friends="friends"
+        @close="showNewChatModal = false"
+        @make-group="showNewChatModal = false; showCreateGroupModal = true"
+        @join-open-chat="showNewChatModal = false; activeNav = 'openchat'"
+        @direct-chat="startDirectChat($event); showNewChatModal = false"
+      />
+    </Transition>
 
 
     <!-- Global LUNO PC Context Menu -->

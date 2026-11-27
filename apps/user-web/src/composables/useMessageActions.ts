@@ -77,12 +77,6 @@ export function useMessageActions(deps: MessageActionsDeps) {
     })
   }
 
-  // Copy text helper
-  function copyMessageText(text: string) {
-    navigator.clipboard.writeText(text)
-    note.value = t('mvCopied')
-  }
-
   // Reply message helper
   function startReply(msg: Message) {
     deps.replyToMessage.value = msg
@@ -111,7 +105,6 @@ export function useMessageActions(deps: MessageActionsDeps) {
     saveEditMessage,
     reactToMessage,
     unsendMessage,
-    copyMessageText,
     startReply,
     showForwardModal,
     forwardTargetMsg,

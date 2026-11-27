@@ -212,6 +212,31 @@ abstract final class LunoHarbor {
       ),
       listTileTheme: base.listTileTheme.copyWith(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2)),
+      // Popups match the web dialog system (build 27): sheet-radius corners,
+      // no Material tint wash, a dimmer that deepens in dark mode. Sheets
+      // that draw their own grab handle (harbor_sheet) keep doing so.
+      dialogTheme: DialogThemeData(
+        backgroundColor: dark ? HarborDark.surface : HarborLight.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        barrierColor: dark ? const Color(0x9E000000) : const Color(0x70000000),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(HarborRadius.sheet)),
+        titleTextStyle: TextStyle(
+            fontSize: HarborType.title, fontWeight: FontWeight.w700, height: 1.35, color: ink),
+        contentTextStyle: TextStyle(fontSize: HarborType.body, height: 1.55, color: drift),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: dark ? HarborDark.surface : HarborLight.surface,
+        modalBackgroundColor: dark ? HarborDark.surface : HarborLight.surface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: dark ? const Color(0x9E000000) : const Color(0x70000000),
+        elevation: 0,
+        modalElevation: 0,
+        dragHandleColor: drift.withValues(alpha: 0.45),
+        dragHandleSize: const Size(36, 4),
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(HarborRadius.sheet))),
+      ),
     );
   }
 

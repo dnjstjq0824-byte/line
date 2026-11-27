@@ -4,6 +4,8 @@
 // Visibility stays outside.
 import { t } from '../store/session'
 import type { User } from '../../../shared/api'
+import { vDialog } from '../directives/dialog'
+import LunoIcon from './LunoIcon.vue'
 
 const groupTitle = defineModel<string>('groupTitle', { default: '' })
 const selectedFriendIds = defineModel<string[]>('selectedFriendIds', { default: () => [] })
@@ -21,11 +23,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="standard-modal-box">
       <div class="modal-header">
         <h3>{{ t('mvGroupTitle') }}</h3>
-        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
       </div>
       <div class="modal-body-form">
         <label>{{ t('mvGroupName') }}</label>

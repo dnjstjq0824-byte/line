@@ -1,6 +1,6 @@
 // E3: ciphertext message envelopes (E1 §4). JSON with v:1; unknown
 // versions and shapes are rejected, never guessed.
-import { b64uDecode, b64uEncode } from './codec.ts';
+import { b64uDecode } from './codec.ts';
 import { parseIdentity } from './keys.ts';
 
 export interface PrekeyEnvelope {

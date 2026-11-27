@@ -2,8 +2,11 @@
 // P2 split: Keep vault modal, extracted verbatim from views/MessengerView.vue.
 // Filter/search are two-way models (SettingsModal precedent); the item lists
 // are read-only and deletion emits upward. Visibility stays outside.
-import { t } from '../store/session'
+import { currentLocale, t } from '../store/session'
+import { RTF_LOCALE } from '../messenger-format'
 import type { KeepItem } from '../composables/useMessengerKeep'
+import { vDialog } from '../directives/dialog'
+import LunoIcon from './LunoIcon.vue'
 
 const keepFilter = defineModel<'all' | 'text' | 'image' | 'link'>('keepFilter', { default: 'all' })
 const keepSearch = defineModel<string>('keepSearch', { default: '' })
@@ -20,11 +23,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="standard-modal-box keep-modal">
       <div class="modal-header">
         <h3>{{ t('mvKeepTitle').replace('{n}', String(keepItems.length)) }}</h3>
-        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
       </div>
       <div class="keep-filter-bar">
         <button :class="{ active: keepFilter === 'all' }" @click="keepFilter = 'all'">{{ t('tabAll') }}</button>
@@ -41,7 +44,7 @@ const emit = defineEmits<{
             <button class="btn-delete-keep" @click="emit('deleteItem', k)">{{ t('mvDeleteItem') }}</button>
           </div>
           <div class="keep-body-text">{{ k.body }}</div>
-          <small class="muted">{{ new Date(k.created_at).toLocaleString('ko-KR') }}</small>
+          <small class="muted">{{ new Date(k.created_at).toLocaleString(RTF_LOCALE[currentLocale] || 'ko-KR') }}</small>
         </div>
       </div>
     </div>

@@ -70,11 +70,6 @@ export function useMessengerReport() {
       myReports.value = []
     }
   }
-  function reportStateLabel(state: string): string {
-    if (state === 'resolved') return t('reportStateResolved')
-    if (state === 'dismissed') return t('reportStateDismissed')
-    return t('reportStateOpen')
-  }
 
   return {
     showReportModal,
@@ -88,6 +83,5 @@ export function useMessengerReport() {
     openReportForMessage,
     submitReport,
     loadMyReports,
-    reportStateLabel,
   }
 }

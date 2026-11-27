@@ -19,6 +19,7 @@ import {
   toggleDarkMode,
   wrap,
 } from '../store/session'
+import { vDialog } from '../directives/dialog'
 
 export interface DeviceItem {
   id: string
@@ -280,7 +281,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="standard-modal-box settings-modal ln-settings-shell" role="dialog" aria-modal="true" :aria-label="t('settingsTitle')">
       <div class="modal-header">
         <h3 class="ln-modal-title">

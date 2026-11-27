@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Message } from '../../../shared/api'
+import { b64uEncode } from '../../../shared/e2ee/codec'
 import { authedFetch } from '../store/session'
 const props = defineProps<{ message: Message; token: string; labels: { download: string; retry: string; loading: string; error: string } }>()
 const url = ref(''), loading = ref(false), failed = ref(false)
@@ -24,7 +25,6 @@ async function load() {
     const meta = props.message.metadata as Record<string, unknown> | undefined
     if (props.message._e2ee && meta && typeof meta.fileKey === 'string' && typeof meta.fileIv === 'string' && typeof meta.fileHash === 'string') {
       const { openFile } = await import('../../../shared/e2ee/files.ts')
-      const { b64uEncode } = await import('../../../shared/e2ee/codec.ts')
       const pt = await openFile({
         key: meta.fileKey as string,
         iv: meta.fileIv as string,

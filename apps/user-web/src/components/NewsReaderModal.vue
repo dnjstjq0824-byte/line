@@ -5,6 +5,8 @@
 import { t } from '../store/session'
 import type { NewsArticle } from '../../../shared/api'
 import type { NewsComment } from '../composables/useMessengerNews'
+import { vDialog } from '../directives/dialog'
+import LunoIcon from './LunoIcon.vue'
 
 const newComment = defineModel<string>('newComment', { default: '' })
 
@@ -23,7 +25,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div v-if="article" class="modal-backdrop pc-modal-backdrop" @click.self="emit('close')">
+  <div v-if="article" class="modal-backdrop pc-modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="standard-modal-box pc-modal-card news-reader-modal">
       <div class="news-reader-header">
         <span class="news-reader-press">{{ article.press }}</span>
@@ -31,7 +33,7 @@ const emit = defineEmits<{
           <button class="btn-news-action" :title="bookmarked ? t('mvBookmarkRemove') : t('mvBookmarkSave')" :aria-label="bookmarked ? t('mvBookmarkRemove') : t('mvBookmarkSave')" @click="emit('toggleBookmark', article.id)">
             {{ bookmarked ? '🔖' : '📑' }}
           </button>
-          <button class="btn-news-action" :title="t('mvClose')" :aria-label="t('mvClose')" @click="emit('close')">✕</button>
+          <button class="btn-news-action" :title="t('mvClose')" :aria-label="t('mvClose')" @click="emit('close')"><LunoIcon name="close" :size="18" /></button>
         </div>
       </div>
       <div class="news-reader-body">
@@ -46,18 +48,18 @@ const emit = defineEmits<{
         </div>
 
         <!-- News Comments Section -->
-        <div class="news-comments-box" style="margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+        <div class="news-comments-box" style="margin-top: 16px; border-top: 1px solid var(--ln-line); padding-top: 12px;">
           <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">{{ t('mvReaderComments').replace('{n}', String(comments.length)) }}</h4>
           <div v-if="comments.length" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
-            <div v-for="c in comments" :key="c.id" style="font-size: 12px; background: #f8fafc; padding: 6px 10px; border-radius: 8px;">
-              <b>{{ c.author }}</b> <span style="color:#94a3b8; font-size:11px;">{{ c.time }}</span>
+            <div v-for="c in comments" :key="c.id" style="font-size: 13px; background: var(--ln-subtle); padding: 8px 12px; border-radius: 12px;">
+              <b>{{ c.author }}</b> <span style="color: var(--ln-muted); font-size: 11px;">{{ c.time }}</span>
               <p style="margin-top:2px;">{{ c.text }}</p>
             </div>
           </div>
-          <div v-else style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">{{ t('mvFirstComment') }}</div>
+          <div v-else style="font-size: 13px; color: var(--ln-muted); margin-bottom: 8px;">{{ t('mvFirstComment') }}</div>
           <form @submit.prevent="emit('submitComment', article.id)" style="display:flex; gap:6px;">
-            <input v-model="newComment" :placeholder="t('mvCommentPh')" style="flex:1; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:16px;" />
-            <button type="submit" class="btn-primary" style="padding:6px 12px; font-size:12px;">{{ t('mvSubmit') }}</button>
+            <input v-model="newComment" :placeholder="t('mvCommentPh')" :aria-label="t('mvCommentPh')" style="flex: 1; min-width: 0;" />
+            <button type="submit" class="btn-primary" :disabled="!newComment.trim()">{{ t('mvSubmit') }}</button>
           </form>
         </div>
       </div>

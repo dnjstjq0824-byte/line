@@ -2,6 +2,8 @@
 // L-05: approval box. Lists a room's proposals with their decision state;
 // approve/reject go through the view (auth-touching) via decide events.
 import { t } from '../store/session'
+import { vDialog } from '../directives/dialog'
+import LunoIcon from './LunoIcon.vue'
 
 export interface ApprovalItem {
   message_id: string
@@ -32,11 +34,11 @@ function stateLabel(state: string): string {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" v-dialog="() => emit('close')" @click.self="emit('close')">
     <div class="modal-card settings-modal" role="dialog" :aria-label="t('apprTitle')">
       <div class="modal-header">
         <h2>{{ t('apprTitle') }} · {{ props.roomTitle }}</h2>
-        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')">✕</button>
+        <button class="btn-modal-close" @click="emit('close')" :aria-label="t('mvClose')"><LunoIcon name="close" :size="18" /></button>
       </div>
       <div class="modal-body-form">
         <p v-if="!props.proposals.length" class="muted">{{ t('apprEmpty') }}</p>
