@@ -13,53 +13,52 @@ import 'package:flutter/material.dart';
 
 import '../legacy_tokens.dart';
 
-/// Harbor daylight tokens. Light chrome follows the LUNO brand blues
-/// (frozen PO tokens); only the night palette keeps the pine look.
+/// LINE-inspired daylight tokens (mirrored 1:1 with design-v3.tokens.json).
 abstract final class HarborLight {
-  static const fog = lunoBg; // page ground
+  static const fog = Color(0xFFF5F7F6); // page ground
   static const surface = Color(0xFFFFFFFF);
-  static const chart = Color(0xFFE4E9F2); // inset / wash panels, blue grey
-  static const ink = lunoNavy;
-  static const drift = lunoSlateGray; // secondary text
-  static const channel = lunoMistGray; // hairlines
-  static const harbor = lunoDeepBlue; // primary brand blue
+  static const chart = Color(0xFFEEF2F0); // inset / search / composer pill
+  static const ink = Color(0xFF111827);
+  static const drift = Color(0xFF52606D); // secondary text
+  static const channel = Color(0xFFE2E8E4); // hairlines
+  static const harbor = Color(0xFF058237); // primary LINE green (AA 4.94:1 on white)
   static const onHarbor = Color(0xFFFFFFFF);
-  static const beacon = Color(0xFFE4572E); // signal vermilion: unread, calls, key CTAs
+  static const beacon = Color(0xFF06C755); // vibrant LINE green: unread badges, active indicators
   static const onBeacon = Color(0xFFFFFFFF);
-  static const seaGlass = Color(0xFFE3EBFF); // selected wash, light brand blue
+  static const seaGlass = Color(0xFFE6F7EC); // selected soft mint wash
   static const buoyBg = Color(0xFFFFF3D6);
   static const buoyInk = Color(0xFF7A5B00);
-  static const danger = Color(0xFFC22E3D); // kept: AA-chosen functional red
-  static const success = Color(0xFF2E7D32); // kept: AA-chosen functional green
+  static const danger = Color(0xFFC22E3D); // AA-chosen functional red
+  static const success = Color(0xFF058237); // AA-chosen LINE green
   static const warning = Color(0xFF7A5B00);
   static const info = Color(0xFF1D6FB8);
   static const tide = Color(0xFF1D6FB8); // links / info
-  static const mine = lunoPrimary; // own chat bubble, brand blue
+  static const mine = Color(0xFF95EC69); // classic LINE lime-green own bubble
   static const theirs = Color(0xFFFFFFFF);
 }
 
-/// Harbor night tokens.
+/// LINE-inspired night tokens (mirrored 1:1 with design-v3.tokens.json).
 abstract final class HarborDark {
-  static const fog = Color(0xFF0A1413); // deep water
-  static const surface = Color(0xFF12201E);
-  static const chart = Color(0xFF1B2E2A);
-  static const ink = Color(0xFFE9F2EF);
-  static const drift = Color(0xFF9DB0AA);
-  static const channel = Color(0xFF2A3E39);
-  static const harbor = Color(0xFF6FD3B6); // sea-glass primary
-  static const onHarbor = Color(0xFF0A1A17);
-  static const beacon = Color(0xFFFF7A59);
-  static const onBeacon = Color(0xFF23110B);
-  static const seaGlass = Color(0xFF1E3A33);
+  static const fog = Color(0xFF0F1419); // deep LINE charcoal
+  static const surface = Color(0xFF171F26);
+  static const chart = Color(0xFF222E38);
+  static const ink = Color(0xFFF1F5F9);
+  static const drift = Color(0xFF94A3B8);
+  static const channel = Color(0xFF2A3642);
+  static const harbor = Color(0xFF06C755); // vibrant LINE green
+  static const onHarbor = Color(0xFF052110);
+  static const beacon = Color(0xFF06C755);
+  static const onBeacon = Color(0xFFFFFFFF);
+  static const seaGlass = Color(0xFF123322);
   static const buoyBg = Color(0xFF3A2F0E);
   static const buoyInk = Color(0xFFFFD98A);
   static const danger = Color(0xFFFF98A0);
-  static const success = Color(0xFF7BC98A);
+  static const success = Color(0xFF34D399);
   static const warning = Color(0xFFFFD98A);
   static const info = Color(0xFF7FB9EC);
   static const tide = Color(0xFF7FB9EC);
-  static const mine = Color(0xFF2A5A4E);
-  static const theirs = Color(0xFF1B2E2A);
+  static const mine = Color(0xFF196B38);
+  static const theirs = Color(0xFF222E38);
 }
 
 /// Harbor elevation: two quiet shadows, no glow. Mirrors design-v3.tokens.json.
@@ -272,7 +271,7 @@ class IdentityTile extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(HarborRadius.avatar),
+        shape: BoxShape.circle,
       ),
       child: Text(ch,
           style: TextStyle(
@@ -281,8 +280,7 @@ class IdentityTile extends StatelessWidget {
               fontSize: size * 0.42)),
     );
     if (photo == null) return initials;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(HarborRadius.avatar),
+    return ClipOval(
       child: Image(
         image: photo!,
         width: size,

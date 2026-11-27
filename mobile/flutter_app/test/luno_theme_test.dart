@@ -7,47 +7,47 @@ import 'package:luno_messenger/theme/luno_theme.dart';
 // apps/user-web/src/styles/design-tokens.css. Any drift fails here.
 void main() {
   test('light brand and surfaces match spec', () {
-    expect(LunoLight.primary, const Color(0xFF2563EB));
-    expect(LunoLight.primaryHover, const Color(0xFF1D4ED8));
-    expect(LunoLight.primaryActive, const Color(0xFF1E40AF));
-    expect(LunoLight.primarySoft, const Color(0xFFEFF6FF));
-    expect(LunoLight.unreadAccent, const Color(0xFFF59E0B));
-    expect(LunoLight.bgApp, const Color(0xFFF8FAFC));
-    expect(LunoLight.bgRail, const Color(0xFF0F172A));
+    expect(LunoLight.primary, const Color(0xFF058237));
+    expect(LunoLight.primaryHover, const Color(0xFF046D2E));
+    expect(LunoLight.primaryActive, const Color(0xFF035A25));
+    expect(LunoLight.primarySoft, const Color(0xFFE6F7EC));
+    expect(LunoLight.unreadAccent, const Color(0xFF06C755));
+    expect(LunoLight.bgApp, const Color(0xFFF5F7F6));
+    expect(LunoLight.bgRail, const Color(0xFF1E242B));
     expect(LunoLight.bgPanel, const Color(0xFFFFFFFF));
-    expect(LunoLight.bgChatRoom, const Color(0xFFF1F5F9));
-    expect(LunoLight.surfaceActive, const Color(0xFFE2E8F0));
-    expect(LunoLight.surfaceInput, const Color(0xFFF8FAFC));
+    expect(LunoLight.bgChatRoom, const Color(0xFF8CABD9));
+    expect(LunoLight.surfaceActive, const Color(0xFFE6F7EC));
+    expect(LunoLight.surfaceInput, const Color(0xFFF2F4F3));
   });
 
   test('light bubbles and text match spec', () {
-    expect(LunoLight.bubbleMineBg, const Color(0xFF2563EB));
+    expect(LunoLight.bubbleMineBg, const Color(0xFF95EC69));
     expect(LunoLight.bubbleTheirsBg, const Color(0xFFFFFFFF));
-    expect(LunoLight.bubbleTheirsText, const Color(0xFF0F172A));
+    expect(LunoLight.bubbleTheirsText, const Color(0xFF111827));
     expect(LunoLight.bubbleSystemBg,
-        const Color.fromRGBO(15, 23, 42, 0.06));
-    expect(LunoLight.textPrimary, const Color(0xFF0F172A));
-    expect(LunoLight.textSecondary, const Color(0xFF475569));
-    expect(LunoLight.textMuted, const Color(0xFF94A3B8));
-    expect(LunoLight.borderFocus, const Color(0xFF2563EB));
+        const Color.fromRGBO(17, 24, 39, 0.24));
+    expect(LunoLight.textPrimary, const Color(0xFF111827));
+    expect(LunoLight.textSecondary, const Color(0xFF52606D));
+    expect(LunoLight.textMuted, const Color(0xFF7B8794));
+    expect(LunoLight.borderFocus, const Color(0xFF058237));
   });
 
   test('dark palette matches spec', () {
-    expect(LunoDark.primary, const Color(0xFF3B82F6));
-    expect(LunoDark.primaryHover, const Color(0xFF60A5FA));
-    expect(LunoDark.unreadAccent, const Color(0xFFFBBF24));
-    expect(LunoDark.bgApp, const Color(0xFF090D16));
-    expect(LunoDark.bgRail, const Color(0xFF05080F));
-    expect(LunoDark.bgPanel, const Color(0xFF0F172A));
-    expect(LunoDark.surfaceActive, const Color(0xFF334155));
-    expect(LunoDark.bubbleTheirsBg, const Color(0xFF1E293B));
-    expect(LunoDark.bubbleTheirsText, const Color(0xFFF8FAFC));
+    expect(LunoDark.primary, const Color(0xFF06C755));
+    expect(LunoDark.primaryHover, const Color(0xFF24DB6F));
+    expect(LunoDark.unreadAccent, const Color(0xFF06C755));
+    expect(LunoDark.bgApp, const Color(0xFF0F1419));
+    expect(LunoDark.bgRail, const Color(0xFF0C1015));
+    expect(LunoDark.bgPanel, const Color(0xFF171F26));
+    expect(LunoDark.surfaceActive, const Color(0xFF123322));
+    expect(LunoDark.bubbleTheirsBg, const Color(0xFF222E38));
+    expect(LunoDark.bubbleTheirsText, const Color(0xFFF1F5F9));
     expect(LunoDark.textMuted, const Color(0xFF64748B));
-    expect(LunoDark.borderFocus, const Color(0xFF3B82F6));
+    expect(LunoDark.borderFocus, const Color(0xFF06C755));
   });
 
   test('status, radii and layout match spec', () {
-    expect(LunoStatus.online, const Color(0xFF10B981));
+    expect(LunoStatus.online, const Color(0xFF06C755));
     expect(LunoStatus.busy, const Color(0xFFEF4444));
     expect(LunoStatus.away, const Color(0xFFF59E0B));
     expect(LunoRadius.sm, 8.0);
@@ -63,11 +63,11 @@ void main() {
 
   test('theme factory uses only spec colors', () {
     final light = LunoTheme.theme(Brightness.light);
-    expect(light.colorScheme.primary, const Color(0xFF2563EB));
-    expect(light.scaffoldBackgroundColor, const Color(0xFFF8FAFC));
+    expect(light.colorScheme.primary, const Color(0xFF058237));
+    expect(light.scaffoldBackgroundColor, const Color(0xFFF5F7F6));
     final dark = LunoTheme.theme(Brightness.dark);
-    expect(dark.colorScheme.primary, const Color(0xFF3B82F6));
-    expect(dark.scaffoldBackgroundColor, const Color(0xFF090D16));
+    expect(dark.colorScheme.primary, const Color(0xFF06C755));
+    expect(dark.scaffoldBackgroundColor, const Color(0xFF0F1419));
   });
 
   test('type scale matches §7-2 exactly', () {
@@ -118,7 +118,7 @@ void main() {
 
   test('theme factory maps §7-4 surfaces', () {
     final light = LunoTheme.theme(Brightness.light);
-    expect(light.primaryColor, const Color(0xFF2563EB));
+    expect(light.primaryColor, const Color(0xFF058237));
     expect(light.cardColor, const Color(0xFFFFFFFF));
     expect(light.appBarTheme.elevation, 0);
     expect(light.appBarTheme.scrolledUnderElevation, 0.5);
@@ -130,21 +130,21 @@ void main() {
     expect(light.textTheme.bodyLarge?.fontSize, 15.0);
     expect(light.textTheme.bodyLarge?.height, 1.48);
     expect(light.textTheme.bodyMedium?.fontSize, 13.0);
-    expect(light.textTheme.bodyMedium?.color, const Color(0xFF475569));
+    expect(light.textTheme.bodyMedium?.color, const Color(0xFF52606D));
     expect(light.textTheme.labelSmall?.fontSize, 11.0);
     expect(LunoTheme.chatRoomBackgroundColor(Brightness.light),
-        const Color(0xFFF1F5F9));
+        const Color(0xFF8CABD9));
     expect(LunoTheme.unreadAccentColor(Brightness.light),
-        const Color(0xFFF59E0B));
+        const Color(0xFF06C755));
     final dark = LunoTheme.theme(Brightness.dark);
-    expect(dark.primaryColor, const Color(0xFF3B82F6));
-    expect(dark.cardColor, const Color(0xFF1E293B));
-    expect(dark.appBarTheme.backgroundColor, const Color(0xFF1E293B));
+    expect(dark.primaryColor, const Color(0xFF06C755));
+    expect(dark.cardColor, const Color(0xFF1E2832));
+    expect(dark.appBarTheme.backgroundColor, const Color(0xFF1E2832));
     expect(dark.appBarTheme.systemOverlayStyle,
         SystemUiOverlayStyle.light);
     expect(LunoTheme.chatRoomBackgroundColor(Brightness.dark),
-        const Color(0xFF090D16));
+        const Color(0xFF131A22));
     expect(LunoTheme.unreadAccentColor(Brightness.dark),
-        const Color(0xFFFBBF24));
+        const Color(0xFF06C755));
   });
 }

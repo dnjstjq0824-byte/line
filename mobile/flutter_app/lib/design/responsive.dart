@@ -158,14 +158,14 @@ class _ConsoleDesk extends StatelessWidget {
         children: [
           Container(
             width: 216,
-            color: dark ? HarborDark.surface : HarborLight.surface,
+            color: dark ? const Color(0xFF0C1015) : const Color(0xFF1E242B),
             child: SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 14, 16, 6),
-                    child: HarborWordmark(compact: false),
+                    child: HarborWordmark(compact: false, onDark: true),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
@@ -177,14 +177,14 @@ class _ConsoleDesk extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
                           child: Text(context.l10n.harborDesk,
-                              style: Theme.of(context).textTheme.labelSmall),
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white54)),
                         ),
                         for (final d in LunoNav.secondaryFor(payments: payments))
                           _RailItem(destination: d, active: active == d.route),
                       ],
                     ),
                   ),
-                  const _SessionFoot(),
+                  const _SessionFoot(onDark: true),
                 ],
               ),
             ),
@@ -223,7 +223,8 @@ class _RailItem extends StatelessWidget {
         badge += (c['unread_count'] as num?)?.toInt() ?? 0;
       }
     }
-    final wash = dark ? HarborDark.seaGlass : HarborLight.seaGlass;
+    final wash = HarborDark.beacon.withValues(alpha: 0.18);
+    final fg = active ? HarborDark.beacon : Colors.white.withValues(alpha: 0.72);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Material(
@@ -241,13 +242,14 @@ class _RailItem extends StatelessWidget {
                   const SizedBox(width: 8),
                 ] else
                   const SizedBox(width: 11),
-                Icon(active ? destination.activeIcon : destination.icon, size: 20),
+                Icon(active ? destination.activeIcon : destination.icon, size: 20, color: fg),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(destination.labelIn(context.l10n),
                       style: TextStyle(
                           fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                          fontSize: 14)),
+                          fontSize: 14,
+                          color: active ? Colors.white : fg)),
                 ),
                 if (badge > 0)
                   Container(
@@ -290,13 +292,13 @@ class _TabletDesk extends StatelessWidget {
           Container(
             key: const Key('tablet-rail'),
             width: HarborLayout.railWidth,
-            color: dark ? HarborDark.surface : HarborLight.surface,
+            color: dark ? const Color(0xFF0C1015) : const Color(0xFF1E242B),
             child: SafeArea(
               child: Column(
                 children: [
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
-                    child: HarborWordmark(compact: true),
+                    child: HarborWordmark(compact: true, onDark: true),
                   ),
                   Expanded(
                     child: ListView(
@@ -310,7 +312,7 @@ class _TabletDesk extends StatelessWidget {
                   IconButton(
                     tooltip: context.l10n.mvLogout,
                     onPressed: () => SessionScope.of(context, listen: false).logout(),
-                    icon: const Icon(Icons.logout, size: 20),
+                    icon: const Icon(Icons.logout, size: 20, color: Colors.white70),
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -342,8 +344,8 @@ class _IconRailItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final wash = dark ? HarborDark.seaGlass : HarborLight.seaGlass;
+    final wash = HarborDark.beacon.withValues(alpha: 0.18);
+    final fg = active ? HarborDark.beacon : Colors.white.withValues(alpha: 0.68);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
@@ -358,11 +360,14 @@ class _IconRailItem extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Column(
                 children: [
-                  Icon(active ? destination.activeIcon : destination.icon, size: 21),
+                  Icon(active ? destination.activeIcon : destination.icon, size: 21, color: fg),
                   const SizedBox(height: 2),
                   Text(destination.labelIn(context.l10n),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           fontSize: 10,
+                          color: fg,
                           fontWeight: active ? FontWeight.w800 : FontWeight.w500)),
                 ],
               ),
@@ -567,18 +572,19 @@ class _TabItem extends StatelessWidget {
 /// Wordmark without hero styling: lamp chip + name + slogan.
 class HarborWordmark extends StatelessWidget {
   final bool compact;
-  const HarborWordmark({super.key, required this.compact});
+  final bool onDark;
+  const HarborWordmark({super.key, required this.compact, this.onDark = false});
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final dark = onDark || Theme.of(context).brightness == Brightness.dark;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
           decoration: BoxDecoration(
-            color: dark ? HarborDark.harbor : LunoBrand.primary,
+            color: dark ? HarborDark.harbor : HarborLight.harbor,
             borderRadius: BorderRadius.circular(7),
           ),
           child: Text('LUNO',
@@ -593,7 +599,8 @@ class HarborWordmark extends StatelessWidget {
           Flexible(
             child: Text('Connect Beyond Borders',
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: onDark ? Colors.white70 : null)),
           ),
         ],
       ],
@@ -719,7 +726,8 @@ class StatusStrip extends StatelessWidget {
 }
 
 class _SessionFoot extends StatelessWidget {
-  const _SessionFoot();
+  final bool onDark;
+  const _SessionFoot({this.onDark = false});
 
   @override
   Widget build(BuildContext context) {
@@ -732,13 +740,16 @@ class _SessionFoot extends StatelessWidget {
             child: Text(
               session.selfName.isEmpty ? 'LUNO' : session.selfName,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: onDark ? Colors.white : null),
             ),
           ),
           IconButton(
             tooltip: context.l10n.mvLogout,
             onPressed: () => SessionScope.of(context, listen: false).logout(),
-            icon: const Icon(Icons.logout, size: 20),
+            icon: Icon(Icons.logout, size: 20, color: onDark ? Colors.white70 : null),
           ),
         ],
       ),

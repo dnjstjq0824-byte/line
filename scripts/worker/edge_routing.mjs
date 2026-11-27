@@ -528,18 +528,18 @@ function renderDeepLinkHtml({
   <meta name="twitter:image" content="${safeImg}" />
   <style>
     :root { color-scheme: light dark; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif; background: #f5f7fb; color: #0f172a; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
-    @media (prefers-color-scheme: dark) { body { background: #0b1220; color: #f8fafc; } .card { background: #111c30; border-color: #1e293b; } .meta-box { background: #0b1220; } }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif; background: #f5f7f6; color: #0f172a; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+    @media (prefers-color-scheme: dark) { body { background: #0f1419; color: #f8fafc; } .card { background: #171f26; border-color: #1e293b; } .meta-box { background: #0f1419; } }
     .card { width: 100%; max-width: 440px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 28px 24px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08); text-align: center; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(79,124,255,0.12); color: #4F7CFF; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(6,199,85,0.14); color: #058237; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
     h1 { margin: 0 0 8px; font-size: 22px; line-height: 1.3; }
     p { margin: 0 0 18px; font-size: 14px; color: #64748b; line-height: 1.6; }
     .meta-box { background: #f8fafc; border-radius: 12px; padding: 10px 14px; margin-bottom: 20px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
-    .meta-box code { font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 700; color: #4F7CFF; }
+    .meta-box code { font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 700; color: #058237; }
     .actions { display: flex; flex-direction: column; gap: 10px; }
     .btn { display: block; padding: 12px 16px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px; }
-    .btn.primary { background: #4F7CFF; color: #ffffff; }
-    .btn.secondary { background: rgba(79,124,255,0.1); color: #4F7CFF; }
+    .btn.primary { background: #058237; color: #ffffff; }
+    .btn.secondary { background: rgba(6,199,85,0.12); color: #058237; }
     .btn.ghost { color: #64748b; font-size: 13px; font-weight: 600; }
     .note { margin-top: 16px; font-size: 12px; color: #94a3b8; }
   </style>
@@ -728,12 +728,12 @@ export function renderStorePageResponse(request, env, lang, slug, legalVersions 
     :root { color-scheme: light dark; }
     body { max-width: 780px; margin: 0 auto; padding: 32px 20px 64px; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif; line-height: 1.7; }
     header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px; }
-    .brand { font-weight: 800; color: #4F7CFF; text-decoration: none; font-size: 18px; }
+    .brand { font-weight: 800; color: #058237; text-decoration: none; font-size: 18px; }
     .langs a { margin-left: 10px; text-decoration: none; color: #64748b; font-size: 13px; }
-    .langs a.on { color: #4F7CFF; font-weight: 700; text-decoration: underline; }
+    .langs a.on { color: #058237; font-weight: 700; text-decoration: underline; }
     h1 { font-size: 24px; margin: 0 0 8px; }
     .ver { font-size: 12px; color: #64748b; margin-bottom: 20px; }
-    a { color: #4F7CFF; }
+    a { color: #058237; }
     footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
   </style>
 </head>

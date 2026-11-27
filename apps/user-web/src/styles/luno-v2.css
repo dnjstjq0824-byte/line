@@ -2,46 +2,46 @@
 /* UX1: the single external font load (was styles/luno-design-tokens.css). */
 :root,
 [data-theme="light"] {
-  /* Brand & Accent (LUNO Royal Blue) */
-  --luno-primary: #2563EB;
-  --luno-primary-hover: #1D4ED8;
-  --luno-primary-active: #1E40AF;
-  --luno-primary-soft: #EFF6FF;
-  --luno-unread-accent: #F59E0B; /* 읽음 카운트 '1' 전용 고시인성 앰버 */
+  /* Brand & Accent (LUNO LINE Green) */
+  --luno-primary: #058237;
+  --luno-primary-hover: #046D2E;
+  --luno-primary-active: #035A25;
+  --luno-primary-soft: #E6F7EC;
+  --luno-unread-accent: #06C755;
 
   /* Backgrounds & Surfaces */
-  --bg-app: #F8FAFC;             /* 전체 앱 배경 */
-  --bg-rail: #0F172A;            /* 좌측 글로벌 네비게이션 레일 (고정 다크 톤) */
-  --bg-panel: #FFFFFF;           /* 대화방/친구 리스트 패널 */
-  --bg-chat-room: #F1F5F9;       /* 대화방 메시지 스트림 배경 */
-  --surface-elevated: #FFFFFF;   /* 모달, 드로어, 바텀시트, 헤더 */
-  --surface-hover: #F1F5F9;      /* 리스트 아이템 호버 */
-  --surface-active: #E2E8F0;     /* 현재 선택된 대화방 */
-  --surface-input: #F8FAFC;      /* 메시지 입력창 배경 */
+  --bg-app: #F5F7F6;
+  --bg-rail: #1E242B;
+  --bg-panel: #FFFFFF;
+  --bg-chat-room: #8CABD9;
+  --surface-elevated: #FFFFFF;
+  --surface-hover: #F3F6F4;
+  --surface-active: #E6F7EC;
+  --surface-input: #F2F4F3;
 
-  /* Chat Bubbles */
-  --bubble-mine-bg: #2563EB;
-  --bubble-mine-text: #FFFFFF;
+  /* Chat Bubbles (LINE Signature Lime Green & Crisp White) */
+  --bubble-mine-bg: #95EC69;
+  --bubble-mine-text: #111827;
   --bubble-theirs-bg: #FFFFFF;
-  --bubble-theirs-text: #0F172A;
-  --bubble-system-bg: rgba(15, 23, 42, 0.06);
-  --bubble-system-text: #475569;
+  --bubble-theirs-text: #111827;
+  --bubble-system-bg: rgba(17, 24, 39, 0.24);
+  --bubble-system-text: #FFFFFF;
 
   /* Typography Colors */
-  --text-primary: #0F172A;       /* 본문, 이름, 대화방 타이틀 */
-  --text-secondary: #475569;     /* 최근 메시지 미리보기, 부가 설명 */
-  --text-muted: #94A3B8;         /* 타임스탬프, 비활성 텍스트 */
+  --text-primary: #111827;
+  --text-secondary: #52606D;
+  --text-muted: #7B8794;
   --text-on-brand: #FFFFFF;
 
   /* Semantic Status */
-  --status-online: #10B981;      /* 접속 중 (에메랄드 그린) */
-  --status-busy: #EF4444;        /* 통화 중 / 방해금지 / 오류 / 미읽음 배지 */
-  --status-away: #F59E0B;        /* 자리비움 / 재연결 중 */
+  --status-online: #06C755;
+  --status-busy: #EF4444;
+  --status-away: #F59E0B;
 
   /* Borders & Dividers */
-  --border-subtle: #E2E8F0;
-  --border-strong: #CBD5E1;
-  --border-focus: #2563EB;
+  --border-subtle: #E2E8E4;
+  --border-strong: #CBD5CF;
+  --border-focus: #058237;
 
   /* Radii & Shadows */
   --radius-sm: 8px;
@@ -92,40 +92,40 @@
 
 [data-theme="dark"] {
   /* Brand & Accent */
-  --luno-primary: #3B82F6;
-  --luno-primary-hover: #60A5FA;
-  --luno-primary-active: #2563EB;
-  --luno-primary-soft: rgba(59, 130, 246, 0.15);
-  --luno-unread-accent: #FBBF24;
+  --luno-primary: #06C755;
+  --luno-primary-hover: #24DB6F;
+  --luno-primary-active: #058237;
+  --luno-primary-soft: rgba(6, 199, 85, 0.16);
+  --luno-unread-accent: #06C755;
 
-  /* Backgrounds & Surfaces (OLED 친화적 딥 슬레이트) */
-  --bg-app: #090D16;
-  --bg-rail: #05080F;
-  --bg-panel: #0F172A;
-  --bg-chat-room: #090D16;
-  --surface-elevated: #1E293B;
-  --surface-hover: #1E293B;
-  --surface-active: #334155;
-  --surface-input: #1E293B;
+  /* Backgrounds & Surfaces (LINE Dark Charcoal) */
+  --bg-app: #0F1419;
+  --bg-rail: #0C1015;
+  --bg-panel: #171F26;
+  --bg-chat-room: #131A22;
+  --surface-elevated: #1E2832;
+  --surface-hover: #1E2832;
+  --surface-active: #123322;
+  --surface-input: #222E38;
 
   /* Chat Bubbles */
-  --bubble-mine-bg: #2563EB;
-  --bubble-mine-text: #FFFFFF;
-  --bubble-theirs-bg: #1E293B;
-  --bubble-theirs-text: #F8FAFC;
-  --bubble-system-bg: rgba(255, 255, 255, 0.08);
-  --bubble-system-text: #94A3B8;
+  --bubble-mine-bg: #196B38;
+  --bubble-mine-text: #F1F5F9;
+  --bubble-theirs-bg: #222E38;
+  --bubble-theirs-text: #F1F5F9;
+  --bubble-system-bg: rgba(255, 255, 255, 0.1);
+  --bubble-system-text: #CBD5E1;
 
   /* Typography Colors */
-  --text-primary: #F8FAFC;
+  --text-primary: #F1F5F9;
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
-  --text-on-brand: #FFFFFF;
+  --text-on-brand: #052110;
 
   /* Borders & Dividers */
-  --border-subtle: #1E293B;
-  --border-strong: #334155;
-  --border-focus: #3B82F6;
+  --border-subtle: #2A3642;
+  --border-strong: #364554;
+  --border-focus: #06C755;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -142,7 +142,7 @@ button {cursor:pointer}
 button:disabled {cursor:not-allowed;opacity:.5}
 /* Focus shadow half kept from styles/luno-design-tokens.css (deleted); the
    outline half is v2's, which won before. */
-:focus-visible {outline:3px solid var(--ln-accent);outline-offset:3px;box-shadow:0 0 0 3px rgba(79,124,255,.35)}
+:focus-visible {outline:3px solid var(--ln-accent);outline-offset:3px;box-shadow:0 0 0 3px rgba(6,199,85,.35)}
 input,textarea {user-select:text}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 /* UX1 EXTRACTED from components/luno-design-tokens.css (deleted): the base
@@ -220,9 +220,9 @@ ul, ol {list-style:none;margin:0;padding:0}
 .luno-desktop-app :is(.btn-start-chat-large,.btn-green-send){background:var(--ln-accent)!important;color:var(--ln-on-accent)!important;border-radius:12px!important}
 .luno-desktop-app .btn-subaction-pill{color:var(--ln-text)!important;background:var(--ln-subtle)!important;border-color:var(--ln-line)!important}
 .luno-desktop-app .pc-chat-messages-canvas{background:var(--ln-chat)!important;padding:32px!important}
-.luno-desktop-app .pc-speech-bubble{border-radius:18px!important;padding:12px 16px!important;box-shadow:0 2px 4px #11182704;line-height:1.48!important}
-.luno-desktop-app .pc-msg-row.mine .pc-speech-bubble{background:var(--ln-accent)!important;color:var(--ln-on-accent)!important;border-bottom-right-radius:4px!important}
-.luno-desktop-app .pc-msg-row:not(.mine) .pc-speech-bubble{background:var(--ln-surface)!important;color:var(--ln-text)!important;border:1px solid var(--ln-line);border-top-left-radius:4px!important;border-bottom-left-radius:18px!important}
+.luno-desktop-app .pc-speech-bubble{border-radius:18px!important;padding:10px 14px!important;box-shadow:0 1px 2px rgba(15,23,42,.08);line-height:1.48!important}
+.luno-desktop-app .pc-msg-row.mine .pc-speech-bubble{background:var(--bubble-mine-bg, #95EC69)!important;color:var(--bubble-mine-text, #111827)!important;border-bottom-right-radius:4px!important}
+.luno-desktop-app .pc-msg-row:not(.mine) .pc-speech-bubble{background:var(--bubble-theirs-bg, #FFFFFF)!important;color:var(--bubble-theirs-text, #111827)!important;border:1px solid rgba(15,23,42,.06);border-top-left-radius:4px!important;border-bottom-left-radius:18px!important}
 .luno-desktop-app :is(.pc-dropdown-menu,.context-menu,.standard-modal-box,.pc-modal-card,.pc-call-detail-card,.keep-item-card,.ecosystem-service-card){background:var(--ln-surface)!important;color:var(--ln-text)!important;border:1px solid var(--ln-line)!important;border-radius:18px!important;box-shadow:var(--ln-shadow)!important}
 .luno-desktop-app :is(.modal-backdrop,.pc-modal-backdrop){background:#10132170!important;backdrop-filter:blur(8px);padding:20px}
 .luno-desktop-app .floating-alert{z-index:120000!important;max-width:calc(100vw - 32px);border-radius:12px}
@@ -526,15 +526,15 @@ ul, ol {list-style:none;margin:0;padding:0}
   user-select: text;
 }
 
-/* ---------- Rail ---------- */
+/* ---------- Rail (LINE Desktop Charcoal Rail) ---------- */
 .lx-rail {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   padding: 16px 0 14px;
-  background: var(--ln-surface);
-  border-right: 1px solid var(--ln-line);
+  background: var(--bg-rail, #1E242B);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
@@ -545,22 +545,23 @@ ul, ol {list-style:none;margin:0;padding:0}
   border: 0;
   background: none;
   cursor: pointer;
-  border-radius: 16px;
+  border-radius: 50%;
 }
-.lx-rail-me:focus-visible { outline: 2px solid var(--ln-accent); outline-offset: 3px; }
+.lx-rail-me:focus-visible { outline: 2px solid #06C755; outline-offset: 3px; }
 .lx-online-dot {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
+  right: -1px;
+  bottom: -1px;
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--ln-success);
-  border: 2px solid var(--ln-surface);
+  background: #06C755;
+  border: 2px solid var(--bg-rail, #1E242B);
 }
 .lx-rail-nav { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
 .lx-rail-btn {
-  width: 64px;
+  position: relative;
+  width: 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -569,14 +570,25 @@ ul, ol {list-style:none;margin:0;padding:0}
   border: 0;
   border-radius: 14px;
   background: none;
-  color: var(--ln-muted);
+  color: rgba(255, 255, 255, 0.62);
   font: inherit;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
 }
-.lx-rail-btn:hover { background: var(--ln-bg); color: var(--ln-text); }
-.lx-rail-btn.active { background: var(--ln-accent-soft); color: var(--ln-accent); }
+.lx-rail-btn:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
+.lx-rail-btn.active { background: rgba(6, 199, 85, 0.16); color: #06C755; }
+.lx-rail-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #06C755;
+}
 .lx-rail-btn:focus-visible, .lx-tab:focus-visible { outline: 2px solid var(--ln-accent); outline-offset: -2px; }
 .lx-rail-icon, .lx-tab-icon { position: relative; display: inline-flex; }
 .lx-rail-icon .lx-badge, .lx-tab-icon .lx-badge { position: absolute; top: -6px; left: 14px; }
@@ -591,11 +603,11 @@ ul, ol {list-style:none;margin:0;padding:0}
   border: 0;
   border-radius: 12px;
   background: none;
-  color: var(--ln-muted);
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
 }
-.lx-rail-tool:hover { background: var(--ln-bg); color: var(--ln-text); }
-.lx-rail-tool[aria-pressed="true"] { color: var(--ln-danger); }
+.lx-rail-tool:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+.lx-rail-tool[aria-pressed="true"] { color: #ff8a93; }
 
 /* ---------- Shared controls ---------- */
 .lx-icon-btn {
@@ -649,7 +661,7 @@ ul, ol {list-style:none;margin:0;padding:0}
 }
 .lx-badge.inline { flex-shrink: 0; }
 
-/* Avatars: rounded squares, initial underneath, photo on top. */
+/* LINE-style circular avatars */
 .lx-avatar {
   position: relative;
   flex-shrink: 0;
@@ -657,7 +669,7 @@ ul, ol {list-style:none;margin:0;padding:0}
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 38%;
+  border-radius: 50%;
   color: #fff;
   font-weight: 700;
   background: var(--ln-accent);
@@ -1364,7 +1376,7 @@ html, body {
    - bubbles stay readable on wide screens; softer date pill
    - quiet illustrated empty states
    ========================================================================== */
-.luno-desktop-app .pc-msg-row .other-avatar.pc-avatar { border-radius: 38% !important; overflow: hidden; position: relative; }
+.luno-desktop-app .pc-msg-row .other-avatar.pc-avatar { border-radius: 50% !important; overflow: hidden; position: relative; }
 .luno-desktop-app .pc-msg-row .other-avatar .ln-profile-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
 
 .luno-desktop-app .pc-msg-row .pc-msg-bubble-group {
@@ -1396,12 +1408,47 @@ html, body {
 }
 
 .luno-desktop-app .pc-date-divider-pill {
-  background: color-mix(in srgb, var(--ln-text) 8%, transparent) !important;
-  color: var(--ln-muted) !important;
+  background: var(--bubble-system-bg, rgba(17, 24, 39, 0.24)) !important;
+  color: var(--bubble-system-text, #ffffff) !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   font-weight: 600 !important;
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
 }
+.luno-desktop-app .lx-room .pc-msg-meta,
+.luno-desktop-app .lx-room .pc-timestamp,
+.luno-desktop-app .lx-room .pc-read-receipt {
+  color: rgba(17, 24, 39, 0.72) !important;
+}
+[data-theme="dark"] .luno-desktop-app .lx-room .pc-msg-meta,
+[data-theme="dark"] .luno-desktop-app .lx-room .pc-timestamp,
+[data-theme="dark"] .luno-desktop-app .lx-room .pc-read-receipt,
+.luno-desktop-app .lx-room .wallpaper-dark .pc-msg-meta,
+.luno-desktop-app .lx-room .wallpaper-dark .pc-timestamp,
+.luno-desktop-app .lx-room .wallpaper-dark .pc-read-receipt {
+  color: rgba(241, 245, 249, 0.68) !important;
+}
+.luno-desktop-app .lx-room .pc-msg-row.mine .pc-speech-bubble .bubble-reply-preview {
+  color: rgba(17, 24, 39, 0.72);
+  border-left-color: rgba(17, 24, 39, 0.35);
+}
+[data-theme="dark"] .luno-desktop-app .lx-room .pc-msg-row.mine .pc-speech-bubble .bubble-reply-preview {
+  color: rgba(241, 245, 249, 0.78);
+  border-left-color: rgba(241, 245, 249, 0.45);
+}
+.luno-desktop-app .lx-room .wallpaper-skyblue { background: #8CABD9 !important; }
+.luno-desktop-app .lx-room .wallpaper-slate { background: #EEF2F5 !important; }
+.luno-desktop-app .lx-room .wallpaper-mint { background: #DCF6E7 !important; }
+.luno-desktop-app .lx-room .wallpaper-dark { background: #131A22 !important; }
+[data-theme="dark"] .luno-desktop-app .lx-room .wallpaper-skyblue { background: #131A22 !important; }
+[data-theme="dark"] .luno-desktop-app .lx-room .wallpaper-slate { background: #182028 !important; }
+[data-theme="dark"] .luno-desktop-app .lx-room .wallpaper-mint { background: #10241B !important; }
+.luno-desktop-app .lx-search { border-radius: 999px; background: var(--surface-input, #F2F4F3); border-color: transparent; }
+.luno-desktop-app .lx-search:focus-within { background: var(--ln-surface); border-color: var(--ln-accent); }
+.luno-desktop-app .lx-chip.active { background: var(--ln-accent); border-color: var(--ln-accent); color: var(--ln-on-accent); }
+.luno-desktop-app .lx-composer { border-radius: 18px; background: var(--surface-input, #F2F4F3); border-color: transparent; }
+.luno-desktop-app .lx-composer:focus-within { background: var(--ln-surface); border-color: var(--ln-accent); }
 
 .lx-empty-illustrated { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-top: 56px !important; }
 .lx-empty-illustrated p { margin: 0 !important; }

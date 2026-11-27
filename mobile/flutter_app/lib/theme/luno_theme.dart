@@ -10,43 +10,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Light (§7 :root / [data-theme="light"]).
+/// Light (§7 :root / [data-theme="light"] — LINE Green palette).
 abstract final class LunoLight {
-  // Brand & Accent (LUNO Royal Blue)
-  static const primary = Color(0xFF2563EB);
-  static const primaryHover = Color(0xFF1D4ED8);
-  static const primaryActive = Color(0xFF1E40AF);
-  static const primarySoft = Color(0xFFEFF6FF);
-  static const unreadAccent = Color(0xFFF59E0B);
+  // Brand & Accent (LUNO LINE Green)
+  static const primary = Color(0xFF058237);
+  static const primaryHover = Color(0xFF046D2E);
+  static const primaryActive = Color(0xFF035A25);
+  static const primarySoft = Color(0xFFE6F7EC);
+  static const unreadAccent = Color(0xFF06C755);
 
   // Backgrounds & Surfaces
-  static const bgApp = Color(0xFFF8FAFC);
-  static const bgRail = Color(0xFF0F172A);
+  static const bgApp = Color(0xFFF5F7F6);
+  static const bgRail = Color(0xFF1E242B);
   static const bgPanel = Color(0xFFFFFFFF);
-  static const bgChatRoom = Color(0xFFF1F5F9);
+  static const bgChatRoom = Color(0xFF8CABD9);
   static const surfaceElevated = Color(0xFFFFFFFF);
-  static const surfaceHover = Color(0xFFF1F5F9);
-  static const surfaceActive = Color(0xFFE2E8F0);
-  static const surfaceInput = Color(0xFFF8FAFC);
+  static const surfaceHover = Color(0xFFF3F6F4);
+  static const surfaceActive = Color(0xFFE6F7EC);
+  static const surfaceInput = Color(0xFFF2F4F3);
 
-  // Chat Bubbles
-  static const bubbleMineBg = Color(0xFF2563EB);
-  static const bubbleMineText = Color(0xFFFFFFFF);
+  // Chat Bubbles (LINE Lime Green & Crisp White)
+  static const bubbleMineBg = Color(0xFF95EC69);
+  static const bubbleMineText = Color(0xFF111827);
   static const bubbleTheirsBg = Color(0xFFFFFFFF);
-  static const bubbleTheirsText = Color(0xFF0F172A);
-  static const bubbleSystemBg = Color.fromRGBO(15, 23, 42, 0.06);
-  static const bubbleSystemText = Color(0xFF475569);
+  static const bubbleTheirsText = Color(0xFF111827);
+  static const bubbleSystemBg = Color.fromRGBO(17, 24, 39, 0.24);
+  static const bubbleSystemText = Color(0xFFFFFFFF);
 
   // Typography Colors
-  static const textPrimary = Color(0xFF0F172A);
-  static const textSecondary = Color(0xFF475569);
-  static const textMuted = Color(0xFF94A3B8);
+  static const textPrimary = Color(0xFF111827);
+  static const textSecondary = Color(0xFF52606D);
+  static const textMuted = Color(0xFF7B8794);
   static const textOnBrand = Color(0xFFFFFFFF);
 
   // Borders & Dividers
-  static const borderSubtle = Color(0xFFE2E8F0);
-  static const borderStrong = Color(0xFFCBD5E1);
-  static const borderFocus = Color(0xFF2563EB);
+  static const borderSubtle = Color(0xFFE2E8E4);
+  static const borderStrong = Color(0xFFCBD5CF);
+  static const borderFocus = Color(0xFF058237);
 
   // Shadows
   static const shadowSm = BoxShadow(
@@ -63,43 +63,43 @@ abstract final class LunoLight {
       color: Color.fromRGBO(15, 23, 42, 0.14));
 }
 
-/// Dark (§7 [data-theme="dark"]).
+/// Dark (§7 [data-theme="dark"] — LINE Dark Charcoal palette).
 abstract final class LunoDark {
   // Brand & Accent
-  static const primary = Color(0xFF3B82F6);
-  static const primaryHover = Color(0xFF60A5FA);
-  static const primaryActive = Color(0xFF2563EB);
-  static const primarySoft = Color.fromRGBO(59, 130, 246, 0.15);
-  static const unreadAccent = Color(0xFFFBBF24);
+  static const primary = Color(0xFF06C755);
+  static const primaryHover = Color(0xFF24DB6F);
+  static const primaryActive = Color(0xFF058237);
+  static const primarySoft = Color.fromRGBO(6, 199, 85, 0.16);
+  static const unreadAccent = Color(0xFF06C755);
 
   // Backgrounds & Surfaces
-  static const bgApp = Color(0xFF090D16);
-  static const bgRail = Color(0xFF05080F);
-  static const bgPanel = Color(0xFF0F172A);
-  static const bgChatRoom = Color(0xFF090D16);
-  static const surfaceElevated = Color(0xFF1E293B);
-  static const surfaceHover = Color(0xFF1E293B);
-  static const surfaceActive = Color(0xFF334155);
-  static const surfaceInput = Color(0xFF1E293B);
+  static const bgApp = Color(0xFF0F1419);
+  static const bgRail = Color(0xFF0C1015);
+  static const bgPanel = Color(0xFF171F26);
+  static const bgChatRoom = Color(0xFF131A22);
+  static const surfaceElevated = Color(0xFF1E2832);
+  static const surfaceHover = Color(0xFF1E2832);
+  static const surfaceActive = Color(0xFF123322);
+  static const surfaceInput = Color(0xFF222E38);
 
   // Chat Bubbles
-  static const bubbleMineBg = Color(0xFF2563EB);
-  static const bubbleMineText = Color(0xFFFFFFFF);
-  static const bubbleTheirsBg = Color(0xFF1E293B);
-  static const bubbleTheirsText = Color(0xFFF8FAFC);
-  static const bubbleSystemBg = Color.fromRGBO(255, 255, 255, 0.08);
-  static const bubbleSystemText = Color(0xFF94A3B8);
+  static const bubbleMineBg = Color(0xFF196B38);
+  static const bubbleMineText = Color(0xFFF1F5F9);
+  static const bubbleTheirsBg = Color(0xFF222E38);
+  static const bubbleTheirsText = Color(0xFFF1F5F9);
+  static const bubbleSystemBg = Color.fromRGBO(255, 255, 255, 0.1);
+  static const bubbleSystemText = Color(0xFFCBD5E1);
 
   // Typography Colors
-  static const textPrimary = Color(0xFFF8FAFC);
+  static const textPrimary = Color(0xFFF1F5F9);
   static const textSecondary = Color(0xFF94A3B8);
   static const textMuted = Color(0xFF64748B);
-  static const textOnBrand = Color(0xFFFFFFFF);
+  static const textOnBrand = Color(0xFF052110);
 
   // Borders & Dividers
-  static const borderSubtle = Color(0xFF1E293B);
-  static const borderStrong = Color(0xFF334155);
-  static const borderFocus = Color(0xFF3B82F6);
+  static const borderSubtle = Color(0xFF2A3642);
+  static const borderStrong = Color(0xFF364554);
+  static const borderFocus = Color(0xFF06C755);
 
   // Shadows
   static const shadowSm = BoxShadow(
@@ -116,7 +116,7 @@ abstract final class LunoDark {
 
 /// Semantic status — shared by both brightnesses (§7 dark has no override).
 abstract final class LunoStatus {
-  static const online = Color(0xFF10B981);
+  static const online = Color(0xFF06C755);
   static const busy = Color(0xFFEF4444);
   static const away = Color(0xFFF59E0B);
 }

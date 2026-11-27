@@ -179,9 +179,10 @@ class _HomePageState extends State<HomePage> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                  color: LunoBrand.primary,
-                  borderRadius: BorderRadius.circular(HarborRadius.avatar)),
-              child: const Icon(Icons.verified_outlined, color: Colors.white),
+                  color: dark ? HarborDark.harbor : HarborLight.harbor,
+                  shape: BoxShape.circle),
+              child: Icon(Icons.verified_outlined,
+                  color: dark ? HarborDark.onHarbor : Colors.white),
             ),
             title: Text(context.l10n.mvOfficialAccount,
                 style: TextStyle(fontWeight: FontWeight.w600)),
@@ -314,6 +315,7 @@ class _ServiceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: () => context.go(route),
       borderRadius: BorderRadius.circular(HarborRadius.avatar),
@@ -322,11 +324,22 @@ class _ServiceButton extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 64, maxWidth: 84),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 30),
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: dark ? HarborDark.seaGlass : HarborLight.seaGlass,
+                  borderRadius: BorderRadius.circular(HarborRadius.card),
+                ),
+                child: Icon(icon,
+                    size: 24,
+                    color: dark ? HarborDark.harbor : HarborLight.harbor),
+              ),
               const SizedBox(height: 6),
               Text(label,
                   maxLines: 2,

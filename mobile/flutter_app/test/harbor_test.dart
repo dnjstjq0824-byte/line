@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:luno_messenger/design/responsive.dart';
 import 'package:luno_messenger/main.dart'
-    show MessengerApp, lunoBg, lunoDeepBlue, lunoPrimary;
+    show MessengerApp, lunoDeepBlue, lunoPrimary;
 import 'package:luno_messenger/design/v3.dart';
 import 'package:luno_messenger/nav.dart';
 import 'package:luno_messenger/pages/chats.dart';
@@ -51,12 +51,12 @@ void main() {
         ['/wallet', '/shop', '/apps', '/feed', '/lounge', '/keep', '/settings', '/console']);
   });
 
-  test('LUNO brand surfaces reuse frozen PO tokens', () {
+  test('LUNO brand surfaces keep frozen PO brand and LINE Harbor palette', () {
     expect(LunoBrand.primary, lunoPrimary);
     expect(LunoBrand.deep, lunoDeepBlue);
-    expect(HarborLight.harbor, lunoDeepBlue);
-    expect(HarborLight.mine, lunoPrimary);
-    expect(HarborLight.fog, lunoBg);
+    expect(HarborLight.harbor, const Color(0xFF058237));
+    expect(HarborLight.mine, const Color(0xFF95EC69));
+    expect(HarborLight.fog, const Color(0xFFF5F7F6));
   });
 
   test('harbor themes build for both brightnesses', () {

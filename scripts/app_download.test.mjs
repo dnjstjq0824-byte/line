@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const BASE = 'https://localhost';
-const TAG = 'v2.0.0-build24';
+const TAG = 'v2.0.0-build25';
 const GH = `https://github.com/dnjstjq0824-byte/line/releases/download/${TAG}`;
 
 let isoCounter = 9600;
@@ -47,16 +47,16 @@ test('GET /download streams the recommended APK with attachment headers', async 
 test('HEAD /download answers with the size and no body; Range passes through', async () => {
   const { api } = await isolate();
   await withUpstream(async (target, init) => {
-    if (init.method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': '44477270' } });
-    return new Response(new Uint8Array(4), { status: 206, headers: { 'content-length': '4', 'content-range': 'bytes 0-3/44477270' } });
+    if (init.method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': '44477274' } });
+    return new Response(new Uint8Array(4), { status: 206, headers: { 'content-length': '4', 'content-range': 'bytes 0-3/44477274' } });
   }, async (calls) => {
     const head = await api('/download', { method: 'HEAD' });
     assert.equal(head.status, 200);
-    assert.equal(head.headers.get('content-length'), '44477270');
+    assert.equal(head.headers.get('content-length'), '44477274');
     assert.equal((await head.arrayBuffer()).byteLength, 0);
     const part = await api('/download', { headers: { Range: 'bytes=0-3' } });
     assert.equal(part.status, 206);
-    assert.equal(part.headers.get('content-range'), 'bytes 0-3/44477270');
+    assert.equal(part.headers.get('content-range'), 'bytes 0-3/44477274');
     assert.equal(calls.at(-1).init.headers.Range, 'bytes=0-3');
     assert.equal((await api('/download', { method: 'POST' })).status, 405);
   });
@@ -140,30 +140,30 @@ test('GET /app, /mobile and /apk redirect to the static download page', async ()
   }
 });
 
-test('GET /api/v1/app/latest reports the per-ABI Build 24 assets', async () => {
+test('GET /api/v1/app/latest reports the per-ABI Build 25 assets', async () => {
   const { api } = await isolate();
   const res = await api('/api/v1/app/latest');
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.platform, 'android');
   assert.equal(body.version, '2.0.0');
-  assert.equal(body.build, 24);
+  assert.equal(body.build, 25);
   assert.equal(body.package, 'com.lunotalk.messenger');
   assert.equal(body.assets.length, 3);
   const byAbi = Object.fromEntries(body.assets.map((a) => [a.abi, a]));
   assert.deepEqual(byAbi['arm64-v8a'], {
     abi: 'arm64-v8a', label: 'arm64', recommended: true, file: 'luno-messenger-arm64.apk',
-    size_bytes: 44477270, sha256: '162E7FB3722CB7D191847445920F5EABE5AE1A52A5525026F01863A73B7ABAE5',
+    size_bytes: 44477274, sha256: 'C2C2DA7409838B1760ACEFA8F32633AAAB13B67AD18769C50539EC0FB10A5AFC',
     url: `${GH}/luno-messenger-arm64.apk`,
   });
   assert.deepEqual(byAbi['armeabi-v7a'], {
     abi: 'armeabi-v7a', label: 'arm32', file: 'luno-messenger-arm32.apk',
-    size_bytes: 35546570, sha256: 'BD2E292FEF08BE630D9C5B5DEE733C1C78CF50835FB19740B937DC14E109627A',
+    size_bytes: 35562954, sha256: '6CF47A10B1EB3D8D11C4837C04A2A51F5FE26C5CEA9E1F209FE2CFE85365F9A3',
     url: `${GH}/luno-messenger-arm32.apk`,
   });
   assert.deepEqual(byAbi['x86_64'], {
     abi: 'x86_64', label: 'x86_64', file: 'luno-messenger-x86_64.apk',
-    size_bytes: 50998094, sha256: '51AD228D2AAEC7FD4DC04D8A0AA1FA270E09ABC52787732414023519F5AF0B32',
+    size_bytes: 50998098, sha256: 'A210760644CFBA09682C966BA29C41F161194242BE011814844304A9EEDB944A',
     url: `${GH}/luno-messenger-x86_64.apk`,
   });
 });

@@ -924,18 +924,17 @@ class _DateDivider extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            // Build 20: softer pill like the web (8% text, muted label).
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withValues(alpha: 0.08),
+            // LINE-style translucent slate pill over sky-blue canvas.
+            color: dark ? LunoDark.bubbleSystemBg : LunoLight.bubbleSystemBg,
             borderRadius: BorderRadius.circular(HarborRadius.lamp),
           ),
           child: Text(label,
               style: TextStyle(
                   fontSize: HarborType.micro,
                   fontWeight: FontWeight.w600,
-                  color: dark ? HarborDark.drift : HarborLight.drift)),
+                  color: dark
+                      ? LunoDark.bubbleSystemText
+                      : LunoLight.bubbleSystemText)),
         ),
       ),
     );
@@ -994,7 +993,9 @@ class _SignalBubble extends StatelessWidget {
         ? (dark ? LunoDark.bubbleMineText : LunoLight.bubbleMineText)
         : (dark ? LunoDark.bubbleTheirsText : LunoLight.bubbleTheirsText);
     final faint = mine
-        ? Colors.white.withValues(alpha: 0.75)
+        ? (dark
+            ? Colors.white.withValues(alpha: 0.78)
+            : LunoLight.bubbleMineText.withValues(alpha: 0.65))
         : (dark ? HarborDark.drift : HarborLight.drift);
     final time = groupTail ? bubbleTime(m['created_at'], session.locale) : '';
     final screenW = MediaQuery.sizeOf(context).width;
@@ -1002,7 +1003,9 @@ class _SignalBubble extends StatelessWidget {
     final wide = kind == DeviceKind.tablet || kind == DeviceKind.desktop;
     final maxW = math.min(screenW * LunoBubble.maxWidthMobileFraction,
         wide ? LunoBubble.maxWidthDesktop : double.infinity);
-    final muted = dark ? LunoDark.textMuted : LunoLight.textMuted;
+    final muted = dark
+        ? LunoDark.textSecondary.withValues(alpha: 0.85)
+        : LunoLight.textPrimary.withValues(alpha: 0.72);
     final timeStyle = TextStyle(
         fontSize: LunoType.stampSize,
         fontWeight: LunoType.stampWeight,
@@ -1019,6 +1022,7 @@ class _SignalBubble extends StatelessWidget {
           : BoxDecoration(
               color: bubble,
               borderRadius: mine ? LunoBubble.mine : LunoBubble.theirs,
+              boxShadow: dark ? null : const [LunoLight.shadowSm],
             ),
       child: InkWell(
         onLongPress: () => _messageActions(context, m, mine, msgId),
@@ -2363,7 +2367,13 @@ class _Composer extends StatelessWidget {
     // Two tools on the left, the text box takes the rest, one action on the
     // right: mic while empty, send once there is text (LINE-style).
     return Container(
-      color: dark ? HarborDark.surface : Colors.white,
+      decoration: BoxDecoration(
+        color: dark ? HarborDark.surface : Colors.white,
+        border: Border(
+          top: BorderSide(
+              color: dark ? HarborDark.channel : HarborLight.channel),
+        ),
+      ),
       padding: EdgeInsets.symmetric(horizontal: 4, vertical: dense ? 4 : 6),
       child: SafeArea(
         child: Row(
