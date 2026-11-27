@@ -2430,6 +2430,13 @@ function ensureSeed(env) {
 }
 
 function json(data, status = 200, headers = {}) {
+  // A Headers instance can carry several Set-Cookie lines (refresh cookie +
+  // stale host-only purge); a plain object cannot.
+  if (headers instanceof Headers) {
+    const h = new Headers(headers);
+    if (!h.has('Content-Type')) h.set('Content-Type', 'application/json; charset=utf-8');
+    return new Response(JSON.stringify(data), { status, headers: h });
+  }
   return new Response(JSON.stringify(data), {
     status,
     headers: {
@@ -2495,15 +2502,6 @@ function siteLangRedirect(request, env = CURRENT_ENV) {
   });
 }
 
-function cookieValue(request, name) {
-  const header = request.headers.get('Cookie') || '';
-  for (const part of header.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq < 0) continue;
-    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
-  }
-  return '';
-}
 // I-2: refresh tokens travel as httpOnly cookies. Secure is set on https
 // origins only so http://localhost development keeps working. On custom
 // apex/subdomain hosts, Domain=.{apex} shares auth across web/api subdomains.
@@ -2521,6 +2519,28 @@ function refreshCookie(token, request, maxAge = 30 * 86400) {
   // logins without "stay signed in"; 0 still expires (logout).
   const age = (maxAge === null || maxAge === undefined) ? '' : `; Max-Age=${maxAge}`;
   return `luno_refresh=${token}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict${domainAttr}; Path=/${age}`;
+}
+// Before 4619b92 the relay hosts got a host-only refresh cookie; since then
+// they get Domain=.{apex}. Browsers keep both and send the older one first,
+// so every Domain cookie also expires the host-only twin on this host.
+function refreshCookieHeaders(token, request, maxAge = 30 * 86400) {
+  const main = refreshCookie(token, request, maxAge);
+  const headers = new Headers();
+  headers.append('Set-Cookie', main);
+  if (main.includes('; Domain=')) {
+    headers.append('Set-Cookie', `luno_refresh=; HttpOnly;${main.includes(' Secure;') ? ' Secure;' : ''} SameSite=Strict; Path=/; Max-Age=0`);
+  }
+  return headers;
+}
+// Every value of a repeated cookie name, in the order the browser sent them.
+function cookieValues(request, name) {
+  const out = [];
+  for (const part of (request.headers.get('Cookie') || '').split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name) out.push(part.slice(eq + 1).trim());
+  }
+  return out;
 }
 // I-3: hardening headers on every response. The strict CSP applies to API
 // payloads only; hosted app assets keep their own document policy.
@@ -4705,7 +4725,7 @@ async function fetchLinkPreview(target) {
       await revokeSessionById(sid, myId);
       await persistAudit(myId, 'session.logout', sid, {});
     }
-    return json({ status: 'logged_out' }, 200, { 'Set-Cookie': refreshCookie('', request, 0) });
+    return json({ status: 'logged_out' }, 200, refreshCookieHeaders('', request, 0));
   }
   if ((p === 'me/devices' || p === 'devices') && method === 'GET') {
     return json({ devices: await listSessionsFor(myId, sessions.get(token)?.device_id) });
@@ -8436,7 +8456,7 @@ const workerCore = {
             user_id: user.id,
             role: user.role,
             device_id: pdevice,
-          }, 200, pre ? { 'Set-Cookie': refreshCookie(pre, request, body.remember === false ? null : 30 * 86400) } : {});
+          }, 200, pre ? refreshCookieHeaders(pre, request, body.remember === false ? null : 30 * 86400) : {});
         } catch (e) {
           return json({ error: 'invalid credentials' }, 401);
         }
@@ -8532,7 +8552,7 @@ const workerCore = {
           role: user.role,
           device_id: deviceId,
           ...(recovered ? { recovered: true } : {})
-        }, 200, refreshToken ? { 'Set-Cookie': refreshCookie(refreshToken, request, body.remember === false ? null : 30 * 86400) } : {});
+        }, 200, refreshToken ? refreshCookieHeaders(refreshToken, request, body.remember === false ? null : 30 * 86400) : {});
       }
       // 2b. Auth: Refresh rotation (A-15). Single-use refresh tokens: each
       // successful call burns the presented token and mints a fresh pair on
@@ -8547,13 +8567,28 @@ const workerCore = {
         if (!rbody.refresh_token && (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
           return json({ error: 'forbidden' }, 403);
         }
-        const presented = String(rbody.refresh_token || cookieValue(request, 'luno_refresh') || '');
+        // A browser can send several luno_refresh cookies at once (a stale
+        // host-only one left from before Domain=.{apex}, sent first, plus the
+        // current Domain one). Reading only the first one tripped reuse
+        // detection and killed the live session on every reload. Use the
+        // first live candidate; reuse detection applies when none is live.
+        const candidates = rbody.refresh_token
+          ? [String(rbody.refresh_token)]
+          : [...new Set(cookieValues(request, 'luno_refresh'))];
         const rdb = dbOf();
         if (!rdb) return json({ error: 'token refresh requires a configured database' }, 501);
-        if (!presented.startsWith('cf-refresh-')) return json({ error: 'invalid credentials' }, 401);
+        const presentedList = candidates.filter((c) => c.startsWith('cf-refresh-'));
+        if (!presentedList.length) return json({ error: 'invalid credentials' }, 401);
         await ensureSchema();
-        const rhash = await sha256Hex(presented);
-        const rrow = await rdb.prepare('SELECT token_hash, user_id, device_id, expires_at, revoked FROM refresh_tokens WHERE token_hash = ?').bind(rhash).first();
+        let rhash = '';
+        let rrow = null;
+        for (const cand of presentedList) {
+          const h = await sha256Hex(cand);
+          const row = await rdb.prepare('SELECT token_hash, user_id, device_id, expires_at, revoked FROM refresh_tokens WHERE token_hash = ?').bind(h).first();
+          if (!row) continue;
+          if (!rrow) { rhash = h; rrow = row; }
+          if (!row.revoked && Number(row.expires_at) > Date.now()) { rhash = h; rrow = row; break; }
+        }
         if (!rrow) return json({ error: 'invalid credentials' }, 401);
         if (rrow.revoked) {
           // Scope the kill to this session chain. A whole-grant kill
@@ -8593,7 +8628,7 @@ const workerCore = {
           user_id: ruser.id,
           role: ruser.role,
           device_id: rrow.device_id
-        }, 200, { 'Set-Cookie': refreshCookie(newRefresh, request, rbody.remember === false ? null : 30 * 86400) });
+        }, 200, refreshCookieHeaders(newRefresh, request, rbody.remember === false ? null : 30 * 86400));
       }
 
 
@@ -8824,7 +8859,7 @@ const workerCore = {
           user_id: user.id,
           role: user.role,
           device_id: deviceId
-        }, 200, phoneRefresh ? { 'Set-Cookie': refreshCookie(phoneRefresh, request, body.remember === false ? null : 30 * 86400) } : {});
+        }, 200, phoneRefresh ? refreshCookieHeaders(phoneRefresh, request, body.remember === false ? null : 30 * 86400) : {});
       }
 
       // 3. Auth: QR Login
@@ -8866,7 +8901,7 @@ const workerCore = {
           if (u.email_verified === 0) return json({ error: 'email not verified', code: 'EMAIL_NOT_VERIFIED' }, 403);
           const { token, deviceId: qrDevice, refreshToken: qrRefresh } = await createSession(u, request);
           await qrDeleteChallenge(body.challenge_id); // Invalidate immediately upon consumption
-          return json({ status: 'authenticated', access_token: token, ...(qrRefresh ? { refresh_token: qrRefresh } : {}), user_id: u.id, role: u.role, device_id: qrDevice }, 200, qrRefresh ? { 'Set-Cookie': refreshCookie(qrRefresh, request, body.remember === false ? null : 30 * 86400) } : {});
+          return json({ status: 'authenticated', access_token: token, ...(qrRefresh ? { refresh_token: qrRefresh } : {}), user_id: u.id, role: u.role, device_id: qrDevice }, 200, qrRefresh ? refreshCookieHeaders(qrRefresh, request, body.remember === false ? null : 30 * 86400) : {});
         }
         return json({ status: 'pending' }, 202);
       }

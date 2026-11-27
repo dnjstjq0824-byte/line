@@ -130,9 +130,9 @@ test('F19: static assets ship matching headers via _headers', async () => {
 test('F19: every login route sets the refresh cookie', async () => {
   const source = await readFile(new URL('./cf_worker.js', import.meta.url), 'utf8');
   // Password login is covered live above; the other three share the helper.
-  assert.ok(source.includes("refreshCookie(pre, request, body.remember === false ? null : 30 * 86400)"), 'passkey sets cookie');
-  assert.ok(source.includes("refreshCookie(phoneRefresh, request, body.remember === false ? null : 30 * 86400)"), 'phone sets cookie');
-  assert.ok(source.includes("refreshCookie(qrRefresh, request, body.remember === false ? null : 30 * 86400)"), 'qr sets cookie');
+  assert.ok(source.includes("refreshCookieHeaders(pre, request, body.remember === false ? null : 30 * 86400)"), 'passkey sets cookie');
+  assert.ok(source.includes("refreshCookieHeaders(phoneRefresh, request, body.remember === false ? null : 30 * 86400)"), 'phone sets cookie');
+  assert.ok(source.includes("refreshCookieHeaders(qrRefresh, request, body.remember === false ? null : 30 * 86400)"), 'qr sets cookie');
 });
 
 async function webFiles(dir, out = []) {
